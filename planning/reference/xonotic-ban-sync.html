@@ -1,0 +1,990 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xonotic Ban Syncing — Server Admin Guide</title>
+<style>
+/*
+  Design:  Operational runbook for server admins — do this, then this, then verify.
+  Voice:   Terse, imperative, every claim anchored to a cvar, a command, or a log line.
+  Layout:  Wide two-column shell — sticky contents rail on the left, runbook on the right.
+           Collapses to a single column under 1040px.
+
+  Palette (shared with the physics + balance history docs):
+    ground   #07100e  near-black with the faintest green trace
+    surface  #0c1a16  card / table background
+    raise    #0f211c  nested surface (code inside cards)
+    border   #162a24  hairline dividers
+    code     #6ec9bc  terminal phosphor — cvars, commands, values
+    hot      #df7b3c  Xonotic orange — step numbers, emphasis
+    text1    #bdd8d1  primary prose
+    text2    #4c7872  secondary / meta
+    text3    #2d5450  tertiary / labels
+    yes      #4baa6b  implemented
+    warn     #c4a235  cautions
+    stop     #c8604a  hard warnings
+    info     #5a9fd4  informational callout
+*/
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  background: #07100e;
+  color: #bdd8d1;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 15.5px;
+  line-height: 1.7;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body { max-width: 1240px; margin: 0 auto; padding: 0 32px 120px; }
+
+code, .mono { font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace; }
+
+::selection { background: #1f3d36; color: #e8f4f0; }
+
+a:focus-visible, summary:focus-visible {
+  outline: 2px solid #df7b3c;
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+/* ══════════════════════════ HEADER ══════════════════════════ */
+
+.page-head {
+  position: relative;
+  padding: 56px 0 40px;
+  border-bottom: 1px solid #162a24;
+  margin-bottom: 44px;
+  overflow: hidden;
+}
+
+.page-head::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(#162a24 1px, transparent 1px),
+    linear-gradient(90deg, #162a24 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.55) 40%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.55) 40%, transparent 100%);
+  pointer-events: none;
+}
+
+.head-inner {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  gap: 48px;
+  align-items: center;
+}
+
+@media (max-width: 900px) { .head-inner { grid-template-columns: minmax(0, 1fr); gap: 32px; } }
+
+.backlink {
+  display: inline-block;
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: .08em;
+  color: #2d5450;
+  text-decoration: none;
+  margin-bottom: 20px;
+  transition: color .15s ease;
+}
+
+.backlink:hover { color: #6ec9bc; }
+
+.kicker {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: #df7b3c;
+  margin-bottom: 14px;
+}
+
+h1 {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: clamp(26px, 1.4rem + 1.6vw, 38px);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: #e8f4f0;
+  margin-bottom: 14px;
+  line-height: 1.2;
+}
+
+.tagline { color: #4c7872; font-size: 16.5px; max-width: 60ch; }
+
+/* ── flow diagram ── */
+
+.flow { width: 100%; height: auto; display: block; }
+.flow text {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 11px;
+}
+
+/* ══════════════════════════ STAT STRIP ══════════════════════════ */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 52px;
+}
+
+.stat {
+  background: #0c1a16;
+  border: 1px solid #162a24;
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+
+.stat-num {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 24px;
+  font-weight: 700;
+  color: #df7b3c;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #2d5450;
+  margin-top: 6px;
+}
+
+.stat-sub { color: #4c7872; font-size: 13px; margin-top: 8px; }
+
+/* ══════════════════════════ SHELL ══════════════════════════ */
+
+.shell {
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+  gap: 56px;
+  align-items: start;
+}
+
+/* minmax(0,…), not 1fr: a bare 1fr floors at min-content, and the wide tables
+   would then stretch the column past the viewport instead of scrolling inside it. */
+@media (max-width: 1040px) { .shell { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+
+.shell > main { min-width: 0; }
+
+/* ── contents rail ── */
+
+.rail { position: sticky; top: 28px; }
+
+@media (max-width: 1040px) {
+  .rail {
+    position: static;
+    margin-bottom: 44px;
+    border: 1px solid #162a24;
+    border-radius: 10px;
+    background: #0c1a16;
+    padding: 18px 20px;
+  }
+}
+
+.rail-label {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: #2d5450;
+  margin-bottom: 14px;
+}
+
+.rail ol { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+
+.rail a {
+  display: flex;
+  gap: 10px;
+  padding: 5px 8px;
+  margin-left: -8px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: #4c7872;
+  text-decoration: none;
+  line-height: 1.45;
+  transition: color .15s ease, background .15s ease;
+}
+
+.rail a:hover { color: #bdd8d1; background: #0c1a16; }
+
+.rail a .n {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 11.5px;
+  color: #2d5450;
+  padding-top: 1px;
+}
+
+.rail a:hover .n { color: #df7b3c; }
+
+/* ══════════════════════════ SECTIONS ══════════════════════════ */
+
+section { margin-bottom: 60px; scroll-margin-top: 24px; }
+section:last-of-type { margin-bottom: 0; }
+
+h2 {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 19px;
+  font-weight: 700;
+  color: #e8f4f0;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #162a24;
+  margin-bottom: 22px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+h2 .num {
+  color: #df7b3c;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: .12em;
+  border: 1px solid #162a24;
+  border-radius: 5px;
+  padding: 2px 8px;
+  background: #0c1a16;
+}
+
+h3 {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #bdd8d1;
+  margin: 32px 0 12px;
+}
+
+p { max-width: 76ch; margin-bottom: 15px; }
+p:last-child { margin-bottom: 0; }
+
+strong { color: #e8f4f0; font-weight: 600; }
+
+ul, ol { max-width: 76ch; margin: 0 0 15px 22px; }
+li { margin-bottom: 7px; }
+li::marker { color: #2d5450; }
+
+a { color: #6ec9bc; text-underline-offset: .2em; }
+
+code {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  color: #6ec9bc;
+  font-size: .87em;
+  background: #0c1a16;
+  border: 1px solid #162a24;
+  border-radius: 4px;
+  padding: 1px 5px;
+  word-break: break-word;
+}
+
+pre {
+  background: #0c1a16;
+  border: 1px solid #162a24;
+  border-radius: 10px;
+  padding: 18px 20px;
+  overflow-x: auto;
+  margin-bottom: 15px;
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.62;
+  color: #bdd8d1;
+  tab-size: 4;
+}
+
+pre code { background: none; border: none; padding: 0; font-size: inherit; color: inherit; word-break: normal; }
+pre .c { color: #2d5450; }   /* comment */
+pre .v { color: #6ec9bc; }   /* value */
+pre .o { color: #df7b3c; }   /* console output highlight */
+
+.caption {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 11.5px;
+  letter-spacing: .06em;
+  color: #2d5450;
+  margin: -8px 0 20px;
+}
+
+/* ══════════════════════════ TABLES ══════════════════════════ */
+
+.scroller {
+  overflow-x: auto;
+  border: 1px solid #162a24;
+  border-radius: 10px;
+  background: #0c1a16;
+  margin-bottom: 18px;
+}
+
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+
+th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid #162a24; vertical-align: top; }
+
+thead th {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #2d5450;
+  font-weight: 400;
+  white-space: nowrap;
+  background: #0a1512;
+}
+
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: #0a1714; }
+
+td.m, th.m {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 12.5px;
+  color: #6ec9bc;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+td.wrap { white-space: normal; }
+
+td.d {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 12.5px;
+  color: #df7b3c;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chip {
+  display: inline-block;
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 10px;
+  white-space: nowrap;
+  border: 1px solid;
+}
+
+.chip.yes { color: #4baa6b; border-color: #23503a; background: #0b1c14; }
+.chip.no  { color: #c8604a; border-color: #4a251e; background: #1c100d; }
+.chip.soon { color: #c4a235; border-color: #4a3f18; background: #1a170c; }
+
+/* ══════════════════════════ STEPS ══════════════════════════ */
+
+.steps { counter-reset: step; }
+
+.step {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 0 18px;
+  padding-bottom: 26px;
+  margin-bottom: 26px;
+  border-bottom: 1px dashed #142520;
+}
+
+.step:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+
+.step::before {
+  counter-increment: step;
+  content: counter(step, decimal-leading-zero);
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  color: #df7b3c;
+  border: 1px solid #162a24;
+  border-radius: 7px;
+  background: #0c1a16;
+  padding: 4px 0;
+  text-align: center;
+  height: fit-content;
+  margin-top: 2px;
+}
+
+.step-body { min-width: 0; }
+
+.step-title {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-weight: 700;
+  color: #e8f4f0;
+  font-size: 14.5px;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 560px) {
+  .step { grid-template-columns: 1fr; gap: 10px; }
+  .step::before { width: 38px; }
+}
+
+/* ══════════════════════════ CALLOUTS ══════════════════════════ */
+
+.note {
+  background: #0c1a16;
+  border: 1px solid #162a24;
+  border-left: 3px solid #5a9fd4;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 18px;
+}
+
+.note.warn { border-left-color: #c4a235; }
+.note.stop { border-left-color: #c8604a; }
+.note p { margin-bottom: 10px; max-width: 74ch; }
+.note p:last-child { margin-bottom: 0; }
+
+.note-label {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #5a9fd4;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.note.warn .note-label { color: #c4a235; }
+.note.stop .note-label { color: #c8604a; }
+
+details {
+  background: #0c1a16;
+  border: 1px solid #162a24;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 18px;
+}
+
+summary {
+  cursor: pointer;
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #bdd8d1;
+  transition: color .15s ease;
+}
+
+summary:hover { color: #6ec9bc; }
+details[open] summary { margin-bottom: 16px; }
+details pre { margin-bottom: 0; background: #0a1512; }
+
+/* two-up card grid for short parallel blocks */
+.duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 18px; }
+
+.card {
+  background: #0c1a16;
+  border: 1px solid #162a24;
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+
+.card h4 {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-size: 13px;
+  color: #e8f4f0;
+  margin-bottom: 8px;
+}
+
+.card p { font-size: 14px; color: #4c7872; margin: 0; }
+
+/* ══════════════════════════ FOOTER ══════════════════════════ */
+
+footer {
+  margin-top: 72px;
+  padding-top: 28px;
+  border-top: 1px solid #162a24;
+  color: #2d5450;
+  font-size: 13px;
+}
+
+footer a { color: #4c7872; text-decoration: none; }
+footer a:hover { color: #6ec9bc; }
+</style>
+</head>
+<body>
+
+<header class="page-head">
+  <div class="head-inner">
+    <div>
+      <a class="backlink" href="./">&larr; project pages</a>
+      <div class="kicker">Server administration</div>
+      <h1>Xonotic Ban Syncing</h1>
+      <p class="tagline">Run a ban list provider, point your dedicated servers at it, and verify that a ban
+        placed on one server takes effect on the rest.</p>
+    </div>
+
+    <svg class="flow" viewBox="0 0 420 232" role="img" aria-label="Three game servers report bans to a provider and pull the combined list back">
+      <defs>
+        <marker id="ar-up" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 L8 4 L0 8 z" fill="#df7b3c"/>
+        </marker>
+        <marker id="ar-dn" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 L8 4 L0 8 z" fill="#6ec9bc"/>
+        </marker>
+      </defs>
+
+      <!-- provider -->
+      <rect x="128" y="8" width="164" height="46" rx="8" fill="#0c1a16" stroke="#162a24"/>
+      <text x="210" y="28" fill="#e8f4f0" text-anchor="middle">provider</text>
+      <text x="210" y="43" fill="#2d5450" text-anchor="middle" font-size="10">bans.example.net</text>
+
+      <!-- report / pull labels -->
+      <text x="120" y="104" fill="#df7b3c" text-anchor="end" font-size="10">report ban</text>
+      <text x="300" y="104" fill="#6ec9bc" text-anchor="start" font-size="10">pull list</text>
+
+      <!-- up arrows (report) -->
+      <path d="M62 158 L62 118 Q62 108 76 108 L196 108 Q206 108 206 96 L206 60" fill="none" stroke="#df7b3c" stroke-width="1.2" marker-end="url(#ar-up)" opacity=".85"/>
+      <!-- down arrows (pull) -->
+      <path d="M214 60 L214 96 Q214 108 224 108 L344 108 Q358 108 358 118 L358 154" fill="none" stroke="#6ec9bc" stroke-width="1.2" marker-end="url(#ar-dn)" opacity=".85"/>
+
+      <!-- servers -->
+      <rect x="8"   y="160" width="108" height="46" rx="8" fill="#0c1a16" stroke="#162a24"/>
+      <text x="62"  y="180" fill="#bdd8d1" text-anchor="middle">server A</text>
+      <text x="62"  y="195" fill="#2d5450" text-anchor="middle" font-size="10">192.0.2.10</text>
+
+      <rect x="156" y="160" width="108" height="46" rx="8" fill="#0c1a16" stroke="#162a24"/>
+      <text x="210" y="180" fill="#bdd8d1" text-anchor="middle">server B</text>
+      <text x="210" y="195" fill="#2d5450" text-anchor="middle" font-size="10">192.0.2.11</text>
+
+      <rect x="304" y="160" width="108" height="46" rx="8" fill="#0c1a16" stroke="#162a24"/>
+      <text x="358" y="180" fill="#bdd8d1" text-anchor="middle">server C</text>
+      <text x="358" y="195" fill="#2d5450" text-anchor="middle" font-size="10">192.0.2.12</text>
+
+      <text x="210" y="226" fill="#2d5450" text-anchor="middle" font-size="10">every server reports; each pulls only from the servers it trusts</text>
+    </svg>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-num">3</div>
+    <div class="stat-label">GET endpoints</div>
+    <div class="stat-sub">ban, unban, list — the entire protocol</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">5 min</div>
+    <div class="stat-label">Default pull</div>
+    <div class="stat-sub"><code>g_ban_sync_interval</code>, in minutes</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">256</div>
+    <div class="stat-label">Ban slots</div>
+    <div class="stat-sub">Local and synced bans share the limit</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">44</div>
+    <div class="stat-label">ID characters</div>
+    <div class="stat-sub">A crypto player ID bans like an address</div>
+  </div>
+</div>
+
+<div class="shell">
+
+  <nav class="rail" aria-label="Contents">
+    <div class="rail-label">// contents</div>
+    <ol>
+      <li><a href="#s1"><span class="n">01</span><span>How ban syncing works</span></a></li>
+      <li><a href="#s2"><span class="n">02</span><span>Run a provider</span></a></li>
+      <li><a href="#s3"><span class="n">03</span><span>Configure each server</span></a></li>
+      <li><a href="#s4"><span class="n">04</span><span>Place a ban that syncs</span></a></li>
+      <li><a href="#s5"><span class="n">05</span><span>Verify the sync</span></a></li>
+      <li><a href="#s6"><span class="n">06</span><span>Cvar reference</span></a></li>
+      <li><a href="#s7"><span class="n">07</span><span>Protocol</span></a></li>
+      <li><a href="#s8"><span class="n">08</span><span>Vortex Arena status</span></a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <div class="note">
+      <span class="note-label">Status in Vortex Arena</span>
+      <p>This documents <strong>upstream Xonotic</strong>. The Godot/.NET port implements the local ban system
+        in full — <code>ban</code>, <code>kickban</code>, <code>unban</code>, <code>banlist</code>, crypto-id
+        bans, the 256-slot store and the <code>g_banned_list</code> serialization — but not the HTTP
+        cross-server sync, which <code>Bans.cs</code> leaves out to keep that core Godot-free.
+        <strong>Better banning support is coming to Vortex Arena soon; it is not implemented yet.</strong></p>
+      <p>Sections 01–07 apply to a stock Xonotic dedicated server. Section 08 covers what carries over today.</p>
+    </div>
+
+    <section id="s1">
+      <h2><span class="num">01</span> How ban syncing works</h2>
+      <p>Every Xonotic server already keeps its own ban list locally, in a cvar named
+        <code>g_banned_list</code>. That needs no configuration: <code>sv_cmd kickban</code> writes to it and
+        banned players are dropped when they connect.</p>
+      <p>Ban <strong>syncing</strong> is an optional layer on top. Once enabled, a server does two things over
+        HTTP. It <strong>reports</strong> each new ban to one or more <em>provider</em> URLs, and every few
+        minutes it <strong>downloads</strong> bans placed by servers you have explicitly named as trusted.
+        Imported bans are stored with a short expiry and renewed at each sync, so when the originating server
+        lifts a ban it drains out of everyone else's list within roughly one sync interval.</p>
+
+      <div class="duo">
+        <div class="card">
+          <h4>What you provide</h4>
+          <p>One HTTP host reachable by every game server. Xonotic ships no provider, and there is no public
+            project-run list to join.</p>
+        </div>
+        <div class="card">
+          <h4>What Xonotic provides</h4>
+          <p>The client half: reporting, polling, parsing, expiry handling and enforcement, all driven by the
+            <code>g_ban_sync_*</code> cvars.</p>
+        </div>
+      </div>
+
+      <div class="note warn">
+        <span class="note-label">Before you enable it</span>
+        <p>Whoever runs the provider sees your server's hostname and every address you ban, and any server you
+          list as trusted can push bans onto yours. Only sync with people you would already trust with rcon
+          access.</p>
+      </div>
+    </section>
+
+    <section id="s2">
+      <h2><span class="num">02</span> Run a provider</h2>
+      <p>You need one host that all your game servers can reach over HTTP. The provider below uses only the
+        Python standard library and keeps its state in a JSON file beside itself.</p>
+
+      <div class="steps">
+
+        <div class="step">
+          <div class="step-body">
+            <div class="step-title">Save the script</div>
+            <p>Put this on the host as <code>bansync.py</code>.</p>
+            <details>
+              <summary>bansync.py — ban list provider</summary>
+<pre><code>#!/usr/bin/env python3
+<span class="c">"""Minimal Xonotic ban list provider.
+
+Protocol (all GET):
+  ?action=ban&amp;hostname=..&amp;ip=..&amp;duration=..&amp;reason=..
+  ?action=unban&amp;hostname=..&amp;ip=..
+  ?action=list&amp;hostname=..&amp;servers=1.2.3.4;5.6.7.8
+
+The list response is plain text, four LF-separated lines per ban:
+  address / seconds remaining / reason / IP of the server that set it
+"""</span>
+import json, os, time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse, parse_qs
+
+STORE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bans.json")
+
+def load():
+    try:
+        with open(STORE) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return []
+
+def save(bans):
+    tmp = STORE + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(bans, fh, indent=1)
+    os.replace(tmp, STORE)
+
+def clean(text):
+    <span class="c"># newlines and carriage returns would corrupt the response format</span>
+    return text.replace("\r", " ").replace("\n", " ").strip()[:200]
+
+class Handler(BaseHTTPRequestHandler):
+    def reply(self, body):
+        raw = body.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def do_GET(self):
+        q = parse_qs(urlparse(self.path).query)
+        action = q.get("action", [""])[0]
+        origin = self.client_address[0]        <span class="c"># the server making the request</span>
+        now = time.time()
+        bans = [b for b in load() if b["expires"] &gt; now]
+
+        if action == "ban":
+            ip = clean(q.get("ip", [""])[0])
+            duration = float(q.get("duration", ["0"])[0] or 0)
+            reason = clean(q.get("reason", [""])[0])
+            if ip and duration &gt; 0:
+                bans = [b for b in bans if not (b["ip"] == ip and b["server"] == origin)]
+                bans.append({"ip": ip, "expires": now + duration,
+                             "reason": reason, "server": origin})
+                save(bans)
+                self.log_message("ban %s by %s for %ds (%s)", ip, origin, duration, reason)
+            return self.reply("ok\n")
+
+        if action == "unban":
+            ip = clean(q.get("ip", [""])[0])
+            bans = [b for b in bans if not (b["ip"] == ip and b["server"] == origin)]
+            save(bans)
+            self.log_message("unban %s by %s", ip, origin)
+            return self.reply("ok\n")
+
+        if action == "list":
+            wanted = [s for s in q.get("servers", [""])[0].split(";") if s]
+            out = []
+            for b in bans:
+                if b["server"] not in wanted:
+                    continue
+                out += [b["ip"], str(int(b["expires"] - now)),
+                        b["reason"] or "no reason given", b["server"]]
+            return self.reply("\n".join(out) + ("\n" if out else ""))
+
+        return self.reply("")   <span class="c"># never HTML: Xonotic rejects a body starting with "&lt;"</span>
+
+    def log_message(self, fmt, *args):
+        print("%s %s" % (self.log_date_time_string(), fmt % args), flush=True)
+
+if __name__ == "__main__":
+    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()</code></pre>
+            </details>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-body">
+            <div class="step-title">Start it</div>
+<pre><code>python3 bansync.py</code></pre>
+            <p>It listens on port <code>8080</code>. Once it works, run it under systemd and put it behind
+              nginx with TLS — the requests carry player IP addresses in the query string.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-body">
+            <div class="step-title">Check it answers</div>
+            <p>With no bans recorded yet this returns an empty body, which is the correct response:</p>
+<pre><code>curl "http://bans.example.net:8080/?action=list&amp;hostname=test&amp;servers=192.0.2.10"</code></pre>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="s3">
+      <h2><span class="num">03</span> Configure each game server</h2>
+      <p>Add this to <code>~/.xonotic/data/server.cfg</code> on every server in the group, substituting your
+        own provider address and the public IP addresses of the other servers.</p>
+<pre><code><span class="c">// where bans are reported to, and fetched from</span>
+set g_ban_sync_uri <span class="v">"http://bans.example.net:8080/"</span>
+
+<span class="c">// whose bans this server accepts — NOT this server's own IP</span>
+set g_ban_sync_trusted_servers <span class="v">"192.0.2.10 192.0.2.11"</span>
+
+<span class="c">// how often to pull, in minutes</span>
+set g_ban_sync_interval <span class="v">5</span></code></pre>
+
+      <p>Each server needs its own <code>g_ban_sync_trusted_servers</code> listing the <em>others</em>, never
+        itself:</p>
+
+      <div class="scroller">
+        <table>
+          <thead><tr><th>Server</th><th>g_ban_sync_trusted_servers</th></tr></thead>
+          <tbody>
+            <tr><td class="m">192.0.2.10</td><td class="m">"192.0.2.11 192.0.2.12"</td></tr>
+            <tr><td class="m">192.0.2.11</td><td class="m">"192.0.2.10 192.0.2.12"</td></tr>
+            <tr><td class="m">192.0.2.12</td><td class="m">"192.0.2.10 192.0.2.11"</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note stop">
+        <span class="note-label">Never trust yourself</span>
+        <p>A server that lists its own IP re-imports every ban it lifts on the very next sync, and unbanning
+          silently stops working.</p>
+      </div>
+
+      <p>Leaving <code>g_ban_sync_trusted_servers</code> empty is valid and means "push only" — the server
+        reports its bans but imports none. That is a reasonable setting for a server whose admin you trust
+        less than the rest of the group.</p>
+
+      <h3>Optional hardening</h3>
+<pre><code>set g_ban_sync_trusted_servers_verify <span class="v">1</span>   <span class="c">// discard bans attributed to servers you didn't ask for</span>
+set g_ban_sync_timeout <span class="v">45</span>                 <span class="c">// seconds before a sync request is written off</span></code></pre>
+      <p><code>g_ban_sync_uri</code> accepts up to <strong>16</strong> space-separated URLs if you want to
+        report to more than one provider.</p>
+    </section>
+
+    <section id="s4">
+      <h2><span class="num">04</span> Place a ban that will actually sync</h2>
+      <p><strong>A ban with no reason is never reported to the provider.</strong> It is stored locally and
+        silently skipped by the sync. A reason beginning with <code>~</code> is skipped too — that prefix
+        marks a ban placed by an unauthenticated admin. So always pass a reason:</p>
+<pre><code>sv_cmd kickban 3 86400 3 aimbot</code></pre>
+      <p class="caption">client #3 · 86400 seconds · mask size 3 · reason "aimbot"</p>
+
+      <div class="scroller">
+        <table>
+          <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="m">sv_cmd kickban &lt;client&gt; [bantime] [masksize] [reason]</td><td>Drops a connected player and bans them.</td></tr>
+            <tr><td class="m">sv_cmd ban &lt;address&gt; [bantime] [reason]</td><td>Bans an address or player ID that is not connected right now.</td></tr>
+            <tr><td class="m">sv_cmd banlist</td><td>Lists active bans with the index number <code>unban</code> needs.</td></tr>
+            <tr><td class="m">sv_cmd unban &lt;banid&gt;</td><td>Lifts ban number <em>banid</em>, and tells the provider to drop it.</td></tr>
+            <tr><td class="m">sv_cmd who</td><td>Shows connected players with their IP and cryptographic ID.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><code>masksize</code> sets how wide the net is:</p>
+      <div class="scroller">
+        <table>
+          <thead><tr><th>masksize</th><th>IPv4</th><th>IPv6</th><th>Use it when</th></tr></thead>
+          <tbody>
+            <tr><td class="d">1</td><td class="m">/8</td><td class="m">/32</td><td>Never, in practice — it bans millions of addresses.</td></tr>
+            <tr><td class="d">2</td><td class="m">/16</td><td class="m">/48</td><td>A hostile network range, accepting heavy collateral.</td></tr>
+            <tr><td class="d">3</td><td class="m">/24</td><td class="m">/56</td><td>Default. Survives most consumer IP churn.</td></tr>
+            <tr><td class="d">4</td><td class="m">/32</td><td class="m">/64</td><td>One address only, no collateral.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Banning a player ID</h3>
+      <p>Cryptographic player IDs sync exactly like addresses. An ID is the 44-character fingerprint a signed
+        player key presents on connect; unlike an address it survives a reconnect from somewhere else, which
+        makes it the better tool against a returning cheater. Read it from the <code>crypto_id</code> column
+        of <code>sv_cmd who</code>, then ban it wherever an address would go:</p>
+<pre><code>sv_cmd ban Xt3q…44-characters…kP= 604800 aimbot</code></pre>
+      <p><code>sv_cmd kickban</code> on a connected player who has a key records both the address ban and the
+        ID ban automatically, so this is only needed for someone who has already left.</p>
+      <div class="note warn">
+        <span class="note-label">Documented but not implemented</span>
+        <p><code>g_ban_default_masksize 0</code> is described as "ban by UID only", but neither the QuakeC nor
+          the C# port has a branch for <code>0</code> — both fall through to banning the single full IP. For
+          an ID-only ban, place it explicitly with <code>sv_cmd ban &lt;id&gt;</code>.</p>
+      </div>
+    </section>
+
+    <section id="s5">
+      <h2><span class="num">05</span> Verify the sync</h2>
+      <p>Ban someone on one server, then check each link in the chain.</p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-body">
+            <div class="step-title">The provider recorded it</div>
+            <p>Its log prints a line naming the banning server:</p>
+<pre><code>ban 203.0.113.0 by 192.0.2.10 for 86400s (aimbot)</code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-body">
+            <div class="step-title">The list endpoint returns it</div>
+            <p>Query it the way another server would. Four lines per ban, always in this order:</p>
+<pre><code>curl "http://bans.example.net:8080/?action=list&amp;hostname=test&amp;servers=192.0.2.10"</code></pre>
+<pre><code><span class="o">203.0.113.0</span>    <span class="c">← address</span>
+<span class="o">86321</span>          <span class="c">← seconds remaining</span>
+<span class="o">aimbot</span>         <span class="c">← reason</span>
+<span class="o">192.0.2.10</span>     <span class="c">← server that registered it</span></code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-body">
+            <div class="step-title">The other servers imported it</div>
+            <p>Their consoles print this once per interval:</p>
+<pre><code>Received ban list from http://bans.example.net:8080/: OK, 1 items
+Ban list syncing: accepted ban of 203.0.113.0 by 192.0.2.10 at http://…: aimbot</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <p>Failures name themselves in the same place:</p>
+      <div class="scroller">
+        <table>
+          <thead><tr><th>Console message</th><th>Cause</th></tr></thead>
+          <tbody>
+            <tr><td class="m">received HTML instead of a ban list</td><td>The URL serves a web page or an error page, not the ban service.</td></tr>
+            <tr><td class="m">received carriage returns</td><td>The provider is using CRLF. Only bare line feeds are allowed.</td></tr>
+            <tr><td class="m">received invalid item count</td><td>Line count is not divisible by four — a ban is missing a field.</td></tr>
+            <tr><td class="m">error: status is …</td><td>The request failed or timed out. Check reachability and firewalling.</td></tr>
+            <tr><td class="m">rejected (syncing disabled)</td><td><code>g_ban_sync_interval</code> is 0.</td></tr>
+            <tr><td class="m wrap">could not get banned due to no free ban slot</td><td>256-ban limit reached; the new ban was shorter than the one it would replace.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s6">
+      <h2><span class="num">06</span> Cvar reference</h2>
+      <div class="scroller">
+        <table>
+          <thead><tr><th>cvar</th><th>default</th><th>What it controls</th></tr></thead>
+          <tbody>
+            <tr><td class="m">g_ban_sync_uri</td><td class="d">""</td><td>Space-separated provider URLs, up to 16. Empty disables syncing.</td></tr>
+            <tr><td class="m">g_ban_sync_trusted_servers</td><td class="d">""</td><td>Servers whose bans this server imports. Empty means push-only.</td></tr>
+            <tr><td class="m">g_ban_sync_interval</td><td class="d">5</td><td>Minutes between pulls. 0 disables; negative syncs once per map load.</td></tr>
+            <tr><td class="m">g_ban_sync_timeout</td><td class="d">45</td><td>Seconds before a sync request is written off.</td></tr>
+            <tr><td class="m">g_ban_sync_trusted_servers_verify</td><td class="d">0</td><td>Set to 1 to discard bans attributed to a server you did not request.</td></tr>
+            <tr><td class="m">g_ban_default_bantime</td><td class="d">5400</td><td>Ban length in seconds when none is given (90 minutes).</td></tr>
+            <tr><td class="m">g_ban_default_masksize</td><td class="d">3</td><td>Mask width for <code>kickban</code>; see the table in section 04.</td></tr>
+            <tr><td class="m">g_ban_telluser</td><td class="d">1</td><td>Tell players they are banned rather than dropping them silently.</td></tr>
+            <tr><td class="m">g_banned_list</td><td class="d">""</td><td>The stored bans, as <code>1 &lt;ip&gt; &lt;secondsleft&gt; …</code>. Edit via commands, not by hand.</td></tr>
+            <tr><td class="m">g_banned_list_idmode</td><td class="d">1</td><td>1 lets a player with a valid signed ID through an IP ban. 0 makes IP bans absolute.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>A server holds <strong>256 bans</strong> in total, local and synced together. Past that a new ban
+        only lands if it outlasts the entry it would replace.</p>
+    </section>
+
+    <section id="s7">
+      <h2><span class="num">07</span> Protocol, for writing your own provider</h2>
+      <p>Three GET requests. All values are URL-encoded; <code>hostname</code> is the reporting server's
+        name.</p>
+<pre><code>?action=ban&amp;hostname=..&amp;ip=..&amp;duration=&lt;seconds&gt;&amp;reason=..
+?action=unban&amp;hostname=..&amp;ip=..
+?action=list&amp;hostname=..&amp;servers=1.2.3.4;5.6.7.8;..</code></pre>
+      <p>The reply to <code>list</code> must satisfy all of the following, or the server discards it:</p>
+      <ul>
+        <li>Plain text, <strong>four lines per ban</strong> — address, seconds remaining, reason, and the IP
+          of the server that registered it.</li>
+        <li>Separated by bare line feeds. A single carriage return anywhere voids the whole response.</li>
+        <li>Must not begin with <code>&lt;</code>, which is how an HTML error page is detected.</li>
+        <li>Total line count divisible by four.</li>
+        <li>An address is 1–4 dot-separated octets, an IPv6 prefix, or a 44-character player ID.</li>
+      </ul>
+      <p>An IP given as fewer than four octets is a network mask: <code>203.0.113</code> covers the whole
+        <code>/24</code>.</p>
+    </section>
+
+    <section id="s8">
+      <h2><span class="num">08</span> What the Vortex Arena port carries over</h2>
+      <p>The Godot/.NET port reimplements the local half faithfully and leaves the HTTP half out for now.
+        <strong>Better banning support is planned and coming soon — none of it has landed yet</strong>, so
+        treat the table below as the current state, not the destination.</p>
+      <div class="scroller">
+        <table>
+          <thead><tr><th>Feature</th><th>Status</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Local ban store, 256 slots</td><td><span class="chip yes">yes</span></td><td>Same version-1 <code>g_banned_list</code> string, storing time remaining.</td></tr>
+            <tr><td><code>ban</code> / <code>kickban</code> / <code>unban</code> / <code>banlist</code></td><td><span class="chip yes">yes</span></td><td>Same argument order; <code>unban</code> uses the index <code>banlist</code> prints.</td></tr>
+            <tr><td>Crypto-id bans</td><td><span class="chip yes">yes</span></td><td>An ID match always bans; an IP match respects <code>g_banned_list_idmode</code>.</td></tr>
+            <tr><td><code>who</code> with the crypto_id column</td><td><span class="chip yes">yes</span></td><td>Honours <code>sv_status_privacy</code>.</td></tr>
+            <tr><td><code>mute</code> / <code>playban</code> lists</td><td><span class="chip yes">yes</span></td><td><code>g_chatban_list</code>, <code>g_playban_list</code>, <code>g_voteban_list</code> — ID prefixes accepted.</td></tr>
+            <tr><td>HTTP ban sync (<code>g_ban_sync_*</code>)</td><td><span class="chip no">no</span></td><td>Excluded to keep the ban core free of engine I/O. The cvars are inherited from the Xonotic config and have no effect.</td></tr>
+            <tr><td>Expanded banning tools</td><td><span class="chip soon">soon</span></td><td>Better banning support is on the roadmap; nothing has shipped yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>To share bans between Vortex Arena servers today, distribute <code>g_banned_list</code> out of band —
+        generate the config from one source and deploy it to each server.</p>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  Commands, cvar defaults, limits and protocol details taken from
+  <span class="mono">qcsrc/server/ipban.qc</span>, <span class="mono">qcsrc/server/command/banning.qc</span>
+  and <span class="mono">xonotic-server.cfg</span>; port behaviour from
+  <span class="mono">src/VortexArena.Server/Bans.cs</span>.
+  · Source: <a href="https://github.com/VortexFPS/VortexArena">github.com/VortexFPS/VortexArena</a>
+</footer>
+
+</body>
+</html>

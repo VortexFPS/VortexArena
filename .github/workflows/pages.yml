@@ -5,6 +5,7 @@ name: Deploy docs to Pages
 #   /ledger.html     -> planning/upstream-watch/LEDGER.html (regenerated from LEDGER.yaml)
 #   /balance.html    -> planning/reference/xonotic-balance-history.html
 #   /physics.html    -> planning/reference/xonotic-physics-history.html
+#   /ban-sync.html   -> planning/reference/xonotic-ban-sync.html
 
 on:
   push:
@@ -14,6 +15,7 @@ on:
       - planning/upstream-watch/LEDGER.yaml
       - planning/reference/xonotic-balance-history.html
       - planning/reference/xonotic-physics-history.html
+      - planning/reference/xonotic-ban-sync.html
       - tools/upstream-ledger-html.py
       - .github/workflows/pages.yml
   workflow_dispatch:
@@ -47,6 +49,7 @@ jobs:
           cp planning/upstream-watch/LEDGER.html _site/ledger.html
           cp planning/reference/xonotic-balance-history.html _site/balance.html
           cp planning/reference/xonotic-physics-history.html _site/physics.html
+          cp planning/reference/xonotic-ban-sync.html _site/ban-sync.html
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site

@@ -34,8 +34,8 @@ public sealed partial class MotionBlurOverlay : CanvasLayer
 {
     private static readonly StringName OffsetUniform = "blur_offset";
 
-    private ColorRect _rect = null!;
-    private ShaderMaterial _mat = null!;
+    private ColorRect? _rect;
+    private ShaderMaterial? _mat;
 
     private Camera3D? _camera;
     private Transform3D _lastXform = Transform3D.Identity;
@@ -54,7 +54,22 @@ public sealed partial class MotionBlurOverlay : CanvasLayer
         // Above the 3-D scene but BELOW the HUD: a blurred crosshair or scoreboard would be a bug, not an
         // effect. ViewEffects sits at -1 (under everything); the net HUD is at 5.
         Layer = 1;
+        // The ColorRect is built LAZILY, on the first frame r_motionblur is non-zero - see EnsureRect.
+    }
 
+    /// <summary>
+    /// Build the overlay on first use, and never if the feature stays off.
+    ///
+    /// <para><b>This is not a micro-optimisation.</b> The shader samples <c>hint_screen_texture</c>, and merely
+    /// having such a material in the tree makes Godot maintain the 2-D back-buffer copy path for the viewport -
+    /// a full-screen copy per frame, whether or not the rect is visible. Creating it eagerly cost roughly 6x on
+    /// map load, because the load spends most of its time rendering frames for pipeline warm
+    /// (render.setup, precache.weapons, gpu.warm-items) and every one of those frames paid the copy.</para>
+    /// </summary>
+    private void EnsureRect()
+    {
+        if (_rect is not null)
+            return;
         _mat = new ShaderMaterial { Shader = new Shader { Code = ShaderCode } };
         _rect = new ColorRect
         {
@@ -75,17 +90,19 @@ public sealed partial class MotionBlurOverlay : CanvasLayer
         Camera3D? cam = _camera;
         if (strength <= 0f || cam is null || !GodotObject.IsInstanceValid(cam))
         {
-            _rect.Visible = false;
+            if (_rect is not null)
+                _rect!.Visible = false;
             _hasLast = false;
             return;
         }
+        EnsureRect();
 
         Transform3D now = cam.GlobalTransform;
         if (!_hasLast)
         {
             _lastXform = now;
             _hasLast = true;
-            _rect.Visible = false;
+            _rect!.Visible = false;
             return;
         }
 
@@ -102,12 +119,12 @@ public sealed partial class MotionBlurOverlay : CanvasLayer
 
         if (offset.Length() < VortexArena.Engine.Rendering.MotionBlurMath.MinOffset)
         {
-            _rect.Visible = false;   // standing still: skip the pass entirely rather than blur by ~zero
+            _rect!.Visible = false;   // standing still: skip the pass entirely rather than blur by ~zero
             return;
         }
 
-        _mat.SetShaderParameter(OffsetUniform, offset);
-        if (!_rect.Visible)
+        _mat!.SetShaderParameter(OffsetUniform, offset);
+        if (!_rect!.Visible)
         {
             _rect.Visible = true;
             if (!_everEngaged)

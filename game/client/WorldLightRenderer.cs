@@ -332,14 +332,23 @@ public sealed partial class WorldLightRenderer : Node3D
                 if (GodotObject.IsInstanceValid(b.Node))
                     LightBudget.SetOwnerVisible(b.Node, on);
             Log.Info(on
-                ? $"[WorldLights] realtime world lighting ON — {_lights.Count} lights."
+                ? (_lights.Count > 0
+                    ? $"[WorldLights] realtime world lighting ON — {_lights.Count} lights."
+                    : "[WorldLights] realtime world lighting ON but this map authored no lights — "
+                      + "keeping the baked lightmaps at full brightness.")
                 : "[WorldLights] realtime world lighting OFF — back to baked lightmaps.");
         }
 
         // DP re-admits the baked lightmaps at r_shadow_realtime_world_lightmaps brightness while the mode is
         // on (default 0 = fully replaced). With the mode off the lightmaps are the whole lighting, so the
         // multiplier must be 1 regardless of what the cvar says.
-        float lm = on ? MathF.Max(0f, Cvar("r_shadow_realtime_world_lightmaps", 0f)) : 1f;
+        // Dim the baked lightmaps ONLY when there are authored lights to replace them with. The mode being
+        // on with an empty light set is the common case, not an edge case: r_shadow_realtime_world is set by
+        // the ultra/ultimate presets, while just six stock maps ship a .rtlights file - so on every other map
+        // the old code multiplied the lightmaps by r_shadow_realtime_world_lightmaps (default 0) and lit the
+        // world with nothing at all. Replacing the lighting with an empty set is never what was wanted.
+        bool replacing = on && _lights.Count > 0;
+        float lm = replacing ? MathF.Max(0f, Cvar("r_shadow_realtime_world_lightmaps", 0f)) : 1f;
         if (!Mathf.IsEqualApprox(lm, _appliedLightmaps))
         {
             _appliedLightmaps = lm;

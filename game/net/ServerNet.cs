@@ -859,10 +859,55 @@ public sealed class ServerNet : IDisposable
     /// <c>infoResponse</c> carries the real game <c>port</c> to connect to (<see cref="BuildServerInfo"/>).
     /// Safe to call when every candidate port is taken (discovery is then simply off, logged).
     /// </summary>
+    /// <summary>
+    /// Answer <c>getinfo</c> and rcon ON THE GAME PORT, by taking the datagrams ENet rejected.
+    ///
+    /// <para>Returns false when the engine has no <c>set_oob_handler</c> — a stock Godot, or a template built
+    /// before <c>tools/engine-patches/godot-4.6.3-enet-oob-intercept.patch</c>. The caller then falls back to
+    /// the historical second socket, so a stock engine still runs; it just needs two ports.</para>
+    ///
+    /// <para>Why this is worth a patched engine: Conductor lists a server only after sending a
+    /// <c>getinfo</c> challenge to the address and port the server ANNOUNCED, and requiring the answer back
+    /// from that same address and port. The announced port is the GAME port. A server answering on
+    /// gamePort+1 therefore never verifies and is never listed, while every announce returns 200 and neither
+    /// side logs anything — the failure is completely silent.</para>
+    /// </summary>
+    private bool TryAttachOobToGameSocket(Godot.ENetConnection host, int gamePort)
+    {
+        if (host is null || !host.HasMethod("set_oob_handler"))
+            return false;
+
+        // Replies leave through the ENet host's OWN socket (socket_send writes to host->socket), so their
+        // source address and port are the game server's — exactly what the challenge requires.
+        var link = new MasterServerLink(
+            (to, packet) => host.Call("socket_send", to.Address.ToString(), to.Port, packet),
+            new System.Net.IPEndPoint(System.Net.IPAddress.Any, gamePort));
+
+        _master = link;
+        _master.GetInfoRequested += (from, _) => _master!.SendInfoResponse(from, BuildServerInfo(gamePort));
+        WireRcon(gamePort); // DS-6: rcon rides the game port now, exactly as DarkPlaces does
+
+        host.Call("set_oob_handler", Godot.Callable.From((byte[] data, string ip, long port) =>
+        {
+            // Runs synchronously inside ENetConnection.service(). Deliver() swallows handler exceptions for
+            // that reason: an escape here aborts the service call carrying every connected player's traffic.
+            try { link.Deliver(data, new System.Net.IPEndPoint(System.Net.IPAddress.Parse(ip), (int)port)); }
+            catch (Exception ex) { GD.Print($"[ServerNet] OOB deliver failed: {ex.Message}"); }
+        }));
+
+        GD.Print($"[ServerNet] OOB on the game port: getinfo + rcon answering on UDP {gamePort} (one port, no discovery socket).");
+        return true;
+    }
+
     public void EnableLanDiscovery(int gamePort)
     {
         if (_master is not null)
             return; // already discoverable (EnableMasterServer bound a link)
+
+        // One port if the engine can hand us its game socket; the +1..+8 probe below only if it cannot.
+        if (TryAttachOobToGameSocket(_enetHost, gamePort))
+            return;
+
         for (int candidate = gamePort + 1; candidate <= gamePort + 8; candidate++)
         {
             try

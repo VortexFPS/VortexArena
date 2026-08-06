@@ -1,0 +1,128 @@
+--- a/modules/enet/enet_connection.h
++++ b/modules/enet/enet_connection.h
+@@ -78,6 +78,15 @@
+ 	static void _bind_methods();
+ 
+ private:
++	// Set by set_oob_handler(); see there. Empty Callable = interception off.
++	Callable oob_handler;
++
++	// ENetHost has no user-data field, and the intercept callback is a plain C function pointer that
++	// receives only the host, so this is how it finds the owning instance. A map rather than a struct
++	// change keeps this patch out of thirdparty/enet entirely.
++	static HashMap<ENetHost *, ENetConnection *> oob_hosts;
++	static int _oob_intercept(ENetHost *p_host, ENetEvent *p_event);
++
+ 	ENetHost *host = nullptr;
+ 	List<Ref<ENetPacketPeer>> peers;
+ 
+@@ -109,6 +118,22 @@
+ public:
+ 	void broadcast(enet_uint8 p_channel, ENetPacket *p_packet);
+ 	void socket_send(const String &p_address, int p_port, const PackedByteArray &p_packet);
++
++	// Out-of-band datagram interception (Vortex Arena).
++	//
++	// ENet drops any datagram that is not a valid ENet packet, which is why a Quake-style server has
++	// historically needed a SECOND socket on a nearby port to answer connectionless getinfo/rcon.
++	// ENet already has the hook that avoids that -- ENetHost::intercept, called in protocol.c before
++	// enet_protocol_handle_incoming_commands -- and Godot does not use it. This exposes it.
++	//
++	// The handler is called as f(PackedByteArray data, String ip, int port) for datagrams beginning
++	// with the four-byte 0xFFFFFFFF sentinel, and those datagrams are consumed. Everything else falls
++	// through to ENet untouched.
++	//
++	// 0xFFFFFFFF cannot collide with a real ENet packet: the first two bytes of an ENet header are
++	// peerID|flags, the flags occupy bits 14-15, and ENET_PROTOCOL_MAXIMUM_PEER_ID is 0xFFF, so bits
++	// 12-13 are always clear in a valid header while 0xFFFF requires both set.
++	void set_oob_handler(const Callable &p_handler);
+ 	Error create_host_bound(const IPAddress &p_bind_address = IPAddress("*"), int p_port = 0, int p_max_peers = 32, int p_max_channels = 0, int p_in_bandwidth = 0, int p_out_bandwidth = 0);
+ 	Error create_host(int p_max_peers = 32, int p_max_channels = 0, int p_in_bandwidth = 0, int p_out_bandwidth = 0);
+ 	void destroy();
+--- a/modules/enet/enet_connection.cpp
++++ b/modules/enet/enet_connection.cpp
+@@ -34,6 +34,7 @@
+ 
+ #include "core/io/compression.h"
+ #include "core/io/ip.h"
++#include "core/templates/hash_map.h"
+ #include "core/variant/typed_array.h"
+ 
+ void ENetConnection::broadcast(enet_uint8 p_channel, ENetPacket *p_packet) {
+@@ -76,6 +77,9 @@
+ 		peer->_on_disconnect();
+ 	}
+ 	peers.clear();
++	// Before the host is freed: a stale entry would let a later host reuse the address and be handed
++	// the wrong instance's handler.
++	oob_hosts.erase(host);
+ 	enet_host_destroy(host);
+ 	host = nullptr;
+ }
+@@ -371,6 +375,58 @@
+ 	enet_socket_send(host->socket, &address, enet_buffers, 1);
+ }
+ 
++HashMap<ENetHost *, ENetConnection *> ENetConnection::oob_hosts;
++
++int ENetConnection::_oob_intercept(ENetHost *p_host, ENetEvent *p_event) {
++	// Return 0 for anything we do not claim, so ENet handles it exactly as before.
++	if (p_host->receivedDataLength < 4) {
++		return 0;
++	}
++	const uint8_t *d = p_host->receivedData;
++	if (d[0] != 0xFF || d[1] != 0xFF || d[2] != 0xFF || d[3] != 0xFF) {
++		return 0;
++	}
++
++	ENetConnection **found = oob_hosts.getptr(p_host);
++	if (!found || (*found)->oob_handler.is_null()) {
++		// Claimed by shape but nobody is listening. Consume it: ENet would only reject it anyway, and
++		// letting it through costs a protocol-error path per stray packet.
++		return 1;
++	}
++
++	IPAddress ip;
++#ifdef GODOT_ENET
++	ip.set_ipv6(p_host->receivedAddress.host);
++#else
++	ip = IPAddress(p_host->receivedAddress.host);
++#endif
++
++	PackedByteArray data;
++	data.resize(p_host->receivedDataLength);
++	memcpy(data.ptrw(), p_host->receivedData, p_host->receivedDataLength);
++
++	// Synchronous, inside service(). The handler is expected to enqueue rather than work: this runs in
++	// ENet's receive loop and every connected peer's traffic is waiting behind it.
++	Array args;
++	args.push_back(data);
++	args.push_back(String(ip));
++	args.push_back((int)p_host->receivedAddress.port);
++	(*found)->oob_handler.callv(args);
++	return 1;
++}
++
++void ENetConnection::set_oob_handler(const Callable &p_handler) {
++	ERR_FAIL_NULL_MSG(host, "The ENetConnection instance isn't currently active.");
++	oob_handler = p_handler;
++	if (p_handler.is_null()) {
++		oob_hosts.erase(host);
++		host->intercept = nullptr;
++	} else {
++		oob_hosts[host] = this;
++		host->intercept = &ENetConnection::_oob_intercept;
++	}
++}
++
+ void ENetConnection::_bind_methods() {
+ 	ClassDB::bind_method(D_METHOD("create_host_bound", "bind_address", "bind_port", "max_peers", "max_channels", "in_bandwidth", "out_bandwidth"), &ENetConnection::create_host_bound, DEFVAL(32), DEFVAL(0), DEFVAL(0), DEFVAL(0));
+ 	ClassDB::bind_method(D_METHOD("create_host", "max_peers", "max_channels", "in_bandwidth", "out_bandwidth"), &ENetConnection::create_host, DEFVAL(32), DEFVAL(0), DEFVAL(0), DEFVAL(0));
+@@ -390,6 +446,7 @@
+ 	ClassDB::bind_method(D_METHOD("get_local_port"), &ENetConnection::get_local_port);
+ 	ClassDB::bind_method(D_METHOD("get_peers"), &ENetConnection::_get_peers);
+ 	ClassDB::bind_method(D_METHOD("socket_send", "destination_address", "destination_port", "packet"), &ENetConnection::socket_send);
++	ClassDB::bind_method(D_METHOD("set_oob_handler", "handler"), &ENetConnection::set_oob_handler);
+ 
+ 	BIND_ENUM_CONSTANT(COMPRESS_NONE);
+ 	BIND_ENUM_CONSTANT(COMPRESS_RANGE_CODER);

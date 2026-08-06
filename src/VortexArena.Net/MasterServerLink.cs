@@ -17,15 +17,61 @@ namespace VortexArena.Net;
 /// </summary>
 public sealed class MasterServerLink : IDisposable
 {
-    private readonly UdpClient _udp;
+    /// <summary>Null in ATTACHED mode. Every send goes through <see cref="SendDatagram"/> rather than
+    /// touching this directly, so the two modes differ in exactly one place.</summary>
+    private readonly UdpClient? _udp;
 
-    /// <summary>The local UDP endpoint actually bound (port is ephemeral when 0 was requested).</summary>
-    public IPEndPoint LocalEndPoint => (IPEndPoint)_udp.Client.LocalEndPoint!;
+    /// <summary>ATTACHED mode's way out. Set together with a null <see cref="_udp"/>.</summary>
+    private readonly Action<IPEndPoint, byte[]>? _send;
 
+    private readonly IPEndPoint _localEndPoint;
+
+    /// <summary>The local UDP endpoint this link answers on. In ATTACHED mode it is the GAME port, because
+    /// that is the socket the datagrams arrived on and the one replies leave from.</summary>
+    public IPEndPoint LocalEndPoint => _localEndPoint;
+
+    /// <summary>True when this link rides a socket it does not own (the ENet game socket) and is fed by
+    /// <see cref="Deliver"/> instead of reading for itself.</summary>
+    public bool IsAttached => _udp is null;
+
+    /// <summary>OWNED mode: bind a UDP socket of this link's own. The classic path — the client browser
+    /// always uses it, and a server falls back to it when the engine cannot hand over its game socket.</summary>
     public MasterServerLink(int localPort = 0)
     {
         _udp = new UdpClient(new IPEndPoint(IPAddress.Any, localPort));
         _udp.Client.Blocking = false;
+        _localEndPoint = (IPEndPoint)_udp.Client.LocalEndPoint!;
+    }
+
+    /// <summary>ATTACHED mode: no socket of our own. Out-of-band datagrams are pushed in by
+    /// <see cref="Deliver"/>, and replies go out through <paramref name="send"/>.
+    ///
+    /// <para>This is what lets a dedicated server answer <c>getinfo</c> and rcon ON THE GAME PORT. The game
+    /// socket belongs to ENet, which drops anything that is not an ENet packet, so historically the only way
+    /// to answer OOB was a second socket on a nearby port. A patched engine hands us the rejected datagrams
+    /// instead (<c>tools/engine-patches/godot-4.6.3-enet-oob-intercept.patch</c>) and this constructor
+    /// receives them.</para>
+    ///
+    /// <para>Answering on the game port is what the rest of the system already assumes. Conductor verifies a
+    /// server by sending <c>getinfo</c> to the address and port it ANNOUNCED and requires the reply from that
+    /// same address and port; a server answering on gamePort+1 fails that check while every announce still
+    /// returns 200, so it is never listed and neither side logs an error.</para></summary>
+    /// <param name="send">Sends one datagram from the game socket. Backed by
+    /// <c>ENetConnection.socket_send</c>, which writes to <c>host->socket</c>, so the reply's source address
+    /// and port are the game server's own.</param>
+    /// <param name="localEndPoint">The game port. Reported by <see cref="LocalEndPoint"/>; not bound here.</param>
+    public MasterServerLink(Action<IPEndPoint, byte[]> send, IPEndPoint localEndPoint)
+    {
+        _send = send ?? throw new ArgumentNullException(nameof(send));
+        _localEndPoint = localEndPoint ?? throw new ArgumentNullException(nameof(localEndPoint));
+    }
+
+    private void SendDatagram(byte[] packet, IPEndPoint to)
+    {
+        if (_udp is not null)
+            _udp.Send(packet, packet.Length, to);
+        else
+            _send!(to, packet);
     }
 
     // ---- events (raised from Poll) ----
@@ -66,50 +112,71 @@ public sealed class MasterServerLink : IDisposable
     public void SendHeartbeat(IPEndPoint master)
     {
         byte[] p = MasterServerProtocol.EncodeHeartbeat();
-        _udp.Send(p, p.Length, master);
+        SendDatagram(p, master);
     }
 
     /// <summary>Client → master: request the server list for <paramref name="game"/>/<paramref name="protocol"/>.</summary>
     public void RequestServers(IPEndPoint master, string game, int protocol)
     {
         byte[] p = MasterServerProtocol.EncodeGetServers(game, protocol);
-        _udp.Send(p, p.Length, master);
+        SendDatagram(p, master);
     }
 
     /// <summary>Client → server: ask a game server for its info (browser detail / ping). The challenge echoes back.</summary>
     public void RequestInfo(IPEndPoint server, string challenge)
     {
         byte[] p = MasterServerProtocol.EncodeGetInfo(challenge);
-        _udp.Send(p, p.Length, server);
+        SendDatagram(p, server);
     }
 
     /// <summary>Server → client: answer a getinfo with our infostring (hostname, map, players, …).</summary>
     public void SendInfoResponse(IPEndPoint to, IReadOnlyDictionary<string, string> info)
     {
         byte[] p = MasterServerProtocol.EncodeInfoResponse(info);
-        _udp.Send(p, p.Length, to);
+        SendDatagram(p, to);
     }
 
     /// <summary>Send a pre-built datagram verbatim (e.g. a master forwarding a canned getserversResponse).</summary>
-    public void SendRaw(byte[] datagram, IPEndPoint to) => _udp.Send(datagram, datagram.Length, to);
+    public void SendRaw(byte[] datagram, IPEndPoint to) => SendDatagram(datagram, to);
 
     // =====================================================================================
     //  Receive + dispatch
     // =====================================================================================
 
-    /// <summary>Drain pending datagrams (non-blocking) and raise the matching event for each recognised message.</summary>
+    /// <summary>Hand this link one out-of-band datagram that arrived on a socket it does not own, and
+    /// dispatch it exactly as <see cref="Poll"/> would have.
+    ///
+    /// <para>ATTACHED mode only. The caller is the engine's ENet intercept, which sees every datagram the
+    /// game socket receives and forwards the ones ENet rejected. The same try/catch as <see cref="Poll"/>
+    /// wraps the dispatch, and for a stronger reason: this runs INSIDE <c>ENetConnection.service()</c>, so
+    /// an escaping exception would not merely kill a frame, it would abort the network service call that
+    /// every connected player's traffic is riding on.</para></summary>
+    public void Deliver(byte[] data, IPEndPoint from)
+    {
+        try { Dispatch(data, from); }
+        catch (Exception ex) { VortexArena.Common.Diagnostics.Log.Warn($"[master] dropped packet: {ex.Message}"); }
+    }
+
+    /// <summary>Drain pending datagrams (non-blocking) and raise the matching event for each recognised message.
+    ///
+    /// <para>A no-op in ATTACHED mode: there is no socket of our own to drain, and packets arrive through
+    /// <see cref="Deliver"/> instead. Callers therefore need no mode check — they pump every frame either
+    /// way.</para></summary>
     public void Poll()
     {
+        if (_udp is null)
+            return;
+
         for (int i = 0; i < MaxPacketsPerPoll; i++)
         {
             byte[] data;
             IPEndPoint from;
             try
             {
-                if (_udp.Available <= 0)
+                if (_udp!.Available <= 0)
                     return;
                 var ep = new IPEndPoint(IPAddress.Any, 0);
-                data = _udp.Receive(ref ep);
+                data = _udp!.Receive(ref ep);
                 from = ep;
             }
             catch (SocketException)
@@ -160,7 +227,7 @@ public sealed class MasterServerLink : IDisposable
 
     /// <summary>DS-6: send a pre-built connectionless packet (rcon reply / challenge reply) to <paramref name="to"/>.
     /// The bytes already include the OOB header (<see cref="RconProtocol"/> builds them).</summary>
-    public void SendRaw(IPEndPoint to, byte[] packet) => _udp.Send(packet, packet.Length, to);
+    public void SendRaw(IPEndPoint to, byte[] packet) => SendDatagram(packet, to);
 
-    public void Dispose() => _udp.Dispose();
+    public void Dispose() => _udp?.Dispose();
 }

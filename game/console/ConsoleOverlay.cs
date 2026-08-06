@@ -253,6 +253,10 @@ public partial class ConsoleOverlay : CanvasLayer
     /// here (not in the Godot-free <see cref="ConsoleCommands"/>) through the menu's existing host hooks.</summary>
     private void RegisterHostCommands(ConfigInterpreter interp)
     {
+        // (N7) .rtlights authoring: status / reload / import-from-entities / save. Registered here with the
+        // other host commands because they need the live client renderer, not just the config store.
+        Client.RtLightsCommands.Register(interp, Print);
+
         interp.RegisterCommand("quit", _ => MenuCommand.Quit?.Invoke(), "exit the game");
         interp.RegisterCommand("exit", _ => MenuCommand.Quit?.Invoke(), "exit the game");
         interp.RegisterCommand("disconnect", _ => MenuCommand.Disconnect?.Invoke(),

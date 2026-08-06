@@ -62,6 +62,34 @@ public sealed partial class WorldLightRenderer : Node3D
     /// <summary>How many world lights are live (console readout / tests).</summary>
     public int Count => _lights.Count;
 
+    /// <summary>(N7) The parsed source lights behind the live nodes - what rtlights_save writes back.</summary>
+    public IReadOnlyList<RtLightsFile.Light> SourceLights => _source;
+
+    private readonly List<RtLightsFile.Light> _source = new();
+
+    /// <summary>(N7) Re-read this map's lights from disk without a map change (DP r_editlights_reload).</summary>
+    public void ForceReload(string? mapName, BspData? bsp)
+    {
+        _loadedMap = string.Empty;
+        LoadForMap(mapName, bsp);
+    }
+
+    /// <summary>
+    /// (N7) Replace the light set with one built from the map's own <c>light</c> entities, and KEEP it - the
+    /// way you bootstrap a .rtlights for a map that has never had one. Returns how many were built.
+    /// </summary>
+    public int ImportFromEntities(BspData? bsp)
+    {
+        List<RtLightsFile.Light> src = ImportFromMapEntities(bsp, out _);
+        if (src.Count == 0)
+            return 0;
+        Clear();
+        _source.AddRange(src);
+        foreach (RtLightsFile.Light l in src)
+            Build(l);
+        return _lights.Count;
+    }
+
     private static bool _registered;
 
     /// <summary>Register the lightmap-dimming global. Called from <see cref="WorldTint.EnsureRegistered"/>.</summary>
@@ -129,7 +157,16 @@ public sealed partial class WorldLightRenderer : Node3D
         return lights;
     }
 
-    /// <summary>DP <c>r_shadow_realtime_world_importlightentitiesfrommap</c> (default 1).</summary>
+    /// <summary>
+    /// DP <c>r_shadow_realtime_world_importlightentitiesfrommap</c> (DP default 1).
+    ///
+    /// <para><b>Xonotic ships it as 0</b> (<c>xonotic-client.cfg:304</c>), with the reason in its own comment:
+    /// "Whether build process uses keepLights is nontransparent and may change, so better make keepLights not
+    /// matter." So on stock content this import never runs, even on the many maps whose entity lump still
+    /// carries their <c>light</c> entities - stormkeep has 119 of them. That is deliberate on Base's part and
+    /// is reproduced here rather than second-guessed: set the cvar to 1 to opt in, which is also what
+    /// <c>rtlights_import</c> does explicitly regardless of the cvar.</para>
+    /// </summary>
     private static bool ImportFromMapAllowed() =>
         Cvar("r_shadow_realtime_world_importlightentitiesfrommap", 1f) != 0f;
 

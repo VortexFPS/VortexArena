@@ -12926,6 +12926,10 @@ public sealed partial class NetGame : Node3D
         {
             _render.WorldLights.Assets = _assets;
             _render.WorldLights.LoadForMap(_map, _bsp);
+            // (N7) hand the console commands the live renderer + map context.
+            Client.RtLightsCommands.Renderer = _render.WorldLights;
+            Client.RtLightsCommands.MapName = _map;
+            Client.RtLightsCommands.Bsp = _bsp;
         }
 
         // (F5) mode 1 throws the blob along the map baked light direction; hand the same grid over.

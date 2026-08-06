@@ -167,6 +167,32 @@ public partial class DialogSettingsEffects : SettingsTab
         box.AddChild(coronaFade);
         Dependent.BindNot(coronaFade, "r_coronas", 0); // setDependentNOT(e,"r_coronas",0)
 
+        // --- Vortex lighting (F1-B / F5 / N2 / N8) ---------------------------------------------------------
+        // The port-only controls, kept together and BELOW the Base-parity ones so the tab still reads as
+        // Xonotic. Every one of these has a live reader; nothing here is a stub.
+        box.AddChild(Widgets.CheckBox("r_model_lightgrid", "Light models from the map",
+            "Sample the map baked light grid per pixel, so players and pickups take the lighting of the room "
+            + "they stand in (DarkPlaces does this by default). Off falls back to one global light."));
+
+        var modelDlight = Widgets.CheckBox("r_model_dlight", "Dynamic lights on models",
+            "Let explosions and muzzle flashes light players and items, not just the walls behind them.");
+        box.AddChild(modelDlight);
+        Dependent.Bind(modelDlight, "r_model_lightgrid", 1, 1);
+
+        box.AddChild(Ui.Row("Ground shadows:", Widgets.TextSlider("r_fakeshadows",
+            "Cheap projected shadows under players and pickups. Costs far less than real shadow maps and "
+            + "stops models looking like they hover.")));
+
+        var worldCasts = Widgets.CheckBox("r_shadow_world_casts", "World casts shadows",
+            "Let map geometry cast into dynamic-light shadows. This is the expensive half of realtime "
+            + "shadows - it makes every world cell a shadow caster.");
+        box.AddChild(worldCasts);
+        Dependent.Bind(worldCasts, "r_shadow_realtime_dlight_shadows", 1, 1);
+
+        box.AddChild(Widgets.CheckBox("cl_rimlight", "Team rim light",
+            "Outline teammates and powerup carriers with a coloured rim. This makes players easier to see, "
+            + "so it is off by default and a server may prefer everyone to match."));
+
         box.AddChild(Ui.Spacer());
 
         // --- Postprocessing / motion blur ------------------------------------------------------------------

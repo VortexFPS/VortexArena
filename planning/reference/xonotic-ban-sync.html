@@ -643,103 +643,319 @@ footer a:hover { color: #6ec9bc; }
 
     <section id="s2">
       <h2><span class="num">02</span> Run a provider</h2>
-      <p>You need one host that all your game servers can reach over HTTP. The provider below uses only the
-        Python standard library and keeps its state in a JSON file beside itself.</p>
+      <p>You need one host that all your game servers can reach over HTTP. The provider is one Python file
+        with no dependencies beyond the standard library, and keeps its state in a JSON file beside itself.</p>
+
+      <div class="note">
+        <span class="note-label">Source</span>
+        <p>The provider lives at
+          <a href="https://github.com/VortexFPS/XonoticBanServer">github.com/VortexFPS/XonoticBanServer</a>
+          — with a systemd unit, an nginx TLS config, and tests. The full script is also reproduced below,
+          so you can run it without cloning anything.</p>
+      </div>
 
       <div class="steps">
 
         <div class="step">
           <div class="step-body">
-            <div class="step-title">Save the script</div>
-            <p>Put this on the host as <code>bansync.py</code>.</p>
+            <div class="step-title">Get the script</div>
+<pre><code>git clone https://github.com/VortexFPS/XonoticBanServer
+cd XonoticBanServer</code></pre>
+            <p>Or save the file below as <code>bansync.py</code> and skip the clone.</p>
             <details>
-              <summary>bansync.py — ban list provider</summary>
+              <summary>bansync.py — ban list provider (full source)</summary>
 <pre><code>#!/usr/bin/env python3
-<span class="c">"""Minimal Xonotic ban list provider.
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""A ban list provider for Xonotic dedicated servers.
 
-Protocol (all GET):
-  ?action=ban&amp;hostname=..&amp;ip=..&amp;duration=..&amp;reason=..
-  ?action=unban&amp;hostname=..&amp;ip=..
-  ?action=list&amp;hostname=..&amp;servers=1.2.3.4;5.6.7.8
+Xonotic can share bans between servers over HTTP: each server reports the bans
+it places to a "ban list provider", and periodically pulls back the bans placed
+by the servers it trusts. Xonotic ships the client half; this is the provider.
 
-The list response is plain text, four LF-separated lines per ban:
-  address / seconds remaining / reason / IP of the server that set it
-"""</span>
-import json, os, time
+Protocol (all GET, see qcsrc/server/ipban.qc upstream):
+
+    ?action=ban&amp;hostname=..&amp;ip=..&amp;duration=&lt;seconds&gt;&amp;reason=..
+    ?action=unban&amp;hostname=..&amp;ip=..
+    ?action=list&amp;hostname=..&amp;servers=1.2.3.4;5.6.7.8
+
+The reply to `list` is plain text, four LF-separated lines per ban:
+
+    address           1-4 octets, an IPv6 prefix, or a 44-char crypto player id
+    seconds remaining
+    reason
+    server            the IP of the game server that registered the ban
+
+Xonotic discards a list reply that starts with "&lt;", contains a carriage
+return, or whose line count is not divisible by four.
+
+No dependencies beyond the standard library. State lives in a single JSON file.
+
+Usage:
+    ./bansync.py --allow 192.0.2.10,192.0.2.11
+    ./bansync.py --bind 127.0.0.1 --trusted-proxy 127.0.0.1   # behind nginx
+"""
+
+import argparse
+import ipaddress
+import json
+import os
+import sys
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-STORE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bans.json")
+MAX_REASON = 200
 
-def load():
+
+def normalize_ip(text):
+    """Return a canonical form of an IP address, or None if it isn't one.
+
+    Accepts the forms that turn up in proxy headers: bracketed IPv6
+    (`[2001:db8::1]`), and IPv4 with a port (`192.0.2.10:54321`). An IPv6
+    address with a port is only unambiguous in the bracketed form, so a bare
+    colon-bearing string is tried as IPv6 first.
+    """
+    if not text:
+        return None
+    text = text.strip()
+    if text.startswith("["):
+        text = text.partition("]")[0][1:]
+    else:
+        try:
+            return str(ipaddress.ip_address(text))
+        except ValueError:
+            pass
+        if text.count(":") == 1:                      # IPv4:port
+            text = text.rsplit(":", 1)[0]
     try:
-        with open(STORE) as fh:
-            return json.load(fh)
-    except (OSError, ValueError):
-        return []
+        return str(ipaddress.ip_address(text))
+    except ValueError:
+        return None
 
-def save(bans):
-    tmp = STORE + ".tmp"
-    with open(tmp, "w") as fh:
-        json.dump(bans, fh, indent=1)
-    os.replace(tmp, STORE)
 
-def clean(text):
-    <span class="c"># newlines and carriage returns would corrupt the response format</span>
-    return text.replace("\r", " ").replace("\n", " ").strip()[:200]
+class BanStore:
+    """The ban list, persisted to JSON.
+
+    Every read-modify-write goes through the lock. The server is threaded, so
+    without it two servers banning at the same moment can lose one of the bans:
+    both read the same list, both append, and the second write wins.
+    """
+
+    def __init__(self, path):
+        self.path = path
+        self.lock = threading.Lock()
+
+    def _load(self):
+        try:
+            with open(self.path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            return []
+        if not isinstance(data, list):
+            return []
+        now = time.time()
+        return [b for b in data if isinstance(b, dict) and b.get("expires", 0) &gt; now]
+
+    def _save(self, bans):
+        tmp = self.path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(bans, fh, indent=1)
+        os.replace(tmp, self.path)                     # atomic: readers never see a half-written file
+
+    def add(self, ip, duration, reason, server):
+        with self.lock:
+            bans = self._load()
+            bans = [b for b in bans if not (b["ip"] == ip and b["server"] == server)]
+            bans.append({
+                "ip": ip,
+                "expires": time.time() + duration,
+                "reason": reason,
+                "server": server,
+            })
+            self._save(bans)
+
+    def remove(self, ip, server):
+        """Drop a ban. A server may only lift the bans it placed itself."""
+        with self.lock:
+            bans = self._load()
+            kept = [b for b in bans if not (b["ip"] == ip and b["server"] == server)]
+            removed = len(bans) - len(kept)
+            if removed:
+                self._save(kept)
+            return removed
+
+    def list_for(self, servers):
+        with self.lock:
+            bans = self._load()
+        now = time.time()
+        out = []
+        for b in bans:
+            if b["server"] not in servers:
+                continue
+            out += [
+                b["ip"],
+                str(int(b["expires"] - now)),
+                b["reason"] or "no reason given",
+                b["server"],
+            ]
+        return out
+
 
 class Handler(BaseHTTPRequestHandler):
-    def reply(self, body):
+    server_version = "xonotic-bansync/1.0"
+
+    # Injected by serve(); class attributes so every request handler sees them.
+    store = None
+    allowed_servers = frozenset()
+    trusted_proxies = frozenset()
+
+    # ---- helpers -------------------------------------------------------
+
+    def origin_ip(self):
+        """The game server that made this request.
+
+        Directly connected: the peer address. Behind a reverse proxy the peer
+        is the proxy, so walk X-Forwarded-For from the right and return the
+        first hop that is not itself a trusted proxy. Only headers arriving
+        from a configured proxy are honoured — otherwise any client could name
+        its own address and impersonate a trusted server.
+        """
+        peer = normalize_ip(self.client_address[0]) or self.client_address[0]
+        if peer not in self.trusted_proxies:
+            return peer
+        forwarded = self.headers.get("X-Forwarded-For", "")
+        for hop in reversed([h for h in forwarded.split(",") if h.strip()]):
+            candidate = normalize_ip(hop)
+            if candidate and candidate not in self.trusted_proxies:
+                return candidate
+        return peer
+
+    def reply(self, body, status=200):
         raw = body.encode("utf-8")
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
 
+    def may_write(self, origin):
+        return not self.allowed_servers or origin in self.allowed_servers
+
+    # ---- request handling ----------------------------------------------
+
     def do_GET(self):
-        q = parse_qs(urlparse(self.path).query)
-        action = q.get("action", [""])[0]
-        origin = self.client_address[0]        <span class="c"># the server making the request</span>
-        now = time.time()
-        bans = [b for b in load() if b["expires"] &gt; now]
+        query = parse_qs(urlparse(self.path).query)
+        action = query.get("action", [""])[0]
+        origin = self.origin_ip()
 
         if action == "ban":
-            ip = clean(q.get("ip", [""])[0])
-            duration = float(q.get("duration", ["0"])[0] or 0)
-            reason = clean(q.get("reason", [""])[0])
+            if not self.may_write(origin):
+                self.log_message("REFUSED ban from %s (not in allowlist)", origin)
+                return self.reply("forbidden\n", 403)
+            ip = clean(query.get("ip", [""])[0])
+            reason = clean(query.get("reason", [""])[0])
+            try:
+                duration = float(query.get("duration", ["0"])[0] or 0)
+            except ValueError:
+                duration = 0
             if ip and duration &gt; 0:
-                bans = [b for b in bans if not (b["ip"] == ip and b["server"] == origin)]
-                bans.append({"ip": ip, "expires": now + duration,
-                             "reason": reason, "server": origin})
-                save(bans)
-                self.log_message("ban %s by %s for %ds (%s)", ip, origin, duration, reason)
+                self.store.add(ip, duration, reason, origin)
+                self.log_message("ban %s by %s for %ds (%s)", ip, origin, int(duration), reason)
             return self.reply("ok\n")
 
         if action == "unban":
-            ip = clean(q.get("ip", [""])[0])
-            bans = [b for b in bans if not (b["ip"] == ip and b["server"] == origin)]
-            save(bans)
-            self.log_message("unban %s by %s", ip, origin)
+            if not self.may_write(origin):
+                self.log_message("REFUSED unban from %s (not in allowlist)", origin)
+                return self.reply("forbidden\n", 403)
+            ip = clean(query.get("ip", [""])[0])
+            if ip and self.store.remove(ip, origin):
+                self.log_message("unban %s by %s", ip, origin)
             return self.reply("ok\n")
 
         if action == "list":
-            wanted = [s for s in q.get("servers", [""])[0].split(";") if s]
-            out = []
-            for b in bans:
-                if b["server"] not in wanted:
-                    continue
-                out += [b["ip"], str(int(b["expires"] - now)),
-                        b["reason"] or "no reason given", b["server"]]
-            return self.reply("\n".join(out) + ("\n" if out else ""))
+            wanted = {s for s in query.get("servers", [""])[0].split(";") if s}
+            lines = self.store.list_for(wanted)
+            return self.reply("\n".join(lines) + ("\n" if lines else ""))
 
-        return self.reply("")   <span class="c"># never HTML: Xonotic rejects a body starting with "&lt;"</span>
+        # Anything else: an empty body. Never HTML — Xonotic rejects a list
+        # reply that starts with "&lt;" as an error page.
+        return self.reply("")
 
     def log_message(self, fmt, *args):
         print("%s %s" % (self.log_date_time_string(), fmt % args), flush=True)
 
+
+def clean(text):
+    """Strip what would corrupt the four-lines-per-ban reply format."""
+    return text.replace("\r", " ").replace("\n", " ").strip()[:MAX_REASON]
+
+
+def parse_ip_set(values, label):
+    result = set()
+    for chunk in values:
+        for item in chunk.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            address = normalize_ip(item)
+            if address is None:
+                sys.exit("%s: %r is not an IP address" % (label, item))
+            result.add(address)
+    return frozenset(result)
+
+
+def serve(bind, port, store_path, allowed, proxies):
+    Handler.store = BanStore(store_path)
+    Handler.allowed_servers = allowed
+    Handler.trusted_proxies = proxies
+
+    if not allowed:
+        print("WARNING: no --allow given; any host that can reach this port "
+              "may place bans", flush=True)
+    print("bansync listening on %s:%d, store=%s, allowed=%s, proxies=%s"
+          % (bind, port, store_path,
+             ",".join(sorted(allowed)) or "(any)",
+             ",".join(sorted(proxies)) or "(none)"), flush=True)
+
+    ThreadingHTTPServer((bind, port), Handler).serve_forever()
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Xonotic ban list provider")
+    parser.add_argument("--bind", default=os.environ.get("BANSYNC_BIND", "0.0.0.0"),
+                        help="address to listen on (default: 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("BANSYNC_PORT", 8080)),
+                        help="port to listen on (default: 8080)")
+    parser.add_argument("--store", default=os.environ.get("BANSYNC_STORE", "bans.json"),
+                        help="path to the JSON ban store (default: bans.json)")
+    parser.add_argument("--allow", action="append", default=[],
+                        help="game server IP allowed to place bans; repeatable "
+                             "or comma-separated. Omit to allow any host.")
+    parser.add_argument("--trusted-proxy", action="append", default=[],
+                        help="reverse proxy IP whose X-Forwarded-For header is "
+                             "honoured; repeatable or comma-separated")
+    args = parser.parse_args(argv)
+
+    if not args.allow and os.environ.get("BANSYNC_ALLOW"):
+        args.allow = [os.environ["BANSYNC_ALLOW"]]
+    if not args.trusted_proxy and os.environ.get("BANSYNC_TRUSTED_PROXIES"):
+        args.trusted_proxy = [os.environ["BANSYNC_TRUSTED_PROXIES"]]
+
+    serve(
+        args.bind,
+        args.port,
+        args.store,
+        parse_ip_set(args.allow, "--allow"),
+        parse_ip_set(args.trusted_proxy, "--trusted-proxy"),
+    )
+
+
 if __name__ == "__main__":
-    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()</code></pre>
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass</code></pre>
             </details>
           </div>
         </div>
@@ -747,9 +963,30 @@ if __name__ == "__main__":
         <div class="step">
           <div class="step-body">
             <div class="step-title">Start it</div>
-<pre><code>python3 bansync.py</code></pre>
-            <p>It listens on port <code>8080</code>. Once it works, run it under systemd and put it behind
-              nginx with TLS — the requests carry player IP addresses in the query string.</p>
+<pre><code>python3 bansync.py --allow <span class="v">192.0.2.10,192.0.2.11</span></code></pre>
+            <p>It listens on port <code>8080</code>. <code>--allow</code> lists the game servers permitted to
+              place bans; everything else gets a <code>403</code>. Reading the list stays open, since that is
+              what the servers poll. Omit the flag and any host that can reach the port may ban — the
+              provider warns about this at startup.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-body">
+            <div class="step-title">Put it behind TLS</div>
+            <p>The requests carry banned players' IP addresses in the query string, so terminate TLS if the
+              provider is reachable from the internet. The repository ships
+              <code>bansync.service</code> and <code>nginx.conf.example</code> for exactly this.</p>
+<pre><code>python3 bansync.py --bind <span class="v">127.0.0.1</span> --trusted-proxy <span class="v">127.0.0.1</span> --allow <span class="v">192.0.2.10</span></code></pre>
+            <div class="note stop">
+              <span class="note-label">Proxies need this flag</span>
+              <p>Bans are keyed by the IP that placed them, and servers pull by that key. Behind a proxy
+                every request appears to come from the proxy, so <strong>without
+                <code>--trusted-proxy</code> every ban is filed under <code>127.0.0.1</code> and the sync
+                returns nothing</strong>. With it, the real address is read from
+                <code>X-Forwarded-For</code> — and only when the connection came from a configured proxy, so
+                nobody else can claim to be a trusted server.</p>
+            </div>
           </div>
         </div>
 
@@ -758,6 +995,9 @@ if __name__ == "__main__":
             <div class="step-title">Check it answers</div>
             <p>With no bans recorded yet this returns an empty body, which is the correct response:</p>
 <pre><code>curl "http://bans.example.net:8080/?action=list&amp;hostname=test&amp;servers=192.0.2.10"</code></pre>
+            <p>The repository's test suite covers the wire format, the allowlist, proxy attribution and
+              concurrent writes:</p>
+<pre><code>python3 -m unittest -v</code></pre>
           </div>
         </div>
 

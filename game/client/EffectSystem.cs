@@ -470,6 +470,15 @@ public partial class EffectSystem : Node3D
         if (string.IsNullOrEmpty(effectName))
             return null;
 
+        // (F9 wiring) cl_spawn_event_particles: the Base gate over the spawn-in flash (client/spawnpoints.qc
+        // renders ENT_CLIENT_SPAWNEVENT only when it is set). The port networks that burst as a plain effect,
+        // so the client-side gate belongs here - the funnel BOTH the wire path and the listen-server mirror
+        // come through. Matches the registry name ("SPAWN") and the effectinfo names ("spawn_event_*").
+        if ((effectName == "SPAWN" || effectName.StartsWith("spawn_event", StringComparison.OrdinalIgnoreCase))
+            && !string.IsNullOrWhiteSpace(VortexArena.Game.Menu.MenuState.Cvars.GetString("cl_spawn_event_particles"))
+            && VortexArena.Game.Menu.MenuState.Cvars.GetFloat("cl_spawn_event_particles") == 0f)
+            return null;
+
         // Casing eject (W_*_Attack SpawnCasing): the bullet/shell casing temp-entities aren't pointparticles —
         // they spawn a tumbling, bouncing brass entity. WeaponFiring.EjectCasing emits them as the CASING_BULLET/
         // CASING_SHELL effects (carrying the QC eject velocity in Velocity); route those to the dedicated casing

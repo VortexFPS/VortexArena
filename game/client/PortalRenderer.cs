@@ -392,10 +392,18 @@ public partial class PortalRenderer : Node3D
     {
         if (Api.Services is null)
             return 1f;
+        float scale = 1f;
         string s = Api.Cvars.GetString("cl_portal_resolution");
-        if (string.IsNullOrWhiteSpace(s))
-            return 1f;
-        return Mathf.Clamp(Api.Cvars.GetFloat("cl_portal_resolution"), 0.25f, 2f);
+        if (!string.IsNullOrWhiteSpace(s))
+            scale = Api.Cvars.GetFloat("cl_portal_resolution");
+        // (F9 wiring) r_water_resolutionmultiplier: the Base menu's "Resolution of reflections/refractions"
+        // slider (Blurred 0.25 / Good 0.5 / Sharp 1). It multiplies WITH the port-only cl_portal_resolution
+        // rather than replacing it, so a dev override survives a preset change. Unset = 1 (no change) - the
+        // Base default of 0.5 would otherwise silently halve everyone's portals the day this wired up.
+        string rm = Api.Cvars.GetString("r_water_resolutionmultiplier");
+        if (!string.IsNullOrWhiteSpace(rm))
+            scale *= Api.Cvars.GetFloat("r_water_resolutionmultiplier");
+        return Mathf.Clamp(scale, 0.25f, 2f);
     }
 
     public override void _ExitTree()
@@ -417,6 +425,22 @@ public partial class PortalRenderer : Node3D
         ActiveExitViewsQuake.Clear();
         if (_portals.Count == 0 || _mainCamera is null)
             return;
+
+        // (F9 wiring) r_water: DP's master switch for the reflection/refraction portal pass, which is exactly
+        // what these warpzone views are (see the type doc). 0 freezes every portal viewport - the surfaces
+        // keep their last rendered image rather than going black, which is the cheapest honest reading of
+        // "don't spend GPU on portal views". Unset = on (the DP default).
+        if (Api.Services is not null)
+        {
+            string rw = Api.Cvars.GetString("r_water");
+            if (!string.IsNullOrWhiteSpace(rw) && Api.Cvars.GetFloat("r_water") == 0f)
+            {
+                foreach (Portal frozen in _portals)
+                    if (frozen.Viewport.RenderTargetUpdateMode != SubViewport.UpdateMode.Disabled)
+                        frozen.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+                return;
+            }
+        }
 
         Camera3D main = _mainCamera;
         // NetGame.UpdateCamera has already posed the camera this frame (parent _Process runs before this

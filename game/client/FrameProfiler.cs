@@ -97,6 +97,9 @@ public partial class FrameProfiler : CanvasLayer
           "fakeshadows",
           // (F2) r_coronas: the per-frame flare placement + occlusion traces.
           "coronas",
+          // (F9) r_motionblur: the per-frame camera-delta measure that drives the smear shader. Inert
+          // while the cvar is 0 (it early-outs and hides the overlay).
+          "motionblur",
           // (F4) r_shadow_realtime_world: the per-frame gate + light-style animation over world lights.
           "worldlights",
           // the messagemode chat prompt's caret-blink _Process (only ticks while the prompt is open — it disables

@@ -68,7 +68,8 @@ public static class ClientSettings
         PushTextureCompression(c);
         c.Changed += name =>
         {
-            if (name.StartsWith("gl_texturecompression", StringComparison.OrdinalIgnoreCase))
+            if (name.StartsWith("gl_texturecompression", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("gl_picmip", StringComparison.OrdinalIgnoreCase))
                 PushTextureCompression(c);
         };
     }
@@ -115,6 +116,9 @@ public static class ClientSettings
     private static void PushTextureCompression(CvarService c)
     {
         Loaders.AssetSystem.TextureCompression = (int)c.GetFloat("gl_texturecompression");
+        // (F9 wiring) gl_picmip rides the same push: clamp the menu's joke/offset values (1337 = Xonotic's
+        // "Lowest"; negatives meant upscale offsets in Base) into an honest 0..4 halving count.
+        Loaders.AssetSystem.Picmip = Math.Clamp((int)c.GetFloat("gl_picmip"), 0, 4);
         int mask = 0;
         foreach ((string cvar, TexCategory category, _) in TextureCompressionCategories)
             if (c.GetFloat(cvar) != 0f)
@@ -724,6 +728,15 @@ public static class ClientSettings
     /// The audio cvars that only take effect on an explicit apply. <see cref="ApplyAudio"/> is called at boot
     /// and from the Apply button and nowhere else, so every volume it pushes is genuinely deferred.
     /// </summary>
+    /// <summary>
+    /// The render cvars consumed while the MAP is built, so only a map reload re-applies them: gl_picmip and
+    /// gl_texturecompression as each texture is decoded, r_subdivisions_tolerance when the bezier patches are
+    /// tessellated, r_shadow_world_casts when the world cells are created. Recorded by the map build (see
+    /// NetGame) so the Effects tab's Apply button knows when one has drifted.
+    /// </summary>
+    public static readonly string[] MapBuildApplyCvars =
+        { "gl_picmip", "gl_texturecompression", "r_subdivisions_tolerance", "r_shadow_world_casts" };
+
     public static readonly string[] AudioApplyCvars =
         { "mastervolume", "bgmvolume", "snd_channel0volume", "snd_channel1volume",
           "snd_channel2volume", "snd_channel7volume" };

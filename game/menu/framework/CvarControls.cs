@@ -130,7 +130,13 @@ public partial class CvarCheckBox : CheckBox
         _updating = true;
         // "on" by exact string match, or (the common numeric case) any nonzero when on=="1".
         string v = CvarUi.Cvars.GetString(_cvar);
-        ButtonPressed = v == _on || (_on == "1" && v != "" && CvarUi.Cvars.GetFloat(_cvar) != 0f);
+        // An UNSET cvar reads as 0 everywhere else in the port - every reader's fallback, and GetFloat itself.
+        // The widget has to agree, or an INVERTED checkbox (on = "0", e.g. "Use lightmaps" over
+        // mod_q3bsp_nolightmaps) shows unchecked for a cvar whose effective value is exactly its on-value.
+        // That mismatch is invisible until something reads the cvar, which is how it survived this long.
+        if (string.IsNullOrEmpty(v))
+            v = "0";
+        ButtonPressed = v == _on || (_on == "1" && CvarUi.Cvars.GetFloat(_cvar) != 0f);
         _updating = false;
     }
 

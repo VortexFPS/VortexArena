@@ -1301,6 +1301,16 @@ public sealed class AssetSystem
     public static int TextureCompression { get; set; }
 
     /// <summary>
+    /// (F9 wiring) <c>gl_picmip</c>: drop this many mip levels from every CONTENT texture before upload -
+    /// halve the resolution N times, DP's classic texture-memory knob. 0 (the default) touches nothing.
+    /// Plain static for the same worker-thread reason as <see cref="TextureCompression"/>; pushed by
+    /// <c>ClientSettings</c> and clamped there (the menu's "Lowest" writes the Xonotic joke value 1337, and
+    /// its "Good"/"Best" write negatives that meant upscale offsets in Base - both clamp into [0,4]).
+    /// Applies to textures DECODED AFTER the change, so in practice: next map load.
+    /// </summary>
+    public static int Picmip { get; set; }
+
+    /// <summary>
     /// Decode and PREPARE the pixels for <paramref name="vpath"/> — everything that is pure CPU work.
     /// Deliberately separate from <see cref="UploadImage"/> so callers can do this OUTSIDE the upload gate:
     /// mipmap generation and especially <see cref="MaybeCompress"/> (BPTC is the "Good" setting because it
@@ -1315,6 +1325,7 @@ public sealed class AssetSystem
             image = LoadImageFromVpath(vpath);
         if (image == null)
             return null;
+        MaybePicmip(vpath, image);     // gl_picmip: halve the resolution N times before mips/compression
         EnsureMipmaps(vpath, image);   // no-op when the worker predecode already generated them
         MaybeCompress(vpath, image);   // gl_texturecompression: shrink RGBA8 to BC before it reaches VRAM
         return image;
@@ -1346,6 +1357,30 @@ public sealed class AssetSystem
     }
 
     /// <summary>The GPU half, and the only part that belongs inside the upload gate.</summary>
+    /// <summary>
+    /// Apply <see cref="Picmip"/>: shrink the decoded image by half per level. Skipped for UI/font pages and
+    /// BSP lightmaps (DP's picmip never touches either - a blurred HUD is pure loss and lightmaps are already
+    /// tiny), for images that arrived pre-compressed (a BC-block image cannot be resized in place), and once
+    /// a dimension would fall under 16 px (past that the texture is noise).
+    /// </summary>
+    private static void MaybePicmip(string vpath, Image image)
+    {
+        int levels = Picmip;
+        if (levels <= 0 || image.IsCompressed())
+            return;
+        TexCategory cat = TextureCategories.Classify(vpath);
+        if (cat is TexCategory.TwoD or TexCategory.Q3BspLightmaps)
+            return;
+        int w = image.GetWidth(), h = image.GetHeight();
+        while (levels-- > 0 && w >= 32 && h >= 32)
+        {
+            w >>= 1;
+            h >>= 1;
+        }
+        if (w != image.GetWidth())
+            image.Resize(w, h, Image.Interpolation.Bilinear);
+    }
+
     private static Texture2D? UploadImage(string vpath, Image image)
     {
         try

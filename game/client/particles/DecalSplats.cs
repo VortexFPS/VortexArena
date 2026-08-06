@@ -56,6 +56,13 @@ public sealed partial class DecalSplats : Node3D
     /// multiplicative marks read at gameplay brightness.</summary>
     [Export] public float IntensityMultiplier { get; set; } = 2f;
 
+    /// <summary>Read a float cvar, honouring an explicit 0; unset returns <paramref name="fallback"/>.</summary>
+    private static float CvarOr(string name, float fallback)
+    {
+        string s = VortexArena.Game.Menu.MenuState.Cvars.GetString(name);
+        return string.IsNullOrWhiteSpace(s) ? fallback : VortexArena.Game.Menu.MenuState.Cvars.GetFloat(name);
+    }
+
     /// <summary>The static collision world supplying brush faces to conform to (wired at map load via
     /// <see cref="EffectSystem.SetCollisionWorld"/>). Secondary geometry source — the render-triangle soup
     /// from <see cref="SetGeometry"/> is preferred (DP splats the RENDER surfaces; collision brushes diverge
@@ -207,6 +214,20 @@ public sealed partial class DecalSplats : Node3D
     /// </summary>
     public void Splat(NVec3 org, NVec3 dir, float halfSize, Color removal, float alpha, int texnum)
     {
+        // (F9 wiring) cl_decals_time / cl_decals_fadetime: adopt the player values before this splat is
+        // stamped (they feed the shader uniforms + the reaper). Read here, not per frame - a decal lifetime
+        // is fixed at birth in DP too. Unset keeps the tuned defaults.
+        DecalTime = CvarOr("cl_decals_time", DecalTime);
+        FadeTime = MathF.Max(0.05f, CvarOr("cl_decals_fadetime", FadeTime));
+        // r_drawdecals_drawdistance (DP: decals beyond this range are not drawn; preset range 200-500).
+        // Approximated at SPAWN rather than per frame: a splat born beyond the range is skipped, the cheap
+        // 95% of the same idea (the camera rarely closes on a fresh decal fast enough for the difference to
+        // read). 0/unset = no limit.
+        float dd = CvarOr("r_drawdecals_drawdistance", 0f);
+        if (dd > 0f && GetViewport()?.GetCamera3D() is { } ddCam
+            && NVec3.DistanceSquared(org, Coords.ToQuake(ddCam.GlobalPosition)) > dd * dd)
+            return;
+
         if (alpha <= 0.005f)
             return;
         // A near-zero removal color subtracts nothing — invisible in DP, skip the geometry work.

@@ -21,10 +21,20 @@ namespace VortexArena.Game.Menu;
 /// </summary>
 public partial class DialogSettingsEffects : SettingsTab
 {
+    /// <summary>
+    /// The Effects cvars that are NOT live: each is consumed while the map is being built, so only a map
+    /// reload re-applies them. Everything else on this tab is polled every frame and changes what you see the
+    /// instant you change it - which is why the Apply button stays grey for the rest.
+    /// </summary>
+    private static string[] EffectsApplyCvars => ClientSettings.MapBuildApplyCvars;
+
     protected override void Fill(VBoxContainer box)
     {
-        // The "Apply immediately" button (QC effectsApplyButton, command "vid_restart"); placed at the end.
-        var applyButton = Widgets.CommandButton("Apply immediately", "vid_restart");
+        // The "Apply immediately" button. QC issues vid_restart here, but that command re-applies the WINDOW
+        // settings (resolution/vsync/fps) and cannot touch anything on this tab. What is not live here is
+        // baked in when the MAP is built, so this reloads the map instead - see EffectsApplyCvars for which
+        // four, and r_restart in ConsoleOverlay for why.
+        var applyButton = Widgets.CommandButton("Apply immediately", "r_restart");
 
         // --- Quality preset: five command buttons exec'ing the effects-*.cfg presets -----------------------
         box.AddChild(Ui.Label("Quality preset:"));
@@ -69,8 +79,14 @@ public partial class DialogSettingsEffects : SettingsTab
         // QC makeXonoticCheckBoxEx(1, 0, "r_sky", ...): bit-0 of an int cvar → CheckBox on/off 1/0.
         box.AddChild(Widgets.CheckBox("r_sky", "Show sky", "Disable sky for performance and visibility"));
 
+        // INVERTED, and it matters: the cvar is "NO lightmaps" while the label is "Use lightmaps", so checked
+        // must write 0. QC says so too - makeXonoticCheckBox_T's leading 1 is isInverted
+        // (dialog_settings_effects.qc:110). The port had the default polarity, so ticking "Use lightmaps"
+        // wrote nolightmaps 1. That was invisible while nothing read the cvar; wiring it up turned it into
+        // "tick the box, the map goes fullbright", which is how it was caught.
         box.AddChild(Widgets.CheckBox("mod_q3bsp_nolightmaps", "Use lightmaps",
-            "Use high resolution lightmaps, which will look pretty but use up some extra video memory"));
+            "Use high resolution lightmaps, which will look pretty but use up some extra video memory",
+            on: "0", off: "1"));
 
         var deluxe = Widgets.CheckBox("r_glsl_deluxemapping", "Deluxe mapping", "Use per-pixel lighting effects");
         box.AddChild(deluxe);
@@ -119,7 +135,11 @@ public partial class DialogSettingsEffects : SettingsTab
 
         var decalsModels = Widgets.CheckBox("cl_decals_models", "Decals on models");
         box.AddChild(decalsModels);
-        Dependent.Bind(decalsModels, "cl_decals", 1, 1); // setDependent(e,"cl_decals",1,1)
+        // INERT: decals here conform to WORLD brush faces (DecalSplats clips against the collision world) or
+        // fall back to a flat quad. Nothing projects onto animated model geometry, so there is no behaviour
+        // behind this. The QC dependency on cl_decals is dropped - see the note on gloss for why two
+        // Dependents on one control cannot coexist.
+        Dependent.Unsupported(decalsModels, "decals are projected onto world geometry only.");
 
         var decalDist = Widgets.Slider("r_drawdecals_drawdistance", 200, 500, 20,
             "Decals further away than this will not be drawn", format: v => $"{CvarUi.Tidy(v)} qu");
@@ -136,7 +156,13 @@ public partial class DialogSettingsEffects : SettingsTab
         // Damage effects — QC mixedslider cl_damageeffect.
         var damageFx = Widgets.TextSlider("cl_damageeffect")
             .Add("Disabled", 0).Add("Skeletal", 1).Add("All", 2);
-        box.AddChild(Ui.Row("Damage effects:", damageFx));
+        var damageFxRow = Ui.Row("Damage effects:", damageFx);
+        box.AddChild(damageFxRow);
+        // INERT: this controls Base's ATTACHED damage effects (flames and bleeding particles stuck to a
+        // damaged player, attached to the nearest bone, lifetime scaled by the damage taken). That whole
+        // subsystem is unported - see planning/parity/registry/cl-damageeffects.yaml, where it is the unit's
+        // top gap. Impact effects at the point of damage are unaffected and do work.
+        Dependent.Unsupported(damageFxRow, "damage effects attached to players are not implemented yet.");
 
         box.AddChild(Ui.Spacer());
 
@@ -225,9 +251,14 @@ public partial class DialogSettingsEffects : SettingsTab
             "Enable bloom effect, which brightens the neighboring pixels of very bright pixels. Has a big impact on performance."));
 
         // QC makeXonoticCheckBoxEx(0.5,0,"hud_postprocessing_maxbluralpha",...) + makeMulti(hud_powerup).
-        box.AddChild(Widgets.CheckBox("hud_postprocessing_maxbluralpha", "Extra postprocessing effects",
+        var extraPost = Widgets.CheckBox("hud_postprocessing_maxbluralpha", "Extra postprocessing effects",
             "Enables special postprocessing effects for when damaged or under water or using a powerup",
-            on: "0.5", off: "0"));
+            on: "0.5", off: "0");
+        box.AddChild(extraPost);
+        // INERT: this drives Base's GLSL blur/sharpen post-process (damage_blurpostprocess /
+        // content_blurpostprocess through r_glsl_postprocess_uservec*), which ViewEffects documents as not
+        // ported - the port shows the damage/contents TINTS but not the blur. Damage feedback still works.
+        Dependent.Unsupported(extraPost, "the damage/underwater blur post-process is not implemented yet.");
 
         // QC makeXonoticSliderCheckBox over r_motionblur (off=0, saved/default 0.4) + the slider beside it.
         // Approximated as a checkbox on the same cvar (on=0.4/off=0) plus the live slider.
@@ -277,13 +308,11 @@ public partial class DialogSettingsEffects : SettingsTab
         box.AddChild(Ui.Spacer());
         box.AddChild(applyButton); // "Apply immediately" — vid_restart
 
-        // Nothing on the Effects tab is deferred: every cvar here that has a reader is polled live, so a
-        // change is visible the instant you make it. The one exception is r_shadow_world_casts, which is
-        // read once when the map geometry is built - and a vid_restart would not apply that either, so it
-        // says so in its own tooltip rather than claiming this button. An empty set greys the button
-        // permanently with the explanation, which beats an always-live button that teaches players to
-        // press it after every change and gives them no signal on the rare occasion it matters.
-        PendingApply.Bind(applyButton, System.Array.Empty<string>(),
-            "Nothing to apply - every effect setting on this tab takes effect the moment you change it.");
+        // Most of this tab IS live - polled every frame, visible the instant you change it. These four are
+        // not, because each is consumed while the map is being built: gl_picmip and gl_texturecompression as
+        // every texture is decoded, r_subdivisions_tolerance when the bezier patches are tessellated, and
+        // r_shadow_world_casts when the world cells are created. So the button lights only for them, and its
+        // command reloads the map, which is the only thing that actually re-applies them.
+        PendingApply.Bind(applyButton, EffectsApplyCvars, string.Empty);
     }
 }

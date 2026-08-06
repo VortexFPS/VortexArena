@@ -37,8 +37,11 @@ public static class SceneLightingSettings
 {
     private static Godot.Environment? _env;
 
+    /// <summary>The map's real sky, captured at <see cref="Attach"/> so <c>r_sky 0</c> can be undone.</summary>
+    private static Sky? _sky;
+
     // Last-applied values, so the per-frame poll only touches the Environment when something moved.
-    private static bool _fogOn, _giOn;
+    private static bool _fogOn, _giOn, _bloomOn, _skyOn;
     private static float _fogDensity, _fogShafts, _giEnergy;
     private static int _giCascades, _giBounces;
     private static bool _seeded;
@@ -47,8 +50,18 @@ public static class SceneLightingSettings
     public static void Attach(Godot.Environment? env)
     {
         _env = env;
+        _sky = env?.Sky;
         _seeded = false;
         Poll();
+    }
+
+    /// <summary>Re-capture the sky after a late swap (the pure-client ApplyMapSky path replaces it).</summary>
+    public static void NoteSkyChanged(Sky? sky)
+    {
+        _sky = sky;
+        // Re-assert r_sky 0 over the new sky object if the player has it off.
+        if (_env is not null && GodotObject.IsInstanceValid(_env) && !_skyOn && _seeded)
+            ApplySky(false);
     }
 
     /// <summary>Drop the binding (map teardown).</summary>
@@ -67,11 +80,18 @@ public static class SceneLightingSettings
         float fogDensity = MathF.Max(0f, Cvar("r_volumetricfog_density", 0.015f));
         float fogShafts = Math.Clamp(Cvar("r_volumetricfog_shafts", 1f), 0f, 16f);
         bool giOn = Cvar("r_gi", 0f) != 0f;
+        // r_bloom -> the Environment glow pass. The port's glow IS its r_bloom equivalent (hand-tuned
+        // threshold-1.0 bloom on genuinely bright pixels, see NetGame.AddLight), so the cvar now actually
+        // owns it. Unset reads as ON to preserve the shipped look; the presets set it explicitly.
+        bool bloomOn = Cvar("r_bloom", 1f) != 0f;
+        // r_sky 0 (DP: disable sky rendering for performance/visibility) -> flat black background. The sky
+        // object is kept so 1 restores the map's real skybox without a reload.
+        bool skyOn = Cvar("r_sky", 1f) != 0f;
         int giCascades = Math.Clamp((int)Cvar("r_gi_cascades", 4f), 1, 8);
         float giEnergy = MathF.Max(0f, Cvar("r_gi_energy", 1f));
         int giBounces = Math.Clamp((int)Cvar("r_gi_bounces", 1f), 0, 4);
 
-        if (_seeded && fogOn == _fogOn && giOn == _giOn
+        if (_seeded && fogOn == _fogOn && giOn == _giOn && bloomOn == _bloomOn && skyOn == _skyOn
             && Mathf.IsEqualApprox(fogDensity, _fogDensity)
             && Mathf.IsEqualApprox(fogShafts, _fogShafts)
             && Mathf.IsEqualApprox(giEnergy, _giEnergy)
@@ -84,6 +104,11 @@ public static class SceneLightingSettings
         _seeded = true;
         _fogOn = fogOn; _fogDensity = fogDensity; _fogShafts = fogShafts;
         _giOn = giOn; _giCascades = giCascades; _giEnergy = giEnergy; _giBounces = giBounces;
+        _bloomOn = bloomOn; _skyOn = skyOn;
+
+        // ---- r_bloom / r_sky (the two Environment toggles the Effects tab always bound) --------------
+        _env.GlowEnabled = bloomOn;
+        ApplySky(skyOn);
 
         // ---- N3: volumetric fog + light shafts ----------------------------------------------------
         _env.VolumetricFogEnabled = fogOn;
@@ -118,6 +143,23 @@ public static class SceneLightingSettings
         if (giTurnedOn)
             Log.Info($"[SceneLighting] SDFGI ON ({giCascades} cascades) — real-time indirect bounce, well " +
                      "above the frame budget on anything but an ultra preset.");
+    }
+
+    /// <summary>Sky on = the map's captured sky; off = flat black (DP r_sky 0 renders no sky pass).</summary>
+    private static void ApplySky(bool on)
+    {
+        if (_env is null || !GodotObject.IsInstanceValid(_env))
+            return;
+        if (on && _sky is not null)
+        {
+            _env.BackgroundMode = Godot.Environment.BGMode.Sky;
+            _env.Sky = _sky;
+        }
+        else if (!on)
+        {
+            _env.BackgroundMode = Godot.Environment.BGMode.Color;
+            _env.BackgroundColor = new Color(0f, 0f, 0f);
+        }
     }
 
     private static float Cvar(string name, float fallback)

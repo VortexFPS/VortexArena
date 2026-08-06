@@ -161,6 +161,15 @@ global uniform float world_dlight;
 // re-admitted at this brightness (DP default 0 = fully replaced by the authored lights; its own help text
 // suggests 0.5 for a tenebrae-like look). 1 when the mode is off, so the normal path is untouched.
 global uniform float world_lightmap_scale;
+// r_glsl_deluxemapping (F9 wiring): the live gate over the per-surface use_deluxemap flag. The flag says
+// ""this surface HAS a deluxe page""; this global says ""the player wants the directional re-modulation"".
+// Both must hold - so flipping the cvar takes effect instantly on every deluxemapped surface, with no
+// material rebuild, exactly like the tints.
+global uniform float deluxe_enabled;
+// mod_q3bsp_nolightmaps (F9 wiring): 1 = render the world FULLBRIGHT (DP loads white lightmaps; here the
+// lightmap term collapses to 1 after all scaling, which displays the plain albedo). The menu's
+// ""Use lightmaps"" checkbox is this cvar INVERTED - see the dialog polarity note.
+global uniform float world_nolightmaps;
 
 // Per-surface tangent frame (DP VectorS/T/R = tangent/binormal/normal), captured in modelspace so the
 // modelspace deluxe light direction can be rotated into it without a view-space mismatch.
@@ -204,7 +213,7 @@ void fragment() {
     }
 
     vec3 spec_accum = vec3(0.0);   // deluxe specular highlight; added (overbright-scaled) into combined below.
-    if (use_deluxemap) {
+    if (use_deluxemap && deluxe_enabled > 0.5) {
         // DP shader_glsl.h MODE_LIGHTDIRECTIONMAP_MODELSPACE (~1605-1622) + the SHADING combine (~1657-1664).
         // Decode the modelspace light direction. q3map2 stores it in Quake space; rotate to Godot space so it
         // matches the Godot-space tangent frame (the rotation is orthogonal, so it preserves the dots below).
@@ -247,6 +256,8 @@ void fragment() {
     }
 
     lm *= lightmap_scale * world_lightmap_scale;
+    // mod_q3bsp_nolightmaps: collapse the whole lighting term to 1 -> the surface displays its raw albedo.
+    lm = mix(lm, vec3(1.0), world_nolightmaps);
     // Self-illumination (DP shader_glsl.h: color.rgb += Texture_Glow * Color_Glow): added on top of the lit
     // diffuse and NOT modulated by the lightmap, so light fixtures glow at full intensity regardless of how
     // lit their own luxels are. Without this, lightmapped lights render as a dim diffuse×lightmap and look dark.

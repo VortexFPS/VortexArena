@@ -12936,6 +12936,15 @@ public sealed partial class NetGame : Node3D
         if (_render is not null && GodotObject.IsInstanceValid(_render) && _render.FakeShadows is not null)
             _render.FakeShadows.Grid = _bsp?.LightGrid;
 
+        // (F9) The map has now been built with the current gl_picmip / gl_texturecompression /
+        // r_subdivisions_tolerance / r_shadow_world_casts, so that IS what is running - record it and the
+        // Effects tab's Apply button greys until one of them drifts again.
+        Menu.AppliedState.Record(Menu.ClientSettings.MapBuildApplyCvars);
+
+        // (F9) r_motionblur measures the view camera between frames.
+        if (_render is not null && GodotObject.IsInstanceValid(_render) && _render.MotionBlur is not null)
+            _render.MotionBlur.Camera = _camera;
+
         // (draws 2026-08-02) The sun's shadow map was pure waste: 4 PSSM cascades into a 4096^2 atlas every
         // frame whose output BOTH consumer shaders discard — LightmapShader's light() drops directional light
         // (the world is lightmapped) and the grid-lit player path writes EMISSION with ALBEDO zeroed. That is
@@ -13001,6 +13010,9 @@ public sealed partial class NetGame : Node3D
         Sky? sky = VortexArena.Game.Loaders.SkyboxLoader.TryBuild(_bsp, _assets?.Assets);
         if (sky is not null)
             _worldEnv.Sky = sky;
+        // r_sky: the late sky swap must re-register with the poller, or an active r_sky 0 would be undone
+        // here (and a later r_sky 1 would restore the boot-time procedural sky instead of the map one).
+        Client.SceneLightingSettings.NoteSkyChanged(_worldEnv.Sky);
         VortexArena.Game.MapLoader.ApplyFog(_worldEnv, _bsp);
         VortexArena.Game.WorldTint.ApplyWorldspawn(_bsp);
         // F1-B: a pure --connect client only learns the map here, so this is where its lightgrid binds. The

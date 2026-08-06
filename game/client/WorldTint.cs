@@ -121,6 +121,12 @@ public static class WorldTint
         Client.ModelLighting.EnsureRegistered();
         // (F4) the realtime-world lightmap dimmer, registered here for the same reason.
         Client.WorldLightRenderer.EnsureRegistered();
+        // (F9 wiring) the two world-shader toggles the Effects tab always bound: r_glsl_deluxemapping and
+        // mod_q3bsp_nolightmaps. Globals so one call repaints the world, polled below like the tints.
+        RenderingServer.GlobalShaderParameterAdd(
+            "deluxe_enabled", RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        RenderingServer.GlobalShaderParameterAdd(
+            "world_nolightmaps", RenderingServer.GlobalShaderParameterType.Float, 0.0f);
         _mapApplied = _entityApplied = Vector3.One;
         _gammaApplied = 0f;
     }
@@ -253,6 +259,21 @@ public static class WorldTint
             PushEntity(_entityBaseline);
         }
 
+        // r_glsl_deluxemapping (unset = the default 1: deluxe on wherever the map ships the pages) and
+        // mod_q3bsp_nolightmaps (unset = 0: lightmaps on). Change-gated like the gamma toggle below.
+        float dlx = CvarF("r_glsl_deluxemapping", 1f) != 0f ? 1f : 0f;
+        if (dlx != _deluxeApplied)
+        {
+            _deluxeApplied = dlx;
+            RenderingServer.GlobalShaderParameterSet("deluxe_enabled", dlx);
+        }
+        float nolm = CvarF("mod_q3bsp_nolightmaps", 0f) != 0f ? 1f : 0f;
+        if (nolm != _nolmApplied)
+        {
+            _nolmApplied = nolm;
+            RenderingServer.GlobalShaderParameterSet("world_nolightmaps", nolm);
+        }
+
         // r_model_light_gamma → the grid-lit models' response-curve toggle (unset = the default 0, linear).
         float gamma = CvarF(ModelLightGammaCvar, 0f) > 0.5f ? 1f : 0f;
         if (gamma != _gammaApplied)
@@ -263,6 +284,8 @@ public static class WorldTint
     }
 
     private static float _gammaApplied;
+    private static float _deluxeApplied = 1f;
+    private static float _nolmApplied;
 
     // ---- internals ----------------------------------------------------------------------------------------
 

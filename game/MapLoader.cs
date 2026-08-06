@@ -30,6 +30,18 @@ public static class MapLoader
     /// <summary>(F3-A) <c>r_shadow_world_casts</c>: may world geometry cast into dynamic-light shadow
     /// maps? Read once per map build, not per frame — a change needs a map reload, which is the honest
     /// cost of flipping every world cell between caster and non-caster.</summary>
+    /// <summary>(F9 wiring) <c>r_subdivisions_tolerance</c>: max allowed curve sag in world units (DP default
+    /// 4; the menu offers 2..16). Read at map build - a change needs a map reload, and both the render and
+    /// collision tessellations read it through here so they can never disagree.</summary>
+    private static float SubdivisionTolerance()
+    {
+        string s = VortexArena.Game.Menu.MenuState.Cvars.GetString("r_subdivisions_tolerance");
+        if (string.IsNullOrWhiteSpace(s))
+            return 4f;
+        float v = VortexArena.Game.Menu.MenuState.Cvars.GetFloat("r_subdivisions_tolerance");
+        return v <= 0f ? 4f : v;
+    }
+
     private static bool WorldCastsShadows()
     {
         string s = VortexArena.Game.Menu.MenuState.Cvars.GetString("r_shadow_world_casts");
@@ -229,8 +241,15 @@ public static class MapLoader
         using (LoadTimeline.Phase("map.patches"))
         {
             var tessResults = new BezierPatch.Tessellation?[patchJobs.Count];
+            // (F9 wiring) r_subdivisions_tolerance: per-patch subdivision from the curve's measured flatness
+            // (BezierPatch.SubdivisionsFor) instead of a fixed 8 everywhere. Lower tolerance = smoother
+            // curves; flat patches (most floors/grates) stay cheap at any setting. Read ONCE for the whole
+            // build, and the COLLISION tessellation below uses the same value - render and collision
+            // disagreeing about where a curve is puts players at a visibly wrong height on it.
+            float tessTol = SubdivisionTolerance();
             System.Threading.Tasks.Parallel.For(0, patchJobs.Count, j =>
-                tessResults[j] = BezierPatch.Tessellate(bsp.Faces[patchJobs[j].Fi], bsp.Vertices));
+                tessResults[j] = BezierPatch.Tessellate(bsp.Faces[patchJobs[j].Fi], bsp.Vertices,
+                    BezierPatch.SubdivisionsFor(bsp.Faces[patchJobs[j].Fi], bsp.Vertices, tessTol)));
             for (int j = 0; j < patchJobs.Count; j++)
             {
                 BezierPatch.Tessellation? tess = tessResults[j];
@@ -1465,7 +1484,8 @@ public static class MapLoader
                 continue;
             if (ShouldSkipCollision(bsp, face.TextureIndex))
                 continue;
-            BezierPatch.Tessellation? tess = BezierPatch.Tessellate(face, bsp.Vertices);
+            BezierPatch.Tessellation? tess = BezierPatch.Tessellate(face, bsp.Vertices,
+                BezierPatch.SubdivisionsFor(face, bsp.Vertices, SubdivisionTolerance()));
             if (tess is null)
                 continue;
             for (int i = 0; i < tess.Indices.Count; i++)

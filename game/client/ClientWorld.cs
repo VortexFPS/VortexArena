@@ -67,6 +67,9 @@ public partial class ClientWorld : Node3D
     /// <summary>(F4) The .rtlights world-light renderer. Call <c>LoadForMap</c> when the BSP is known.</summary>
     public WorldLightRenderer WorldLights { get; private set; } = null!;
 
+    /// <summary>(F9) The r_motionblur overlay. Needs <see cref="MotionBlurOverlay.Camera"/> set per map.</summary>
+    public MotionBlurOverlay MotionBlur { get; private set; } = null!;
+
     /// <summary>func_pointparticles / func_sparks persistent emitters (T48; ambient-facade scan).</summary>
     public MapParticleEmitters MapEmitters { get; private set; } = null!;
 
@@ -491,6 +494,11 @@ public partial class ClientWorld : Node3D
         // (F2) r_coronas - flares on lights that author one. On in every Xonotic preset, so this is
         // default-look parity rather than an extra; it stays inert until a light asks for a corona.
         AddChild(new CoronaRenderer { Name = "Coronas" });
+
+        // (F9) r_motionblur - camera motion blur. A CanvasLayer, so it lives here beside the other client
+        // render systems rather than in the HUD tree; NetGame hands it the camera.
+        MotionBlur = new MotionBlurOverlay { Name = "MotionBlur" };
+        AddChild(MotionBlur);
 
         // (F4/F7) .rtlights world lights. Inert until r_shadow_realtime_world 1, which is also where
         // Xonotic leaves it below the ultra preset.

@@ -36,6 +36,23 @@ public sealed partial class Decals : Node3D
 
     private readonly Queue<Decal> _live = new();
 
+    /// <summary>A suppressed decal: callers expect a node back, so hand them one that self-frees at once
+    /// rather than teaching every call site about null.</summary>
+    private Decal MakeInert()
+    {
+        var d = new Decal();
+        AddChild(d);
+        d.QueueFree();
+        return d;
+    }
+
+    /// <summary>Read a float cvar, honouring an explicit 0; unset returns <paramref name="fallback"/>.</summary>
+    private static float CvarOr(string name, float fallback)
+    {
+        string s = VortexArena.Game.Menu.MenuState.Cvars.GetString(name);
+        return string.IsNullOrWhiteSpace(s) ? fallback : VortexArena.Game.Menu.MenuState.Cvars.GetFloat(name);
+    }
+
     // Cache one solid-color texture per quantised tint so we don't allocate an ImageTexture per impact.
     private readonly Dictionary<int, ImageTexture> _texCache = new();
 
@@ -47,6 +64,18 @@ public sealed partial class Decals : Node3D
     /// </summary>
     public Decal Spawn(NVec3 origin, NVec3 dir, float radius, Color color, float alpha = 1f, Texture2D? sprite = null)
     {
+        // (F9 wiring) Same cvar adoption as DecalSplats: master gate, lifetime, draw distance. This legacy
+        // path serves the non-conforming quad decals, so it must honour the same knobs or the menu would
+        // control only half the decals in a scene.
+        if (CvarOr("cl_decals", 1f) == 0f)
+            return MakeInert();
+        DecalTime = CvarOr("cl_decals_time", DecalTime);
+        FadeTime = MathF.Max(0.05f, CvarOr("cl_decals_fadetime", FadeTime));
+        float dd = CvarOr("r_drawdecals_drawdistance", 0f);
+        if (dd > 0f && GetViewport()?.GetCamera3D() is { } ddCam
+            && NVec3.DistanceSquared(origin, Coords.ToQuake(ddCam.GlobalPosition)) > dd * dd)
+            return MakeInert();
+
         radius = Math.Clamp(radius <= 0f ? 8f : radius, 1f, 256f);
         Vector3 gpos = Coords.ToGodot(origin);
         Vector3 gdir = dir == default ? Vector3.Down : Coords.ToGodot(dir).Normalized();

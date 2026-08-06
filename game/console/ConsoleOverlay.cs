@@ -386,6 +386,23 @@ public partial class ConsoleOverlay : CanvasLayer
             "re-apply the video settings");
         interp.RegisterCommand("snd_restart", _ => MenuCommand.AudioRestart?.Invoke(),
             "restart the sound system");
+
+        // (F9) r_restart - DP's renderer restart. Here it re-hosts the CURRENT map, because that is what
+        // actually re-applies the settings that are baked in at map-build time: gl_picmip and
+        // gl_texturecompression are consumed as each texture is decoded, r_subdivisions_tolerance when the
+        // bezier patches are tessellated, r_shadow_world_casts when the world cells are created. A
+        // vid_restart cannot touch any of them - it only re-applies the window/vsync/fps family.
+        interp.RegisterCommand("r_restart", _ =>
+        {
+            string map = MenuState.Cvars.GetString("mapname");
+            if (string.IsNullOrWhiteSpace(map))
+            {
+                Print("r_restart: no map loaded - these settings apply the next time a map loads.");
+                return;
+            }
+            Print($"r_restart: reloading {map} to re-apply the map-build render settings.");
+            MenuCommand.StartMap?.Invoke(map);
+        }, "reload the current map to re-apply settings that are baked in at map-build time");
         interp.RegisterCommand("togglemenu", a =>
         {
             int mode = (a.Count >= 2 && a[1] == "0") ? 0 : -1;

@@ -249,6 +249,24 @@ public partial class ConsoleOverlay : CanvasLayer
         return results;
     }
 
+    /// <summary>
+    /// Reset the renderer by reloading the current map. That IS the reset here: the settings a renderer
+    /// restart is expected to pick up (gl_picmip and gl_texturecompression as each texture decodes,
+    /// r_subdivisions_tolerance at patch tessellation, r_shadow_world_casts at world-cell creation) are all
+    /// consumed while the map is built, and nothing short of rebuilding it re-applies them.
+    /// </summary>
+    private void ResetRenderer(string who)
+    {
+        string map = MenuState.Cvars.GetString("mapname");
+        if (string.IsNullOrWhiteSpace(map))
+        {
+            Print($"{who}: no map loaded - these settings apply the next time a map loads.");
+            return;
+        }
+        Print($"{who}: reloading {map} to re-apply the map-build render settings.");
+        MenuCommand.StartMap?.Invoke(map);
+    }
+
     /// <summary>Engine/host actions that need the Godot front-end (DP engine commands the console exposes). Wired
     /// here (not in the Godot-free <see cref="ConsoleCommands"/>) through the menu's existing host hooks.</summary>
     private void RegisterHostCommands(ConfigInterpreter interp)
@@ -382,8 +400,23 @@ public partial class ConsoleOverlay : CanvasLayer
             Print(MapList.LsmapsReply(a.Count >= 2 ? a[1] : null));
         }, "list the installed maps, optionally for one gametype: lsmaps [gametype]");
 
-        interp.RegisterCommand("vid_restart", _ => MenuCommand.VideoRestart?.Invoke(),
-            "re-apply the video settings");
+        interp.RegisterCommand("vid_restart", _ =>
+        {
+            MenuCommand.VideoRestart?.Invoke();
+            // vid_restart_resetrenderer (default 1): also reset the renderer, i.e. do what r_restart does.
+            //
+            // This exists because of a real difference between the two engines. In DarkPlaces vid_restart
+            // recreates the GL context, which re-uploads every texture - so gl_picmip and
+            // gl_texturecompression genuinely ARE applied by vid_restart there, and players know it. Here
+            // textures are cached Godot resources that re-applying the window settings never touches, so a
+            // literal port of vid_restart would silently do less than the same command does in Base.
+            //
+            // Default 1 keeps the Base expectation. It is a cvar because the reset is a MAP RELOAD, which is
+            // far more disruptive than the resolution change that usually triggers it - set it to 0 and
+            // vid_restart only touches the window, leaving r_restart as the explicit way to ask.
+            if (MenuState.Cvars.GetFloat("vid_restart_resetrenderer") != 0f)
+                ResetRenderer("vid_restart");
+        }, "re-apply the video settings (and reset the renderer, unless vid_restart_resetrenderer is 0)");
         interp.RegisterCommand("snd_restart", _ => MenuCommand.AudioRestart?.Invoke(),
             "restart the sound system");
 
@@ -392,17 +425,8 @@ public partial class ConsoleOverlay : CanvasLayer
         // gl_texturecompression are consumed as each texture is decoded, r_subdivisions_tolerance when the
         // bezier patches are tessellated, r_shadow_world_casts when the world cells are created. A
         // vid_restart cannot touch any of them - it only re-applies the window/vsync/fps family.
-        interp.RegisterCommand("r_restart", _ =>
-        {
-            string map = MenuState.Cvars.GetString("mapname");
-            if (string.IsNullOrWhiteSpace(map))
-            {
-                Print("r_restart: no map loaded - these settings apply the next time a map loads.");
-                return;
-            }
-            Print($"r_restart: reloading {map} to re-apply the map-build render settings.");
-            MenuCommand.StartMap?.Invoke(map);
-        }, "reload the current map to re-apply settings that are baked in at map-build time");
+        interp.RegisterCommand("r_restart", _ => ResetRenderer("r_restart"),
+            "reload the current map to re-apply settings that are baked in at map-build time");
         interp.RegisterCommand("togglemenu", a =>
         {
             int mode = (a.Count >= 2 && a[1] == "0") ? 0 : -1;

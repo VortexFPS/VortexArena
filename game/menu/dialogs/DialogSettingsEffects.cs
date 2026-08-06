@@ -119,9 +119,18 @@ public partial class DialogSettingsEffects : SettingsTab
         box.AddChild(Ui.Spacer());
 
         // --- Reflections ------------------------------------------------------------------------------------
-        box.AddChild(Widgets.CheckBox("r_water", "Reflections",
-            "Reflection and refraction quality, has a huge impact on performance on maps with reflecting surfaces"));
+        var reflections = Widgets.CheckBox("r_water", "Reflections",
+            "Reflection and refraction quality, has a huge impact on performance on maps with reflecting surfaces");
+        box.AddChild(reflections);
+        // INERT: r_water is DP's reflection/refraction pass. The shader keywords that drive it (dpreflect,
+        // dprefract, dpwater) are parsed by Q3ShaderParser but no renderer consumes them, so a mirror or water
+        // surface here draws its placeholder rather than a reflection. Warpzones are a SEPARATE feature with
+        // its own cvar (r_warpzone, below) - they were briefly gated on r_water, which meant switching off
+        // "Reflections" also blanked every warpzone.
+        Dependent.Unsupported(reflections, "reflections and refractions are not implemented yet.");
 
+        // Inert with its parent, and for the same reason - it sizes a pass that does not exist. Warpzone view
+        // resolution is cl_portal_resolution, which is a console cvar rather than a menu row.
         var reflRes = Widgets.TextSlider("r_water_resolutionmultiplier", "Resolution of reflections/refractions")
             .Add("Blurred", 0.25f).Add("Good", 0.5f).Add("Sharp", 1);
         var reflResRow = Ui.Row("Resolution:", reflRes);
@@ -243,6 +252,11 @@ public partial class DialogSettingsEffects : SettingsTab
         box.AddChild(Widgets.CheckBox("cl_rimlight", "Team rim light",
             "Outline teammates and powerup carriers with a coloured rim. This makes players easier to see, "
             + "so it is off by default and a server may prefer everyone to match."));
+
+        box.AddChild(Widgets.CheckBox("r_warpzone", "Warpzones",
+            "Render the view through warpzone portals. Separate from Reflections on purpose: a warpzone is "
+            + "level geometry you navigate THROUGH, so turning off reflections should not blank it. Off "
+            + "freezes the portal image instead of blacking it."));
 
         box.AddChild(Ui.Spacer());
 

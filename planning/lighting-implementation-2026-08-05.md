@@ -105,6 +105,26 @@ value (Gloss and normal maps read as checked-but-greyed, which is honest), and e
 Where a control had an ordinary `Dependent.Bind`, that bind was **removed** rather than left alongside: two
 Dependents on one target fight, and which wins depends on which cvar changed last.
 
+### Reflections vs warpzones, and the two restart commands
+
+`r_water` in DarkPlaces names the reflection/refraction pass. This port renders **warpzone portals** through
+`PortalRenderer`, and briefly gated that on `r_water` — so switching off "Reflections" blanked every warpzone,
+which is the opposite of what anyone wants from that checkbox. They are separate cvars now:
+
+* **`r_warpzone`** (new, default 1) gates warpzone portal views. Every portal this renderer builds had to match
+  a live warpzone to exist at all, so this is exactly what it draws. `0` freezes the portal viewports rather
+  than blacking them — the surface keeps its last image.
+* **`r_water`** is back to greyed. `dpreflect` / `dprefract` / `dpwater` are parsed by `Q3ShaderParser` but no
+  renderer consumes them, so a mirror or water surface draws its placeholder. `r_water_resolutionmultiplier`
+  is greyed with it: it sizes a pass that does not exist. Warpzone view resolution is `cl_portal_resolution`.
+
+**`vid_restart` vs `r_restart`.** In DarkPlaces `vid_restart` recreates the GL context, which re-uploads every
+texture — so `gl_picmip` and `gl_texturecompression` genuinely are applied by it there. Here textures are
+cached Godot resources that re-applying the window settings never touches, so a literal port would silently do
+less than the same command does in Base. **`vid_restart_resetrenderer`** (default 1) makes `vid_restart` also
+do what `r_restart` does. It is a cvar because the reset is a *map reload*, far more disruptive than the
+resolution change that usually triggers it; set it to 0 and `vid_restart` only touches the window.
+
 ### The Apply button
 
 "Apply immediately" now reflects whether there is anything to apply, instead of being permanently live.

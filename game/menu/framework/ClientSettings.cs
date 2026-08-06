@@ -561,6 +561,17 @@ public static class ClientSettings
         // though the mechanism differs - a trace, because Godot exposes no per-object occlusion query.
         c.Register("r_coronas", "1");
         c.Register("r_coronas_occlusionquery", "1");
+        // r_warpzone: warpzone portal views, split out of r_water. They are separate features and were only
+        // ever conflated because DP names its portal pass r_water: turning off "Reflections" must not take
+        // warpzones with it, which is what a shared cvar did. ON by default - a warpzone is level geometry a
+        // player has to see THROUGH to navigate, not an ornament. (r_water itself gates reflections and
+        // refractions, which this renderer does not implement at all; its menu row says so.)
+        c.Register("r_warpzone", "1");
+        // vid_restart_resetrenderer: does vid_restart also reset the renderer (reload the map)? DP recreates
+        // the GL context on vid_restart, which re-uploads every texture, so gl_picmip and
+        // gl_texturecompression really are applied by it there. Default 1 keeps that expectation; 0 leaves
+        // vid_restart touching only the window, with r_restart as the explicit way to ask for the reload.
+        c.Register("vid_restart_resetrenderer", "1");
         // ---- (F4/F7) Realtime WORLD lighting from a map .rtlights file, and its cubemap light filters.
         // OFF by default, which is where Xonotic leaves it below the ultra preset - and only six stock maps
         // ship a .rtlights file at all, so this is fidelity for the maps that authored it rather than a

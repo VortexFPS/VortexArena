@@ -89,6 +89,7 @@ public partial class PortalRenderer : Node3D
     private Camera3D? _mainCamera;
     private bool _built;
     private float _lastTrace = -1f;   // 1Hz gate-trace clock (sv_warpzone_trace)
+    private bool _warpzoneOffLogged;  // one-shot: r_warpzone 0 froze the views
 
     /// <summary>wz_portal_scan (debug, one-shot): list every MeshInstance3D in the tree whose world AABB
     /// intersects the first portal's window region — identifies WHICH node actually draws there.</summary>
@@ -396,13 +397,10 @@ public partial class PortalRenderer : Node3D
         string s = Api.Cvars.GetString("cl_portal_resolution");
         if (!string.IsNullOrWhiteSpace(s))
             scale = Api.Cvars.GetFloat("cl_portal_resolution");
-        // (F9 wiring) r_water_resolutionmultiplier: the Base menu's "Resolution of reflections/refractions"
-        // slider (Blurred 0.25 / Good 0.5 / Sharp 1). It multiplies WITH the port-only cl_portal_resolution
-        // rather than replacing it, so a dev override survives a preset change. Unset = 1 (no change) - the
-        // Base default of 0.5 would otherwise silently halve everyone's portals the day this wired up.
-        string rm = Api.Cvars.GetString("r_water_resolutionmultiplier");
-        if (!string.IsNullOrWhiteSpace(rm))
-            scale *= Api.Cvars.GetFloat("r_water_resolutionmultiplier");
+        // r_water_resolutionmultiplier is deliberately NOT read here. It is Base's "resolution of
+        // reflections/refractions", and this renderer draws warpzones, not reflections - borrowing it would
+        // re-create exactly the conflation the r_warpzone split just undid. Warpzone view resolution is
+        // cl_portal_resolution, above.
         return Mathf.Clamp(scale, 0.25f, 2f);
     }
 
@@ -426,18 +424,31 @@ public partial class PortalRenderer : Node3D
         if (_portals.Count == 0 || _mainCamera is null)
             return;
 
-        // (F9 wiring) r_water: DP's master switch for the reflection/refraction portal pass, which is exactly
-        // what these warpzone views are (see the type doc). 0 freezes every portal viewport - the surfaces
-        // keep their last rendered image rather than going black, which is the cheapest honest reading of
-        // "don't spend GPU on portal views". Unset = on (the DP default).
-        if (Api.Services is not null)
+        // r_warpzone: the switch for WARPZONE portal views specifically - which is all this renderer draws.
+        // Every portal here had to match a live warpzone to be built at all (see Setup's TryMatchZone), so a
+        // dpcamera mirror or water surface with no zone behind it never reaches this loop.
+        //
+        // This used to be gated on r_water, which was wrong twice over: it conflated two different features,
+        // and r_water in DP means reflections/refractions - a pass this port does not have. Turning off
+        // "Reflections" therefore killed warpzones, which is the opposite of what anyone wanted. They are
+        // separate cvars now. 0 freezes the portal viewports rather than blacking them: the surfaces keep
+        // their last rendered image, which is the cheapest honest reading of "stop spending GPU on this".
+        // Read from the SHARED menu/console store, NOT the Api.Cvars gameplay facade. In a networked match
+        // Api.Cvars is the listen SERVER's private store and the shared->server bridge only mirrors cvars the
+        // server already has, so a client-only cvar like this one never arrives there and would read as unset
+        // forever. (Same reasoning WorldTint documents; caught here by r_warpzone 0 doing nothing.)
         {
-            string rw = Api.Cvars.GetString("r_water");
-            if (!string.IsNullOrWhiteSpace(rw) && Api.Cvars.GetFloat("r_water") == 0f)
+            string rw = Menu.MenuState.Cvars.GetString("r_warpzone");
+            if (!string.IsNullOrWhiteSpace(rw) && Menu.MenuState.Cvars.GetFloat("r_warpzone") == 0f)
             {
                 foreach (Portal frozen in _portals)
                     if (frozen.Viewport.RenderTargetUpdateMode != SubViewport.UpdateMode.Disabled)
                         frozen.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+                if (!_warpzoneOffLogged)
+                {
+                    _warpzoneOffLogged = true;
+                    GD.Print($"[PortalRenderer] r_warpzone 0 - froze {_portals.Count} warpzone view(s).");
+                }
                 return;
             }
         }

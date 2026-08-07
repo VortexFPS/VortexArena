@@ -236,6 +236,10 @@ public static class MenuState
         }
         // Even without a data dir (config skipped/failed) the console still needs a live command buffer.
         _interp ??= new ConfigInterpreter(_cvars, reader);
+        // `maxplayers` for that fallback interpreter — the tree path already got it inside ConfigLoader.Load
+        // (it has to be registered before xonotic-server.cfg:31 execs). RegisterCommand overwrites by name, so
+        // re-registering on the normal path is harmless and keeps the command present in both.
+        ServerSlots.RegisterCommand(_interp);
 
         // `fs_rescan` (DP FS_Rescan_f). Registered HERE rather than alongside the console's host commands
         // because this is where the VFS lives and the command needs nothing from the Godot front-end — so the

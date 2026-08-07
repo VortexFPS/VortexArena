@@ -1370,10 +1370,30 @@ public sealed class GameWorld
     private bool LmsPreStart => Warmup.WarmupStage || Time <= GameStartTime;
 
     /// <summary>
-    /// QC <c>GetPlayerLimit</c> (server/client.qc:2155): the hard cap on simultaneous players. Duel short-circuits
-    /// to 2 (<see cref="Duel.PlayerLimit"/>) — its defining 1v1 rule. 0 ⇒ no gametype cap (use g_maxplayers/maxclients).
+    /// QC <c>GetPlayerLimit</c> (server/client.qc:2154-2169): the hard cap on simultaneous players.
+    ///
+    /// <para>Duel short-circuits to 2 (<see cref="Duel.PlayerLimit"/>) — its defining 1v1 rule, and upstream's
+    /// own first line. Otherwise <c>g_maxplayers</c> when set, else the server's slot count; the result is
+    /// clamped into <c>[0, maxclients]</c> because no gametype limit can exceed the slots that exist.</para>
+    ///
+    /// <para><c>maxclients</c> is read through <see cref="Bots"/>.<c>MaxClients</c>, which the host assigns at
+    /// server start from <c>ServerSlots</c> — the same read-only-from-here relationship QC has with the engine
+    /// global, and deliberately NOT a second copy of the number.</para>
+    ///
+    /// <para>Upstream also honours <c>g_maxplayers -1</c> ⇒ the map's <c>map_maxplayers</c> (client.qc:2163).
+    /// The port has no mapinfo player-count key to read, so a negative value simply falls through to the slot
+    /// count here; <c>Cvars</c>' help string for <c>g_maxplayers</c> documents 0/positive only, so nothing
+    /// promises otherwise.</para>
     /// </summary>
-    private int GetPlayerLimit() => GameType is Duel ? Duel.PlayerLimit : 0;
+    public int GetPlayerLimit()
+    {
+        if (GameType is Duel)
+            return Duel.PlayerLimit;
+        int maxClients = Bots.MaxClients;
+        int configured = Cvars.Int("g_maxplayers");
+        int limit = configured > 0 ? configured : maxClients;
+        return System.Math.Clamp(limit, 0, maxClients);
+    }
 
     /// <summary>
     /// QC <c>nJoinAllowed</c> free-slot test (server/client.qc:2192: <c>free_slots = max(0, player_limit -
@@ -1397,6 +1417,44 @@ public sealed class GameWorld
                 currentlyPlaying++;
         }
         return currentlyPlaying < limit;
+    }
+
+    /// <summary>
+    /// QC <c>nJoinAllowed(NULL)</c> — the getstatus branch (server/client.qc:2171-2210): how many player slots
+    /// this server should ADVERTISE as free, for the browser's <c>qcstatus</c> S token.
+    ///
+    /// <para>Differs from <see cref="GametypeHasFreeSlot"/> in counting BOTS against the limit and then adding
+    /// <c>bots_would_leave</c> back: a server held full by <c>minplayers</c> fill is genuinely joinable (a bot
+    /// steps aside), while one an operator filled via <c>bot_number</c> is not. Finally capped by real connection
+    /// room, because a slot the gamecode would allow is worthless if no client can attach to take it.</para>
+    /// </summary>
+    public int FreeSlotsForStatus()
+    {
+        // QC client.qc:2175-2181: a server that forces unlisted clients to spectate, or that has teams locked in
+        // a team game, has nothing to offer a joiner whatever the arithmetic below says.
+        string forced = Cvars.String("g_forced_team_otherwise");
+        if (string.Equals(forced, "spectate", System.StringComparison.OrdinalIgnoreCase)
+            || string.Equals(forced, "spectator", System.StringComparison.OrdinalIgnoreCase)
+            || (Teamplay.IsTeamGame && TeamsLocked))
+            return 0;
+
+        int totalClients = 0, currentlyPlaying = 0;
+        IReadOnlyList<ClientManager.ClientInfo> roster = Clients.Clients;
+        for (int i = 0; i < roster.Count; i++)
+        {
+            totalClients++; // QC counts every client, bots included
+            if (!roster[i].Player.IsObserver) // QC IS_PLAYER(it) || INGAME(it)
+                currentlyPlaying++;
+        }
+
+        int connectionRoom = Bots.MaxClients - totalClients; // QC maxclients - totalClients
+        int freeSlots = System.Math.Max(0, GetPlayerLimit() - currentlyPlaying);
+        // QC client.qc:2200-2201: hand back the fill-only bots' slots — but only when a human could attach at all.
+        if (connectionRoom != 0)
+            freeSlots += Bots.BotsWouldLeave;
+        // QC client.qc:2202-2203. Clamped at 0 as well: QC can return a negative here on an over-full roster, and
+        // a negative S token would read as garbage to the browser.
+        return System.Math.Min(freeSlots, System.Math.Max(0, connectionRoom));
     }
 
     /// <summary>QC the ClientConnect tail: enforce bans, init anticheat/timeout, log connect/join, register stats.</summary>

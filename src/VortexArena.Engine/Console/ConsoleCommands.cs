@@ -144,6 +144,11 @@ public sealed class ConsoleCommands
         _interp.RegisterCommand("bindlist", _ => CmdBindList(),
             "list every bound key and the command it runs");
 
+        // `maxplayers` is already on the interpreter (ConfigLoader wires it before the cfg tree execs, since
+        // xonotic-server.cfg:31 uses it). Re-register with the CONSOLE's print sink so a typed `maxplayers`
+        // reports into the console instead of only the log — same handler, same ServerSlots state.
+        VortexArena.Common.Config.ServerSlots.RegisterCommand(_interp, _print);
+
         _interp.RegisterCommand("name", CmdName,
             "set your player name: name <newname>");
         _interp.RegisterCommand("developer", CmdDeveloper,

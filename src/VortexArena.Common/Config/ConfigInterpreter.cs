@@ -69,6 +69,11 @@ public sealed class ConfigInterpreter
         "map", "changelevel", "gotomap", "gametype", "kill", "give", "god", "noclip",
         "say", "say_team", "tell", "name", "color", "playermodel", "playerskin",
         "kick", "ban", "banlist", "status", "quit", "disconnect", "connect", "reconnect",
+        // `maxplayers <n>` (DP host_cmd.c:2517) is a COMMAND, not a cvar — xonotic-server.cfg:31 ships one and
+        // without this entry the bare-assignment path below would mint a phantom `maxplayers` cvar that nothing
+        // reads. ConfigLoader registers the real handler (ServerSlots.RegisterCommand) before any exec, which
+        // pre-empts this list anyway; the entry is what protects a bare interpreter that skipped that wiring.
+        "maxplayers",
         "defer", "wait", "echo", "toggle", "cycle", "inc", "dec", "play", "play2", "playall",
         "cd", "sv_startdownload", "prvm_language", "fpredict", "fdisconnect", "togglemenu",
         "alias", "unalias", "exec", "set", "seta", // builtins (already handled; listed for completeness)

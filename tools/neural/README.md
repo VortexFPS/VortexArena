@@ -75,10 +75,23 @@ converge usually means the stage before it did not really finish; reordering to 
 | 3 | Platforms, gaps, ramps | Jump timing and landing |
 | 4 | Stage 3 plus jump pads, teleporters, hurt volumes | Route through map furniture |
 | 5 | Gaps wider than a jump, ledges higher than one | Weapon jumps |
+| 6 | The game's real maps, minus a held-out split | Stairwells, doorways, railings, multi-level loops |
 
-Stages 1 to 5 run on **generated** geometry, different every episode. The 32 shipped maps are held back for
-stage 6 and the eval split, because a policy trained on maps we own has no pressure to generalise and a
-training curve cannot tell you it failed.
+Stages 1 to 5 run on **generated** geometry, different every episode, because a policy trained only on maps
+we own has no pressure to generalise and a training curve cannot tell you it failed.
+
+Stage 6 exists because generated geometry teaches locomotion and stops there. Measured on a policy that
+cleared stages 1 to 3: **97% arrivals on the corridor stage, 71% on terrain** against 22% and 3.5% for the
+scripted runner, and **12.5% on real maps** — 3 routes of 8 on stormkeep where the classic steer finishes 7.
+
+```bash
+python tools/neural/train.py --stage 6 --steps 20000000 --hosts 8 --resume runs/latest/checkpoint.pt
+```
+
+`--maps A,B,C` narrows the pool; empty means every installed map. **The held-out set is removed either way**,
+whatever the list says — `MapCourseSource.HeldOut` is `catharsis`, `fuse`, `afterslime`, and
+`NeuralBotTests.MapCourseSource_RefusesHeldOutMapsEvenWhenAskedForThemByName` is the guard. Change that set
+deliberately and record why; silently widening it is how a generalisation claim becomes untrue.
 
 ## Check the export
 

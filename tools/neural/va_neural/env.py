@@ -36,6 +36,13 @@ OP_ERROR = 10
 _HEADER = struct.Struct("<BI")
 
 
+def _pack_str(s: str) -> bytes:
+    data = s.encode("utf-8")
+    if len(data) > 0xFFFF:
+        raise ValueError("string too long for the HELLO frame")
+    return struct.pack("<H", len(data)) + data
+
+
 @dataclass
 class EnvConfig:
     """Mirrors TrainingEnv.Config; sent verbatim in the HELLO frame."""
@@ -49,12 +56,16 @@ class EnvConfig:
     permit_flip_chance: float = 0.35
     aim_constraint_chance: float = 0.4
     trace_fan: bool = True
+    # Stage 6 only: where the maps are, and which of them to train on (empty = every installed map).
+    data_root: str = ""
+    map_list: str = ""
 
-    # Field order and types must match Program.ReadHello exactly: six i32, three f32, one i32.
+    # Field order and types must match Program.ReadHello exactly: six i32, three f32, one i32, then two
+    # u16-length-prefixed UTF-8 strings.
     _WIRE = struct.Struct("<6i3fi")
 
     def pack(self) -> bytes:
-        return self._WIRE.pack(
+        head = self._WIRE.pack(
             layout.PROTOCOL_VERSION,
             self.agents,
             self.ticks_per_step,
@@ -66,6 +77,7 @@ class EnvConfig:
             self.aim_constraint_chance,
             1 if self.trace_fan else 0,
         )
+        return head + _pack_str(self.data_root) + _pack_str(self.map_list)
 
 
 def _default_host_binary() -> Path:

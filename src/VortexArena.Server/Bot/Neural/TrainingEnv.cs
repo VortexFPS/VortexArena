@@ -68,6 +68,12 @@ public sealed class TrainingEnv
 
         /// <summary>Spend the per-think trace fan. Off is faster; on is what the live server does.</summary>
         public bool TraceFan = true;
+
+        /// <summary>Content root for <see cref="CourseGenerator.Stage.RealMaps"/>. Ignored by every other stage.</summary>
+        public string DataRoot = "";
+
+        /// <summary>Comma-separated map names for stage 6, or empty for "every installed map".</summary>
+        public string MapList = "";
     }
 
     private readonly Config _cfg;
@@ -78,6 +84,8 @@ public sealed class TrainingEnv
     private MapFeatures _features = null!;
     private NavDistanceField _distance = null!;
     private CourseGenerator.Course _course = null!;
+    private MapCourseSource? _mapSource;
+    private MapCourseSource.PreparedMap? _currentMap;
     private PolicyNetwork _dummyNet = null!;
     private NeuralBotService _service = null!;
 
@@ -149,6 +157,8 @@ public sealed class TrainingEnv
     public void Reset(Span<float> observations)
     {
         _episodeIndex++;
+        if (_cfg.Stage == CourseGenerator.Stage.RealMaps) { ResetOnRealMap(observations); return; }
+        _currentMap = null;
         _course = CourseGenerator.Generate(_cfg.Stage, _cfg.Seed * 7919 + _episodeIndex);
 
         // bot_neural OFF across Boot, then on again below.
@@ -162,23 +172,7 @@ public sealed class TrainingEnv
 
         _world = new GameWorld(_course.World, BuildEntityDicts()) { MapName = $"nbcourse{_episodeIndex}" };
         _world.Boot("dm");
-        Cvars.Set("bot_join_empty", "1");
-        // bot_number must MATCH the roster this env creates by hand.
-        //
-        // It was 0, on the reasoning that the roster is built directly so fixcount has nothing to do. What
-        // fixcount actually does with a target of 0 and eight connected bots is remove them, one per frame,
-        // and it starts doing that during the warm-up frames. Every agent's Player was freed a few ticks
-        // after spawning; the env kept stepping stale references, so position and velocity froze at
-        // whatever they held at disconnect and nothing ever moved again. The scripted hold-forward probe
-        // read as "closes 24 qu/s", which looks like bad movement and was actually no movement.
-        Cvars.Set("bot_number", _cfg.Agents.ToString(CultureInfo.InvariantCulture));
-        Cvars.Set("skill", "10");
-        Cvars.Set("g_balance_selfdamagepercent", "0.65");
-        Cvars.Set("bot_nofire", "0");
-        // Agents share a world for throughput, not to fight. Without this they acquire each other as
-        // enemies, combat claims the weapon (so the policy never gets to weapon-jump), and they shoot each
-        // other down in seconds — which is a deathmatch, not a locomotion curriculum.
-        Cvars.Set("bot_ignore_bots", "1");
+        ApplyTrainingCvars();
 
         // Bake the field for this course. Courses are a few thousand columns, so a single-threaded bake is
         // milliseconds; doing it inline keeps the env deterministic, with no background work racing a step.
@@ -207,6 +201,81 @@ public sealed class TrainingEnv
         _world.Bots.Neural = _service;
         Cvars.Set("bot_neural", "1");
 
+        SpawnRosterAndSettle(observations);
+    }
+
+    /// <summary>The cvar state every training episode runs under, shared by both reset paths.</summary>
+    private void ApplyTrainingCvars()
+    {
+        Cvars.Set("bot_join_empty", "1");
+        // bot_number must MATCH the roster this env creates by hand.
+        //
+        // It was 0, on the reasoning that the roster is built directly so fixcount has nothing to do. What
+        // fixcount actually does with a target of 0 and eight connected bots is remove them, one per frame,
+        // and it starts doing that during the warm-up frames. Every agent's Player was freed a few ticks
+        // after spawning; the env kept stepping stale references, so position and velocity froze at
+        // whatever they held at disconnect and nothing ever moved again. The scripted hold-forward probe
+        // read as "closes 24 qu/s", which looks like bad movement and was actually no movement.
+        Cvars.Set("bot_number", _cfg.Agents.ToString(CultureInfo.InvariantCulture));
+        Cvars.Set("skill", "10");
+        Cvars.Set("g_balance_selfdamagepercent", "0.65");
+        Cvars.Set("bot_nofire", "0");
+        // Agents share a world for throughput, not to fight. Without this they acquire each other as
+        // enemies, combat claims the weapon (so the policy never gets to weapon-jump), and they shoot each
+        // other down in seconds — which is a deathmatch, not a locomotion curriculum.
+        Cvars.Set("bot_ignore_bots", "1");
+    }
+
+    /// <summary>
+    /// Stage 6's reset: draw a map and an A/B pair from <see cref="MapCourseSource"/>, then build the world
+    /// around it. The map's collision, entity lump and navigation field are prepared once and reused; only
+    /// the goal-relative distance field is rebuilt, which is a few milliseconds.
+    /// </summary>
+    private void ResetOnRealMap(Span<float> observations)
+    {
+        _mapSource ??= new MapCourseSource(_cfg.DataRoot, _cfg.MapList) { Log = Log };
+
+        var draw = _mapSource.NextEpisode(_rng);
+        if (draw is null)
+            throw new InvalidOperationException(
+                "no map in the pool produced a reachable A/B pair — check the map list and the held-out set");
+
+        (MapCourseSource.PreparedMap map, Vector3 spawn, Vector3 target, NavDistanceField dist) = draw.Value;
+        _currentMap = map;
+
+        // A spawn point exactly at the episode origin, appended to the map's own entity lump so the roster
+        // starts where the route does.
+        var dicts = new List<EntityDict>(map.Entities) { new("info_player_deathmatch", spawn) };
+
+        Cvars.Set("bot_neural", "0");   // see the note in the generated-course reset
+        _world = new GameWorld(map.World, dicts) { MapName = map.Name };
+        _world.BrushModels = map.Submodels;
+        _world.MapBsp = map.Bsp;
+        _world.Boot("dm");
+        ApplyTrainingCvars();
+
+        _field = map.Field;
+        _features = new MapFeatures();
+        _features.Build(_world.Services.EntityTable.All);
+        _distance = dist;
+
+        // The generated-course record the rest of the class reads for spawn, target and world bounds.
+        _course = new CourseGenerator.Course { World = map.World, Spawn = spawn, Target = target };
+
+        _dummyNet ??= PolicyNetwork.CreateUntrained(NeuralObservation.Size, ActionSpace.Size);
+        _service = NeuralBotService.ForPreparedMap(_evalPolicy ?? _dummyNet, _field, _features, map.Name);
+        _world.Bots.Neural = _service;
+        Cvars.Set("bot_neural", "1");
+
+        SpawnRosterAndSettle(observations);
+    }
+
+    /// <summary>Console sink for the map loader; null stays silent.</summary>
+    public Action<string>? Log;
+
+    /// <summary>Connect the roster, let the world settle, and write the opening observations.</summary>
+    private void SpawnRosterAndSettle(Span<float> observations)
+    {
         _agents.Clear();
         for (int i = 0; i < _cfg.Agents; i++)
             _agents.Add(SpawnAgent(i));

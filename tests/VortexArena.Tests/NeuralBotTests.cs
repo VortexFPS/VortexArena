@@ -798,6 +798,73 @@ public class NeuralBotTests
                 agentEpisodes == 0 ? 0f : arrived / (float)agentEpisodes);
     }
 
+    // =============================================================================================
+    // stage 6: real maps and the held-out split
+    // =============================================================================================
+
+    /// <summary>
+    /// The held-out eval maps must never enter the training pool, however the map list asks for them.
+    ///
+    /// <para>This is the guard on risk R-N1. Training on all 32 maps and then reporting on all 32 cannot
+    /// detect memorisation, and the failure is silent: the numbers look good and mean nothing. Naming a
+    /// held-out map explicitly is the most likely way someone reintroduces it, so that is what this asserts
+    /// against.</para>
+    /// </summary>
+    [Fact]
+    public void MapCourseSource_RefusesHeldOutMapsEvenWhenAskedForThemByName()
+    {
+        if (!TestPaths.HasData) return;   // no content checkout; nothing to pool
+
+        // Ask for exactly the held-out set plus one trainable map.
+        string asked = string.Join(",", MapCourseSource.HeldOut) + ",stormkeep";
+        MapCourseSource source;
+        try
+        {
+            source = new MapCourseSource(TestPaths.Data, asked);
+        }
+        catch (InvalidOperationException)
+        {
+            return;   // stormkeep is not installed either, so there is no pool to check
+        }
+
+        Assert.DoesNotContain(source.Pool, m =>
+            MapCourseSource.HeldOut.Contains(m, StringComparer.OrdinalIgnoreCase));
+        Assert.Contains("stormkeep", source.Pool, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// An episode drawn from a real map must be a route the bot could actually run: a reachable target, far
+    /// enough away to be worth measuring.
+    ///
+    /// <para>An unreachable A/B pair is not a hard episode, it is an impossible one, and a curriculum full
+    /// of them teaches the policy that arriving is not achievable.</para>
+    /// </summary>
+    [Fact]
+    public void MapCourseSource_DrawsReachableRoutesOfUsefulLength()
+    {
+        if (!TestPaths.HasData) return;
+
+        MapCourseSource source;
+        try
+        {
+            source = new MapCourseSource(TestPaths.Data, "stormkeep");
+        }
+        catch (InvalidOperationException)
+        {
+            return;   // stormkeep not installed
+        }
+
+        var draw = source.NextEpisode(new Random(4), minRouteLength: 700f);
+        if (draw is null) return;   // a graphless map is reported, not asserted on
+
+        (MapCourseSource.PreparedMap map, Vector3 spawn, Vector3 target, NavDistanceField dist) = draw.Value;
+        Assert.Equal("stormkeep", map.Name);
+        Assert.True(map.Field.OccupiedColumns > 1000, $"only {map.Field.OccupiedColumns} baked columns");
+        Assert.True(dist.IsReachable(spawn), "the drawn origin cannot reach the drawn target");
+        Assert.True(dist.DistanceAt(spawn) >= 700f, "the drawn route is shorter than the requested minimum");
+        Assert.NotEqual(spawn, target);
+    }
+
     private static CollisionWorld FlatFloorWorld()
     {
         var w = new CollisionWorld();

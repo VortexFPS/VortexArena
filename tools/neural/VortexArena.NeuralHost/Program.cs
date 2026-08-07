@@ -302,6 +302,8 @@ public static class Program
             Stage = (CourseGenerator.Stage)opts.Stage,
             Seed = opts.Seed,
             TraceFan = !opts.NoTraceFan,
+            DataRoot = opts.DataRoot,
+            MapList = opts.MapList,
             // Mirror train.py's per-stage settings, or the bench measures a harder problem than the one
             // being trained. Stages 1 and 2 are pure locomotion: handing them the movement weapons only
             // adds an action dimension with no reward attached, and under RANDOM actions it adds a death
@@ -466,7 +468,20 @@ public static class Program
             PermitFlipChance = BinaryPrimitives.ReadSingleLittleEndian(body[28..]),
             AimConstraintChance = BinaryPrimitives.ReadSingleLittleEndian(body[32..]),
             TraceFan = BinaryPrimitives.ReadInt32LittleEndian(body[36..]) != 0,
+            DataRoot = ReadPrefixedString(body, 40, out int after),
+            MapList = ReadPrefixedString(body, after, out _),
         };
+    }
+
+    /// <summary>A u16 length followed by that many UTF-8 bytes. Stage 6's map settings ride the HELLO frame.</summary>
+    private static string ReadPrefixedString(ReadOnlySpan<byte> body, int offset, out int next)
+    {
+        if (offset + 2 > body.Length) { next = body.Length; return ""; }
+        int len = BinaryPrimitives.ReadUInt16LittleEndian(body[offset..]);
+        int start = offset + 2;
+        if (start + len > body.Length) { next = body.Length; return ""; }
+        next = start + len;
+        return len == 0 ? "" : Encoding.UTF8.GetString(body.Slice(start, len));
     }
 
     private static void SendError(Frames frames, string message)
@@ -517,6 +532,8 @@ public static class Program
         public bool Scripted;
         public bool Debug;
         public string? PolicyPath;
+        public string DataRoot = "";
+        public string MapList = "";
         public bool ShowHelp;
 
         public const string Usage = """
@@ -525,7 +542,11 @@ public static class Program
               --port N        listen on 127.0.0.1:N (0 = pick one; the chosen port is printed to stdout)
               --agents N      agents in the world (default 8)
               --ticks N       sim ticks per policy step (default 4 = an 18 Hz decision rate)
-              --stage N       curriculum stage 1-5 (flat, corridor, terrain, furniture, weapon-gaps)
+              --stage N       curriculum stage 1-6 (flat, corridor, terrain, furniture, weapon-gaps,
+                              real-maps)
+              --data DIR      content root for stage 6 (the directory holding maps/)
+              --maps A,B,C    stage 6 map list; empty means every installed map. The held-out
+                              eval split is removed either way, whatever this says.
               --seed N        base RNG seed (default 1)
               --bench N       no trainer: run N steps with random actions and report throughput
               --verify-weights PATH
@@ -555,7 +576,9 @@ public static class Program
                     case "--port": o.Port = ParseInt(Next(), 0); break;
                     case "--agents": o.Agents = Math.Clamp(ParseInt(Next(), 8), 1, 64); break;
                     case "--ticks": o.TicksPerStep = Math.Clamp(ParseInt(Next(), 4), 1, 32); break;
-                    case "--stage": o.Stage = Math.Clamp(ParseInt(Next(), 1), 1, 5); break;
+                    case "--stage": o.Stage = Math.Clamp(ParseInt(Next(), 1), 1, 6); break;
+                    case "--data": o.DataRoot = Next() ?? ""; break;
+                    case "--maps": o.MapList = Next() ?? ""; break;
                     case "--seed": o.Seed = ParseInt(Next(), 1); break;
                     case "--bench": o.BenchSteps = ParseInt(Next(), 1000); break;
                     case "--verify-weights": o.VerifyWeights = Next(); break;

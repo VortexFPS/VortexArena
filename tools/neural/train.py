@@ -77,6 +77,9 @@ CURRICULUM = [
     (3, 8_000_000, 0.70),   # terrain: jump timing
     (4, 8_000_000, 0.65),   # furniture: pads, teleporters, hazards
     (5, 10_000_000, 0.45),  # weapon gaps: rocket and blaster jumps
+    # Real maps, held-out split excluded. The threshold is low because a shipped arena route is a harder
+    # problem than any generated course: measured 12.5% arrivals for a policy that scores 71% on stage 3.
+    (6, 20_000_000, 0.55),
 ]
 
 
@@ -96,6 +99,11 @@ def main() -> int:
     ap.add_argument("--device", type=str, default="cpu",
                     help="cpu is usually right: the net is 45k parameters and the bottleneck is the env")
     ap.add_argument("--verbose-hosts", action="store_true", help="let the env hosts write to stderr")
+    ap.add_argument("--data", type=Path, default=None,
+                    help="content root for stage 6 (default: <repo>/data)")
+    ap.add_argument("--maps", type=str, default="",
+                    help="stage 6 map list, comma separated; empty means every installed map. "
+                         "The held-out eval split is excluded either way.")
     args = ap.parse_args()
 
     run_name = args.name or time.strftime("%Y%m%d-%H%M%S")
@@ -155,6 +163,8 @@ def train_stage(policy, norm, optimizer, hyper: Hyper, args, stage: int, budget:
         weapon_chance=0.0 if stage <= 2 else 1.0,
         permit_flip_chance=0.0 if stage <= 3 else 0.35,
         aim_constraint_chance=0.0 if stage <= 2 else 0.4,
+        data_root=str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data"),
+        map_list=args.maps,
     )
     env = VectorEnv(cfg, num_hosts=args.hosts, quiet=not args.verbose_hosts)
     try:

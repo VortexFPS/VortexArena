@@ -32,6 +32,18 @@ public static class CourseGenerator
         Furniture = 4,
         /// <summary>Gaps too wide to jump and ledges too high to climb. Forces weapon jumps.</summary>
         WeaponGaps = 5,
+
+        /// <summary>
+        /// The game's real maps, minus a held-out eval split. Not generated: see
+        /// <see cref="MapCourseSource"/>, which owns this stage entirely.
+        ///
+        /// <para>Generated geometry teaches locomotion and stops there. Measured after stages 1 to 5: 97%
+        /// arrivals on the corridor stage and 71% on terrain, against 22% and 3.5% for a scripted
+        /// straight-line runner — and 3 routes of 8 on stormkeep, where the classic waypoint steer finishes
+        /// 7. Stairwells, tight doorways, railings and multi-level loops are not in the generator, and this
+        /// is where the policy meets them.</para>
+        /// </summary>
+        RealMaps = 6,
     }
 
     /// <summary>A generated course: geometry, spawn and target, plus the entities the furniture stage adds.</summary>

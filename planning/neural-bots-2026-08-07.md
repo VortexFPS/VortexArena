@@ -468,7 +468,7 @@ A policy step advances the world 4 ticks at 72 Hz, so one step is 0.0556 s of ga
 the first row to the last is entirely Python-side: a synchronous socket round trip per step, plus a
 per-step forward pass on CPU. If training time starts to matter, that is the thing to fix, not the game.
 
-### 11.2 Four bugs the build found, worth not re-deriving
+### 11.2 Five bugs the build found, worth not re-deriving
 
 * **Discounted potential shaping pays a stationary agent to stay away.** With `phi = -d` and gamma 0.99,
   `gamma*phi(s') - phi(s)` is worth `d*(1-gamma)` per step to an agent that does not move: at 1000 qu out
@@ -489,6 +489,12 @@ per-step forward pass on CPU. If training time starts to matter, that is the thi
   24 qu/s where a running player does 320: not a movement problem, a not-moving problem.
   `TrainingEnv_ScriptedForward_ArrivesOnFlatGroundAndBeatsRandom` is the regression net, and it is the only
   test that asks whether the environment is solvable at all.
+* **A full stdout pipe looks exactly like a crash.** The trainer read one line from the host's stdout (the
+  port) and never touched the pipe again, but the game prints a line per map load. After about 24 episodes
+  the 64 KB buffer filled and the host blocked forever inside a write; the client saw the socket go away.
+  Deterministic to the step, no exception, no stderr, flat memory, and not reproducible in-process — the
+  determinism was the clue, because a fixed step number with flat memory is a fixed-size buffer filling at
+  a fixed rate.
 
 ---
 

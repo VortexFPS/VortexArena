@@ -150,6 +150,13 @@ starts near 8.2 nats where a single-head space would be near 2. At the usual 0.0
 outweighed the policy gradient by 13x and the policy never left uniform. It is 0.002 here; scale it with
 the number of heads if you add one.
 
+**Anything the host writes to stdout.** The client reads exactly one line from that pipe (the port) and
+then drains it on a daemon thread, because the GAME prints too: one `[bots] waypoints for ...` line per map
+load, and a map load is every episode. Before the drain existed, the 64 KB pipe filled after about 24
+episodes and the host blocked forever inside a write it could not complete. It presented as a hard crash at
+a perfectly reproducible step number with no exception, no stderr and flat memory. If you add a new stdout
+line to the host, the drain covers you; if you add a new pipe, remember this.
+
 **Shaping.** The progress term is the plain difference `d - d'`, not the textbook discounted
 `gamma*phi(s') - phi(s)`. The discounted form pays a stationary agent `d*(1-gamma)` per step, which at
 1000 qu out is five times the time penalty, and the best available policy becomes standing still far from

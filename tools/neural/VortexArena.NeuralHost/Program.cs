@@ -34,10 +34,74 @@ public static class Program
             return 0;
         }
 
+        if (opts.VerifyWeights is not null)
+            return VerifyWeights(opts.VerifyWeights);
+
         if (opts.BenchSteps > 0)
             return RunBenchmark(opts);
 
         return RunServer(opts);
+    }
+
+    /// <summary>
+    /// Load a weight file the Python exporter wrote and report whether this build can use it.
+    ///
+    /// <para>The weight format is written by <c>tools/neural/va_neural/model.py</c> and read by
+    /// <c>PolicyNetwork.cs</c>: two implementations of one layout, in two languages, that only ever meet at
+    /// a binary file. A transposed weight matrix or a wrong activation byte produces a network that loads
+    /// and runs and is simply wrong. Running this after every export is how that gets caught in a second
+    /// rather than after a training run.</para>
+    /// </summary>
+    private static int VerifyWeights(string path)
+    {
+        PolicyNetwork? net = PolicyNetwork.Load(path, out string? error);
+        if (net is null)
+        {
+            Console.Error.WriteLine($"[verify] FAILED to load {path}: {error}");
+            return 1;
+        }
+
+        Console.WriteLine($"label          {net.Label}");
+        Console.WriteLine($"input          {net.InputSize} (this build expects {NeuralObservation.Size})");
+        Console.WriteLine($"output         {net.OutputSize} (this build expects {ActionSpace.Size})");
+        Console.WriteLine($"parameters     {net.ParameterCount:N0}");
+        Console.WriteLine($"widest layer   {net.MaxLayerWidth}");
+
+        if (net.InputSize != NeuralObservation.Size || net.OutputSize != ActionSpace.Size)
+        {
+            Console.Error.WriteLine("[verify] FAILED: shape does not match this build's observation/action layout");
+            return 1;
+        }
+
+        // A forward pass on a deterministic non-trivial input, so a NaN or a dead network shows up here.
+        var obs = new float[net.InputSize];
+        for (int i = 0; i < obs.Length; i++) obs[i] = MathF.Sin(i * 0.37f);
+        var output = new float[net.OutputSize];
+        var sw = Stopwatch.StartNew();
+        const int iterations = 20000;
+        var scratch = new PolicyNetwork.Scratch(net);
+        for (int i = 0; i < iterations; i++) net.Evaluate(obs, scratch, output);
+        sw.Stop();
+
+        foreach (float v in output)
+        {
+            if (float.IsFinite(v)) continue;
+            Console.Error.WriteLine("[verify] FAILED: forward pass produced a non-finite output");
+            return 1;
+        }
+
+        double usPerEval = sw.Elapsed.TotalMilliseconds * 1000.0 / iterations;
+        Console.WriteLine($"forward pass   {usPerEval:F1} us  ({1000.0 / usPerEval:F0}/ms)");
+        // 16 bots at the 20 Hz think rate is 320 evaluations a second.
+        Console.WriteLine($"16 bots @20Hz  {usPerEval * 320 / 1000.0:F3} ms/s of CPU " +
+                          $"({usPerEval * 320 / 10000.0:F3}% of one core)");
+
+        NeuralAction action = ActionSpace.Decode(output, weaponAllowed: true, stackalloc bool[] { true, true, true });
+        Console.WriteLine($"sample action  move ({action.MoveForward:+0.00;-0.00}, {action.MoveRight:+0.00;-0.00}) " +
+                          $"jump {action.Jump} yaw {action.YawDelta:+0.0;-0.0} pitch {action.PitchDelta:+0.0;-0.0} " +
+                          $"weapon {action.WeaponSelect}");
+        Console.WriteLine("[verify] OK");
+        return 0;
     }
 
     // =============================================================================================
@@ -132,17 +196,21 @@ public static class Program
                         AppendBytes(payload, AsBytes(rewards));
                         AppendBytes(payload, dones);
                         AppendBytes(payload, truncated);
-                        frames.Write(OpCode.StepResult, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(payload));
 
-                        if (env.AllDone())
-                        {
-                            (int arrived, float meanTime, float meanRemaining) = env.EpisodeSummary();
-                            payload.Clear();
-                            AppendI32(payload, arrived);
-                            AppendF32(payload, meanTime);
-                            AppendF32(payload, meanRemaining);
-                            frames.Write(OpCode.EpisodeStats, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(payload));
-                        }
+                        // Episode stats ride along in every step result rather than arriving as their own
+                        // frame when an episode happens to end. A separate optional frame means the client
+                        // has to guess whether one is waiting, and the obvious way to guess (peek with a
+                        // short socket timeout) breaks a buffered reader the moment it fires. Thirteen
+                        // bytes a step is a good trade for a protocol with no conditional framing in it.
+                        bool episodeOver = env.AllDone();
+                        payload.Add((byte)(episodeOver ? 1 : 0));
+                        (int arrived, float meanTime, float meanRemaining) =
+                            episodeOver ? env.EpisodeSummary() : (0, 0f, 0f);
+                        AppendI32(payload, arrived);
+                        AppendF32(payload, meanTime);
+                        AppendF32(payload, meanRemaining);
+
+                        frames.Write(OpCode.StepResult, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(payload));
                         break;
                     }
 
@@ -197,6 +265,13 @@ public static class Program
             Stage = (CourseGenerator.Stage)opts.Stage,
             Seed = opts.Seed,
             TraceFan = !opts.NoTraceFan,
+            // Mirror train.py's per-stage settings, or the bench measures a harder problem than the one
+            // being trained. Stages 1 and 2 are pure locomotion: handing them the movement weapons only
+            // adds an action dimension with no reward attached, and under RANDOM actions it adds a death
+            // — 5% attack chance with a devastator in hand is a rocket at your own feet.
+            WeaponChance = opts.Stage <= 2 ? 0f : 1f,
+            PermitFlipChance = opts.Stage <= 3 ? 0f : 0.35f,
+            AimConstraintChance = opts.Stage <= 2 ? 0f : 0.4f,
         };
         var env = new TrainingEnv(cfg);
 
@@ -329,6 +404,7 @@ public static class Program
         public int Stage = 1;
         public int Seed = 1;
         public int BenchSteps;
+        public string? VerifyWeights;
         public bool NoTraceFan;
         public bool ShowHelp;
 
@@ -341,6 +417,9 @@ public static class Program
               --stage N       curriculum stage 1-5 (flat, corridor, terrain, furniture, weapon-gaps)
               --seed N        base RNG seed (default 1)
               --bench N       no trainer: run N steps with random actions and report throughput
+              --verify-weights PATH
+                              load an exported policy, time a forward pass, and report whether
+                              this build can use it (run after every export)
               --no-tracefan   skip the per-think box sweeps (faster, and not what the live server does)
               --help
 
@@ -362,6 +441,7 @@ public static class Program
                     case "--stage": o.Stage = Math.Clamp(ParseInt(Next(), 1), 1, 5); break;
                     case "--seed": o.Seed = ParseInt(Next(), 1); break;
                     case "--bench": o.BenchSteps = ParseInt(Next(), 1000); break;
+                    case "--verify-weights": o.VerifyWeights = Next(); break;
                     case "--no-tracefan": o.NoTraceFan = true; break;
                     case "--help" or "-h": o.ShowHelp = true; break;
                 }

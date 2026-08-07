@@ -17,9 +17,17 @@ namespace VortexArena.Server.Bot.Neural;
 /// a 1 s waypoint freeze as a shipped bug — so <see cref="BakeParallel"/> fans out across cores and the
 /// caller is expected to run it off the sim thread with the classic steer live until it lands.</para>
 ///
-/// <para><b>Thread safety.</b> <see cref="TraceService"/> keeps per-instance scratch
-/// (<c>_candidates</c>, <c>_boxCache</c>) and is NOT safe to share. Each worker therefore gets its own
-/// service over the SAME <see cref="CollisionWorld"/>, which is read-only during a query.</para>
+/// <para><b>Thread safety.</b> Neither <see cref="TraceService"/> nor <see cref="CollisionWorld"/> is safe
+/// to share across threads. The trace service keeps per-instance scratch (<c>_candidates</c>,
+/// <c>_boxCache</c>); the collision world keeps an epoch-dedup array (<c>_mark</c>/<c>_markNumber</c>) that
+/// every broadphase query stamps. Sharing the world silently loses candidate brushes rather than crashing:
+/// the first version of this bake did share it and found 995 spans where the serial bake found 1058, a
+/// 6% hole in the map that nothing would have reported.
+///
+/// <para>So each worker gets both its own trace service AND its own world, built over the SAME
+/// <see cref="Brush"/> objects — brushes are immutable during a trace, so only the grid and the mark array
+/// need duplicating. That costs one grid build per worker (milliseconds) against a bake measured in
+/// seconds, and it needs no change to the engine's hot path.</para>
 /// </summary>
 public static class NavFieldBaker
 {
@@ -114,8 +122,8 @@ public static class NavFieldBaker
                 int y0 = w * rowsPer;
                 int y1 = Math.Min(height, y0 + rowsPer);
                 if (y0 >= y1) return;
-                // One service per worker: see the thread-safety note in the class comment.
-                BakeRange(y0, y1, new TraceService(world));
+                // A private world AND a private service per worker: see the thread-safety note above.
+                BakeRange(y0, y1, new TraceService(PrivateView(world)));
             });
         }
 
@@ -142,6 +150,19 @@ public static class NavFieldBaker
         var field = new NavField(mapName, geometryHash, origin, width, height, columnStart, columnCount, spans);
         LinkNeighbours(field, spans, columnStart, columnCount, width, height);
         return field;
+    }
+
+    /// <summary>
+    /// A collision world one worker can query alone: the same brush objects, its own broadphase grid and
+    /// its own dedup marks. Brushes are read-only during a trace, so this shares the geometry and
+    /// duplicates only the mutable query state.
+    /// </summary>
+    private static CollisionWorld PrivateView(CollisionWorld shared)
+    {
+        var view = new CollisionWorld();
+        view.AddBrushes(shared.Brushes);
+        view.BuildGrid();
+        return view;
     }
 
     private static NavField Empty(string mapName, ulong hash, Vector3 origin, int w, int h)

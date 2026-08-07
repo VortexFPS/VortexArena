@@ -78,9 +78,11 @@ public sealed class BotPopulation
     private void SyncNeuralLocomotors()
     {
         bool want = Neural is { Ready: true } && Cvars.Bool("bot_neural");
-        if (want == _neuralAttached && (!want || _neuralGeneration == Neural!.Network))
-            return;
 
+        // Deliberately NOT short-circuited on "nothing changed globally". The first version was, and it
+        // meant a bot that connected AFTER the first sync never got a locomotor at all — which is every
+        // bot on a real server, because fixcount fills one per frame and the sync runs at the top of the
+        // frame. The loop is over a handful of brains and does nothing when they are already correct.
         for (int i = 0; i < _brains.Count; i++)
             AttachLocomotor(_brains[i], want);
 #if VA_BOTPLAYER
@@ -89,27 +91,28 @@ public sealed class BotPopulation
         if (_botPlayerBrain is not null)
             AttachLocomotor(_botPlayerBrain, want);
 #endif
-
-        _neuralAttached = want;
-        _neuralGeneration = want ? Neural!.Network : null;
+        if (!want) _neuralGeneration = null;
     }
 
     private void AttachLocomotor(BotBrain brain, bool want)
     {
         if (!want)
         {
+            if (brain.Locomotor is null) return;
             brain.Locomotor = null;
             brain.Neural = null;
             return;
         }
+
+        Neural.PolicyNetwork net = Neural!.Network!;
         brain.Neural = Neural;
         if (brain.Locomotor is null)
-            brain.Locomotor = new Neural.NeuralLocomotor(Neural!.Network!);
-        else
-            brain.Locomotor.SetNetwork(Neural!.Network!);
+            brain.Locomotor = new Neural.NeuralLocomotor(net);
+        else if (!ReferenceEquals(_neuralGeneration, net))
+            brain.Locomotor.SetNetwork(net);   // a bot_neural_weights reload mid-match
+        _neuralGeneration = net;
     }
 
-    private bool _neuralAttached;
     private Neural.PolicyNetwork? _neuralGeneration;
 
     // brains in connect order (QC bot_list; the order drives strategy-token rotation + remove-newest).

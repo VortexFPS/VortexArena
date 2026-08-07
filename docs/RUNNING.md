@@ -738,3 +738,34 @@ character columns.
   the present path), `vid_vsync 2` (mailbox — no FIFO cascade on a missed present), `sys_priority_boost 1`
   (default — AboveNormal process priority). Hitch lines tagged `EXTERNAL?` are the machine (compositor/
   driver/background load), not the game — check what else is running before profiling the repo.
+
+## Neural bots
+
+Bots can be driven by a learned locomotion policy instead of the waypoint steer. Off by default; it stays
+off until a policy beats the classic steer on maps it did not train on.
+
+```bash
+./vx run -- --host stormkeep --bots 4 --cvar bot_neural 1 --cvar bot_neural_weights runs/latest/policy.vxpw
+```
+
+| cvar | default | what it does |
+|---|---|---|
+| `bot_neural` | `0` | drive bot movement with the learned policy |
+| `bot_neural_weights` | `data/neural/policy.vxpw` | path to the weight file |
+| `bot_neural_bake` | `1` | bake a navigation field at map load when no cached one is present |
+| `bot_neural_tracefan` | `1` | spend the per-think box sweeps that see doors, lifts and players |
+
+Every failure mode of this subsystem is a **silent fallback to the classic steer**: no weight file, a field
+baked against different geometry, a bake still running, a weight file whose observation size does not match
+the build. `bot_neural_status` in the console says which:
+
+```
+] bot_neural_status
+ready: policy 'run7-s5' (45975 params); field 11464 cols / 30985 spans (baked 412 ms); 37 features; map stormkeep
+```
+
+The navigation field bake runs off the sim thread (377 ms on stormkeep across six workers), and bots use the
+classic steer until it lands, so a map change never stalls on it.
+
+Training lives in [`tools/neural/README.md`](../tools/neural/README.md); the design is
+[`planning/neural-bots-2026-08-07.md`](../planning/neural-bots-2026-08-07.md).

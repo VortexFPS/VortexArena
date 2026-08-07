@@ -138,6 +138,10 @@ public sealed class TrainingEnv
         Cvars.Set("skill", "10");
         Cvars.Set("g_balance_selfdamagepercent", "0.65");
         Cvars.Set("bot_nofire", "0");
+        // Agents share a world for throughput, not to fight. Without this they acquire each other as
+        // enemies, combat claims the weapon (so the policy never gets to weapon-jump), and they shoot each
+        // other down in seconds — which is a deathmatch, not a locomotion curriculum.
+        Cvars.Set("bot_ignore_bots", "1");
 
         // Bake the field for this course. Courses are a few thousand columns, so a single-threaded bake is
         // milliseconds; doing it inline keeps the env deterministic, with no background work racing a step.
@@ -153,16 +157,34 @@ public sealed class TrainingEnv
         _dummyNet ??= PolicyNetwork.CreateUntrained(NeuralObservation.Size, ActionSpace.Size);
         _service = NeuralBotService.ForPreparedMap(_dummyNet, _field, _features, _world.MapName!);
 
+        // Hand the service to the population and turn the feature on, so BotPopulation's per-frame sync
+        // creates and owns the locomotors. The env then borrows them and switches them to external-action
+        // mode.
+        //
+        // The env used to construct its own locomotors and assign brain.Locomotor directly. That worked
+        // only while the sync happened to early-out; once the sync was corrected to handle bots joining
+        // mid-match, it saw bot_neural off and cleared the env's locomotors every single frame. The bots
+        // silently fell back to the classic steer, fought each other with the movement weapons they had
+        // been granted, and died in about twelve steps — 3,364 episodes in a 40,000-step bench, mean reward
+        // -0.52, throughput down from 4,200 steps/s to 174. One owner for the locomotors, not two.
+        _world.Bots.Neural = _service;
+        Cvars.Set("bot_neural", "1");
+
         _agents.Clear();
         for (int i = 0; i < _cfg.Agents; i++)
             _agents.Add(SpawnAgent(i));
 
-        // A few frames so the bots are alive, weapons are raised and the first ground contact has happened.
+        // A few frames so the sync attaches locomotors, the bots are alive, and the first ground contact
+        // has happened.
         for (int t = 0; t < 6; t++) _world.Frame(SimulationLoop.TicRate);
 
         for (int i = 0; i < _agents.Count; i++)
         {
             Agent a = _agents[i];
+            a.Loco = a.Brain.Locomotor
+                     ?? throw new InvalidOperationException(
+                         "the bot population did not attach a locomotor — bot_neural or the service is unset");
+            a.Loco.UseExternalAction = true;
             a.PrevPotential = Potential(a.Player.Origin);
             a.PrevHealth = Vitality(a.Player);
             // Build the opening observation through the locomotor, so it is produced by exactly the code
@@ -203,17 +225,10 @@ public sealed class TrainingEnv
         BotBrain brain = _world.Bots.BrainOf(p)
             ?? throw new InvalidOperationException("bot connected without a brain — OnBotConnected is unwired");
 
-        var loco = new NeuralLocomotor(_dummyNet) { UseExternalAction = true };
-        brain.Locomotor = loco;
-        // The brain's neural branch gates on `Neural is { Ready: true }`, so hand it a service already
-        // holding this episode's field and features rather than letting it load anything.
-        brain.Neural = _service;
-
         var a = new Agent
         {
             Brain = brain,
             Player = p,
-            Loco = loco,
             Target = _course.Target,
             WeaponPermit = _rng.NextDouble() < _cfg.WeaponChance,
             PermitFlipStep = _rng.NextDouble() < _cfg.PermitFlipChance ? _rng.Next(60, Math.Max(61, _cfg.MaxSteps)) : -1,

@@ -1,7 +1,13 @@
 # Neural bots — a learned movement policy
 
-*Design plan, 2026-08-07. Branch `feature/neural-bots`. Nothing here is implemented yet; the numbers in
-§2 were measured on this branch at `bee93eb7` on the RTX 3080 dev box.*
+*Design plan, 2026-08-07. Branch `feature/neural-bots`. Measurements throughout are from the RTX 3080 dev
+box.*
+
+> **Status, 2026-08-07 (same day).** Phases N1 to N7 are built: the runtime seam, the baked navigation
+> field, the MLP evaluator, the observation and action space, the training environment, the PPO trainer,
+> the time-trial bench and 28 tests. What is NOT done is the training itself, which is compute time rather
+> than code. The policy currently loses to the classic steer, as an under-trained policy should. See
+> §11 for what each measured number turned out to be and §12 for what is left.
 
 A bot in Vortex Arena today walks a waypoint graph. It reaches its goal by steering at the next node,
 and it bunnyhops only when `skill >= bot_ai_bunnyhop_skilloffset` and the next node happens to be
@@ -207,9 +213,9 @@ A 4000 x 4000 qu map is 125 x 125 = 15,625 columns; at three spans average that 
 map. Runtime sampling is `spans[(y * w + x)]` plus a short scan, so the 72-sample egocentric pattern
 (three radii x eight directions x three height offsets) is array indexing.
 
-The bake needs roughly five traces per column: 15,625 x 5 x 0.03 ms ≈ **2.3 s single-threaded per map**
-[estimated from the §2.3 trace cost, not yet measured end to end]. Too slow to sit on the map-load
-thread, so:
+The bake needs roughly five traces per column, which estimated to about 2.3 s single-threaded per map.
+**Measured on stormkeep: 377-473 ms across six workers, 11,464 occupied columns, 30,985 spans, 308 KB.**
+Still too slow to sit on the map-load thread, so:
 
 - ship the bake as a build artifact next to the BSP, the same shape as `.waypoints.cache`;
 - fall back to an at-load parallel bake when the artifact is missing, off the sim thread, with bots
@@ -408,16 +414,88 @@ first whatever happens to the rest.
 
 ---
 
-## 10. Open questions
+## 10. Decisions taken
 
-1. **Per-map weights or one general policy?** One policy generalising across maps is the goal and the
-   harder problem. A per-map fine-tune is a cheap fallback that trades disk and a training run per map
-   for reliability. Decide after N5, when generalisation has actual evidence behind it.
-2. **Does the policy own aim entirely, or only during locomotion?** This plan gives it the view delta at
-   all times with combat as a weighted constraint. The alternative is that `BotAim` keeps authority
-   whenever `AimRequired` is set and the policy only moves. The blended version is what the brief asks
-   for and is strictly more capable; it is also harder to train and harder to debug when a bot misses.
-3. **Skill scaling.** Bots ship at skill 0 to 10. A single fast policy makes every bot a movement
-   expert, which is wrong for skill 3. Options: noise injection scaled by skill, a slew limit on the
-   view delta, or training a small family of policies. Not urgent, but it decides whether skill is an
-   input to the network or a filter on its output, and that is an input-layout decision.
+The three open questions from the first draft were answered on 2026-08-07 and are settled:
+
+1. **One general policy, with a per-map fine-tune only if it turns out to be needed.** The weight file
+   carries its own observation normalisation, so a fine-tune is a separate file rather than a format
+   change; nothing in the runtime has to know which kind it loaded.
+2. **The policy owns aim entirely.** Deterministic code computes the angle the crosshair should be at,
+   including projectile lead, ballistic arcs, and the per-bot skill degradation that makes a low-skill bot
+   miss (`BotAim.ComputeDesiredAngles`). The policy decides the path the crosshair takes to get there and
+   pays a reward penalty proportional to `AimWeight` for missing it. Aim skill therefore never has to be
+   learned, which is the whole reason the split is worth the plumbing.
+3. **No skill scaling for now.** Every neural bot moves like the policy. The mechanism when it lands will
+   combine disabling mechanics (no blaster jumps below skill N), slowing the view delta, and degrading
+   perception; none of that needs skill as a network input, so deferring it costs nothing in the
+   observation layout.
+
+---
+
+## 11. What the numbers turned out to be
+
+Every estimate in this document that the build could check, checked. Measured on the RTX 3080 dev box.
+
+| Claim | Estimated | Measured |
+|---|---|---|
+| Network size | ~45,000 parameters | **45,975** |
+| Forward pass | ~10 us | **21.0 us** (`--verify-weights`) |
+| 16 bots at 20 Hz | "roughly cost-neutral" against the 35 us `bot.think` | **0.67% of one core** — cheaper than the think it replaces |
+| Nav field bake, stormkeep | ~2.3 s single-threaded | **377-473 ms** across 6 workers; 11,464 columns, 30,985 spans |
+| Nav field size | ~560 KB | **308 KB** (stormkeep) |
+| Env throughput | inferred from 13,400 agent-steps/s on stormkeep | **34,000 agent-steps/s** in one process on a generated course, 235x real time |
+| Full training loop | not estimated | **8,200 agent-steps/s** end to end, 6 hosts plus the PPO update |
+| Observation length | ~190 floats | **206** |
+
+Two came out worse than estimated and neither changes anything: the forward pass is 2.1x the estimate and
+still an order below budget, and the observation is 16 floats longer than sketched.
+
+**The baseline the policy has to beat**, from the time trial on stormkeep over 6 routes x 2 seeds with the
+goal-rating layer silenced: **the classic steer finishes 7 of 8 runs at a 7.86 s median.** On held-out maps.
+
+### Three bugs the build found, worth not re-deriving
+
+* **Discounted potential shaping pays a stationary agent to stay away.** With `phi = -d` and gamma 0.99,
+  `gamma*phi(s') - phi(s)` is worth `d*(1-gamma)` per step to an agent that does not move: at 1000 qu out
+  that is +0.1 per step against a time penalty of 0.02. Random actions scored +0.057/step, so the optimal
+  learnable behaviour was standing still far from the target. The plain difference `d - d'` is zero when
+  stationary; random actions now score -0.023, which is the time cost and nothing else.
+* **`CollisionWorld` is not safe for concurrent queries.** It keeps an epoch-dedup array
+  (`_mark`/`_markNumber`) that every broadphase query stamps. The first parallel bake shared one world and
+  found 995 spans where the serial bake found 1058 — a 6% hole in the map, silent. Each bake worker now
+  gets its own world over the same immutable brushes.
+* **A locomotor sync that early-outs on global state never reaches a bot that joins later.** Which is
+  every bot on a real server: fixcount fills one per frame and the sync runs at the top of the frame.
+
+---
+
+## 12. What is left
+
+The code is done; the training is not.
+
+* **T1 — Run the curriculum (recommended).** Stages 1 to 5 on generated courses, then stage 6 on the
+  shipped maps with a held-out split.
+  *Impact:* hours of compute, no code. A 6M-step stage is about twelve minutes at the measured rate, so the
+  five generated stages are a couple of hours; stage 6 on real maps is slower per step and wants overnight.
+  This is the only thing between the current state and a policy worth shipping.
+
+* **T2 — Tune what the curriculum exposes (recommended).** Three settings are already known to be
+  load-bearing, each found the hard way: the entropy coefficient (0.002, not the usual 0.01, because the
+  entropy sums over eight heads and at 0.01 it outweighed the policy gradient 13-to-1), the rollout length
+  (128, because gradient updates rather than samples were the short axis), and the arrival-bonus scale (the
+  critic's loss spikes 400x when a rare +30 lands).
+  *Impact:* the difference between a stage converging in twelve minutes and not converging at all.
+
+* **T3 — Fix the held-out map split before stage 6 starts (recommended).**
+  *Impact:* free now, impossible later. Choosing the eval maps after seeing the results is exactly how
+  R-N1 gets missed.
+
+* **T4 — Skill scaling.** Deferred by decision 3.
+  *Impact:* until it lands, `bot_neural 1` makes every bot a movement expert regardless of `skill`. Fine
+  for testing, wrong for a skill-3 opponent, so the cvar stays 0 by default anyway.
+
+* **T5 — Ship baked fields as build artifacts.** At 377 ms off-thread the fallback bake is already cheap,
+  so this is an optimisation rather than a fix.
+  *Impact:* removes half a second of background CPU at map load; needs a VortexMaps packer change, and
+  parity finding D1 is the cautionary tale about how packers classify unfamiliar extensions.

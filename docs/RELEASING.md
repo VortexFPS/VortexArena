@@ -32,10 +32,21 @@ dropped.
 | Zip | Contents | Run |
 |---|---|---|
 | `VortexArena-<ver>-windows-x86_64.zip` | `VortexArena.exe` (+ console wrapper, `data_*` .NET folder), `data/` | double-click the `.exe` |
+| `VortexArena-<ver>-windows-dedicated-x86_64.zip` | `vortexarena-dedicated.exe` (+ console wrapper), `run-dedicated.cmd`, `data/` | `run-dedicated.cmd [map]` |
 | `VortexArena-<ver>-linux-x86_64.zip` | `VortexArena.x86_64`, `run-client.sh`, `data/` | `./run-client.sh` |
 | `VortexArena-<ver>-linux-dedicated-x86_64.zip` | `vortexarena-dedicated.x86_64`, `run-dedicated.sh`, `data/` | `./run-dedicated.sh [map]` |
 | `VortexArena-<ver>-macos-universal.zip` | `VortexArena.app` (data inside `Contents/Resources/`) | double-click — see macOS note below |
 | `SHA256SUMS-<ver>.txt` | checksums for the above | — |
+
+**There is no `macos-dedicated`, on purpose.** A dedicated server runs on a host somebody rents, and
+nobody rents macOS hosts. `macos-client` is already the one best-effort target here — it exports from the
+**stock** template (see the macOS note below), so a second macOS target would double the unpinned surface
+to serve no operator who exists.
+
+The two dedicated zips are what a server host consumes through the launcher, so an operator can pin,
+update and roll back a published build instead of installing a toolchain and compiling. Building from
+source stays available for testing a specific ref; see [DEDICATED-SERVER.md](../../VortexLauncher/docs/DEDICATED-SERVER.md)
+in the launcher repo.
 
 The game finds its data **relative to the executable** (`DataPaths.Resolve`), so the zips work no
 matter the working directory — a double-clicked binary, a file-manager launch, or a macOS `.app` (CWD `/`)
@@ -45,9 +56,9 @@ all resolve `data/` correctly. Keep the files together when you unzip.
 
 ```
 push tag v* ─┬─ (no assets job: core content is committed; maps fetched per data/maps.lock.json)
-             ├─ windows  export windows-client                  ─┐
-             ├─ linux    export linux-client + linux-dedicated  ─┤→ each: unpack assets, package.sh, upload zip
-             ├─ macos    export macos-client (continue-on-error)─┘
+             ├─ windows  export windows-client + windows-dedicated ─┐
+             ├─ linux    export linux-client + linux-dedicated     ─┤→ each: unpack assets, package.sh, upload zip
+             ├─ macos    export macos-client (continue-on-error)   ─┘
              └─ release  collect zips, checksum, softprops/action-gh-release  (tag pushes only)
 ```
 
@@ -63,7 +74,7 @@ You need the Godot **4.6.3 mono** editor and its **export templates** installed
 
 ```bash
 python tools/data/fetch-maps.py                         # one-time: fetch maps into data/maps/
-ci/ci.sh --export                                       # export windows-client + linux-client + linux-dedicated
+ci/ci.sh --export                                       # export windows-client/-dedicated + linux-client/-dedicated
 tools/package.sh --version 0.1.0 linux-client           # lay out assets + zip → dist/VortexArena-0.1.0-linux-x86_64.zip
 ```
 

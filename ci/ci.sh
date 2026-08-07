@@ -9,7 +9,7 @@
 # Usage:
 #   ci/ci.sh                 # build libs+tests, run the suite, build the Godot host, headless smoke
 #   ci/ci.sh --no-smoke      # skip the Godot headless boot (no Godot install needed)
-#   ci/ci.sh --export        # additionally run the three local export presets. Fetches the pinned
+#   ci/ci.sh --export        # additionally run the four local export presets. Fetches the pinned
 #                            # engine templates first and verifies the exported binaries after, the
 #                            # same gates release.yml runs — an export that silently ships a stock
 #                            # engine is the bug ADR-0017 exists to prevent, on CI and locally alike.
@@ -194,7 +194,7 @@ else
 fi
 rm -f "$vqa_log"
 
-# ── 6. optional: the three local export presets (untested path — see ADR-0014) ─
+# ── 6. optional: the four local export presets (untested path — see ADR-0014) ──
 if $do_export; then
     if [ -z "$GODOT" ] || { [ ! -f "$GODOT" ] && [ ! -x "$GODOT" ]; }; then
         godot_not_found "$ROOT"
@@ -219,13 +219,16 @@ if $do_export; then
     # and note that step 0's --audit-presets is what keeps that omission from being silent.
     step "engine template configured + hashes + form match (pre-export gate)"
     "$PYTHON" "$ROOT/tools/verify-engine-template.py" \
-        --preset-config windows-client --preset-config linux-client --preset-config linux-dedicated
+        --preset-config windows-client --preset-config windows-dedicated \
+        --preset-config linux-client --preset-config linux-dedicated
 
-    step "export windows-client + linux-client + linux-dedicated (macos-client is CI-only — needs a Mac)"
-    mkdir -p "$ROOT/dist/windows-client" "$ROOT/dist/linux-client" "$ROOT/dist/linux-dedicated"
-    "$GODOT" --headless --path "$ROOT" --export-release "windows-client"  "$ROOT/dist/windows-client/VortexArena.exe"
-    "$GODOT" --headless --path "$ROOT" --export-release "linux-client"    "$ROOT/dist/linux-client/VortexArena.x86_64"
-    "$GODOT" --headless --path "$ROOT" --export-release "linux-dedicated" "$ROOT/dist/linux-dedicated/vortexarena-dedicated.x86_64"
+    step "export windows-client/-dedicated + linux-client/-dedicated (macos-client is CI-only — needs a Mac)"
+    mkdir -p "$ROOT/dist/windows-client" "$ROOT/dist/windows-dedicated" \
+             "$ROOT/dist/linux-client" "$ROOT/dist/linux-dedicated"
+    "$GODOT" --headless --path "$ROOT" --export-release "windows-client"    "$ROOT/dist/windows-client/VortexArena.exe"
+    "$GODOT" --headless --path "$ROOT" --export-release "windows-dedicated" "$ROOT/dist/windows-dedicated/vortexarena-dedicated.exe"
+    "$GODOT" --headless --path "$ROOT" --export-release "linux-client"      "$ROOT/dist/linux-client/VortexArena.x86_64"
+    "$GODOT" --headless --path "$ROOT" --export-release "linux-dedicated"   "$ROOT/dist/linux-dedicated/vortexarena-dedicated.x86_64"
 
     # Assert on the SHIPPED BYTES, which is the only thing that speaks to what a player would run.
     # Windows is the real content check (the backport's marker is present or the build is stock). The
@@ -235,6 +238,8 @@ if $do_export; then
     step "windows: verify the engine template that was used; linux: contamination canary only"
     "$PYTHON" "$ROOT/tools/verify-engine-template.py" \
         --binary "$ROOT/dist/windows-client/VortexArena.exe" --preset windows-client
+    "$PYTHON" "$ROOT/tools/verify-engine-template.py" \
+        --binary "$ROOT/dist/windows-dedicated/vortexarena-dedicated.exe" --preset windows-dedicated
     "$PYTHON" "$ROOT/tools/verify-engine-template.py" \
         --binary "$ROOT/dist/linux-client/VortexArena.x86_64" --preset linux-client
     "$PYTHON" "$ROOT/tools/verify-engine-template.py" \

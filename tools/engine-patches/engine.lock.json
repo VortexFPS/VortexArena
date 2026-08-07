@@ -213,7 +213,8 @@
         "bytes": 67065344,
         "template_form": "pe",
         "presets": [
-          "windows-client"
+          "windows-client",
+          "windows-dedicated"
         ],
         "patched": true,
         "$comment": [

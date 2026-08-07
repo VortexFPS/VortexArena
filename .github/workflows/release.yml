@@ -15,7 +15,7 @@
 # ADR-0014 flags as the flakiest path). Core content is committed and arrives with checkout; only compiled
 # maps are fetched, per data/maps.lock.json, cached on the lockfile hash.
 #
-#   windows â†’ export windows-client                     â†’ complete zip
+#   windows â†’ export windows-client + windows-dedicated â†’ 2 complete zips
 #   linux   â†’ export linux-client + linux-dedicated     â†’ 2 complete zips
 #   macos   â†’ export macos-client (continue-on-error)   â†’ complete zip   [BEST-EFFORT: see ADR-0014 Â§macOS]
 #   release â†’ collect all zips, checksum, publish to GitHub Releases (tag pushes only)
@@ -105,16 +105,20 @@ jobs:
       # gated by no step in any job and every one of them would stay green. It reads committed text
       # only, so this Windows job is as good a place for it as any and it needs no template on disk.
       - name: Verify the engine template is configured and pinned
-        run: python tools/verify-engine-template.py --audit-presets --preset-config windows-client
+        run: |
+          python tools/verify-engine-template.py --audit-presets \
+            --preset-config windows-client --preset-config windows-dedicated
         shell: bash
 
-      - name: Export windows-client
+      - name: Export windows-client + windows-dedicated
         # Godot's headless export often exits non-zero on benign warnings â€” `|| true`, then assert the
         # binary actually appeared so a REAL export failure (no output) still fails the job.
         run: |
-          mkdir -p dist/windows-client
-          godot --headless --path . --export-release "windows-client" dist/windows-client/VortexArena.exe || true
+          mkdir -p dist/windows-client dist/windows-dedicated
+          godot --headless --path . --export-release "windows-client"    dist/windows-client/VortexArena.exe || true
+          godot --headless --path . --export-release "windows-dedicated" dist/windows-dedicated/vortexarena-dedicated.exe || true
           test -f dist/windows-client/VortexArena.exe
+          test -f dist/windows-dedicated/vortexarena-dedicated.exe
         shell: bash
 
       # G10. `test -f` above proves a file appeared, which is NOT the same as proving the right engine
@@ -126,6 +130,8 @@ jobs:
         run: |
           python tools/verify-engine-template.py --patches \
             --binary dist/windows-client/VortexArena.exe --preset windows-client
+          python tools/verify-engine-template.py --patches \
+            --binary dist/windows-dedicated/vortexarena-dedicated.exe --preset windows-dedicated
         shell: bash
 
       # Maps are build output, fetched per data/maps.lock.json. Cached on the LOCKFILE hash so the cache
@@ -141,11 +147,21 @@ jobs:
         shell: bash
 
       - name: Package
-        run: bash tools/package.sh --version "${{ needs.prep.outputs.version }}" windows-client
+        run: |
+          bash tools/package.sh --version "${{ needs.prep.outputs.version }}" \
+            windows-client windows-dedicated
         shell: bash
 
+      # Two globs, not one: `*-windows-x86_64.zip` does NOT match `*-windows-dedicated-x86_64.zip`,
+      # and if-no-files-found:error only fires when a path matches nothing at all, so a single client
+      # glob would upload the client zip and drop the dedicated one silently.
       - uses: actions/upload-artifact@v7
-        with: { name: zip-windows, path: "dist/VortexArena-*-windows-x86_64.zip", if-no-files-found: error }
+        with:
+          name: zip-windows
+          path: |
+            dist/VortexArena-*-windows-x86_64.zip
+            dist/VortexArena-*-windows-dedicated-x86_64.zip
+          if-no-files-found: error
 
   # â”€â”€ Linux desktop client + headless dedicated server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   linux:

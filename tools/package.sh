@@ -65,19 +65,25 @@ info "version: $version"
 
 # target → (export-output marker, friendly zip suffix)
 marker_for()  { case "$1" in
-    windows-client)  echo "windows-client/VortexArena.exe" ;;
-    linux-client)    echo "linux-client/VortexArena.x86_64" ;;
-    linux-dedicated) echo "linux-dedicated/vortexarena-dedicated.x86_64" ;;
-    macos-client)    echo "macos-client/VortexArena.app" ;;
+    windows-client)    echo "windows-client/VortexArena.exe" ;;
+    windows-dedicated) echo "windows-dedicated/vortexarena-dedicated.exe" ;;
+    linux-client)      echo "linux-client/VortexArena.x86_64" ;;
+    linux-dedicated)   echo "linux-dedicated/vortexarena-dedicated.x86_64" ;;
+    macos-client)      echo "macos-client/VortexArena.app" ;;
 esac; }
 suffix_for()  { case "$1" in
-    windows-client)  echo "windows-x86_64" ;;
-    linux-client)    echo "linux-x86_64" ;;
-    linux-dedicated) echo "linux-dedicated-x86_64" ;;
-    macos-client)    echo "macos-universal" ;;
+    windows-client)    echo "windows-x86_64" ;;
+    windows-dedicated) echo "windows-dedicated-x86_64" ;;
+    linux-client)      echo "linux-x86_64" ;;
+    linux-dedicated)   echo "linux-dedicated-x86_64" ;;
+    macos-client)      echo "macos-universal" ;;
 esac; }
 
-ALL_TARGETS=(windows-client linux-client linux-dedicated macos-client)
+# There is deliberately no macos-dedicated. A dedicated server is a thing operators run on a host they
+# rent, and nobody rents macOS hosts; the macos-client target is already best-effort here (it exports
+# from the STOCK template, see engine.lock.json unpinned_presets) and adding a second macOS target
+# would double that unpinned surface for no operator who exists.
+ALL_TARGETS=(windows-client windows-dedicated linux-client linux-dedicated macos-client)
 [ ${#requested[@]} -gt 0 ] || requested=("${ALL_TARGETS[@]}")
 
 # ── 1. find which requested targets actually have an export output ────────────
@@ -148,8 +154,9 @@ write_readme() {  # write_readme <dir> <target>
 Vortex Arena — $t ($version)
 A fork of Xonotic, reborn on Godot + C#.  https://github.com/VortexFPS/VortexArena
 
-This is a "complete" build: the game binary, the Godot runtime, and all Xonotic game data are
-bundled together. Keep the files together — the game loads data/ from beside the binary.
+This is a "complete" build: the game binary, the Godot runtime, the .NET runtime, and all Xonotic
+game data are bundled together. You do not need .NET installed on your system. Keep the files
+together — the game loads data/ from beside the binary.
 
 Source code and licensing
 -------------------------
@@ -175,10 +182,22 @@ EOF
 RUN:  ./run-client.sh        (or run ./VortexArena.x86_64 directly)
 EOF
             ;;
+        windows-dedicated)
+            cat >> "$dir/README.txt" <<'EOF'
+
+RUN:  run-dedicated.cmd [map]       (dedicated server, e.g. run-dedicated.cmd stormkeep)
+
+Use the .cmd rather than the .exe directly: the build finds data\ relative to the working
+directory, and only the script guarantees that is this folder.
+
+Server output goes to the window the script was started from. If you launch it by
+double-clicking, a console window opens and closes with the server.
+EOF
+            ;;
         linux-dedicated)
             cat >> "$dir/README.txt" <<'EOF'
 
-RUN:  ./run-dedicated.sh [map]      (headless listen server, e.g. ./run-dedicated.sh stormkeep)
+RUN:  ./run-dedicated.sh [map]      (dedicated server, e.g. ./run-dedicated.sh stormkeep)
 EOF
             ;;
         macos-client)
@@ -217,6 +236,10 @@ for t in "${targets[@]}"; do
         linux-dedicated)
             cp "$ROOT/tools/run-dedicated.sh" "$tdir/"
             chmod +x "$tdir/run-dedicated.sh" "$tdir/vortexarena-dedicated.x86_64" 2>/dev/null || true ;;
+        windows-dedicated)
+            # No chmod: the zip is built on the Windows runner and unpacked on Windows, where the
+            # executable bit does not exist. Copy only.
+            cp "$ROOT/tools/run-dedicated.cmd" "$tdir/" ;;
     esac
 done
 

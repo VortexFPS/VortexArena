@@ -38,10 +38,17 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # top-level directory (package.sh zips dist/<target>/, so the export-target name is the root).
 SUFFIX_TO_PLATFORM = {
     "windows-x86_64": ("windows-x86_64", "windows-client"),
+    "windows-dedicated-x86_64": ("windows-dedicated-x86_64", "windows-dedicated"),
     "linux-x86_64": ("linux-x86_64", "linux-client"),
     "linux-dedicated-x86_64": ("linux-dedicated-x86_64", "linux-dedicated"),
     "macos-universal": ("macos-universal", "macos-client"),
 }
+
+# The two `-dedicated-` keys are what a server operator's launcher resolves. Keeping them in the same
+# manifest as the client builds is the point: a host runs `vortex source build` only when it wants a
+# specific ref, and otherwise pins a published build through exactly the path a player's client uses,
+# so update and rollback behave identically on a server and on a desktop.
+DEDICATED_PLATFORMS = frozenset({"windows-dedicated-x86_64", "linux-dedicated-x86_64"})
 
 ASSETS_NAME_RE = re.compile(r"^VortexArena-assets-([0-9a-f]{12})\.zip$")
 

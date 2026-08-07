@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, asdict
@@ -172,13 +174,14 @@ def train_stage(policy, norm, optimizer, hyper: Hyper, args, stage: int, budget:
     )
     env = VectorEnv(cfg, num_hosts=args.hosts, quiet=not args.verbose_hosts)
     try:
-        return _run(policy, norm, optimizer, hyper, env, stage, budget, threshold, run_dir, device)
+        return _run(policy, norm, optimizer, hyper, env, stage, budget, threshold, run_dir, device,
+                    args.eval_every, args.eval_steps, args)
     finally:
         env.close()
 
 
 def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budget: int,
-         threshold: float, run_dir: Path, device) -> bool:
+         threshold: float, run_dir: Path, device, eval_every: int, eval_steps: int, eval_args) -> bool:
     n_agents = env.num_agents
     obs_size = env.obs_size
     rollout = hyper.rollout
@@ -236,7 +239,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
 
         sps = total_steps / max(1e-6, time.time() - t0)
         print(f"[s{stage} u{update:4d}] steps {total_steps:>10,}  {sps:6.0f}/s  "
-              f"reward {rew_buf.mean():+.4f}  sampled {sampled:5.1%}  det {det_rate:5.1%}  "
+              f"reward {rew_buf.mean():+.4f}  sampled {sampled:5.1%}  shipped {det_rate:5.1%}  "
               f"pi {stats['policy_loss']:+.4f}  v {stats['value_loss']:.4f}  "
               f"ent {stats['entropy']:.3f}  kl {stats['kl']:.4f}")
 
@@ -250,42 +253,71 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         # arrivals sampled, 71% deterministic. Gating on the rollout number stalled the curriculum on a
         # stage the deployable policy had already cleared, and more training would not have moved it --
         # the entropy bonus keeps the sampled policy noisy on purpose.
-        if threshold > 0 and update % args.eval_every == 0:
-            det_rate = evaluate(policy, norm, env, device, args.eval_steps)
-            print(f"[s{stage}] deterministic eval: {det_rate:.1%} arrivals (gate {threshold:.0%})")
-            if det_rate >= threshold:
+        # Runs whether or not there is a gate: a single-stage run still wants to see the number that
+        # matters, and printing `det 0.0%` because the eval was skipped is worse than not printing it.
+        if update % eval_every == 0:
+            det_rate = evaluate(policy, norm, run_dir, stage, eval_steps, eval_args)
+            gate = f"gate {threshold:.0%}" if threshold > 0 else "no gate"
+            print(f"[s{stage}] shipped-path eval: {det_rate:.1%} arrivals ({gate})")
+            if threshold > 0 and det_rate >= threshold:
                 save(policy, norm, optimizer, stage, run_dir)
                 return True
-            obs = env.reset()   # the eval consumed episodes; start the next rollout clean
+            # The eval runs out-of-process now, so the rollout state is untouched and there is nothing
+            # to reset.
 
     save(policy, norm, optimizer, stage, run_dir)
     if threshold <= 0:
         return True
-    final = evaluate(policy, norm, env, device, args.eval_steps)
-    print(f"[s{stage}] final deterministic eval: {final:.1%} arrivals (gate {threshold:.0%})")
+    final = evaluate(policy, norm, run_dir, stage, eval_steps, eval_args)
+    print(f"[s{stage}] final shipped-path eval: {final:.1%} arrivals (gate {threshold:.0%})")
     return final >= threshold
 
 
-def evaluate(policy, norm, env: VectorEnv, device, steps: int) -> float:
-    """Arrival rate of the DETERMINISTIC (argmax) policy, which is the thing that gets exported.
+def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args) -> float:
+    """Arrival rate of the exported policy, measured through the path that actually SHIPS.
 
-    The observation normaliser is read but never updated here, so an eval pass cannot shift the statistics
-    the training rollouts depend on.
+    Exports the weights and hands them to ``va-neural-host --bench --policy``, which runs the network
+    inside the game's own locomotor: the same code a live server executes, deciding at the same fixed rate.
+
+    Not measured in-process, and the reason is worth keeping. The trainer drives the environment through
+    an external-action path — observation out over a socket, action back in — and that path is measurably
+    worse than the locomotor evaluating the network itself. Same weights, same seed, stage 3:
+    **34.7% arrivals in-locomotor against 8.8% through the external path.** Two causes were found and fixed
+    (the decision rate was skill-scaled rather than fixed, and the observation was built inside the think
+    rather than at the step boundary); a residual gap remains, and bunnyhopping is chaotic enough that
+    small timing differences compound over a 50-second episode.
+
+    Whatever the residual is, gating on it would be gating on a number the shipped bot never experiences.
     """
-    obs = env.reset()
-    env.clear_episode_stats()
-    arrived = 0
-    agent_episodes = 0
-    with torch.no_grad():
-        for _ in range(steps):
-            wire, _, _, _ = policy.act(torch.as_tensor(norm.normalize(obs), device=device),
-                                       deterministic=True)
-            obs, _, _, _ = env.step(wire.cpu().numpy())
-            for a, _, _ in env.episode_stats():
-                arrived += a
-                agent_episodes += env.agents_per_host
-            env.clear_episode_stats()
-    return arrived / agent_episodes if agent_episodes else 0.0
+    weights = run_dir / "eval.vxpw"
+    export_weights(policy, norm, weights, label=f"{run_dir.name}-s{stage}-eval")
+
+    dll = Path(__file__).resolve().parent / "VortexArena.NeuralHost" / "bin" / "Release" / "net8.0" / "va-neural-host.dll"
+    if not dll.exists():
+        return float("nan")
+
+    cmd = [shutil.which("dotnet") or "dotnet", str(dll), "--bench", str(steps),
+           "--agents", str(args.agents), "--ticks", str(args.ticks),
+           "--stage", str(stage), "--seed", str(args.seed + 9001),
+           "--policy", str(weights)]
+    if stage == 6:
+        cmd += ["--data", str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data")]
+        if args.maps:
+            cmd += ["--maps", args.maps]
+
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=900).stdout
+    except (subprocess.TimeoutExpired, OSError):
+        return float("nan")
+
+    for line in out.splitlines():
+        if line.startswith("arrival rate"):
+            # "arrival rate   34.7 % (161/464 agent-episodes)"
+            try:
+                return float(line.split()[2]) / 100.0
+            except (IndexError, ValueError):
+                return float("nan")
+    return float("nan")
 
 
 def gae(rewards, values, dones, last_value, gamma: float, lam: float):

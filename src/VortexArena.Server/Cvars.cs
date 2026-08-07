@@ -391,6 +391,11 @@ public static class Cvars
         // steer rather than spending cores on a map it may be about to rotate away from.
         new("bot_neural_bake", "1", "bake a navigation field at map load when no cached one is present"),
         new("bot_neural_tracefan", "1", "spend the per-think box sweeps that see doors, lifts and players"),
+        // The neural think rate, fixed rather than skill-scaled. A policy that decides twice as often is a
+        // different policy: measured 41.6% arrivals at ~34 Hz against 9.6% at 18 Hz on the same network.
+        // This MUST match the rate the policy was trained at (the trainer's ticks-per-step), so changing it
+        // without retraining changes what the network is.
+        new("bot_neural_hz", "18", "decision rate for the learned locomotor; must match the training rate"),
         // The shipped xonotic-server.cfg values, NOT empty strings. These are the fallbacks used when the cfg
         // tree is not mounted (headless tests, a bare host), and an empty list makes PickFromPriority return
         // null so the bot falls through to "highest-impulse owned weapon" — a different weapon choice than

@@ -48,6 +48,21 @@ public sealed class NeuralLocomotor
     public NeuralAction PendingExternalAction;
 
     /// <summary>
+    /// TRAINING ONLY, and only with <see cref="UseExternalAction"/>: skip the observation build inside the
+    /// think and let the environment build it once, after the physics for the step has run.
+    ///
+    /// <para><b>Why this exists.</b> Without it the think rebuilds the observation and applies the pending
+    /// action in the same call, so the action the trainer chose from the observation returned at the END of
+    /// step N is applied against a freshly built observation at the START of step N+1 — a one-think lag that
+    /// the live server does not have, because there the observation and the action come from the same
+    /// forward pass. Measured on one network, one seed, stage 3: <b>41.2% arrivals evaluated in-locomotor,
+    /// 9.3% through the lagged path</b>. Training through the worse of the two teaches the policy to
+    /// compensate for a delay that will not be there, and stage 3 is jump timing, where 55 ms is the whole
+    /// problem.</para>
+    /// </summary>
+    public bool DeferObservationBuild;
+
+    /// <summary>
     /// The observation built by the most recent <see cref="Think"/>. The trainer reads it straight out of
     /// here, so what the policy is scored on is byte-for-byte what the live server would have fed it.
     /// </summary>
@@ -66,6 +81,19 @@ public sealed class NeuralLocomotor
     {
         _net = net;
         _scratch = new PolicyNetwork.Scratch(net);
+    }
+
+    /// <summary>
+    /// Build the observation for the current state without producing an action. The training environment
+    /// calls this once per step, after the physics, so the observation it returns is exactly the state the
+    /// next action will be applied to. See <see cref="DeferObservationBuild"/>.
+    /// </summary>
+    public void BuildObservationOnly(Player bot, in MoveIntent intent, NavField? field, MapFeatures? features,
+        Vector3 currentView, float now, bool traceFan)
+    {
+        MoveIntent seen = intent;
+        seen.GoalPos = _goalPrimed ? _smoothedGoal : intent.GoalPos;
+        _obs.Build(bot, seen, field, features, currentView, now, traceFan, _observation);
     }
 
     /// <summary>Clear the per-bot history at a spawn or teleport.</summary>
@@ -103,7 +131,10 @@ public sealed class NeuralLocomotor
         // exactly the frame the observation was built in.
         _lastFrame = ResolveFrame(bot, goal, currentView);
 
-        _obs.Build(bot, seen, field, features, currentView, now, traceFan, _observation);
+        // The environment builds the observation itself when it is driving the step boundary; see
+        // DeferObservationBuild.
+        if (!DeferObservationBuild)
+            _obs.Build(bot, seen, field, features, currentView, now, traceFan, _observation);
 
         NeuralAction action;
         if (UseExternalAction)

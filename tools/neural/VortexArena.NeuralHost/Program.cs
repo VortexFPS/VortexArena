@@ -313,6 +313,9 @@ public static class Program
             AimConstraintChance = opts.Stage <= 2 ? 0f : 0.4f,
         };
         var env = new TrainingEnv(cfg);
+        PolicyNetwork? benchPolicy = null;
+        PolicyNetwork.Scratch? benchScratch = null;
+        float[]? benchLogits = null;
 
         // --policy scores an exported weight file on this stage's courses, running it through the same
         // locomotor the live server uses. The random and --scripted arms are the two reference points it
@@ -331,8 +334,20 @@ public static class Program
                                         $"this build needs {NeuralObservation.Size}x{ActionSpace.Size}");
                 return 1;
             }
-            env.SetEvalPolicy(net);
-            Console.Error.WriteLine($"[bench] policy '{net.Label}' ({net.ParameterCount:N0} parameters)");
+            if (opts.PolicyExternal)
+            {
+                // Evaluate the SAME network here, but push the action through the trainer's external path:
+                // observation out, action back in, one round trip later. Isolates the path from the policy.
+                benchPolicy = net;
+                benchScratch = new PolicyNetwork.Scratch(net);
+                benchLogits = new float[ActionSpace.Size];
+            }
+            else
+            {
+                env.SetEvalPolicy(net);
+            }
+            Console.Error.WriteLine($"[bench] policy '{net.Label}' ({net.ParameterCount:N0} parameters)" +
+                                    (opts.PolicyExternal ? " via the EXTERNAL action path" : " in-locomotor"));
         }
 
         int obsSize = TrainingEnv.ObservationSize;
@@ -352,7 +367,8 @@ public static class Program
         // A warm-up episode so the JIT and the first-touch allocations are not in the measurement.
         for (int i = 0; i < 60; i++)
         {
-            if (opts.Scripted) ForwardActions(actions, cfg.Agents, i);
+            if (benchPolicy is not null) PolicyActions(benchPolicy, benchScratch!, benchLogits!, observations, actions, cfg.Agents);
+            else if (opts.Scripted) ForwardActions(actions, cfg.Agents, i);
             else RandomActions(rng, actions, cfg.Agents);
             env.Step(actions, observations, rewards, dones, truncated);
             if (env.AllDone()) env.Reset(observations);
@@ -363,7 +379,8 @@ public static class Program
         double rewardSum = 0, remainingSum = 0;
         while (steps < opts.BenchSteps)
         {
-            if (opts.Scripted) ForwardActions(actions, cfg.Agents, steps);
+            if (benchPolicy is not null) PolicyActions(benchPolicy, benchScratch!, benchLogits!, observations, actions, cfg.Agents);
+            else if (opts.Scripted) ForwardActions(actions, cfg.Agents, steps);
             else RandomActions(rng, actions, cfg.Agents);
             env.Step(actions, observations, rewards, dones, truncated);
             for (int i = 0; i < rewards.Length; i++) rewardSum += rewards[i];
@@ -400,6 +417,41 @@ public static class Program
         Console.WriteLine($"arrival rate   {arrivedTotal / (double)Math.Max(1, agentEpisodes):P1} " +
                           $"({arrivedTotal}/{agentEpisodes} agent-episodes)");
         Console.WriteLine($"distance left  {remainingSum / Math.Max(1, episodes):F0} qu mean at episode end");
+        return 0;
+    }
+
+    /// <summary>
+    /// Evaluate the network on the observations the env just returned and encode the argmax action onto the
+    /// wire, exactly as the Python trainer does. Same network, same decode, the trainer's timing.
+    /// </summary>
+    private static void PolicyActions(PolicyNetwork net, PolicyNetwork.Scratch scratch, float[] logits,
+        float[] observations, float[] actions, int agents)
+    {
+        int obsSize = TrainingEnv.ObservationSize;
+        for (int i = 0; i < agents; i++)
+        {
+            net.Evaluate(observations.AsSpan(i * obsSize, obsSize), scratch, logits);
+            NeuralAction a = ActionSpace.Decode(logits, weaponAllowed: true, stackalloc bool[] { true, true, true });
+            int o = i * ActionEncoding.Size;
+            actions[o + 0] = MoveIndexOf(a);
+            actions[o + 1] = a.Jump ? 1f : 0f;
+            actions[o + 2] = a.Crouch ? 1f : 0f;
+            actions[o + 3] = a.Attack1 ? 1f : 0f;
+            actions[o + 4] = a.Attack2 ? 1f : 0f;
+            actions[o + 5] = a.WeaponSelect + 1;
+            actions[o + 6] = a.YawDelta / NeuralAction.MaxYawRate;
+            actions[o + 7] = a.PitchDelta / NeuralAction.MaxPitchRate;
+        }
+    }
+
+    /// <summary>Reverse the nine-way wishmove table, so a decoded action can go back on the wire.</summary>
+    private static int MoveIndexOf(in NeuralAction a)
+    {
+        for (int i = 0; i < ActionEncoding.MoveTable.Length; i++)
+        {
+            (float f, float r) = ActionEncoding.MoveTable[i];
+            if (MathF.Abs(f - a.MoveForward) < 1e-3f && MathF.Abs(r - a.MoveRight) < 1e-3f) return i;
+        }
         return 0;
     }
 
@@ -532,6 +584,7 @@ public static class Program
         public bool Scripted;
         public bool Debug;
         public string? PolicyPath;
+        public bool PolicyExternal;
         public string DataRoot = "";
         public string MapList = "";
         public bool ShowHelp;
@@ -586,6 +639,7 @@ public static class Program
                     case "--scripted": o.Scripted = true; break;
                     case "--debug": o.Debug = true; break;
                     case "--policy": o.PolicyPath = Next(); break;
+                    case "--policy-external": o.PolicyExternal = true; break;
                     case "--help" or "-h": o.ShowHelp = true; break;
                 }
             }

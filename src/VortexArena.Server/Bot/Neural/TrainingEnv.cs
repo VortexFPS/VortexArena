@@ -224,6 +224,9 @@ public sealed class TrainingEnv
         // enemies, combat claims the weapon (so the policy never gets to weapon-jump), and they shoot each
         // other down in seconds — which is a deathmatch, not a locomotion curriculum.
         Cvars.Set("bot_ignore_bots", "1");
+        // One think per env step, exactly. The policy's decision rate is part of what it learns, so the
+        // trainer's step rate and the runtime's bot_neural_hz have to be the same number.
+        Cvars.Set("bot_neural_hz", (72f / _cfg.TicksPerStep).ToString(CultureInfo.InvariantCulture));
     }
 
     /// <summary>
@@ -296,6 +299,9 @@ public sealed class TrainingEnv
             // Evaluating: let the locomotor run the network. Training: it builds the observation and
             // applies the action the trainer sampled.
             a.Loco.UseExternalAction = _evalPolicy is null;
+            // With external actions the env owns the step boundary, so it also owns when the observation is
+            // built: after the physics, not inside the think. See NeuralLocomotor.DeferObservationBuild.
+            a.Loco.DeferObservationBuild = _evalPolicy is null;
             a.PrevPotential = Potential(a.Player.Origin);
             a.PrevHealth = Vitality(a.Player);
             // Build the opening observation through the locomotor, so it is produced by exactly the code
@@ -413,6 +419,12 @@ public sealed class TrainingEnv
     /// </summary>
     private void RunLocomotor(Agent a)
     {
+        if (_evalPolicy is null)
+        {
+            a.Loco.BuildObservationOnly(a.Player, BuildIntent(a), _field, _features,
+                a.Player.ViewAngles, _world.Time, _cfg.TraceFan);
+            return;
+        }
         a.Loco.Think(a.Player, BuildIntent(a), _field, _features,
             a.Player.ViewAngles, _world.Time, 1f / 18f, 400f, _cfg.TraceFan);
     }
@@ -458,6 +470,13 @@ public sealed class TrainingEnv
             dones[i] = (byte)(terminal ? 1 : 0);
             truncated[i] = (byte)(cut ? 1 : 0);
             if (terminal || cut) a.Done = true;
+
+            // Build the observation HERE, after the step's physics, so what the trainer sees is the state
+            // its next action will act on. Reading whatever the last think happened to build put a
+            // one-think lag between the two and cost 4x the arrival rate.
+            if (_evalPolicy is null)
+                a.Loco.BuildObservationOnly(a.Player, BuildIntent(a), _field, _features,
+                    a.Player.ViewAngles, _world.Time, _cfg.TraceFan);
             a.Loco.LastObservation.CopyTo(observations.Slice(i * ObservationSize, ObservationSize));
         }
     }
@@ -478,7 +497,9 @@ public sealed class TrainingEnv
         if (_agents.Count == 0) return "no agents";
         Agent a = _agents[0];
         bool sameLoco = ReferenceEquals(a.Loco, a.Brain.Locomotor);
-        return $"pos {a.Player.Origin.X:F0},{a.Player.Origin.Y:F0},{a.Player.Origin.Z:F0} " +
+        return $"act mv {a.Loco.LastAction.MoveForward:+0.0;-0.0},{a.Loco.LastAction.MoveRight:+0.0;-0.0} " +
+               $"jmp {(a.Loco.LastAction.Jump ? 1 : 0)} yaw {a.Loco.LastAction.YawDelta:+00.0;-00.0} " +
+               $"pos {a.Player.Origin.X:F0},{a.Player.Origin.Y:F0},{a.Player.Origin.Z:F0} " +
                $"spd {a.Player.Velocity.Length():F0} " +
                $"dist {(a.Player.Origin - a.Target).Length():F0} " +
                $"ground {a.Player.OnGround} step {a.Step} done {a.Done} " +

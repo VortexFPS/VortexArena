@@ -459,9 +459,22 @@ public sealed partial class BotBrain
         if (Cvars.Bool("bot_god"))
             bot.Flags |= EntFlags.GodMode;
 
+        // A neural bot thinks on a FIXED clock, not the skill-scaled havocbot one.
+        //
+        // The learned policy is trained at one decision rate and has to run at that rate, because a policy
+        // that decides twice as often is a different (and better) policy. Measured on one network, one seed,
+        // stage 3: 41.6% arrivals deciding at the skill-10 rate of ~34 Hz against 9.6% at the 18 Hz the
+        // trainer steps at. Letting `skill` set the rate would silently change what the network is, and
+        // would make every training number an over- or under-estimate depending on the server's skill cvar.
+        // See planning/neural-bots-2026-08-07.md.
+        if (Locomotor is not null && Neural is { Ready: true })
+        {
+            float hz = MathF.Max(1f, Cvars.FloatOr("bot_neural_hz", 18f));
+            _nextThink = MathF.Max(now, _nextThink) + 1f / hz;
+        }
         // QC: SUPERBOT thinks at 0.005; others at bot_ai_thinkinterval * min(14/(skill+14), 1), floor 0.01.
         // (The per-bot bot_aiskill modifier rides on Skill here — the port folds bots.txt's "ai" column into it.)
-        if (Skill > BotAim.SuperbotSkill)
+        else if (Skill > BotAim.SuperbotSkill)
             _nextThink = MathF.Max(now, _nextThink) + 0.005f;
         else
         {

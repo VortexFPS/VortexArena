@@ -145,6 +145,30 @@ and 3 are where the policy is doing something the scripted arm cannot. Stage 6 i
 
 **On real maps against the classic steer** — the shipping question: the time trial, above.
 
+## Three ways to measure, and only one of them counts
+
+The trainer prints two arrival rates and a third exists. They disagree by up to 6x, so know which is which.
+
+| what | how it decides | typical, stage 3, same weights |
+|---|---|---|
+| `sampled` | rollout actions, exploration noise alive | **11.9%** |
+| external path, argmax | the trainer's socket path, argmax | **8.8%** |
+| `shipped` | the game's own locomotor evaluating the weight file | **34.7%** |
+
+`shipped` is what a live server does and the only one the curriculum gate reads. It is measured by shelling
+out to `va-neural-host --bench --policy`, not in-process, because the trainer's external-action path is
+measurably worse than the locomotor evaluating the network itself and gating on it would gate on a number
+the shipped bot never experiences.
+
+Two causes of that gap were found and fixed: the decision rate was skill-scaled rather than fixed (a policy
+deciding at 34 Hz is a different and better policy than the same weights at 18 Hz — `bot_neural_hz` now
+pins it, and the trainer sets it to its own step rate), and the observation was built inside the think
+rather than at the step boundary. A residual gap remains and is not fully explained; bunnyhopping is
+chaotic enough that small timing differences compound over a 50-second episode.
+
+**`bot_neural_hz` must match the rate the policy trained at.** Changing it without retraining changes what
+the network is.
+
 ## Sampled versus deterministic, which is a trap
 
 The trainer prints two arrival rates and they disagree by a lot:

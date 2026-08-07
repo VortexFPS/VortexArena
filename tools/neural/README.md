@@ -120,6 +120,47 @@ silenced, so the comparison is locomotion against locomotion.
 
 Baseline to beat, stormkeep, 6 routes x 2 seeds: **classic steer finishes 7/8 at a 7.86 s median.**
 
+## Scoring a checkpoint
+
+Two different questions, two different tools.
+
+**On the curriculum's own courses** — "did stage 4 teach it anything":
+
+```bash
+dotnet tools/neural/VortexArena.NeuralHost/bin/Release/net8.0/va-neural-host.dll   --bench 6000 --agents 8 --stage 3 --seed 101 --policy runs/latest/policy.vxpw
+```
+
+Compare against the same command with `--scripted` and with neither, on the same `--stage` and `--seed`.
+A policy that cleared stages 1 to 3, measured that way:
+
+| stage | policy | scripted forward | random |
+|---|---|---|---|
+| 1 flat | 97.2% | 98.7% | 12.5% |
+| 2 corridor | **97.0%** | 22.0% | 0.0% |
+| 3 terrain | **71.0%** | 3.5% | 0.0% |
+| 6 real maps | 12.5% | — | — |
+
+Stage 1 is where a straight line is already optimal, so matching the scripted arm is the ceiling. Stages 2
+and 3 are where the policy is doing something the scripted arm cannot. Stage 6 is why stage 6 exists.
+
+**On real maps against the classic steer** — the shipping question: the time trial, above.
+
+## Sampled versus deterministic, which is a trap
+
+The trainer prints two arrival rates and they disagree by a lot:
+
+```
+[s3 u 977] steps 6,002,688  reward +0.0710  sampled 11.9%  det 71.0%  ent 7.297
+```
+
+`sampled` is the rollout, taken with exploration noise alive (sigma 0.7 on the view deltas plus sampling
+from six categorical heads). `det` is the argmax policy, which is **what gets exported and what runs in the
+game**. The curriculum gate reads `det`; the first version read `sampled` and stalled on a stage the
+deployable policy had already cleared, and no amount of further training would have moved it, because the
+entropy bonus keeps the sampled policy noisy on purpose.
+
+If you add your own gate or early-stop, gate on the deterministic number.
+
 ## Is it learning
 
 The healthy signature, from a stage that converged:

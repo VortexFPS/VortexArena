@@ -3,11 +3,14 @@
 *Design plan, 2026-08-07. Branch `feature/neural-bots`. Measurements throughout are from the RTX 3080 dev
 box.*
 
-> **Status, 2026-08-07 (same day).** Phases N1 to N7 are built and the curriculum has started producing
-> policies: **stage 1 reaches 100% arrivals in 80k steps, stage 2 reaches 95% in 245k.** What is not done is
-> the rest of the curriculum and the eval against the classic steer on held-out maps, both of which are
-> compute time rather than code. §11 records what each estimate turned out to be, §11.1 the throughput
-> breakdown, §11.2 the four bugs worth not re-deriving, and §12 what is left.
+> **Status, 2026-08-07 (same day).** Phases N1 to N7 are built, plus curriculum stage 6 (the game's real
+> maps) which the first measurements showed was necessary. Scored against a scripted straight-line runner
+> on the curriculum's own courses: **stage 1 97%, stage 2 97% against the scripted arm's 22%, stage 3 71%
+> against 3.5%.** On stormkeep it finishes 3 routes of 8 where the classic steer finishes 7, which is the
+> gap stage 6 exists to close and the training that is still to run.
+>
+> §11 records what each estimate turned out to be, §11.1 the throughput breakdown, §11.2 the bugs worth not
+> re-deriving, and §12 what is left.
 
 A bot in Vortex Arena today walks a waypoint graph. It reaches its goal by steering at the next node,
 and it bunnyhops only when `skill >= bot_ai_bunnyhop_skilloffset` and the next node happens to be
@@ -502,9 +505,14 @@ per-step forward pass on CPU. If training time starts to matter, that is the thi
 
 The code is done; the training is not.
 
-* **T1 — Finish the curriculum (recommended).** Stages 1 and 2 are done (100% and 95% arrivals). Stage 3
-  (terrain, jump timing) is where the difficulty steps up, then 4 and 5, then stage 6 on the shipped maps
-  with a held-out split.
+* **T1 — Finish the curriculum (recommended).** Stages 1 to 3 are done, measured deterministically at 97%,
+  97% and 71%. Stages 4 and 5 next, then stage 6 on the shipped maps.
+
+  Two things the first full run taught, both now fixed and both worth knowing before reading a curve:
+  the gate must read the DETERMINISTIC arrival rate, not the sampled one (the same stage-3 checkpoint
+  measured 11.9% sampled and 71% deterministic, and the run stopped on a stage it had already cleared);
+  and the corridor look-ahead inputs must carry real data during training, or six of the 206 observation
+  floats are constant while learning and informative at runtime.
   *Impact:* hours of compute, no code. Stages 1 and 2 took about 15 minutes between them; the later stages
   are harder and stage 6 wants overnight. This is the only thing between the current state and a policy
   worth shipping.
@@ -521,9 +529,10 @@ The code is done; the training is not.
   critic's loss spikes 400x when a rare +30 lands).
   *Impact:* the difference between a stage converging in twelve minutes and not converging at all.
 
-* **T3 — Fix the held-out map split before stage 6 starts (recommended).**
-  *Impact:* free now, impossible later. Choosing the eval maps after seeing the results is exactly how
-  R-N1 gets missed.
+* **T3 — Held-out map split. Done.** `catharsis`, `fuse` and `afterslime` are refused at load however the
+  map list spells them (`MapCourseSource.HeldOut`), and the test asks for them by name to prove it.
+  *Impact:* the generalisation claim is now checkable. Widening that set is a deliberate act with a test to
+  change, not an accident.
 
 * **T4 — Skill scaling.** Deferred by decision 3.
   *Impact:* until it lands, `bot_neural 1` makes every bot a movement expert regardless of `skill`. Fine

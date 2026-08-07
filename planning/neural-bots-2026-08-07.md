@@ -3,11 +3,11 @@
 *Design plan, 2026-08-07. Branch `feature/neural-bots`. Measurements throughout are from the RTX 3080 dev
 box.*
 
-> **Status, 2026-08-07 (same day).** Phases N1 to N7 are built: the runtime seam, the baked navigation
-> field, the MLP evaluator, the observation and action space, the training environment, the PPO trainer,
-> the time-trial bench and 28 tests. What is NOT done is the training itself, which is compute time rather
-> than code. The policy currently loses to the classic steer, as an under-trained policy should. See
-> §11 for what each measured number turned out to be and §12 for what is left.
+> **Status, 2026-08-07 (same day).** Phases N1 to N7 are built and the curriculum has started producing
+> policies: **stage 1 reaches 100% arrivals in 80k steps, stage 2 reaches 95% in 245k.** What is not done is
+> the rest of the curriculum and the eval against the classic steer on held-out maps, both of which are
+> compute time rather than code. §11 records what each estimate turned out to be, §11.1 the throughput
+> breakdown, §11.2 the four bugs worth not re-deriving, and §12 what is left.
 
 A bot in Vortex Arena today walks a waypoint graph. It reaches its goal by steering at the next node,
 and it bunnyhops only when `skill >= bot_ai_bunnyhop_skilloffset` and the next node happens to be
@@ -454,7 +454,21 @@ still an order below budget, and the observation is 16 floats longer than sketch
 **The baseline the policy has to beat**, from the time trial on stormkeep over 6 routes x 2 seeds with the
 goal-rating layer silenced: **the classic steer finishes 7 of 8 runs at a 7.86 s median.** On held-out maps.
 
-### Three bugs the build found, worth not re-deriving
+### 11.1 Where the throughput actually goes
+
+The environment is not the bottleneck, and it is worth knowing by how much before optimising the wrong end.
+
+| | game seconds simulated per wall second | agent-steps/s |
+|---|---|---|
+| One env host, no trainer (`--bench`) | **490** (one world, 8 agents in it) | 70,589 |
+| 8 hosts through the socket, no network forward pass | 8 x 48 = **384** | 55,381 |
+| Full loop: 6 hosts + torch on CPU + the PPO update | 6 x 6.8 = **41** | ~6,600 |
+
+A policy step advances the world 4 ticks at 72 Hz, so one step is 0.0556 s of game time. The 12x drop from
+the first row to the last is entirely Python-side: a synchronous socket round trip per step, plus a
+per-step forward pass on CPU. If training time starts to matter, that is the thing to fix, not the game.
+
+### 11.2 Four bugs the build found, worth not re-deriving
 
 * **Discounted potential shaping pays a stationary agent to stay away.** With `phi = -d` and gamma 0.99,
   `gamma*phi(s') - phi(s)` is worth `d*(1-gamma)` per step to an agent that does not move: at 1000 qu out
@@ -467,6 +481,14 @@ goal-rating layer silenced: **the classic steer finishes 7 of 8 runs at a 7.86 s
   gets its own world over the same immutable brushes.
 * **A locomotor sync that early-outs on global state never reaches a bot that joins later.** Which is
   every bot on a real server: fixcount fills one per frame and the sync runs at the top of the frame.
+* **The training env simulated freed players for 1.5M steps and nothing said so.** `bot_number` was 0 while
+  the env connected its agents by hand, so fixcount removed them one per frame during warm-up. Position and
+  velocity froze at their disconnect values, every observation was constant, every reward was the bare time
+  penalty, and PPO learned nothing from a world where no action had any effect. It looked exactly like slow
+  learning. What found it was a scripted hold-forward policy (`--scripted` on the env bench) closing
+  24 qu/s where a running player does 320: not a movement problem, a not-moving problem.
+  `TrainingEnv_ScriptedForward_ArrivesOnFlatGroundAndBeatsRandom` is the regression net, and it is the only
+  test that asks whether the environment is solvable at all.
 
 ---
 
@@ -474,11 +496,17 @@ goal-rating layer silenced: **the classic steer finishes 7 of 8 runs at a 7.86 s
 
 The code is done; the training is not.
 
-* **T1 — Run the curriculum (recommended).** Stages 1 to 5 on generated courses, then stage 6 on the
-  shipped maps with a held-out split.
-  *Impact:* hours of compute, no code. A 6M-step stage is about twelve minutes at the measured rate, so the
-  five generated stages are a couple of hours; stage 6 on real maps is slower per step and wants overnight.
-  This is the only thing between the current state and a policy worth shipping.
+* **T1 — Finish the curriculum (recommended).** Stages 1 and 2 are done (100% and 95% arrivals). Stage 3
+  (terrain, jump timing) is where the difficulty steps up, then 4 and 5, then stage 6 on the shipped maps
+  with a held-out split.
+  *Impact:* hours of compute, no code. Stages 1 and 2 took about 15 minutes between them; the later stages
+  are harder and stage 6 wants overnight. This is the only thing between the current state and a policy
+  worth shipping.
+
+  The healthy-run signature to compare against: policy loss slightly negative (-0.006 to -0.012), KL 0.003
+  to 0.007, entropy falling steadily from 8.2, mean reward crossing zero as arrivals climb. A flat entropy
+  is the entropy coefficient; a mean reward pinned at exactly -0.02 with 0% arrivals is the environment,
+  not the policy.
 
 * **T2 — Tune what the curriculum exposes (recommended).** Three settings are already known to be
   load-bearing, each found the hard way: the entropy coefficient (0.002, not the usual 0.01, because the

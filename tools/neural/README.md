@@ -33,9 +33,19 @@ before committing to a run:
 dotnet tools/neural/VortexArena.NeuralHost/bin/Release/net8.0/va-neural-host.dll --bench 4000 --agents 8
 ```
 
-On the RTX 3080 dev box, stage 1: **34,000 agent-steps/s in one process, 235x real time.** Six host
-processes plus the PPO update measure **8,200 agent-steps/s end to end**, so a 6M-step stage is about
-twelve minutes.
+On the RTX 3080 dev box, stage 1: **70,589 agent-steps/s in one process, 490x real time** — that is 490
+seconds of game world per wall second, with 8 players in it.
+
+The full loop gets a fraction of that, and it is worth knowing which fraction before optimising:
+
+| | game seconds per wall second | agent-steps/s |
+|---|---|---|
+| One host, no trainer | 490 | 70,589 |
+| 8 hosts through the socket, no forward pass | 384 | 55,381 |
+| 6 hosts + torch on CPU + the PPO update | 41 | ~6,600 |
+
+The 12x drop is Python-side: a synchronous round trip per step plus a per-step CPU forward pass. The game
+is not the bottleneck.
 
 ## Train
 
@@ -96,6 +106,25 @@ Both arms run identical (map, origin, target) triples with identical seeds and t
 silenced, so the comparison is locomotion against locomotion.
 
 Baseline to beat, stormkeep, 6 routes x 2 seeds: **classic steer finishes 7/8 at a 7.86 s median.**
+
+## Is it learning
+
+The healthy signature, from a stage that converged:
+
+```
+[s2 u   1] steps      6,144  reward -0.0211  arrivals  0.0%  pi -0.0062  ent 7.777  kl 0.0026
+[s2 u  20] steps    122,880  reward +0.2779  arrivals 67.9%  pi -0.0097  ent 7.351  kl 0.0061
+[s2 u  40] steps    245,760  reward +0.2542  arrivals 95.3%  pi -0.0085  ent 7.216  kl 0.0066
+```
+
+Policy loss slightly negative, KL between 0.003 and 0.007, entropy falling steadily from 8.2, mean reward
+crossing zero as arrivals climb. Three ways it goes wrong and what each looks like:
+
+* **Entropy flat near 8.2** — the entropy coefficient is drowning the policy gradient.
+* **KL negative** — impossible for a real KL; the stored action and its log-prob disagree.
+* **Mean reward pinned at exactly -0.02 with 0% arrivals** — that is the time penalty and nothing else, so
+  no action is having any effect. Check the environment before touching a hyperparameter:
+  `--bench 4000 --scripted` should reach 90%+ arrivals on stage 1 at about +0.30/step.
 
 ## Play against it
 

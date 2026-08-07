@@ -243,6 +243,18 @@ public static class Program
             Console.Error.WriteLine($"[neural-host] bad frame: {e.Message}");
             return 2;
         }
+        catch (Exception e)
+        {
+            // Anything the environment throws must reach the trainer as a MESSAGE, not as a dead socket.
+            // Without this the process just exits and the client reports "connection forcibly closed",
+            // which says nothing about which of reset, step or bake actually failed — and the host's own
+            // stderr is normally suppressed, so the reason is gone entirely.
+            Console.Error.WriteLine($"[neural-host] {e.GetType().Name}: {e.Message}");
+            Console.Error.WriteLine(e.StackTrace);
+            try { frames.Write(OpCode.Error, Encoding.UTF8.GetBytes($"{e.GetType().Name}: {e.Message}")); }
+            catch (IOException) { /* the trainer is already gone */ }
+            return 3;
+        }
 
         return 0;
     }
@@ -284,28 +296,44 @@ public static class Program
         var rng = new Random(opts.Seed);
 
         Console.Error.WriteLine($"[bench] stage {cfg.Stage}, {cfg.Agents} agents, {cfg.TicksPerStep} ticks/step, " +
-                                $"trace fan {(cfg.TraceFan ? "on" : "off")}, obs {obsSize}");
+                                $"trace fan {(cfg.TraceFan ? "on" : "off")}, obs {obsSize}, " +
+                                $"actions {(opts.Scripted ? "SCRIPTED forward" : "random")}");
 
         env.Reset(observations);
 
         // A warm-up episode so the JIT and the first-touch allocations are not in the measurement.
         for (int i = 0; i < 60; i++)
         {
-            RandomActions(rng, actions, cfg.Agents);
+            if (opts.Scripted) ForwardActions(actions, cfg.Agents, i);
+            else RandomActions(rng, actions, cfg.Agents);
             env.Step(actions, observations, rewards, dones, truncated);
             if (env.AllDone()) env.Reset(observations);
         }
 
         var sw = Stopwatch.StartNew();
-        int steps = 0, episodes = 0;
-        double rewardSum = 0;
+        int steps = 0, episodes = 0, arrivedTotal = 0, agentEpisodes = 0;
+        double rewardSum = 0, remainingSum = 0;
         while (steps < opts.BenchSteps)
         {
-            RandomActions(rng, actions, cfg.Agents);
+            if (opts.Scripted) ForwardActions(actions, cfg.Agents, steps);
+            else RandomActions(rng, actions, cfg.Agents);
             env.Step(actions, observations, rewards, dones, truncated);
             for (int i = 0; i < rewards.Length; i++) rewardSum += rewards[i];
             steps++;
-            if (env.AllDone()) { env.Reset(observations); episodes++; }
+            if (opts.Debug && steps % 60 == 0)
+                Console.Error.WriteLine($"[dbg {steps,5}] {env.DebugAgent0()}");
+            if (env.AllDone())
+            {
+                (int arrived, float meanTime, float meanRemaining) = env.EpisodeSummary();
+                arrivedTotal += arrived;
+                agentEpisodes += cfg.Agents;
+                remainingSum += meanRemaining;
+                if (episodes < 6)
+                    Console.Error.WriteLine($"[bench] episode {episodes}: {arrived}/{cfg.Agents} arrived, " +
+                                            $"mean arrival {meanTime:F1}s, mean distance left {meanRemaining:F0} qu");
+                env.Reset(observations);
+                episodes++;
+            }
         }
         sw.Stop();
 
@@ -321,6 +349,9 @@ public static class Program
         Console.WriteLine($"agent-steps/s  {agentStepsPerSec:F0}");
         Console.WriteLine($"realtime x     {simSecondsPerSec:F1}");
         Console.WriteLine($"mean reward    {rewardSum / Math.Max(1, steps * cfg.Agents):F4}");
+        Console.WriteLine($"arrival rate   {arrivedTotal / (double)Math.Max(1, agentEpisodes):P1} " +
+                          $"({arrivedTotal}/{agentEpisodes} agent-episodes)");
+        Console.WriteLine($"distance left  {remainingSum / Math.Max(1, episodes):F0} qu mean at episode end");
         return 0;
     }
 
@@ -337,6 +368,34 @@ public static class Program
             actions[o + 5] = 0f;                          // weapon: keep current
             actions[o + 6] = (float)(rng.NextDouble() * 2.0 - 1.0);
             actions[o + 7] = (float)(rng.NextDouble() * 0.4 - 0.2);
+        }
+    }
+
+    /// <summary>
+    /// The scripted baseline: hold forward, jump on a fixed cadence, never turn.
+    ///
+    /// <para>Wishmove is chosen in the GOAL frame, so "forward" is literally "toward the target" whatever
+    /// the view is doing. That makes this close to optimal on stage 1 and a serviceable bunnyhopper on
+    /// stage 2, which is exactly what a diagnostic needs: if THIS cannot arrive, the environment is broken
+    /// and no amount of training will help. It is also the scripted baseline the design doc asks the
+    /// learned policy to beat.</para>
+    /// </summary>
+    private static void ForwardActions(float[] actions, int agents, int step)
+    {
+        // Jump every 8th policy step. At 4 ticks per step and 72 Hz that is a hop about every 0.44 s,
+        // roughly the ground contact rhythm a bunnyhop chain wants.
+        float jump = step % 8 == 0 ? 1f : 0f;
+        for (int i = 0; i < agents; i++)
+        {
+            int o = i * ActionEncoding.Size;
+            actions[o + 0] = 1f;    // index 1 = straight forward in the goal frame
+            actions[o + 1] = jump;
+            actions[o + 2] = 0f;
+            actions[o + 3] = 0f;
+            actions[o + 4] = 0f;
+            actions[o + 5] = 0f;
+            actions[o + 6] = 0f;
+            actions[o + 7] = 0f;
         }
     }
 
@@ -406,6 +465,8 @@ public static class Program
         public int BenchSteps;
         public string? VerifyWeights;
         public bool NoTraceFan;
+        public bool Scripted;
+        public bool Debug;
         public bool ShowHelp;
 
         public const string Usage = """
@@ -421,6 +482,9 @@ public static class Program
                               load an exported policy, time a forward pass, and report whether
                               this build can use it (run after every export)
               --no-tracefan   skip the per-think box sweeps (faster, and not what the live server does)
+              --scripted      bench with a hold-forward policy instead of random actions: the
+                              sanity check that the environment is solvable at all, and the
+                              scripted baseline the learned policy has to beat
               --help
 
             The trainer normally launches these; see tools/neural/train.py.
@@ -443,6 +507,8 @@ public static class Program
                     case "--bench": o.BenchSteps = ParseInt(Next(), 1000); break;
                     case "--verify-weights": o.VerifyWeights = Next(); break;
                     case "--no-tracefan": o.NoTraceFan = true; break;
+                    case "--scripted": o.Scripted = true; break;
+                    case "--debug": o.Debug = true; break;
                     case "--help" or "-h": o.ShowHelp = true; break;
                 }
             }

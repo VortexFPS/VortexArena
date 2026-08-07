@@ -131,10 +131,27 @@ public sealed class TrainingEnv
         _episodeIndex++;
         _course = CourseGenerator.Generate(_cfg.Stage, _cfg.Seed * 7919 + _episodeIndex);
 
+        // bot_neural OFF across Boot, then on again below.
+        //
+        // Boot reads the cvar and, when it is set, builds its own NeuralBotService and kicks off a
+        // BACKGROUND parallel bake of the map. That is right for a server and wrong here: the cvar is still
+        // 1 from the previous episode, so from the second Reset onward every episode spawned a detached
+        // bake against a course that was already being discarded. A few hundred episodes in, the host died
+        // and the trainer saw only "connection forcibly closed".
+        Cvars.Set("bot_neural", "0");
+
         _world = new GameWorld(_course.World, BuildEntityDicts()) { MapName = $"nbcourse{_episodeIndex}" };
         _world.Boot("dm");
         Cvars.Set("bot_join_empty", "1");
-        Cvars.Set("bot_number", "0");          // the roster is created directly, not by fixcount
+        // bot_number must MATCH the roster this env creates by hand.
+        //
+        // It was 0, on the reasoning that the roster is built directly so fixcount has nothing to do. What
+        // fixcount actually does with a target of 0 and eight connected bots is remove them, one per frame,
+        // and it starts doing that during the warm-up frames. Every agent's Player was freed a few ticks
+        // after spawning; the env kept stepping stale references, so position and velocity froze at
+        // whatever they held at disconnect and nothing ever moved again. The scripted hold-forward probe
+        // read as "closes 24 qu/s", which looks like bad movement and was actually no movement.
+        Cvars.Set("bot_number", _cfg.Agents.ToString(CultureInfo.InvariantCulture));
         Cvars.Set("skill", "10");
         Cvars.Set("g_balance_selfdamagepercent", "0.65");
         Cvars.Set("bot_nofire", "0");
@@ -181,6 +198,9 @@ public sealed class TrainingEnv
         for (int i = 0; i < _agents.Count; i++)
         {
             Agent a = _agents[i];
+            if (a.Player.IsFreed)
+                throw new InvalidOperationException(
+                    "an agent was disconnected during warm-up — check bot_number against the roster size");
             a.Loco = a.Brain.Locomotor
                      ?? throw new InvalidOperationException(
                          "the bot population did not attach a locomotor — bot_neural or the service is unset");
@@ -345,6 +365,23 @@ public sealed class TrainingEnv
     {
         for (int i = 0; i < _agents.Count; i++) if (!_agents[i].Done) return false;
         return true;
+    }
+
+    /// <summary>
+    /// Diagnostic snapshot of agent 0: where it is, how fast, how far from its target, and whether the
+    /// locomotor the env holds is still the one the brain is using. For the env host's bench only.
+    /// </summary>
+    public string DebugAgent0()
+    {
+        if (_agents.Count == 0) return "no agents";
+        Agent a = _agents[0];
+        bool sameLoco = ReferenceEquals(a.Loco, a.Brain.Locomotor);
+        return $"pos {a.Player.Origin.X:F0},{a.Player.Origin.Y:F0},{a.Player.Origin.Z:F0} " +
+               $"spd {a.Player.Velocity.Length():F0} " +
+               $"dist {(a.Player.Origin - a.Target).Length():F0} " +
+               $"ground {a.Player.OnGround} step {a.Step} done {a.Done} " +
+               $"loco-ok {sameLoco} ext {a.Brain.Locomotor?.UseExternalAction} " +
+               $"move {a.Brain.LastInput.MoveValues.X:F0},{a.Brain.LastInput.MoveValues.Y:F0}";
     }
 
     /// <summary>Per-episode summary the trainer logs.</summary>

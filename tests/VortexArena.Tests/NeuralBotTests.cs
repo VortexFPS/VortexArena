@@ -638,6 +638,166 @@ public class NeuralBotTests
         Assert.Null(world.Bots.Brains[0].Locomotor);
     }
 
+    /// <summary>
+    /// A bot told to run straight at a target on flat ground must actually run: about sv_maxspeed of
+    /// ground speed, closing on the target the whole way.
+    ///
+    /// <para>Pins the thing the whole feature rests on. The scripted-forward probe in the env host was
+    /// closing 24 qu/s where a running player does 320, and no amount of training fixes an action that
+    /// does not move the bot.</para>
+    /// </summary>
+    [Fact]
+    public void ExternalAction_HoldForward_RunsAtRoughlyFullSpeed()
+    {
+        var world = new GameWorld(FlatFloorWorld(), new List<EntityDict>
+        {
+            new("worldspawn"),
+            new("info_player_deathmatch", new Vector3(0f, 0f, 32f)),
+        })
+        { MapName = "runtest" };
+        world.Boot("dm");
+        Cvars.Set("bot_join_empty", "1");
+        Cvars.Set("skill", "10");
+
+        NavField field = NavFieldBaker.Bake(world.Collision, "runtest", 1);
+        PolicyNetwork net = PolicyNetwork.CreateUntrained(NeuralObservation.Size, ActionSpace.Size);
+        world.Bots.Neural = NeuralBotService.ForPreparedMap(net, field, new MapFeatures(), "runtest");
+        Cvars.Set("bot_neural", "1");
+        Cvars.Set("bot_number", "1");
+
+        for (int t = 0; t < 72 * 4 && world.Bots.Brains.Count == 0; t++) world.Frame(SimulationLoop.TicRate);
+        Assert.Single(world.Bots.Brains);
+
+        BotBrain brain = world.Bots.Brains[0];
+        for (int t = 0; t < 12; t++) world.Frame(SimulationLoop.TicRate);   // let the sync attach + land
+        Assert.NotNull(brain.Locomotor);
+
+        var target = new Vector3(1600f, 0f, 24f);
+        brain.IntentOverride = intent =>
+        {
+            intent.GoalPos = target;
+            intent.CorridorA = target;
+            intent.CorridorB = target;
+            intent.AimRequired = false;
+            intent.WeaponMovementAllowed = false;
+            return intent;
+        };
+        brain.Locomotor!.UseExternalAction = true;
+        // Index 1 in the wishmove table: straight forward in the GOAL frame.
+        brain.Locomotor.PendingExternalAction = new NeuralAction { MoveForward = 1f, MoveRight = 0f, WeaponSelect = -1 };
+
+        Vector3 start = brain.Bot.Origin;
+        for (int t = 0; t < 72; t++) world.Frame(SimulationLoop.TicRate);   // one second
+        float travelled = (brain.Bot.Origin - start).Length();
+
+        // sv_maxspeed is 320 with ground friction and an acceleration ramp, so a second of running from a
+        // standstill covers appreciably more than half of it. 24 qu/s (the observed failure) is 13x under.
+        Assert.True(travelled > 180f,
+            $"a bot holding forward covered only {travelled:F0} qu in one second; expected ~250-320");
+        Assert.True((brain.Bot.Origin - target).Length() < (start - target).Length(),
+            "the bot moved, but not toward the target");
+    }
+
+    // =============================================================================================
+    // the training environment
+    // =============================================================================================
+
+    /// <summary>
+    /// A scripted hold-forward policy must reach the target on stage 1 most of the time, and must score
+    /// clearly better than random actions.
+    ///
+    /// <para><b>The most valuable test here.</b> It is the only one that asks whether the environment is
+    /// SOLVABLE, and the bug it was written for was invisible to every other check: <c>bot_number</c> was 0
+    /// while the env connected eight bots by hand, so fixcount disconnected them one per frame during
+    /// warm-up. The env then stepped freed Player references. Position and velocity froze at their
+    /// disconnect values, every observation stayed constant, every reward was the bare time penalty, and
+    /// PPO dutifully learned nothing from 1.5M steps of a world where no action had any effect. Nothing
+    /// threw. Nothing logged. The training curve just looked slow.</para>
+    ///
+    /// <para>A reward-shaping mistake, a broken action projection, a frozen world: all of them show up here
+    /// as a scripted policy that cannot reach a point on flat ground.</para>
+    /// </summary>
+    [Fact]
+    public void TrainingEnv_ScriptedForward_ArrivesOnFlatGroundAndBeatsRandom()
+    {
+        (float scriptedReward, float scriptedArrivals) = RunEnvEpisodes(scripted: true);
+        (float randomReward, float randomArrivals) = RunEnvEpisodes(scripted: false);
+
+        Assert.True(scriptedArrivals > 0.6f,
+            $"hold-forward reached the target in only {scriptedArrivals:P0} of episodes on flat ground");
+        Assert.True(scriptedReward > 0f,
+            $"hold-forward scored {scriptedReward:F4}/step; a policy that arrives must score positive");
+        Assert.True(scriptedReward > randomReward + 0.1f,
+            $"hold-forward ({scriptedReward:F4}) barely beat random ({randomReward:F4}); " +
+            "the reward does not distinguish progress from noise");
+        Assert.True(randomArrivals < scriptedArrivals,
+            $"random actions arrived {randomArrivals:P0} vs scripted {scriptedArrivals:P0}");
+    }
+
+    /// <summary>Run a few short episodes and return (mean reward per agent-step, arrival rate).</summary>
+    private static (float Reward, float Arrivals) RunEnvEpisodes(bool scripted)
+    {
+        var cfg = new TrainingEnv.Config
+        {
+            Agents = 4,
+            TicksPerStep = 4,
+            MaxSteps = 400,
+            Stage = CourseGenerator.Stage.Flat,
+            Seed = 20260807,
+            WeaponChance = 0f,          // stage 1 is locomotion; weapons only add a way to die
+            PermitFlipChance = 0f,
+            AimConstraintChance = 0f,
+            TraceFan = false,           // the fan costs traces and changes nothing about arriving
+        };
+        var env = new TrainingEnv(cfg);
+
+        int obsSize = TrainingEnv.ObservationSize;
+        var obs = new float[cfg.Agents * obsSize];
+        var rewards = new float[cfg.Agents];
+        var dones = new byte[cfg.Agents];
+        var trunc = new byte[cfg.Agents];
+        var actions = new float[cfg.Agents * ActionEncoding.Size];
+        var rng = new Random(7);
+
+        env.Reset(obs);
+
+        double rewardSum = 0;
+        int steps = 0, arrived = 0, agentEpisodes = 0, episodes = 0;
+        while (episodes < 4 && steps < 4000)
+        {
+            for (int i = 0; i < cfg.Agents; i++)
+            {
+                int o = i * ActionEncoding.Size;
+                Array.Clear(actions, o, ActionEncoding.Size);
+                if (scripted)
+                {
+                    actions[o] = 1f;                                   // straight forward in the goal frame
+                    actions[o + 1] = steps % 8 == 0 ? 1f : 0f;         // a hop roughly every 0.44 s
+                }
+                else
+                {
+                    actions[o] = rng.Next(0, 9);
+                    actions[o + 1] = rng.Next(0, 2);
+                    actions[o + 6] = (float)(rng.NextDouble() * 2.0 - 1.0);
+                }
+            }
+
+            env.Step(actions, obs, rewards, dones, trunc);
+            for (int i = 0; i < rewards.Length; i++) rewardSum += rewards[i];
+            steps++;
+
+            if (!env.AllDone()) continue;
+            (int a, _, _) = env.EpisodeSummary();
+            arrived += a;
+            agentEpisodes += cfg.Agents;
+            episodes++;
+            env.Reset(obs);
+        }
+
+        return ((float)(rewardSum / Math.Max(1, steps * cfg.Agents)),
+                agentEpisodes == 0 ? 0f : arrived / (float)agentEpisodes);
+    }
+
     private static CollisionWorld FlatFloorWorld()
     {
         var w = new CollisionWorld();

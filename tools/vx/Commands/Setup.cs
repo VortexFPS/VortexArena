@@ -48,7 +48,13 @@ internal static class Setup
         new("dev",      "develop: engine + maps + export templates",      true,  true,  true,  true,  true),
         new("server",   "dedicated server: maps only, no editor",         false, true,  true,  true,  true),
         new("ci",       "non-interactive; installs nothing it is not told to", true,  true,  true,  false, false),
-        new("launcher", "invoked by VortexLauncher; content only",        false, true,  true,  false, false),
+        // Godot went true 2026-08-06. This profile was "content only" because the launcher resolved its
+        // own engine and refused when it found none — which meant an operator's first build failed with
+        // instructions to go and install by hand, while the tool that installs the RIGHT one by
+        // construction sat in the clone it had just cloned. VortexLauncher now calls this profile when no
+        // editor is present, so the profile has to be able to supply one. MayPrompt/MaySystemInstall stay
+        // false: it still runs unattended and still has no business reshaping a host it was invoked on.
+        new("launcher", "invoked by VortexLauncher; engine + content",    true,  true,  true,  false, false),
     ];
 
     /// <summary>System dependencies vx knows how to name, in the order a fresh clone needs them.</summary>

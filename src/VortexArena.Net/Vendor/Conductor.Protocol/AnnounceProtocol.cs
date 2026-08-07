@@ -14,10 +14,18 @@ public static class AnnounceProtocol
     public const string AnnouncePath = "/api/v1/announce";
     public const string ServersPath = "/api/v1/servers";
 
-    /// <summary>Default sv_master_url. One deployment also answers the panel on
-    /// conductor.vortexfps.org; this host is the game-facing one and the only one a game server or a
-    /// client ever needs.</summary>
-    public const string DefaultMasterUrl = "https://master.vortexfps.org";
+    /// <summary>Default sv_master_url, and the only host a game server or a client ever needs.
+    ///
+    /// <para>One deployment answers all of it on this name: the announce protocol, the server list, and
+    /// the orchestrator panel. It was two names until 2026-08-06 — master.vortexfps.org for the
+    /// directory, conductor.vortexfps.org for the panel — separated so the two could carry different
+    /// cache, WAF and rate-limit policy, and so the panel could go down without the server list
+    /// following it. That separation was given up deliberately; the README says what it cost.</para>
+    ///
+    /// <para><b>Changing this value is close to permanent.</b> It is compiled into every shipped build,
+    /// so any name that has once reached a player has to keep resolving for as long as that build is in
+    /// use. The 2026-08-06 rename was free only because nothing had shipped yet.</para></summary>
+    public const string DefaultMasterUrl = "https://conductor.vortexfps.org";
 
     /// <summary>Re-announce cadence. Also the floor: never send faster than this.</summary>
     public const int AnnounceIntervalSeconds = 180;

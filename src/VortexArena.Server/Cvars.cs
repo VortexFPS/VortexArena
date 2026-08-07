@@ -431,7 +431,7 @@ public static class Cvars
         // deliberately NOT registered here: DP leaves it unregistered/0, so a listen server that never asked
         // to be public cannot leak itself to a public directory by upgrading. server.cfg.example ships
         // `set sv_public 1` for operators who do want listing.
-        new("sv_master_url", "https://master.vortexfps.org",
+        new("sv_master_url", "https://conductor.vortexfps.org",
             "base URL of the master server this host announces to (self-hosters point this at their own)"),
         // The adoption OFFER, not adoption itself: it only asks Conductor to show this box in its queue.
         // Accepting there still grants nothing until the runner dials out and proves the private key behind

@@ -798,6 +798,37 @@ public class NeuralBotTests
                 agentEpisodes == 0 ? 0f : arrived / (float)agentEpisodes);
     }
 
+    /// <summary>
+    /// Walking the distance field from a point must move toward the goal, and stop at it.
+    ///
+    /// <para>This is what fills the observation's two corridor look-ahead slots during training. They used
+    /// to be set to the goal itself, which made six of the 206 inputs constant while learning and
+    /// informative at runtime — the policy learns to ignore an input that then starts carrying data.</para>
+    /// </summary>
+    [Fact]
+    public void PointAlongRoute_WalksTowardTheGoalAndStopsThere()
+    {
+        CollisionWorld world = Room(half: 640f);
+        Api.Services = new EngineServices(world);
+        NavField field = NavFieldBaker.Bake(world, "room", 1);
+
+        var goal = new Vector3(-500f, 0f, 26f);
+        NavDistanceField dist = NavDistanceField.Build(field, goal);
+
+        var from = new Vector3(500f, 0f, 26f);
+        Vector3 near = dist.PointAlongRoute(from, 320f);
+        Vector3 far = dist.PointAlongRoute(near, 320f);
+
+        Assert.True(dist.DistanceAt(near) < dist.DistanceAt(from), "the first look-ahead did not close on the goal");
+        Assert.True(dist.DistanceAt(far) < dist.DistanceAt(near), "the second look-ahead did not close further");
+        // The walk covers roughly the requested distance, give or take one lattice step.
+        Assert.InRange((near - from).Length(), 200f, 520f);
+
+        // Standing on the goal, there is nowhere further to walk.
+        Vector3 atGoal = dist.PointAlongRoute(goal, 320f);
+        Assert.True((atGoal - goal).Length() < 64f, $"walking from the goal moved {(atGoal - goal).Length():F0} qu");
+    }
+
     // =============================================================================================
     // stage 6: real maps and the held-out split
     // =============================================================================================

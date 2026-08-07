@@ -381,11 +381,22 @@ public sealed class TrainingEnv
     private MoveIntent BuildIntent(Agent a)
     {
         bool permit = a.WeaponPermit && (a.PermitFlipStep < 0 || a.Step < a.PermitFlipStep);
+
+        // Corridor look-ahead, walked down the distance field from where the agent actually is.
+        //
+        // Both of these used to be set to the target, which made six of the 206 observation floats constant
+        // for the whole of training. At runtime they carry the next two waypoint-route nodes
+        // (BotBrainNeural reads Nav.RouteNode), so the policy was learning to ignore an input that then
+        // started carrying information. Walking the field produces the same quantity from the same
+        // geometry, and unlike the waypoint graph it exists on generated courses too.
+        Vector3 near = _distance.PointAlongRoute(a.Player.Origin, 320f);
+        Vector3 far = _distance.PointAlongRoute(near, 320f);
+
         return new MoveIntent
         {
             GoalPos = a.Target,
-            CorridorA = a.Target,
-            CorridorB = a.Target,
+            CorridorA = near,
+            CorridorB = far,
             Urgency = 1f,
             WeaponMovementAllowed = permit,
             AimRequired = a.AimConstraint,

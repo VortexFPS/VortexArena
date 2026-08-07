@@ -190,6 +190,86 @@ public sealed class NavDistanceField
     }
 
     /// <summary>
+    /// Walk downhill from <paramref name="from"/> and return the point roughly <paramref name="lookahead"/>
+    /// Quake units along the route to the goal.
+    ///
+    /// <para><b>Why the training environment needs this.</b> The observation carries two corridor
+    /// look-ahead vectors, which at runtime come from the waypoint route
+    /// (<c>BotBrainNeural</c> reads <see cref="BotNavigation.RouteNode"/>) and give the policy two nodes of
+    /// warning before a direction change. Training used to set both equal to the goal, so six of the 206
+    /// observation floats were constant during learning and meaningful in the game: the policy learns to
+    /// ignore an input that then starts carrying information. Walking the distance field produces the same
+    /// quantity from the same geometry, and it works on generated courses too, where there is no waypoint
+    /// graph to read.</para>
+    ///
+    /// <para>Returns the goal itself when the route is shorter than the look-ahead, and
+    /// <paramref name="from"/> when the position is off-graph.</para>
+    /// </summary>
+    public Vector3 PointAlongRoute(Vector3 from, float lookahead)
+    {
+        if (!_field.TryCell(from, out int cx, out int cy)) return from;
+        int idx = SpanIndexUnder(cx, cy, from.Z);
+        if (idx < 0 || _dist[idx] >= Unreachable) return from;
+
+        ReadOnlySpan<int> dxs = stackalloc int[] { 1, 1, 0, -1, -1, -1, 0, 1 };
+        ReadOnlySpan<int> dys = stackalloc int[] { 0, 1, 1, 1, 0, -1, -1, -1 };
+
+        int w = _field.Width, h = _field.Height;
+        float travelled = 0f;
+        Vector3 cur = from;
+        int steps = 0;
+
+        // Greedy descent over the same adjacency Dijkstra used, so the path exists by construction. Bounded
+        // because a numerically flat region could otherwise oscillate between two equal-cost neighbours.
+        while (travelled < lookahead && steps++ < 96)
+        {
+            float best = _dist[SpanIndexAt(cx, cy, cur.Z, out int curSlot)];
+            if (curSlot < 0) break;
+
+            int bx = -1, by = -1;
+            float bz = cur.Z;
+            for (int d = 0; d < 8; d++)
+            {
+                int nx = cx + dxs[d], ny = cy + dys[d];
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                int nc = ny * w + nx;
+                ReadOnlySpan<FloorSpan> col = _field.Column(nx, ny);
+                for (int t = 0; t < col.Length; t++)
+                {
+                    float nd = _dist[_start[nc] + t];
+                    if (nd >= best) continue;
+                    best = nd;
+                    bx = nx; by = ny; bz = col[t].FloorZ + 24f;
+                }
+            }
+            if (bx < 0) break;   // a local minimum: this is the goal, or as close as the graph gets
+
+            Vector3 next = _field.CellCentre(bx, by);
+            next.Z = bz;
+            travelled += (next - cur).Length();
+            cur = next;
+            cx = bx; cy = by;
+        }
+        return cur;
+    }
+
+    /// <summary>The flat span index under a cell at height <paramref name="z"/>, with its slot.</summary>
+    private int SpanIndexAt(int cx, int cy, float z, out int slot)
+    {
+        int c = cy * _field.Width + cx;
+        ReadOnlySpan<FloorSpan> col = _field.Column(cx, cy);
+        float probe = z + BotNavigation.StepHeight;
+        for (int i = 0; i < col.Length; i++)
+        {
+            if (col[i].FloorZ > probe) continue;
+            slot = i;
+            return _start[c] + i;
+        }
+        slot = -1;
+        return 0;
+    }
+
+    /// <summary>
     /// Every standable span whose distance from the goal falls in [<paramref name="min"/>,
     /// <paramref name="max"/>], as world positions. The course generator draws episode start points from
     /// this, so difficulty is set by route length rather than by straight-line distance.

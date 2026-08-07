@@ -99,6 +99,10 @@ def main() -> int:
     ap.add_argument("--device", type=str, default="cpu",
                     help="cpu is usually right: the net is 45k parameters and the bottleneck is the env")
     ap.add_argument("--verbose-hosts", action="store_true", help="let the env hosts write to stderr")
+    ap.add_argument("--eval-every", type=int, default=10,
+                    help="updates between deterministic evals; the curriculum gate reads these, "
+                         "not the sampled rollout rate")
+    ap.add_argument("--eval-steps", type=int, default=400, help="steps per deterministic eval pass")
     ap.add_argument("--data", type=Path, default=None,
                     help="content root for stage 6 (default: <repo>/data)")
     ap.add_argument("--maps", type=str, default="",
@@ -191,6 +195,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     update = 0
     t0 = time.time()
     arrival_history: list[float] = []
+    det_rate = 0.0
 
     while total_steps < budget:
         update += 1
@@ -221,31 +226,66 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
 
         stats = ppo_update(policy, optimizer, hyper, obs_buf, act_buf, logp_buf, adv, ret, device)
 
+        # Rollout arrivals, from SAMPLED actions. A progress signal, not a gate: see the eval below.
         ep = env.episode_stats()
         if ep:
             rate = float(np.mean([a / max(1, env.agents_per_host) for a, _, _ in ep]))
             arrival_history.append(rate)
             arrival_history[:] = arrival_history[-20:]
+        sampled = float(np.mean(arrival_history)) if arrival_history else 0.0
 
-        recent = float(np.mean(arrival_history)) if arrival_history else 0.0
         sps = total_steps / max(1e-6, time.time() - t0)
         print(f"[s{stage} u{update:4d}] steps {total_steps:>10,}  {sps:6.0f}/s  "
-              f"reward {rew_buf.mean():+.4f}  arrivals {recent:5.1%}  "
+              f"reward {rew_buf.mean():+.4f}  sampled {sampled:5.1%}  det {det_rate:5.1%}  "
               f"pi {stats['policy_loss']:+.4f}  v {stats['value_loss']:.4f}  "
               f"ent {stats['entropy']:.3f}  kl {stats['kl']:.4f}")
 
         if update % 20 == 0:
             save(policy, norm, optimizer, stage, run_dir)
 
-        # Advance only on a sustained rate, not on one lucky update.
-        if threshold > 0 and len(arrival_history) >= 10 and recent >= threshold:
-            print(f"[s{stage}] arrival rate {recent:.1%} over the last {len(arrival_history)} updates")
-            save(policy, norm, optimizer, stage, run_dir)
-            return True
+        # ---- the advancement gate, measured DETERMINISTICALLY ----
+        #
+        # What ships is the argmax policy; what the rollout measures is the sampled one, and the gap is
+        # enormous while exploration noise is alive. Measured on the same stage-3 checkpoint: 11.9%
+        # arrivals sampled, 71% deterministic. Gating on the rollout number stalled the curriculum on a
+        # stage the deployable policy had already cleared, and more training would not have moved it --
+        # the entropy bonus keeps the sampled policy noisy on purpose.
+        if threshold > 0 and update % args.eval_every == 0:
+            det_rate = evaluate(policy, norm, env, device, args.eval_steps)
+            print(f"[s{stage}] deterministic eval: {det_rate:.1%} arrivals (gate {threshold:.0%})")
+            if det_rate >= threshold:
+                save(policy, norm, optimizer, stage, run_dir)
+                return True
+            obs = env.reset()   # the eval consumed episodes; start the next rollout clean
 
     save(policy, norm, optimizer, stage, run_dir)
-    recent = float(np.mean(arrival_history)) if arrival_history else 0.0
-    return threshold <= 0 or recent >= threshold
+    if threshold <= 0:
+        return True
+    final = evaluate(policy, norm, env, device, args.eval_steps)
+    print(f"[s{stage}] final deterministic eval: {final:.1%} arrivals (gate {threshold:.0%})")
+    return final >= threshold
+
+
+def evaluate(policy, norm, env: VectorEnv, device, steps: int) -> float:
+    """Arrival rate of the DETERMINISTIC (argmax) policy, which is the thing that gets exported.
+
+    The observation normaliser is read but never updated here, so an eval pass cannot shift the statistics
+    the training rollouts depend on.
+    """
+    obs = env.reset()
+    env.clear_episode_stats()
+    arrived = 0
+    agent_episodes = 0
+    with torch.no_grad():
+        for _ in range(steps):
+            wire, _, _, _ = policy.act(torch.as_tensor(norm.normalize(obs), device=device),
+                                       deterministic=True)
+            obs, _, _, _ = env.step(wire.cpu().numpy())
+            for a, _, _ in env.episode_stats():
+                arrived += a
+                agent_episodes += env.agents_per_host
+            env.clear_episode_stats()
+    return arrived / agent_episodes if agent_episodes else 0.0
 
 
 def gae(rewards, values, dones, last_value, gamma: float, lam: float):

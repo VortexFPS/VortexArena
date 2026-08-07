@@ -302,6 +302,15 @@ class VectorEnv:
     def episode_stats(self) -> list[tuple[int, float, float]]:
         return [e.last_episode_stats for e in self.envs if e.last_episode_stats is not None]
 
+    def clear_episode_stats(self) -> None:
+        """Forget the last episode summary on every host.
+
+        The deterministic eval counts episodes as they finish, so a stale summary left over from the
+        previous poll would be counted twice and inflate the arrival rate the curriculum gate reads.
+        """
+        for e in self.envs:
+            e.last_episode_stats = None
+
     def close(self) -> None:
         for e in self.envs:
             e.close()

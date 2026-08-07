@@ -63,6 +63,10 @@ python tools/neural/train.py --resume runs/20260807-1200/checkpoint.pt --stage 4
 `--hosts` is roughly "cores to spend"; each host is one process running one world. Every checkpoint writes
 `policy.vxpw` beside it, ready to load.
 
+Every run mirrors its output to `<run_dir>/train.log`, line-buffered. Read that to check on a run in
+progress: piping the trainer's stdout through `grep` or `tee` buffers it until the process exits, so a
+healthy long run looks identical to a hung one.
+
 ### The curriculum
 
 Ordered because each stage's reward is only learnable once the previous one is. A stage that will not

@@ -85,6 +85,33 @@ CURRICULUM = [
 ]
 
 
+class _Tee:
+    """Write to two streams at once, flushing each line. Used for the run log."""
+
+    def __init__(self, a, b):
+        self._a, self._b = a, b
+
+    def write(self, text: str) -> int:
+        self._a.write(text)
+        self._a.flush()
+        self._b.write(text)
+        self._b.flush()
+        return len(text)
+
+    def flush(self) -> None:
+        self._a.flush()
+        self._b.flush()
+
+    def isatty(self) -> bool:
+        return False
+
+
+def _tee(path: Path) -> None:
+    handle = open(path, "a", encoding="utf-8", buffering=1)
+    sys.stdout = _Tee(sys.stdout, handle)
+    sys.stderr = _Tee(sys.stderr, handle)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--stage", type=int, default=1, help="curriculum stage 1-5")
@@ -115,6 +142,14 @@ def main() -> int:
     run_name = args.name or time.strftime("%Y%m%d-%H%M%S")
     run_dir = args.out / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    # Mirror everything to <run_dir>/train.log, line-buffered.
+    #
+    # A run is hours long and the only way to see how it is going is to read its output. Piping stdout
+    # through grep or tee buffers it until the process exits, so a run in progress looks like a run that
+    # has printed nothing -- which is indistinguishable from a run that has hung. The log file always has
+    # the current state.
+    _tee(run_dir / "train.log")
     print(f"[train] run {run_dir}")
 
     torch.manual_seed(args.seed)

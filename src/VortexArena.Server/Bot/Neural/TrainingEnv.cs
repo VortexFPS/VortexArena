@@ -81,6 +81,26 @@ public sealed class TrainingEnv
     private PolicyNetwork _dummyNet = null!;
     private NeuralBotService _service = null!;
 
+    /// <summary>
+    /// A trained policy to evaluate INSIDE the environment, instead of taking actions from the trainer.
+    ///
+    /// <para>Training keeps the network in Python, so the env normally runs on external actions. Set this
+    /// and the locomotors evaluate the weight file themselves: the same code the live server runs, scored
+    /// against the same courses the curriculum trains on. That answers "is this checkpoint any good on
+    /// stage 4" without a Python process, and it is the only way to score a policy on the curriculum at all
+    /// — the time trial measures real maps, which is a different question.</para>
+    /// </summary>
+    private PolicyNetwork? _evalPolicy;
+
+    /// <summary>
+    /// Run <paramref name="policy"/> inside the environment rather than accepting external actions. Pass
+    /// null to go back to external actions. Takes effect at the next <see cref="Reset"/>.
+    /// </summary>
+    public void SetEvalPolicy(PolicyNetwork? policy) => _evalPolicy = policy;
+
+    /// <summary>True when the env is scoring its own policy and the trainer's actions are ignored.</summary>
+    public bool IsEvaluating => _evalPolicy is not null;
+
     private readonly List<Agent> _agents = new();
     private int _episodeIndex;
 
@@ -172,7 +192,7 @@ public sealed class TrainingEnv
         // one. An untrained net of the right shape is the cheapest way to satisfy that without a nullable
         // field on the runtime path.
         _dummyNet ??= PolicyNetwork.CreateUntrained(NeuralObservation.Size, ActionSpace.Size);
-        _service = NeuralBotService.ForPreparedMap(_dummyNet, _field, _features, _world.MapName!);
+        _service = NeuralBotService.ForPreparedMap(_evalPolicy ?? _dummyNet, _field, _features, _world.MapName!);
 
         // Hand the service to the population and turn the feature on, so BotPopulation's per-frame sync
         // creates and owns the locomotors. The env then borrows them and switches them to external-action
@@ -204,7 +224,9 @@ public sealed class TrainingEnv
             a.Loco = a.Brain.Locomotor
                      ?? throw new InvalidOperationException(
                          "the bot population did not attach a locomotor — bot_neural or the service is unset");
-            a.Loco.UseExternalAction = true;
+            // Evaluating: let the locomotor run the network. Training: it builds the observation and
+            // applies the action the trainer sampled.
+            a.Loco.UseExternalAction = _evalPolicy is null;
             a.PrevPotential = Potential(a.Player.Origin);
             a.PrevHealth = Vitality(a.Player);
             // Build the opening observation through the locomotor, so it is produced by exactly the code
@@ -330,7 +352,7 @@ public sealed class TrainingEnv
         for (int i = 0; i < _agents.Count; i++)
         {
             Agent a = _agents[i];
-            if (a.Done) continue;
+            if (a.Done || _evalPolicy is not null) continue;
             a.Loco.PendingExternalAction = ActionEncoding.Decode(actions.Slice(i * ActionEncoding.Size, ActionEncoding.Size));
         }
 

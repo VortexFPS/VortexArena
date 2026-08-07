@@ -312,6 +312,27 @@ public static class Program
         };
         var env = new TrainingEnv(cfg);
 
+        // --policy scores an exported weight file on this stage's courses, running it through the same
+        // locomotor the live server uses. The random and --scripted arms are the two reference points it
+        // has to sit between: below random means broken, below scripted means not worth shipping.
+        if (opts.PolicyPath is not null)
+        {
+            PolicyNetwork? net = PolicyNetwork.Load(opts.PolicyPath, out string? err);
+            if (net is null)
+            {
+                Console.Error.WriteLine($"[bench] cannot load {opts.PolicyPath}: {err}");
+                return 1;
+            }
+            if (net.InputSize != NeuralObservation.Size || net.OutputSize != ActionSpace.Size)
+            {
+                Console.Error.WriteLine($"[bench] {opts.PolicyPath} is {net.InputSize}x{net.OutputSize}, " +
+                                        $"this build needs {NeuralObservation.Size}x{ActionSpace.Size}");
+                return 1;
+            }
+            env.SetEvalPolicy(net);
+            Console.Error.WriteLine($"[bench] policy '{net.Label}' ({net.ParameterCount:N0} parameters)");
+        }
+
         int obsSize = TrainingEnv.ObservationSize;
         var observations = new float[cfg.Agents * obsSize];
         var rewards = new float[cfg.Agents];
@@ -322,7 +343,7 @@ public static class Program
 
         Console.Error.WriteLine($"[bench] stage {cfg.Stage}, {cfg.Agents} agents, {cfg.TicksPerStep} ticks/step, " +
                                 $"trace fan {(cfg.TraceFan ? "on" : "off")}, obs {obsSize}, " +
-                                $"actions {(opts.Scripted ? "SCRIPTED forward" : "random")}");
+                                $"actions {(opts.PolicyPath is not null ? "POLICY" : opts.Scripted ? "SCRIPTED forward" : "random")}");
 
         env.Reset(observations);
 
@@ -495,6 +516,7 @@ public static class Program
         public bool NoTraceFan;
         public bool Scripted;
         public bool Debug;
+        public string? PolicyPath;
         public bool ShowHelp;
 
         public const string Usage = """
@@ -513,6 +535,9 @@ public static class Program
               --scripted      bench with a hold-forward policy instead of random actions: the
                               sanity check that the environment is solvable at all, and the
                               scripted baseline the learned policy has to beat
+              --policy PATH   score an exported weight file on this stage's courses, run through
+                              the same locomotor the live server uses. Compare its arrival rate
+                              against the random and --scripted arms on the same --stage/--seed.
               --help
 
             The trainer normally launches these; see tools/neural/train.py.
@@ -537,6 +562,7 @@ public static class Program
                     case "--no-tracefan": o.NoTraceFan = true; break;
                     case "--scripted": o.Scripted = true; break;
                     case "--debug": o.Debug = true; break;
+                    case "--policy": o.PolicyPath = Next(); break;
                     case "--help" or "-h": o.ShowHelp = true; break;
                 }
             }

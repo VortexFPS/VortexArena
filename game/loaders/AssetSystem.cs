@@ -1526,8 +1526,9 @@ public sealed class AssetSystem
         // mode — BC5 with shaders that read .z directly — is exactly what that flag closes. Without the
         // encoder (unpatched template) normals fall through with everything else to BC7-Generic, which keeps
         // a real blue channel and needs no flag.
-        if (TextureCategories.Classify(vpath) == TexCategory.Normal
-            && target == Image.CompressMode.S3Tc && S3tcEncoderAvailable())
+        bool normalMap = TextureCategories.Classify(vpath) == TexCategory.Normal
+                         && target == Image.CompressMode.S3Tc && S3tcEncoderAvailable();
+        if (normalMap)
         {
             src = Image.CompressSource.Normal;
         }
@@ -1570,7 +1571,8 @@ public sealed class AssetSystem
             {
                 string stem = AssetPaths.StripImageExtension(AssetPaths.Normalize(vpath));
                 string cached = System.IO.Path.Combine(UserPaths.GameDir,
-                    "dds", stem.Replace('/', System.IO.Path.DirectorySeparatorChar) + ".dds");
+                    Formats.Vfs.VirtualFileSystem.DdsCacheDir,
+                    stem.Replace('/', System.IO.Path.DirectorySeparatorChar) + ".dds");
                 bool onDisk = System.IO.File.Exists(cached);
                 GD.Print($"[dds-debug] encoding '{vpath}' {image.GetWidth()}x{image.GetHeight()} "
                        + $"mips={image.GetMipmapCount()} fmt={image.GetFormat()} "
@@ -1581,7 +1583,38 @@ public sealed class AssetSystem
             // texture happened to load on — the whole question of "is CPU compression too slow" is answerable
             // from a capture only if it has its own line.
             using var _ = VortexArena.Common.Diagnostics.Prof.Sample("tex.compress");
-            if (image.Compress(target, src) != Error.Ok)
+
+            // (G3) Declare the channel set instead of letting Godot infer it from the pixels.
+            //
+            // Image.Compress runs detect_used_channels(), which reports what the CONTENT happens to use — so a
+            // greyscale glow or gloss map came back USED_CHANNELS_R and routed to RGTC_R/BC4, a ONE-CHANNEL
+            // format. The shaders do not read these as one channel: glow_tex is sampled `.rgb` (PlayerSkinShader
+            // 278/396) and BC4 gives (R,0,0), so a grey glow rendered RED; gloss_tex is sampled `.g` (:360) and
+            // gives 0, so `rough = 1.0 - 0` made the surface fully matte, with `.a` (:273) pinning specular
+            // power at max. Only mode 1 was affected — measured, dds1/ holds 3 BC4 + 39 BC5 files while dds2/ is
+            // 293/293 BC7 — and it reached players through effects-low.cfg and effects-omg.cfg, which are the
+            // two presets that set gl_texturecompression 1.
+            //
+            // This is also what DarkPlaces does, and the reason it never had this bug. Its whole compressed
+            // vocabulary is RGB or RGBA (gl_textures.c:129-152: DXT1/DXT1A/DXT3/DXT5 plus sRGB variants, with
+            // no RGTC/BC4/BC5 anywhere), and the choice is one line — gl_textures.c:283, `TEXF_ALPHA ? DXT5 :
+            // DXT1`. Format follows the texture's declared ROLE and flags, never a scan of its pixels.
+            //
+            // Costs no VRAM: BC4 and DXT1 are both 8 bytes per 4x4 block. The narrower format bought nothing.
+            // Normal maps keep the deliberate BC5 path (see above) — that one is read back through `norm_rg`.
+            Error rc;
+            if (normalMap)
+            {
+                rc = image.Compress(target, src);
+            }
+            else
+            {
+                Image.UsedChannels channels = image.DetectAlpha() == Image.AlphaMode.None
+                    ? Image.UsedChannels.Rgb
+                    : Image.UsedChannels.Rgba;
+                rc = image.CompressFromChannels(target, channels);
+            }
+            if (rc != Error.Ok)
             {
                 _compressFailed++;
                 GD.Print($"[AssetSystem] texture compression skipped for '{vpath}' (unsupported source format).");

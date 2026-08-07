@@ -1,0 +1,375 @@
+using System.Buffers.Binary;
+using System.Diagnostics;
+using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using VortexArena.Server.Bot.Neural;
+
+namespace VortexArena.NeuralHost;
+
+/// <summary>
+/// The environment host. Listens on a localhost port, accepts one trainer, and serves
+/// reset/step/observation/reward until the trainer closes.
+///
+/// <para>One world per process by design: <c>Api.Services</c> is process-ambient, so two worlds on threads
+/// would fight over it. The trainer scales by launching N of these on N ports, which is also how the work
+/// spreads across cores.</para>
+///
+/// <code>
+/// va-neural-host --port 7801 --agents 8 --stage 1 --seed 1
+/// va-neural-host --bench 2000          # no trainer: measure steps/s and exit
+/// </code>
+/// </summary>
+public static class Program
+{
+    private const int ProtocolVersion = 1;
+
+    public static int Main(string[] args)
+    {
+        var opts = Options.Parse(args);
+        if (opts.ShowHelp)
+        {
+            Console.WriteLine(Options.Usage);
+            return 0;
+        }
+
+        if (opts.BenchSteps > 0)
+            return RunBenchmark(opts);
+
+        return RunServer(opts);
+    }
+
+    // =============================================================================================
+    // serve
+    // =============================================================================================
+
+    private static int RunServer(Options opts)
+    {
+        var listener = new TcpListener(IPAddress.Loopback, opts.Port);
+        listener.Start();
+        // The port goes to stdout before anything else so a trainer launching with --port 0 can read the
+        // assigned one. Every other message goes to stderr, keeping stdout a clean machine-readable channel.
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        Console.WriteLine($"PORT {port}");
+        Console.Out.Flush();
+        Console.Error.WriteLine($"[neural-host] listening on 127.0.0.1:{port}");
+
+        using TcpClient client = listener.AcceptTcpClient();
+        client.NoDelay = true;   // a step is a request/response round trip; Nagle would add 40 ms to each
+        listener.Stop();
+        Console.Error.WriteLine("[neural-host] trainer connected");
+
+        using NetworkStream stream = client.GetStream();
+        var frames = new Frames(stream);
+
+        TrainingEnv? env = null;
+        int agents = 0, obsSize = 0;
+        float[] observations = Array.Empty<float>();
+        float[] rewards = Array.Empty<float>();
+        byte[] dones = Array.Empty<byte>();
+        byte[] truncated = Array.Empty<byte>();
+        float[] actions = Array.Empty<float>();
+        var payload = new List<byte>(1 << 16);
+
+        try
+        {
+            while (frames.TryRead(out OpCode op, out ReadOnlySpan<byte> body))
+            {
+                switch (op)
+                {
+                    case OpCode.Hello:
+                    {
+                        var cfg = ReadHello(body, out int version);
+                        if (version != ProtocolVersion)
+                        {
+                            SendError(frames, $"protocol version {version}, host speaks {ProtocolVersion}");
+                            return 2;
+                        }
+                        env = new TrainingEnv(cfg);
+                        agents = cfg.Agents;
+                        obsSize = TrainingEnv.ObservationSize;
+                        observations = new float[agents * obsSize];
+                        rewards = new float[agents];
+                        dones = new byte[agents];
+                        truncated = new byte[agents];
+                        actions = new float[agents * ActionEncoding.Size];
+
+                        payload.Clear();
+                        AppendI32(payload, obsSize);
+                        AppendI32(payload, ActionEncoding.Size);
+                        AppendI32(payload, agents);
+                        AppendI32(payload, cfg.TicksPerStep);
+                        frames.Write(OpCode.HelloAck, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(payload));
+                        Console.Error.WriteLine(
+                            $"[neural-host] {agents} agents, obs {obsSize}, action {ActionEncoding.Size}, " +
+                            $"stage {cfg.Stage}, {cfg.TicksPerStep} ticks/step");
+                        break;
+                    }
+
+                    case OpCode.Reset:
+                    {
+                        if (env is null) { SendError(frames, "reset before hello"); return 2; }
+                        env.Reset(observations);
+                        frames.Write(OpCode.Observation, AsBytes(observations));
+                        break;
+                    }
+
+                    case OpCode.Step:
+                    {
+                        if (env is null) { SendError(frames, "step before hello"); return 2; }
+                        int expect = actions.Length * sizeof(float);
+                        if (body.Length != expect)
+                        {
+                            SendError(frames, $"step payload is {body.Length} bytes, expected {expect}");
+                            return 2;
+                        }
+                        CopyToFloats(body, actions);
+                        env.Step(actions, observations, rewards, dones, truncated);
+
+                        payload.Clear();
+                        AppendBytes(payload, AsBytes(observations));
+                        AppendBytes(payload, AsBytes(rewards));
+                        AppendBytes(payload, dones);
+                        AppendBytes(payload, truncated);
+                        frames.Write(OpCode.StepResult, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(payload));
+
+                        if (env.AllDone())
+                        {
+                            (int arrived, float meanTime, float meanRemaining) = env.EpisodeSummary();
+                            payload.Clear();
+                            AppendI32(payload, arrived);
+                            AppendF32(payload, meanTime);
+                            AppendF32(payload, meanRemaining);
+                            frames.Write(OpCode.EpisodeStats, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(payload));
+                        }
+                        break;
+                    }
+
+                    case OpCode.SetStage:
+                    {
+                        // Applied at the next Reset, because a stage change mid-episode would score a policy
+                        // on a course it did not start.
+                        if (body.Length < 4) { SendError(frames, "setstage payload too short"); return 2; }
+                        Console.Error.WriteLine($"[neural-host] stage -> {BinaryPrimitives.ReadInt32LittleEndian(body)}");
+                        break;
+                    }
+
+                    case OpCode.Close:
+                        Console.Error.WriteLine("[neural-host] trainer closed");
+                        return 0;
+
+                    default:
+                        SendError(frames, $"unexpected opcode {op}");
+                        return 2;
+                }
+            }
+        }
+        catch (IOException e)
+        {
+            Console.Error.WriteLine($"[neural-host] connection lost: {e.Message}");
+            return 1;
+        }
+        catch (InvalidDataException e)
+        {
+            Console.Error.WriteLine($"[neural-host] bad frame: {e.Message}");
+            return 2;
+        }
+
+        return 0;
+    }
+
+    // =============================================================================================
+    // benchmark
+    // =============================================================================================
+
+    /// <summary>
+    /// Run the env with random actions and report steps/s. No trainer, no socket: this is the number that
+    /// says whether a training run is worth starting on this machine, and it is the first thing to re-measure
+    /// after any change to the observation or the course generator.
+    /// </summary>
+    private static int RunBenchmark(Options opts)
+    {
+        var cfg = new TrainingEnv.Config
+        {
+            Agents = opts.Agents,
+            TicksPerStep = opts.TicksPerStep,
+            Stage = (CourseGenerator.Stage)opts.Stage,
+            Seed = opts.Seed,
+            TraceFan = !opts.NoTraceFan,
+        };
+        var env = new TrainingEnv(cfg);
+
+        int obsSize = TrainingEnv.ObservationSize;
+        var observations = new float[cfg.Agents * obsSize];
+        var rewards = new float[cfg.Agents];
+        var dones = new byte[cfg.Agents];
+        var truncated = new byte[cfg.Agents];
+        var actions = new float[cfg.Agents * ActionEncoding.Size];
+        var rng = new Random(opts.Seed);
+
+        Console.Error.WriteLine($"[bench] stage {cfg.Stage}, {cfg.Agents} agents, {cfg.TicksPerStep} ticks/step, " +
+                                $"trace fan {(cfg.TraceFan ? "on" : "off")}, obs {obsSize}");
+
+        env.Reset(observations);
+
+        // A warm-up episode so the JIT and the first-touch allocations are not in the measurement.
+        for (int i = 0; i < 60; i++)
+        {
+            RandomActions(rng, actions, cfg.Agents);
+            env.Step(actions, observations, rewards, dones, truncated);
+            if (env.AllDone()) env.Reset(observations);
+        }
+
+        var sw = Stopwatch.StartNew();
+        int steps = 0, episodes = 0;
+        double rewardSum = 0;
+        while (steps < opts.BenchSteps)
+        {
+            RandomActions(rng, actions, cfg.Agents);
+            env.Step(actions, observations, rewards, dones, truncated);
+            for (int i = 0; i < rewards.Length; i++) rewardSum += rewards[i];
+            steps++;
+            if (env.AllDone()) { env.Reset(observations); episodes++; }
+        }
+        sw.Stop();
+
+        double sec = sw.Elapsed.TotalSeconds;
+        double stepsPerSec = steps / sec;
+        double agentStepsPerSec = stepsPerSec * cfg.Agents;
+        double simSecondsPerSec = stepsPerSec * cfg.TicksPerStep / 72.0;
+
+        Console.WriteLine($"steps          {steps}");
+        Console.WriteLine($"episodes       {episodes}");
+        Console.WriteLine($"wall seconds   {sec:F2}");
+        Console.WriteLine($"steps/s        {stepsPerSec:F0}");
+        Console.WriteLine($"agent-steps/s  {agentStepsPerSec:F0}");
+        Console.WriteLine($"realtime x     {simSecondsPerSec:F1}");
+        Console.WriteLine($"mean reward    {rewardSum / Math.Max(1, steps * cfg.Agents):F4}");
+        return 0;
+    }
+
+    private static void RandomActions(Random rng, float[] actions, int agents)
+    {
+        for (int i = 0; i < agents; i++)
+        {
+            int o = i * ActionEncoding.Size;
+            actions[o + 0] = rng.Next(0, 9);              // wishmove
+            actions[o + 1] = rng.Next(0, 2);              // jump
+            actions[o + 2] = 0f;                          // crouch
+            actions[o + 3] = rng.NextDouble() < 0.05 ? 1f : 0f;  // attack1
+            actions[o + 4] = 0f;                          // attack2
+            actions[o + 5] = 0f;                          // weapon: keep current
+            actions[o + 6] = (float)(rng.NextDouble() * 2.0 - 1.0);
+            actions[o + 7] = (float)(rng.NextDouble() * 0.4 - 0.2);
+        }
+    }
+
+    // =============================================================================================
+    // payload helpers
+    // =============================================================================================
+
+    private static TrainingEnv.Config ReadHello(ReadOnlySpan<byte> body, out int version)
+    {
+        version = BinaryPrimitives.ReadInt32LittleEndian(body);
+        return new TrainingEnv.Config
+        {
+            Agents = BinaryPrimitives.ReadInt32LittleEndian(body[4..]),
+            TicksPerStep = BinaryPrimitives.ReadInt32LittleEndian(body[8..]),
+            MaxSteps = BinaryPrimitives.ReadInt32LittleEndian(body[12..]),
+            Stage = (CourseGenerator.Stage)BinaryPrimitives.ReadInt32LittleEndian(body[16..]),
+            Seed = BinaryPrimitives.ReadInt32LittleEndian(body[20..]),
+            WeaponChance = BinaryPrimitives.ReadSingleLittleEndian(body[24..]),
+            PermitFlipChance = BinaryPrimitives.ReadSingleLittleEndian(body[28..]),
+            AimConstraintChance = BinaryPrimitives.ReadSingleLittleEndian(body[32..]),
+            TraceFan = BinaryPrimitives.ReadInt32LittleEndian(body[36..]) != 0,
+        };
+    }
+
+    private static void SendError(Frames frames, string message)
+    {
+        Console.Error.WriteLine($"[neural-host] error: {message}");
+        frames.Write(OpCode.Error, Encoding.UTF8.GetBytes(message));
+    }
+
+    private static ReadOnlySpan<byte> AsBytes(float[] a)
+        => System.Runtime.InteropServices.MemoryMarshal.AsBytes(a.AsSpan());
+
+    private static void CopyToFloats(ReadOnlySpan<byte> src, float[] dest)
+        => src.CopyTo(System.Runtime.InteropServices.MemoryMarshal.AsBytes(dest.AsSpan()));
+
+    private static void AppendBytes(List<byte> list, ReadOnlySpan<byte> bytes)
+    {
+        foreach (byte b in bytes) list.Add(b);
+    }
+
+    private static void AppendI32(List<byte> list, int v)
+    {
+        Span<byte> tmp = stackalloc byte[4];
+        BinaryPrimitives.WriteInt32LittleEndian(tmp, v);
+        AppendBytes(list, tmp);
+    }
+
+    private static void AppendF32(List<byte> list, float v)
+    {
+        Span<byte> tmp = stackalloc byte[4];
+        BinaryPrimitives.WriteSingleLittleEndian(tmp, v);
+        AppendBytes(list, tmp);
+    }
+
+    // =============================================================================================
+    // CLI
+    // =============================================================================================
+
+    private sealed class Options
+    {
+        public int Port;
+        public int Agents = 8;
+        public int TicksPerStep = 4;
+        public int Stage = 1;
+        public int Seed = 1;
+        public int BenchSteps;
+        public bool NoTraceFan;
+        public bool ShowHelp;
+
+        public const string Usage = """
+            va-neural-host — the reinforcement-learning environment host for neural bots.
+
+              --port N        listen on 127.0.0.1:N (0 = pick one; the chosen port is printed to stdout)
+              --agents N      agents in the world (default 8)
+              --ticks N       sim ticks per policy step (default 4 = an 18 Hz decision rate)
+              --stage N       curriculum stage 1-5 (flat, corridor, terrain, furniture, weapon-gaps)
+              --seed N        base RNG seed (default 1)
+              --bench N       no trainer: run N steps with random actions and report throughput
+              --no-tracefan   skip the per-think box sweeps (faster, and not what the live server does)
+              --help
+
+            The trainer normally launches these; see tools/neural/train.py.
+            """;
+
+        public static Options Parse(string[] args)
+        {
+            var o = new Options();
+            for (int i = 0; i < args.Length; i++)
+            {
+                string a = args[i];
+                string? Next() => i + 1 < args.Length ? args[++i] : null;
+                switch (a)
+                {
+                    case "--port": o.Port = ParseInt(Next(), 0); break;
+                    case "--agents": o.Agents = Math.Clamp(ParseInt(Next(), 8), 1, 64); break;
+                    case "--ticks": o.TicksPerStep = Math.Clamp(ParseInt(Next(), 4), 1, 32); break;
+                    case "--stage": o.Stage = Math.Clamp(ParseInt(Next(), 1), 1, 5); break;
+                    case "--seed": o.Seed = ParseInt(Next(), 1); break;
+                    case "--bench": o.BenchSteps = ParseInt(Next(), 1000); break;
+                    case "--no-tracefan": o.NoTraceFan = true; break;
+                    case "--help" or "-h": o.ShowHelp = true; break;
+                }
+            }
+            return o;
+        }
+
+        private static int ParseInt(string? s, int fallback)
+            => int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) ? v : fallback;
+    }
+}

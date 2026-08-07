@@ -379,6 +379,18 @@ public static class Cvars
         new("bot_ai_bunnyhop_turn_angle_max", "80"),
         new("bot_ai_bunnyhop_turn_angle_reduction", "40"),
         new("bot_ai_custom_weapon_priority_distances", "300 850"),
+
+        // ---- neural bots (planning/neural-bots-2026-08-07.md) ----
+        // Off by default and staying off until the policy beats the classic steer on HELD-OUT maps. A
+        // learned locomotor that only wins where it trained is a lookup table, and the default is the one
+        // place that distinction has to be enforced rather than argued about.
+        new("bot_neural", "0", "drive bot movement with the learned locomotion policy instead of the waypoint steer"),
+        new("bot_neural_weights", "data/neural/policy.vxpw", "path to the policy weight file"),
+        // The bake is seconds of work (see NavFieldBaker) and runs off the sim thread. Setting this to 0
+        // disables the fallback bake entirely, so a server with no cached field simply keeps the classic
+        // steer rather than spending cores on a map it may be about to rotate away from.
+        new("bot_neural_bake", "1", "bake a navigation field at map load when no cached one is present"),
+        new("bot_neural_tracefan", "1", "spend the per-think box sweeps that see doors, lifts and players"),
         // The shipped xonotic-server.cfg values, NOT empty strings. These are the fallbacks used when the cfg
         // tree is not mounted (headless tests, a bare host), and an empty list makes PickFromPriority return
         // null so the bot falls through to "highest-impulse owned weapon" — a different weapon choice than

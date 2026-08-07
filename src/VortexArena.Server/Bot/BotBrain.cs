@@ -24,7 +24,7 @@ namespace VortexArena.Server.Bot;
 /// <see cref="Skill"/> (0..10, or &gt;100 = SUPERBOT) scales aim error, turn rate, reaction interval and
 /// aggression — the single knob the QC <c>skill</c> cvar controls.
 /// </summary>
-public sealed class BotBrain
+public sealed partial class BotBrain
 {
     // ---- tuning (QC autocvar_bot_ai_*, defaults from xonotic-server.cfg) ----
     private const float EnemyDetectionRadius = 10000f;       // bot_ai_enemydetectionradius
@@ -653,6 +653,18 @@ public sealed class BotBrain
             Nav.ClearRoute();
             _strategyForced = true;
         }
+
+        // ---- the locomotion fork ----
+        // Everything above this line is the TACTICIAN: which goal, which enemy, which weapon. Everything
+        // below is one particular way of walking there. The learned policy replaces the second half only.
+        //
+        // Deliberately a branch rather than an extraction of the classic path into a strategy object. The
+        // blocks below carry dense QC citations and a parity audit's worth of hard-won behaviour
+        // (planning/bot-ai-parity-2026-08-03.md); refactoring them to fit an interface would put every one
+        // of those behaviours at risk to buy tidiness. The branch gets the same kill switch and the same
+        // A/B for none of the risk. See planning/neural-bots-2026-08-07.md section 3.
+        if (Locomotor is not null && Neural is { Ready: true })
+            return NeuralThinkProduce(bot, dt, now, jumpHeld);
 
         // 3) navigation: steer toward current goal -> wish-move + jump/crouch
         // QC havocbot.qc:136-137 sets AI_STATUS_ATTACKING when the bot has an enemy, before movetogoal runs;

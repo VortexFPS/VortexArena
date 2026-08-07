@@ -91,6 +91,12 @@ public sealed class BotAim
     private float _fireTimer;
     private bool _initialized;
 
+    /// <summary>
+    /// The <c>deltaT</c> the last <see cref="ComputeDesiredAngles"/> pass measured. <see cref="AimAt"/>'s
+    /// turn needs it, and cannot recompute it because <see cref="_prevAimTime"/> has already advanced.
+    /// </summary>
+    private float _lastDeltaT = 1e-4f;
+
     private readonly Random _rng;
 
     public BotAim(int seed = 0) => _rng = seed == 0 ? new Random() : new Random(seed);
@@ -186,6 +192,51 @@ public sealed class BotAim
 
         if (dir == Vector3.Zero) return; // invalid (bot overlaps target)
 
+        Vector3 desiredang = ComputeDesiredAngles(dir, skill, now, hasEnemy);
+
+        // final turn toward desiredang, rate-limited by skill
+        float mouseCvar = Cvars.FloatOr("bot_ai_aimskill_mouse", MouseDefault);
+        float fixedRate = Cvars.FloatOr("bot_ai_aimskill_fixedrate", FixedRateDefault);
+        float blendRate = Cvars.FloatOr("bot_ai_aimskill_blendrate", BlendRateDefault);
+        float effSkill = hasEnemy ? skill : MathF.Max(4f, skill);
+
+        Vector3 diffang = WrapPitchYaw(desiredang - ViewAngles);
+        float dist = diffang.Length();
+
+        float fixedrate = fixedRate / QMath.Bound(1f, dist, 1000f);
+        float r = MathF.Max(fixedrate, blendRate);
+        r = QMath.Bound(_lastDeltaT, r * _lastDeltaT * (2f + MathF.Pow(effSkill + MouseSkill, 3f) * 0.005f - Random01()), 1f); // QC aim.qc:294
+        ViewAngles += diffang * (r + (1f - r) * QMath.Clamp(1f - mouseCvar, 0f, 1f));
+        ViewAngles.Z = 0f;
+        ViewAngles.Y -= MathF.Floor(ViewAngles.Y / 360f) * 360f;
+
+        ArmFireTimer(dir, origin, skill, now, maxFireDeviation);
+    }
+
+    /// <summary>
+    /// The first half of <see cref="AimAt"/>: work out the angle the bot is *trying* to hold, complete with
+    /// this bot's skill-driven aim error and the higher-order anticipation filters, WITHOUT turning the view.
+    ///
+    /// <para>Split out for the neural locomotor, which owns the mouse. The deterministic side still decides
+    /// where the crosshair should end up (projectile lead, hitscan straight-line, and the skill degradation
+    /// that makes a low-skill bot miss); the policy decides the path the crosshair takes to get there. Aim
+    /// skill therefore never has to be learned.</para>
+    ///
+    /// <para>Mutates the filter state, so it must run exactly once per think on either path. At
+    /// <see cref="SuperbotSkill"/> it returns the exact angle with no error injected.</para>
+    /// </summary>
+    public Vector3 ComputeDesiredAngles(Vector3 dir, float skill, float now, bool hasEnemy)
+    {
+        if (!_initialized) Reset(now);
+        if (dir == Vector3.Zero) return ViewAngles;
+
+        if (skill > SuperbotSkill)
+        {
+            var exact = QMath.VecToAngles(QMath.Normalize(dir));
+            exact.X *= -1f;
+            return exact;
+        }
+
         // Live aim-skill tuning (QC reads autocvar_bot_ai_aimskill_* every frame). Falls back to the
         // stock defaults when the cvar service is absent (headless tests), so behaviour is unchanged.
         float offsetCvar = Cvars.FloatOr("bot_ai_aimskill_offset", OffsetDefault);
@@ -253,17 +304,25 @@ public sealed class BotAim
         diffang = WrapPitchYaw(_mouseaim - desiredang);
         desiredang += diffang * QMath.Clamp(thinkCvar, 0f, 1f);
 
-        // final turn toward desiredang, rate-limited by skill
-        diffang = WrapPitchYaw(desiredang - ViewAngles);
-        float dist = diffang.Length();
+        // The turn rate needs the same deltaT this pass measured. AimAt reads it back rather than
+        // recomputing, because _prevAimTime has already advanced by the time it runs.
+        _lastDeltaT = deltaT;
+        _ = mouseCvar; _ = fixedRate; _ = blendRate;   // read by AimAt's turn, kept here so one place owns the cvar names
+        return desiredang;
+    }
 
-        float fixedrate = fixedRate / QMath.Bound(1f, dist, 1000f);
-        float r = MathF.Max(fixedrate, blendRate);
-        r = QMath.Bound(deltaT, r * deltaT * (2f + MathF.Pow(effSkill + MouseSkill, 3f) * 0.005f - Random01()), 1f); // QC aim.qc:294
-        ViewAngles += diffang * (r + (1f - r) * QMath.Clamp(1f - mouseCvar, 0f, 1f));
-        ViewAngles.Z = 0f;
-        ViewAngles.Y -= MathF.Floor(ViewAngles.Y / 360f) * 360f;
-
+    /// <summary>
+    /// The second half of <see cref="AimAt"/>: decide whether the trigger may be pulled, given where the
+    /// view ACTUALLY ended up. Split out for the neural locomotor, which has to run this after the policy
+    /// has moved the mouse rather than before.
+    /// </summary>
+    /// <param name="dir">The desired shot direction (the same one handed to <see cref="ComputeDesiredAngles"/>).</param>
+    /// <param name="origin">Bot origin, for the shot-vector refresh.</param>
+    /// <param name="skill">Bot skill, for the aggression term.</param>
+    /// <param name="now">Sim time.</param>
+    /// <param name="maxFireDeviation">The cone from <see cref="MaxFireDeviation"/>; 0 skips the decision.</param>
+    public void ArmFireTimer(Vector3 dir, Vector3 origin, float skill, float now, float maxFireDeviation)
+    {
         if (maxFireDeviation <= 0f)
             return;
 

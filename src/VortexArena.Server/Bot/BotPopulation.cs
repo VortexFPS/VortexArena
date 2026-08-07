@@ -61,6 +61,57 @@ public sealed class BotPopulation
     /// removal path funnels through it.</summary>
     public event Action<Player>? BotRemoved;
 
+    /// <summary>
+    /// The server-wide learned-locomotion resources (policy weights, baked navigation field, map features).
+    /// Owned by <see cref="GameWorld"/>; null in a world that never booted one.
+    /// </summary>
+    public Neural.NeuralBotService? Neural;
+
+    /// <summary>
+    /// Attach or detach the learned locomotor across every live brain, following <c>bot_neural</c> and the
+    /// service's readiness.
+    ///
+    /// <para>Re-evaluated each frame rather than latched at spawn, because the field bake finishes
+    /// asynchronously: a bot that spawned during the bake starts on the classic steer and picks up the
+    /// policy the moment the field lands, with no respawn and no reconnect.</para>
+    /// </summary>
+    private void SyncNeuralLocomotors()
+    {
+        bool want = Neural is { Ready: true } && Cvars.Bool("bot_neural");
+        if (want == _neuralAttached && (!want || _neuralGeneration == Neural!.Network))
+            return;
+
+        for (int i = 0; i < _brains.Count; i++)
+            AttachLocomotor(_brains[i], want);
+#if VA_BOTPLAYER
+        // The bot-player harness brain (a synthetic "human" client driven by a brain) gets the same
+        // treatment: it exists to exercise the real input path, so it has to exercise this one too.
+        if (_botPlayerBrain is not null)
+            AttachLocomotor(_botPlayerBrain, want);
+#endif
+
+        _neuralAttached = want;
+        _neuralGeneration = want ? Neural!.Network : null;
+    }
+
+    private void AttachLocomotor(BotBrain brain, bool want)
+    {
+        if (!want)
+        {
+            brain.Locomotor = null;
+            brain.Neural = null;
+            return;
+        }
+        brain.Neural = Neural;
+        if (brain.Locomotor is null)
+            brain.Locomotor = new Neural.NeuralLocomotor(Neural!.Network!);
+        else
+            brain.Locomotor.SetNetwork(Neural!.Network!);
+    }
+
+    private bool _neuralAttached;
+    private Neural.PolicyNetwork? _neuralGeneration;
+
     // brains in connect order (QC bot_list; the order drives strategy-token rotation + remove-newest).
     private readonly List<BotBrain> _brains = new();
     private readonly Dictionary<Player, BotBrain> _byPlayer = new();
@@ -140,6 +191,9 @@ public sealed class BotPopulation
         // its normal interval. This is the hard bound that turns the bot-tick tail (Release p99 6.2ms /
         // max 17.1ms, all strategy walks) into a flat O(budget) cost.
         BotTracewalk.ResetTickBudget();
+
+        // Follow bot_neural and the async field bake. Cheap: an early-out compare unless something changed.
+        SyncNeuralLocomotors();
 
         // (a) intermission (bot.qc:691-702): after the match ends bots STAY unless every human left — then all
         // bots are dropped (so an abandoned server empties out).

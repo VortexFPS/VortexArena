@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The reinforcement-learning environment host: a console process that owns a headless GameWorld full of
+    bots and serves observation/action/reward over a localhost socket to the Python trainer.
+
+    Godot-free by construction (it references only Server, which is Godot-free per ADR-0008), so training
+    needs no engine, no renderer and no display. See planning/neural-bots-2026-08-07.md.
+
+    Separate from the game and from ./vx because it is developer tooling with a different lifecycle: it is
+    built when someone is training, not when someone is playing. It IS in the solution, so `dotnet build`
+    keeps it compiling against the observation layout it has to stay in step with — a host that silently
+    stopped building would be discovered at the start of a training run rather than at the commit that
+    broke it.
+  -->
+  <PropertyGroup>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.NeuralHost</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>va-neural-host</AssemblyName>
+    <RollForward>latestMajor</RollForward>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\VortexArena.Server\VortexArena.Server.csproj" />
+    <ProjectReference Include="..\..\..\src\VortexArena.Formats\VortexArena.Formats.csproj" />
+  </ItemGroup>
+</Project>

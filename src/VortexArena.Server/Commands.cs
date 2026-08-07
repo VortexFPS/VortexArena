@@ -778,6 +778,7 @@ public sealed class Commands
         // ---- bots (QC bot_cmd add / bot_remove / setbots) ----
         Register("bot_add", "bot_add [name] [skill] — add an AI player", CmdBotAdd);
         Register("bot_remove", "bot_remove [name] — remove a bot", CmdBotRemove);
+        Register("bot_neural_status", "bot_neural_status — what the learned locomotion policy is doing (or why it is not)", CmdBotNeuralStatus);
         Register("setbots", "setbots <n> — keep this many bots on the server", CmdSetBots);
         Register("removebots", "removebots — remove all bots", CmdRemoveBots);
 
@@ -1318,6 +1319,22 @@ public sealed class Commands
         ctx.Print(ok ? "removed bot" : "no bot to remove");
         return true;
     }
+
+    /// <summary>
+    /// Report the neural locomotor's state. Written because every failure mode of this subsystem is a
+    /// SILENT fallback to the classic steer: no weight file, a field baked against different geometry, a
+    /// bake still running, an observation-size mismatch. Without one command that says which, the symptom
+    /// is always the same ("bots move like they used to") and the cause is never visible.
+    /// </summary>
+    private bool CmdBotNeuralStatus(CommandContext ctx)
+    {
+        string? status = NeuralStatusHandler?.Invoke();
+        ctx.Print(status ?? "neural bots: not initialised (bot_neural is 0, or no map is loaded)");
+        return true;
+    }
+
+    /// <summary>Supplies <c>bot_neural_status</c>'s report. Wired by GameWorld to its NeuralBotService.</summary>
+    public System.Func<string?>? NeuralStatusHandler { get; set; }
 
     private bool CmdMap(CommandContext ctx)
     {

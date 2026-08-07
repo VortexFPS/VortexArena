@@ -104,6 +104,19 @@ public sealed class GameWorld
     /// </summary>
     public Bot.BotPopulation Bots { get; private set; } = null!;
 
+    /// <summary>
+    /// The learned-locomotion resources for this map (policy weights, baked navigation field, map feature
+    /// list), or null when <c>bot_neural</c> is off. See <c>planning/neural-bots-2026-08-07.md</c>.
+    /// </summary>
+    public Bot.Neural.NeuralBotService? NeuralBots { get; private set; }
+
+    /// <summary>
+    /// Console sink for the neural-bot subsystem (weight load, bake completion, fallback reasons). The host
+    /// points this at its console; a headless world leaves it null and the subsystem stays silent, which is
+    /// what the test suite wants.
+    /// </summary>
+    public System.Action<string>? NeuralLog { get; set; }
+
     /// <summary>The round flow state machine (round-based modes); spawned lazily via <see cref="EnableRounds"/>.</summary>
     public RoundHandler? Rounds { get; private set; }
 
@@ -623,6 +636,10 @@ public sealed class GameWorld
         Bots = new Bot.BotPopulation(this);
         Clients.OnBotConnected = Bots.RegisterBot;
 
+        // Drop any previous map's field/bake before this one's boot reaches step 6c.
+        NeuralBots?.CancelBake();
+        NeuralBots = null;
+
         // 4) subscribe the unified score table to the obituary bus. The bundled gametypes are the
         //    authoritative frag-scorers (they write Player.ScoreFrags + their own team totals), so the table
         //    runs in READ-THROUGH mode (ownsScore: false) and only records the aux columns
@@ -908,6 +925,31 @@ public sealed class GameWorld
         if (Cvars.Bool("g_campaign") && !Campaign.Aborted)
             Campaign.PostInit();
 
+        // 6c) neural bots: load the policy weights and get the map's navigation field either off disk or from
+        //     an off-thread bake (planning/neural-bots-2026-08-07.md). Nothing here can fail the boot — a
+        //     missing weight file or an unfinished bake simply leaves the bots on the classic waypoint steer.
+        //     Placed after the entity lump so the feature scan sees every jumppad, teleporter and hurt volume,
+        //     and after InitMapZones so warpzone brushes carry their linked planes.
+        if (Cvars.Bool("bot_neural"))
+        {
+            NeuralBots = new Bot.Neural.NeuralBotService
+            {
+                // The host owns the console; a headless world leaves this null and stays silent.
+                Log = NeuralLog,
+                VfsReader = ConfigReader is null ? null : p => ConfigReader(p) is { } t ? System.Text.Encoding.UTF8.GetBytes(t) : null,
+            };
+            if (Cvars.Bool("bot_neural_bake"))
+            {
+                NeuralBots.BeginMap(MapName ?? "", Collision, Services.EntityTable.All,
+                    Cvars.String("bot_neural_weights"));
+            }
+            else
+            {
+                NeuralBots.LoadWeights(Cvars.String("bot_neural_weights"));
+            }
+            Bots.Neural = NeuralBots;
+        }
+
         // 7) wire the fixed-tick frame callbacks (QC StartFrame / per-client PreThink-move-PostThink / world end).
         Simulation.StartFrame = OnStartFrame;
         Simulation.ClientMove = OnClientMove;
@@ -915,6 +957,8 @@ public sealed class GameWorld
 
         // 8) console commands + warmup + voting (QC server/command/ + warmup_stage + the vote bus).
         WireCommandsWarmupVoting();
+        // After step 8, because Commands does not exist until WireCommandsWarmupVoting constructs it.
+        Commands.NeuralStatusHandler = () => NeuralBots?.StatusLine;
 
         // [T56] Precompute the common-command reply caches at world init (QC server/world.qc:1022-1038:
         // maplist_reply/lsmaps_reply/monsterlist_reply/…). The reply commands also recompute lazily on read,

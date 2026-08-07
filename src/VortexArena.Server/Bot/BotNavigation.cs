@@ -128,6 +128,19 @@ public sealed class BotNavigation
 
     public bool HasGoal => _goals.Count > 0;
 
+    /// <summary>
+    /// The <paramref name="index"/>-th node along the current route, clamped to the last one when the route
+    /// is shorter. Feeds the neural locomotor's corridor look-ahead
+    /// (<see cref="Neural.MoveIntent.CorridorA"/>/<see cref="Neural.MoveIntent.CorridorB"/>): two nodes of
+    /// warning is what lets a policy carry speed through a corner instead of arriving at it flat.
+    /// Returns <paramref name="fallback"/> when there is no route at all.
+    /// </summary>
+    public Vector3 RouteNode(int index, Vector3 fallback)
+        => _goals.Count == 0 ? fallback : _goals[System.Math.Min(index, _goals.Count - 1)].Pos;
+
+    /// <summary>Nodes remaining on the route (QC the goal stack depth).</summary>
+    public int RouteLength => _goals.Count;
+
     /// <summary>Clear the route (QC navigation_clearroute).</summary>
     public void ClearRoute()
     {

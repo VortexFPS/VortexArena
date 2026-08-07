@@ -363,17 +363,42 @@ internal static class Setup
             return;
         }
 
-        foreach (string f in Directory.GetFiles(staging, "*", SearchOption.AllDirectories))
+        // The payload is inside a single top-level directory for the mono archives and loose at the root
+        // for the plain ones. Take whichever this is.
+        string[] topDirs = Directory.GetDirectories(staging);
+        string root = topDirs.Length == 1 && Directory.GetFiles(staging).Length == 0 ? topDirs[0] : staging;
+
+        // MOVE THE DIRECTORIES TOO, not only the executable.
+        //
+        // This loop used to walk files with SearchOption.AllDirectories and keep just the one whose name
+        // matched, discarding everything else with the staging tree. That is correct for the PLAIN builds,
+        // which are a lone binary, and silently wrong for the MONO ones: those ship a GodotSharp/ directory
+        // of managed assemblies that has to sit beside the executable. Without it the editor still starts,
+        // exits 0, and prints NOTHING — not even for --version — so every caller sees a binary that is
+        // present, runnable and unidentifiable, and the failure surfaces much later as "engine unusable".
+        // Measured on Ubuntu 24.04 against the pinned Godot_v4.6.3-stable_mono_linux_x86_64.zip.
+        foreach (string dir in Directory.GetDirectories(root))
+        {
+            string dest = Path.Combine(binDir, Path.GetFileName(dir));
+            if (Directory.Exists(dest)) Directory.Delete(dest, true);
+            Directory.Move(dir, dest);
+        }
+
+        foreach (string f in Directory.GetFiles(root))
         {
             string name = Path.GetFileName(f);
-            string? dest = Env.IsWindows
+            // Unmatched files keep their own name rather than being dropped: the archives carry
+            // LICENSE/README beside the binary, and there is no reason to be selective now that the
+            // directory beside them is being kept.
+            string dest = Env.IsWindows
                 ? name.EndsWith("_console.exe", StringComparison.OrdinalIgnoreCase) ? "godot_console.exe"
-                  : name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? "godot.exe" : null
-                : name.Contains("linux", StringComparison.OrdinalIgnoreCase) ? "godot" : null;
-            if (dest is null) continue;
+                  : name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? "godot.exe" : name
+                : name.Contains("linux", StringComparison.OrdinalIgnoreCase) ? "godot" : name;
+
             string target = Path.Combine(binDir, dest);
             File.Move(f, target, overwrite: true);
-            if (!Env.IsWindows) MakeExecutable(target);
+            // ZipFile does not preserve the Unix exec bit, so only the engine itself needs it back.
+            if (!Env.IsWindows && dest == "godot") MakeExecutable(target);
         }
     }
 

@@ -3197,6 +3197,76 @@ public sealed partial class NetGame : Node3D
     }
 
     /// <summary>
+    /// (C2) Fan the parse + texture predecode for a whole precache set onto the streamer's worker lane, at
+    /// once, BEFORE the main thread starts building any of it.
+    ///
+    /// <para><b>Why this exists.</b> The asset streamer's worker lane, its width, its priority band and the
+    /// texture-compression CPU budget were all tuned as if the load ran through them. It does not: the two
+    /// precache phases below — 15 s of a 19 s cold load — are synchronous main-thread loops that read, decode,
+    /// compress and upload one texture at a time. Measured directly: 100% of a cold load's block-compression
+    /// ran on the frame thread, 0.37x parallel, and widening the lane from 4 workers to 16 moved the load by
+    /// 2%. There was nothing on the lane to widen.</para>
+    ///
+    /// <para>So this queues the work the lane was built for. Each job parses one model off-thread and
+    /// pre-decodes every texture its materials will probe; the main-thread loop that follows then finds those
+    /// images parked and does the GPU upload alone. Bounded by
+    /// <see cref="Loaders.AssetSystem.PredecodeParkCap"/> so it cannot hold a whole map's pixels in RAM, and
+    /// racing with the main thread is harmless by construction — a texture main reaches first is simply loaded
+    /// the old way, and the pre-pass's decode of it becomes a no-op.</para>
+    /// </summary>
+    private void QueueLoadPredecode(System.Collections.Generic.IEnumerable<string> modelPaths, string what)
+    {
+        if (_streamer is null || _assets is null || Loaders.AssetSystem.PredecodeParkCap <= 0)
+            return;
+        AssetLoader loader = _assets;
+        int queued = 0;
+        foreach (string path in modelPaths)
+        {
+            if (string.IsNullOrEmpty(path))
+                continue;
+            string p = path;
+            queued++;
+            _streamer.Request<string>(
+                () =>
+                {
+                    // Both halves are already proven off-thread: QueueBackgroundModelWarm parses models on this
+                    // lane, and PredecodeMaterialTextures is documented off-thread-safe (the shader table is
+                    // immutable after construction and the VFS resolve cache is concurrent).
+                    System.Collections.Generic.IReadOnlyList<string>? mats = loader.PrepareModel(p, 0);
+                    if (mats is not null)
+                        foreach (string m in mats)
+                            loader.Assets.PredecodeMaterialTextures(m);
+                    return p;
+                },
+                _ => { },   // nothing to do on main: the point is what is now sitting in the handoff
+                VortexArena.Game.Client.BackgroundAssetStreamer.Priority.High,
+                label: $"prepass {p}");
+        }
+        if (queued > 0)
+            GD.Print($"[NetGame] load pre-pass: {queued} {what} queued across "
+                   + $"{VortexArena.Game.Client.BackgroundAssetStreamer.WorkerCount} streamer workers "
+                   + $"(r_streamer_prepass {Loaders.AssetSystem.PredecodeParkCap}).");
+    }
+
+    /// <summary>The player models this match will warm — the local pick, the stock default, and (hosting) the
+    /// bot roster. Hoisted out of <see cref="PrecacheCombatSoundsAndModelsAsync"/> so the load pre-pass can
+    /// queue them at the START of the weapon phase, giving the workers that whole phase as runway.</summary>
+    private System.Collections.Generic.HashSet<string> PrecachePlayerModelSet()
+    {
+        var models = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+        {
+            "models/player/erebus.iqm",
+        };
+        string local = _sharedCvars?.GetString("_cl_playermodel") ?? string.Empty;
+        if (!string.IsNullOrEmpty(local))
+            models.Add(local);
+        if (_isListenServer && _serverWorld is not null)
+            foreach (string bm in _serverWorld.Bots.CandidateModelPaths())
+                models.Add(bm);
+        return models;
+    }
+
+    /// <summary>
     /// Warm every registered weapon's view model (and its sibling <c>h_*</c> hand rig) into the asset caches
     /// once, up-front. <see cref="EquipNetworkedWeapon"/> / <see cref="BuildWeaponWorldModel"/> otherwise read
     /// + decode the model and ALL its textures synchronously on the main thread the first time each weapon is
@@ -3215,6 +3285,25 @@ public sealed partial class NetGame : Node3D
         if (_assets is null || _weaponsPrecached)
             return;
         _weaponsPrecached = true;
+
+        // Queue the ENTIRE load's texture work onto the worker lane first (weapons and player models both), so
+        // the synchronous build loops below consume a warm handoff instead of decoding on the frame thread.
+        // Queued here rather than in each phase so the player-model half gets the weapon phase as runway.
+        if (!_dedicatedSlim)
+        {
+            var prepass = new System.Collections.Generic.List<string>();
+            foreach (VortexArena.Common.Gameplay.Weapon pw in VortexArena.Common.Gameplay.Weapons.All)
+            {
+                string vm = WeaponVModelPath(pw);
+                if (string.IsNullOrEmpty(vm))
+                    continue;
+                string hm = vm.Replace("/v_", "/h_").Replace(".md3", ".iqm");
+                if (!prepass.Contains(vm)) prepass.Add(vm);
+                if (hm != vm && !prepass.Contains(hm)) prepass.Add(hm);
+            }
+            prepass.AddRange(PrecachePlayerModelSet());
+            QueueLoadPredecode(prepass, "weapon + player models");
+        }
 
         // Smart-precache: only warm the v_ model + hand rig for weapons we EXPECT to see this match (the
         // map's weapon_<netname> spawns, plus whatever the active gametype/mutators force). Anything else
@@ -3382,14 +3471,6 @@ public sealed partial class NetGame : Node3D
         // the first player render doesn't stall building the skeletal IQM's textures/materials (cached in
         // _assets). The throwaway build node is freed — only the material/texture caches are the goal. Other
         // players' picks stay lazy; precaching each connected client's model at join is a follow-up.
-        var models = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
-        {
-            "models/player/erebus.iqm",
-        };
-        string local = _sharedCvars?.GetString("_cl_playermodel") ?? string.Empty;
-        if (!string.IsNullOrEmpty(local))
-            models.Add(local);
-
         // (perf §9.4) Hosting → warm the PLAYER-MODEL roster NOW, under the loading screen, instead of letting it
         // stream in during play. The set isn't bot-specific: a bot added at RUNTIME (bot_number raised mid-match —
         // the 2026-06-14 release profile started bots=0 and added them later, so every model cold-loaded and the
@@ -3399,9 +3480,9 @@ public sealed partial class NetGame : Node3D
         // skeletal build (StreamSkeletalInto) is a cache hit. erebus/local are already in `models` (HashSet dedups).
         // NOTE: a human bringing a NON-roster custom model still cold-loads on first sight — a warm-on-first-seen
         // hook would close that, but the stock roster covers bots and the overwhelming majority of player picks.
-        if (_isListenServer && _serverWorld is not null)
-            foreach (string bm in _serverWorld.Bots.CandidateModelPaths())
-                models.Add(bm);
+        // The set itself now comes from PrecachePlayerModelSet, so the load pre-pass can queue the same list at
+        // the start of the weapon phase and have these textures decoded by the time this loop reaches them.
+        System.Collections.Generic.HashSet<string> models = PrecachePlayerModelSet();
 
         int modelsWarmed = 0;
         var warmRoots = new System.Collections.Generic.List<Node3D>();
@@ -12931,6 +13012,9 @@ public sealed partial class NetGame : Node3D
             Client.RtLightsCommands.MapName = _map;
             Client.RtLightsCommands.Bsp = _bsp;
         }
+
+        // (C10) the texture-encoder benchmark needs a mounted VFS to pull real textures through.
+        Client.TextureCompressBench.Assets = _assets?.Assets;
 
         // (F5) mode 1 throws the blob along the map baked light direction; hand the same grid over.
         if (_render is not null && GodotObject.IsInstanceValid(_render) && _render.FakeShadows is not null)

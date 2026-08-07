@@ -185,12 +185,81 @@ public partial class BackgroundAssetStreamer : Node
     // -------------------------------------------------------------------------------------------------
 
     /// <summary>Worker-lane width: enough for a load-time texture wave to overlap the main thread's build
-    /// work without herding a many-core pool (see the lane note above).</summary>
-    public static int WorkerCount { get; } = Math.Clamp(System.Environment.ProcessorCount / 4, 2, 4);
+    /// work without herding a many-core pool (see the lane note above). The default is deliberately narrow —
+    /// see <see cref="SetWorkerCount"/> for what widening it actually costs.</summary>
+    public static int WorkerCount { get; private set; } = DefaultWorkerCount;
+
+    /// <summary>The auto width — a quarter of the machine, floored at 2 and capped at 4.</summary>
+    public static int DefaultWorkerCount => Math.Clamp(System.Environment.ProcessorCount / 4, 2, 4);
+
+    /// <summary>
+    /// Set the lane width (<c>r_streamer_workers</c>; 0 or less restores <see cref="DefaultWorkerCount"/>).
+    /// Grows immediately; shrinks by retiring workers as they go IDLE, so a lowered width never interrupts a
+    /// job in flight and the lane can be narrow again after a load without a restart.
+    ///
+    /// <para><b>What widening costs</b>, since the narrow default is a measured choice and not timidity. Three
+    /// things scale with the width, and only the first is obvious:</para>
+    /// <list type="number">
+    ///   <item><b>GC pauses scale with the number of ALLOCATING threads.</b> A collection suspends every one of
+    ///   them, so N parallel decoders make an N-scaled stop-the-world — 17.4 ms for a gen0+gen1 with four
+    ///   workers busy. That is the mechanism behind the menu warm's four-config capture (window 2 fanned out:
+    ///   3 GC-PAUSE hitches, p95 8.6 ms, 63 MB/s allocated; window 1 chained: no hitches, p95 6.9 ms, 26 MB/s).</item>
+    ///   <item><b>Per-thread scratch is per-thread.</b> The <c>[ThreadStatic]</c> file/decode buffers in
+    ///   AssetSystem are grow-only and sized to the biggest texture a thread has seen (4-16 MB each), so the
+    ///   lane's resident cost is roughly width x that. Sixteen workers is a couple of hundred MB of scratch
+    ///   that never shrinks.</item>
+    ///   <item><b>Cores taken from the frame thread.</b> Mitigated but not removed by the BelowNormal band:
+    ///   the OS preempts workers first, which is the right answer while a frame is being drawn and irrelevant
+    ///   under a loading screen, where the load IS the foreground work.</item>
+    /// </list>
+    /// <para>What it does NOT cost: extra concurrent GPU uploads. Those are serialised by AssetSystem's upload
+    /// gate regardless of how many workers reach it, so the driver-ingest saturation that gate exists to
+    /// prevent is not on the table here.</para>
+    /// </summary>
+    public static void SetWorkerCount(int count)
+    {
+        int want = count <= 0 ? DefaultWorkerCount : Math.Clamp(count, 1, 64);
+        lock (WorkGate)
+        {
+            if (want == WorkerCount)
+                return;
+            WorkerCount = want;
+            if (Workers.Count == 0)
+                return;                        // lane not started; PostWork will create it at the new width
+            while (Workers.Count < want)
+                StartWorker();
+            // Shrinking retires workers as they go idle rather than interrupting them mid-job, so the pulse is
+            // the whole mechanism: a parked worker wakes, sees the lane is over-wide, and leaves.
+            if (Workers.Count > want)
+                Monitor.PulseAll(WorkGate);
+        }
+    }
+
+    /// <summary>Start one lane worker. Caller must hold <see cref="WorkGate"/>.</summary>
+    private static void StartWorker()
+    {
+        var t = new Thread(WorkerLoop)
+        {
+            IsBackground = true,
+            Name = $"AssetStreamer-{_workerSeq++}",
+            // BelowNormal: this lane is PREFETCH. Nothing on it is worth a frame — a late asset shows a
+            // placeholder a moment longer, a late frame is a visible stutter. The client process runs
+            // AboveNormal (sys_priority_boost), so leaving the workers at Normal put them two bands under the
+            // game only by luck of the process boost; saying it explicitly means the OS preempts THEM rather
+            // than the render loop whenever cores are contended. RetuneLanePriority may raise it from here.
+            Priority = _lanePriority,
+        };
+        Workers.Add(t);
+        t.Start();
+    }
 
     private static readonly object WorkGate = new();
     private static readonly List<(Priority Prio, long Seq, Action Work)> WorkQueue = new();
-    private static Thread[]? _workers;
+    /// <summary>The live lane, guarded by <see cref="WorkGate"/>. A worker removes ITSELF from this list when
+    /// it retires, so the list is the set of threads that exist rather than the width that was last asked for
+    /// (those differ while a shrink drains).</summary>
+    private static readonly List<Thread> Workers = new();
+    private static int _workerSeq;   // names only — never reused as an identity
 
     /// <summary>
     /// Raise the shared lane to Normal for as long as any High-priority work is queued, and drop it back
@@ -205,14 +274,13 @@ public partial class BackgroundAssetStreamer : Node
     /// </summary>
     private static void RetuneLanePriority()
     {
-        if (_workers is null) return;
         ThreadPriority want = _highQueued > 0 ? ThreadPriority.Normal : ThreadPriority.BelowNormal;
         if (want == _lanePriority) return;
         _lanePriority = want;
-        foreach (Thread t in _workers)
+        foreach (Thread t in Workers)
         {
             try { t.Priority = want; }
-            catch (ThreadStateException) { /* thread has exited; the array is rebuilt on next post */ }
+            catch (ThreadStateException) { /* thread has exited; it removes itself on the next drain */ }
         }
     }
 
@@ -223,25 +291,8 @@ public partial class BackgroundAssetStreamer : Node
     {
         lock (WorkGate)
         {
-            if (_workers is null)
-            {
-                _workers = new Thread[WorkerCount];
-                for (int i = 0; i < _workers.Length; i++)
-                {
-                    _workers[i] = new Thread(WorkerLoop)
-                    {
-                        IsBackground = true,
-                        Name = $"AssetStreamer-{i}",
-                        // BelowNormal: this lane is PREFETCH. Nothing on it is worth a frame — a late asset
-                        // shows a placeholder a moment longer, a late frame is a visible stutter. The client
-                        // process runs AboveNormal (sys_priority_boost), so leaving the workers at Normal put
-                        // them two bands under the game only by luck of the process boost; saying it explicitly
-                        // means the OS preempts THEM rather than the render loop whenever cores are contended.
-                        Priority = ThreadPriority.BelowNormal,
-                    };
-                    _workers[i].Start();
-                }
-            }
+            while (Workers.Count < WorkerCount)
+                StartWorker();
             WorkQueue.Add((priority, seq, work));
             if (priority == Priority.High) { _highQueued++; RetuneLanePriority(); }
             Monitor.Pulse(WorkGate);
@@ -256,7 +307,17 @@ public partial class BackgroundAssetStreamer : Node
             lock (WorkGate)
             {
                 while (WorkQueue.Count == 0)
+                {
+                    // Retire only while IDLE and only while over-wide: a shrink never interrupts a job, it just
+                    // stops a parked worker from waiting again. Removing itself here is what keeps Workers the
+                    // set of threads that EXIST rather than the width last requested.
+                    if (Workers.Count > WorkerCount)
+                    {
+                        Workers.Remove(Thread.CurrentThread);
+                        return;
+                    }
                     Monitor.Wait(WorkGate);
+                }
                 // Highest priority (lowest enum), then FIFO by sequence — the same order as the main-thread
                 // drain. The queue peaks at a few hundred texture jobs during a warm wave; linear scan.
                 int best = 0;

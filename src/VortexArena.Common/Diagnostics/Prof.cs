@@ -100,6 +100,16 @@ public static class Prof
         _threadAcc = null; // re-tag this thread's accumulator as main on next use
     }
 
+    /// <summary>
+    /// True when the caller is running on the thread <see cref="SetMainThread"/> tagged — i.e. the Godot frame
+    /// thread. False on every worker, and false everywhere before the tag is set (headless tools, unit tests).
+    ///
+    /// <para>Exists so a cost can say WHICH thread paid it. A stage that reports "7.6 s of thread-time" is
+    /// telling you nothing about whether that was seven threads for a second or one thread for seven seconds,
+    /// and those have opposite fixes.</para>
+    /// </summary>
+    public static bool IsMainThread => Environment.CurrentManagedThreadId == _mainThreadId;
+
     // ---- watchdog phase + frame timing (read by the collector's sampling watchdog) ----------------------------
 
     /// <summary>The name of the innermost open scope on the main thread (null when between scopes / in un-wrapped

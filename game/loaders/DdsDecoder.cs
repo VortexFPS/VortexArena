@@ -23,6 +23,12 @@ namespace VortexArena.Game.Loaders;
 ///   <item>uncompressed RGB/RGBA, 24/32-bit, via the pixel-format channel masks</item>
 /// </list>
 ///
+/// <para><b>Superseded for BC5 (2026-08-06).</b> The paragraph below is why BC4 and BC5 were BOTH decoded in
+/// July. BC5 now passes through compressed — <c>norm_rg</c> (added 2026-08-02) is the "shaders taught to
+/// reconstruct Z" that its last sentence asks for, and it is already the path a cold load takes, since
+/// <c>MaybeCompress</c> produces RGTC_RG for normal maps itself. BC4 still decodes, for the <c>.g</c> reason
+/// given. See the pass-through comment in <c>Decode</c>.</para>
+///
 /// <para><b>Why BC4/BC5 are CPU-decoded rather than passed through (2026-07-31).</b> Xonotic's <c>_norm</c>
 /// and <c>_gloss</c> companions ship as BC5 and BC4 — 18 per map on stormkeep — and until now every one was
 /// REJECTED here, silently falling back to the uncompressed TGA: a wasted read, 4-8× the VRAM, and the
@@ -120,9 +126,23 @@ internal static class DdsDecoder
             else return null;
 
             // ---- pass-through: full mip chain present → give Godot the compressed payload verbatim ----------
-            // Only for formats whose channel layout the sampling side already expects. BC4/BC5 are deliberately
-            // excluded (see the class remarks): they would arrive with the wrong channels for our shaders.
-            bool passThrough = kind is BcKind.Dxt1 or BcKind.Dxt3 or BcKind.Dxt5 or BcKind.PassThroughOnly;
+            //
+            // (P6, 2026-08-06) BC5 now passes through; BC4 still does not. The class remarks above explain why
+            // both were excluded in July — and for BC5 that reason has since been retired. The `norm_rg`
+            // uniform and the AssetSystem._texMeta registry were added on 2026-08-02 precisely so a
+            // two-channel RGTC normal map binds correctly and the shader reconstructs Z, and they are not
+            // theoretical: MaybeCompress ITSELF produces RGTC_RG for normal maps, so a cold load already
+            // uploads exactly this format down exactly this path. Passing the cached blocks through therefore
+            // reproduces the cold-load result byte for byte, where expanding them guaranteed the opposite —
+            // decode to RGBA8, re-encode to the same BC5, every launch, for ever. That was 40 files of this
+            // machine's cache and most of the reason it never converged.
+            //
+            // BC4 keeps the RGBA8 expansion: there is no `norm_r` counterpart, and the remarks name a concrete
+            // breakage (the skin shader reads gloss from .g, which RGTC_R leaves at 0). It is 3 files here, so
+            // the residual cost is a rounding error against the 40 — and the real fix is upstream of this
+            // decoder anyway, in MaybeCompress choosing RGTC_R for a greyscale glow/gloss map at all.
+            bool passThrough = kind is BcKind.Dxt1 or BcKind.Dxt3 or BcKind.Dxt5
+                                    or BcKind.Bc5 or BcKind.PassThroughOnly;
             if (passThrough)
             {
                 (int chainLevels, long chainBytes) = FullChainSize(width, height, blockBytes);

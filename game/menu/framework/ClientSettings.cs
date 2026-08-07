@@ -71,7 +71,8 @@ public static class ClientSettings
             if (name.StartsWith("gl_texturecompression", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("gl_picmip", StringComparison.OrdinalIgnoreCase)
                 || name.StartsWith("r_texture_dds_", StringComparison.OrdinalIgnoreCase)
-                || name.Equals("r_texturecompression_cpubudget", StringComparison.OrdinalIgnoreCase))
+                || name.StartsWith("r_texturecompression_", StringComparison.OrdinalIgnoreCase)
+                || name.StartsWith("r_streamer_", StringComparison.OrdinalIgnoreCase))
                 PushTextureCompression(c);
         };
     }
@@ -134,13 +135,29 @@ public static class ClientSettings
         // 0 because its GL driver compressed for free during upload - Vulkan removed that path, so here the
         // cache is the difference between a 15 s and a 118 s load and both default ON.
         Formats.Vfs.VirtualFileSystem.PreferDds = CvarOn(c, "r_texture_dds_load");
+        // (P7) Our own cache lives in a directory named for the mode that produced it, so switching
+        // gl_texturecompression actually changes what gets loaded instead of silently reusing the other
+        // mode's blocks. Empty when compression is off - there is nothing of ours to prefer, and the game's
+        // shipped dds/ tree is still used either way.
+        int texMode = Loaders.AssetSystem.TextureCompression;
+        Formats.Vfs.VirtualFileSystem.DdsCacheDir = texMode > 0 ? $"dds{texMode}" : string.Empty;
         Loaders.AssetSystem.DdsSave = CvarOn(c, "r_texture_dds_save");
+        Loaders.AssetSystem.DdsDebug = c.GetFloat("r_texture_dds_debug") != 0f;
         // (C2) How much of the machine encoding may take. Same 0..1 contract as the editor bake's CPU
         // budget; unset keeps 0.75. Caps the S3TC path (a CPU codec on our own streamer threads); BC7 is
         // serialised inside Godot's Betsy compressor and is beyond this knob either way.
         string budget = c.GetString("r_texturecompression_cpubudget");
         Loaders.AssetSystem.CompressCpuBudget = string.IsNullOrWhiteSpace(budget)
             ? 0.75f : c.GetFloat("r_texturecompression_cpubudget");
+        // Where the encode RUNS. 0 keeps it on the frame thread inside LoadTexture (where it has always been
+        // for a map load, which is why the CPU budget above could never bite - one thread cannot be capped);
+        // 1 moves it into the streamer's worker phase, where r_streamer_workers decides how wide it goes.
+        Loaders.AssetSystem.CompressOffThread = CvarOn(c, "r_texturecompression_offthread");
+        // The lane those workers live on. 0 = auto (a quarter of the machine, 2..4).
+        Client.BackgroundAssetStreamer.SetWorkerCount((int)c.GetFloat("r_streamer_workers"));
+        // ...and whether the load feeds that lane at all. 0 = no pre-pass (the synchronous main-thread precache
+        // loops, as before); N = pre-pass on, holding at most N decoded images in the handoff.
+        Loaders.AssetSystem.PredecodeParkCap = Math.Max(0, (int)c.GetFloat("r_streamer_prepass"));
         int mask = 0;
         foreach ((string cvar, TexCategory category, _) in TextureCompressionCategories)
             if (c.GetFloat(cvar) != 0f)
@@ -549,6 +566,21 @@ public static class ClientSettings
         c.Register("r_texturecompression_cpubudget", "0.75");
         c.Register("r_texture_dds_load", "1");
         c.Register("r_texture_dds_save", "1");
+        c.Register("r_texture_dds_debug", "0", CvarFlags.None,
+            "Log every texture that reaches the block encoder, and whether a dds/ cache file for it already "
+            + "exists - tells a cold cache apart from a cache that is not being read back.");
+        // (C2) Where texture encoding runs and how wide the lane under it is. Port-only, both live-tunable so
+        // an A/B is a console line rather than a rebuild. Defaults are set where they are measured, not here -
+        // see AssetSystem.CompressOffThread and BackgroundAssetStreamer.SetWorkerCount for what each costs.
+        c.Register("r_texturecompression_offthread", "1", CvarFlags.None,
+            "Block-compress textures on the asset-streamer's worker lane (1) instead of on the frame thread "
+            + "during load (0). Off-thread encoding is what r_streamer_workers widens.");
+        c.Register("r_streamer_workers", "0", CvarFlags.None,
+            "Asset-streamer worker threads. 0 = auto (a quarter of the machine, 2-4). Higher loads faster and "
+            + "makes GC pauses and per-thread scratch memory scale with it.");
+        c.Register("r_streamer_prepass", "0", CvarFlags.None,
+            "Decode a map load's textures on the streamer workers ahead of the main-thread precache loops. "
+            + "0 = off; N = on, holding at most N decoded images in RAM at once.");
         c.Register("r_model_lightgrid", "1");
         // ---- Real-time lights and shadows (N6 budget, F3-A dynamic shadows, F5 fake shadows) ----
         // DP names where DP has one, and DP/Xonotic defaults where Xonotic ships one. The two that decide

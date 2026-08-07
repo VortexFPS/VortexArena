@@ -991,7 +991,17 @@ public sealed class AssetSystem
     //  the ImageTexture.CreateFromImage upload on the main thread.
     // -------------------------------------------------------------------------------------------------
 
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Image> _predecodedImages =
+    /// <summary>
+    /// A parked predecode: the decoded image, plus whether the worker already ran the FULL CPU prep
+    /// (<see cref="MaybePicmip"/> → <see cref="EnsureMipmaps"/> → <see cref="MaybeCompress"/>).
+    ///
+    /// <para>The flag is carried rather than re-derived because <see cref="MaybePicmip"/> is not idempotent —
+    /// running it twice halves the image twice — so "has this been prepared?" cannot be read off the image
+    /// itself. (Compression can: a compressed image is visibly compressed. Picmip cannot.)</para>
+    /// </summary>
+    private readonly record struct Parked(Image Image, bool Prepared);
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Parked> _predecodedImages =
         new(StringComparer.Ordinal);
 
     /// <summary>
@@ -999,6 +1009,12 @@ public sealed class AssetSystem
     /// <see cref="LoadTexture"/> of the same name skips the read+decode. Idempotent; a miss is a no-op.
     /// (Worst case — the texture was already GPU-cached — the entry sits unused until consumed or
     /// <see cref="ClearPredecodedImages"/>.)
+    ///
+    /// <para>With <see cref="CompressOffThread"/> set this also runs picmip and the block compression here, so
+    /// the whole CPU half of a texture load happens on the worker and the main thread is left with the upload
+    /// alone. That is the difference between an encode that can use the lane's width and one that cannot: the
+    /// main-thread <see cref="LoadTexture"/> is a single thread by definition, so encoding there is serial
+    /// however many workers exist and whatever the CPU budget says.</para>
     /// </summary>
     public void PredecodeTexture(string baseNameNoExt)
     {
@@ -1011,12 +1027,29 @@ public sealed class AssetSystem
         string? vpath = _vfs.ResolveImage(baseNameNoExt);   // ConcurrentDictionary-cached (thread-safe)
         if (vpath is null || _predecodedImages.ContainsKey(vpath))
             return;
-        Image? img = LoadImageFromVpath(vpath);
-        if (img is not null)
+
+        // Back-pressure for the load pre-pass (see PredecodeParkCap). Workers decode much faster than the main
+        // thread consumes, so without this the pre-pass would try to hold a whole map's pixels in RAM at once.
+        // Never applied on the main thread: main is the DRAIN, so blocking it here would deadlock the cap.
+        int cap = PredecodeParkCap;
+        if (cap > 0 && !VortexArena.Common.Diagnostics.Prof.IsMainThread)
         {
-            EnsureMipmaps(vpath, img);   // on the WORKER — the main-thread upload then includes mips for free
-            _predecodedImages.TryAdd(vpath, img);
+            // Bounded rather than a true wait/notify: the consumer side is two call sites plus a Clear(), and a
+            // missed wake would strand a worker for the rest of the load. A 20 s ceiling makes the worst case
+            // "the pre-pass gave up and the main thread loads it the old way", which is merely slow.
+            for (int spins = 0; _predecodedImages.Count >= cap && spins < 20_000; spins++)
+                System.Threading.Thread.Sleep(1);
         }
+
+        Image? img = LoadImageFromVpath(vpath);
+        if (img is null)
+            return;
+        bool prepared = EncodeOffThread;
+        if (prepared)
+            PrepareDecoded(vpath, img);  // picmip + mips + block compress, all on the WORKER
+        else
+            EnsureMipmaps(vpath, img);   // on the WORKER — the main-thread upload then includes mips for free
+        _predecodedImages.TryAdd(vpath, new Parked(img, prepared));
     }
 
     /// <summary>
@@ -1131,6 +1164,15 @@ public sealed class AssetSystem
     // asset streamer compresses on several threads at once; the sum is therefore CPU-time-across-threads, not
     // elapsed - which is the honest number to report for a parallel stage, and is labelled as such.
     private static long _compressMicros;
+    // ...of which was paid ON THE FRAME THREAD. A thread-time total alone cannot distinguish "eight threads for
+    // one second" from "one thread for eight seconds", and those have opposite fixes, so the split is recorded
+    // rather than inferred. See CompressionTimeReport.
+    private static long _compressMicrosMain;
+    // First encode start and last encode end, as Stopwatch ticks, so the report can state the WALL span the
+    // encodes occupied. thread-time / wall-span is the parallelism actually achieved: 1.0 means strictly serial
+    // no matter how many threads were nominally available.
+    private static long _compressWallFirst, _compressWallLast;
+    private static readonly object _compressWallGate = new();
     private static int _ddsSaved, _ddsSaveFailed;
 
     /// <summary>
@@ -1141,27 +1183,70 @@ public sealed class AssetSystem
     /// </summary>
     public static bool DdsSave { get; set; } = true;
 
+    /// <summary>(P6) <c>r_texture_dds_debug</c>: name every texture that reaches the encoder and say whether a
+    /// cache file for it already exists on disk — the two ways a texture can re-encode (never cached vs cached
+    /// but not readable back) are indistinguishable in the summary line.</summary>
+    public static bool DdsDebug { get; set; }
+
+    /// <summary>
+    /// <c>r_texturecompression_offthread</c>: run the CPU half of a texture load — picmip, mipmaps and the
+    /// block compression — on the asset streamer's worker lane rather than on the frame thread.
+    ///
+    /// <para><b>Why this exists.</b> A map load pre-decodes each texture on a worker and then calls
+    /// <c>LoadTexture</c> on the main thread, and <em>that</em> is where compression sat. So the encode was
+    /// serial by construction: one thread, one texture at a time, no matter how wide the worker lane was or
+    /// what <see cref="CompressCpuBudget"/> allowed. It is also why the budget knob measured as a no-op — you
+    /// cannot cap the concurrency of something that has none.</para>
+    ///
+    /// <para>Off-thread encoding is not new ground: the menu warm has always compressed on a worker
+    /// (<see cref="WarmTextureOffThread"/> → <c>PrepareImage</c>), so the thread-safety of
+    /// <c>Image.Compress</c> and of the DDS cache write is already exercised in production. This puts the map
+    /// load on the same path.</para>
+    ///
+    /// <para>The frame-thread path remains for anything that reaches <c>LoadTexture</c> without a predecode —
+    /// a lazy mid-match load, an editor probe — which is exactly where the old behaviour's hitch lived.</para>
+    ///
+    /// <para><b>Never applies to BC7</b> (see <see cref="EncodeOffThread"/>): the pre-pass warms every texture
+    /// a material COULD probe, ~45% more than the build consumes, and speculative work is only free when it is
+    /// free. S3TC costs ~0.01 CPU-seconds per megapixel and eight workers absorb the waste; BC7 costs ~2.3 and
+    /// already saturates the machine on its own, so the same waste is ~420 ms of pure added wall-clock each.</para>
+    /// </summary>
+    public static bool CompressOffThread { get; set; } = true;
+
+    /// <summary>Whether the worker predecode should do the block compression as well as the decode: only when
+    /// the caller asked for it AND the cheap codec (S3TC, not BC7) will run it. See
+    /// <see cref="UsesBptcEncoder"/>.</summary>
+    private static bool EncodeOffThread => CompressOffThread && !UsesBptcEncoder();
+
+    /// <summary>
+    /// <c>r_streamer_prepass</c>: how many decoded images the load pre-pass may leave parked in the handoff at
+    /// once. 0 disables the pre-pass entirely; a positive value is both the switch and the depth.
+    ///
+    /// <para>It is a depth rather than a plain on/off because a parked image is a full mip chain in RAM and the
+    /// workers decode far faster than the main thread consumes: stormkeep's texture set is ~3 GB uncompressed
+    /// (~950 MB compressed) by the VRAM census, so an unbounded pre-pass would try to hold the entire map's
+    /// pixels at once. <see cref="PredecodeTexture"/> makes a worker wait here rather than park past the cap —
+    /// back-pressure, with the main thread as the drain.</para>
+    /// </summary>
+    public static int PredecodeParkCap { get; set; }
+
+    /// <summary>How many images are parked in the predecode handoff right now (diagnostics + back-pressure).</summary>
+    public int PredecodeParkedCount => _predecodedImages.Count;
+
     /// <summary>
     /// Share of the machine texture compression may claim, 0..1 (<c>r_texturecompression_cpubudget</c>).
     /// Same contract as the editor bake's <c>EditorLightBake.CpuBudget</c>, and for the same reason: this is
     /// the other job here that can make a desktop unusable while it runs, and "how much of my computer does
     /// this get" belongs to whoever is sitting at it.
     ///
-    /// <para><b>What it can and cannot do — measured, not assumed.</b> It caps how many textures encode
-    /// CONCURRENTLY. Today that changes nothing, and the reason is worth writing down: at budget 1.0 vs 0.25
-    /// a cold-cache stormkeep load measured 20,711 ms vs 20,821 ms, and the encode thread-time 7,596 ms vs
-    /// 7,767 ms. Identical. Compression is not running wide in the first place — the asset streamer feeds
-    /// textures through essentially one at a time, so there is never more than about one encode in flight for
-    /// a cap to bite on.</para>
+    /// <para><b>What it caps.</b> How many textures encode CONCURRENTLY on the CPU codec (S3TC/etcpak). It is
+    /// live now that <c>r_streamer_prepass</c> feeds the encode from the worker lane; before that it measured
+    /// as an exact no-op (budget 1.0 vs 0.25: 20,711 ms vs 20,821 ms), because compression ran on the frame
+    /// thread and one thread has no concurrency to cap.</para>
     ///
-    /// <para>So this is a RAIL, not a speed-up: it bounds the worst case if the streamer ever widens, and it
-    /// is the honest place for the setting to live. The thing that would actually make encoding parallel is
-    /// widening the streamer, not this knob.</para>
-    ///
-    /// <para>BC7 is beyond it either way. BPTC does not run on our threads at all: Godot routes it to Betsy,
-    /// a compute-shader compressor owning ONE RenderingDevice on ONE background thread, so every BC7 call in
-    /// the process serialises there regardless of callers. Measured: 107 s of thread-time inside a 121 s load
-    /// is a ratio of 0.89 — one thread's worth.</para>
+    /// <para>It has little to say about BC7, which never reaches the worker lane in the first place (see
+    /// <see cref="EncodeOffThread"/>) and already fans out across ~13 of 24 cores inside CVTT. Throttling
+    /// callers of an already-parallel encoder measured SLOWER, not safer — see <see cref="UsesBptcEncoder"/>.</para>
     /// </summary>
     public static float CompressCpuBudget
     {
@@ -1191,6 +1276,34 @@ public sealed class AssetSystem
     /// the thread that is holding the decoded image.
     /// </summary>
     private static System.Threading.SemaphoreSlim? _compressGate;
+
+    /// <summary>
+    /// True when this texture will be encoded as <b>BPTC/BC7</b> rather than S3TC: either BC7 was asked for, or
+    /// S3TC was and this build has no S3TC encoder so it falls back to BC7.
+    ///
+    /// <para><b>What makes BC7 different, measured.</b> Godot routes BPTC to CVTT — a CPU encoder dispatched
+    /// across <c>WorkerThreadPool.get_thread_count()</c> threads — and it costs about <b>2.3 CPU-seconds per
+    /// megapixel</b> against S3TC/etcpak's <b>0.01</b>, roughly 190x, for +9.8 dB (<c>texcompress_bench</c>).
+    /// During a cold BC7 load this process burns <b>13.4 of 24 cores</b> continuously and drops to ~2 the
+    /// instant the encode ends. So BC7 is not slow because it is serialised — it is already using most of the
+    /// machine — it is slow because the work is genuinely enormous.</para>
+    ///
+    /// <para>Which is exactly why it must not be given speculative work. Three cold stormkeep loads:</para>
+    /// <list type="bullet">
+    ///   <item>encode on the frame thread, 287 textures — <b>120,595 ms</b></item>
+    ///   <item>pre-pass, 8 workers, 411 textures — <b>144,351 ms</b> (oversubscription, not parallelism)</item>
+    ///   <item>the same with encodes admitted one at a time, 415 textures — <b>180,758 ms</b> (starves it)</item>
+    ///   <item>pre-pass with the encode kept on main, 287 textures — <b>115,256 ms</b></item>
+    /// </list>
+    /// <para>The pre-pass warms every companion and stage a material could probe, ~45% more textures than the
+    /// build consumes. An 8-wide etcpak absorbs that; BC7 cannot. See <see cref="CompressOffThread"/>.</para>
+    ///
+    /// <para><b>Historical note:</b> this was called <c>UsesBetsy</c> and documented as "Godot routes BPTC to
+    /// Betsy, one RenderingDevice on one thread". That was wrong — Betsy implements BC1/3/4/5/6H and ETC, not
+    /// BC7 — and the CPU trace above is what disproved it. The behaviour it selects was right either way.</para>
+    /// </summary>
+    private static bool UsesBptcEncoder() => TextureCompression >= 2 || !S3tcEncoderAvailable();
+
     private static int _s3tcAvailable = -1, _bptcAvailable = -1;
     private static bool _noEncoderWarned;
 
@@ -1259,9 +1372,18 @@ public sealed class AssetSystem
         try { MaybeCompressCore(vpath, image); }
         finally
         {
-            System.Threading.Interlocked.Add(ref _compressMicros,
-                (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1_000_000L
-                / System.Diagnostics.Stopwatch.Frequency);
+            long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
+            long micros = (t1 - t0) * 1_000_000L / System.Diagnostics.Stopwatch.Frequency;
+            System.Threading.Interlocked.Add(ref _compressMicros, micros);
+            if (VortexArena.Common.Diagnostics.Prof.IsMainThread)
+                System.Threading.Interlocked.Add(ref _compressMicrosMain, micros);
+            // A short lock rather than a CAS pair: two long writes per encode, against an encode that costs
+            // milliseconds, is not measurable — and min/max of two independent Interlocked fields is racy.
+            lock (_compressWallGate)
+            {
+                if (_compressWallFirst == 0 || t0 < _compressWallFirst) _compressWallFirst = t0;
+                if (t1 > _compressWallLast) _compressWallLast = t1;
+            }
             gate.Release();
         }
     }
@@ -1273,6 +1395,11 @@ public sealed class AssetSystem
     /// multi-thread encode on every launch, and nothing in the loading stages said so - the time simply
     /// appeared inside precache.weapons and render.setup, which are named after something else entirely.
     /// Measured on this box: mode 2 (BC7) adds ~100 s to a map load, mode 1 (S3TC) ~4 s.</para>
+    ///
+    /// <para>The line reports thread-time, the WALL span the encodes occupied, and how much of the thread-time
+    /// was paid on the frame thread — because a bare thread-time total cannot distinguish "eight threads for one
+    /// second" from "one thread for eight seconds", and those two have opposite fixes. <c>Nx parallel</c> is
+    /// thread-time over wall span: 1.0 means strictly serial however many workers existed.</para>
     /// </summary>
     public static string CompressionTimeReport()
     {
@@ -1282,13 +1409,21 @@ public sealed class AssetSystem
                 ? $"textures.compress: nothing compressed (gl_texturecompression {TextureCompression}, no eligible textures)"
                 : "textures.compress: off (gl_texturecompression 0)";
         double ms = System.Threading.Interlocked.Read(ref _compressMicros) / 1000.0;
+        double mainMs = System.Threading.Interlocked.Read(ref _compressMicrosMain) / 1000.0;
+        long first, last;
+        lock (_compressWallGate) { first = _compressWallFirst; last = _compressWallLast; }
+        double wallMs = first == 0 ? 0.0
+            : (last - first) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         string what = TextureCompression >= 2 ? "BC7/BPTC, high quality" : "S3TC/DXT, fast";
         string cache = _ddsSaved > 0
-            ? $"; cached {_ddsSaved} to dds/ - next launch skips this"
+            ? $"; cached {_ddsSaved} to {Formats.Vfs.VirtualFileSystem.DdsCacheDir}/ - next launch skips this"
             : (DdsSave ? "" : "; dds cache OFF (r_texture_dds_save 0)");
         if (_ddsSaveFailed > 0)
             cache += $" ({_ddsSaveFailed} cache writes failed)";
-        return $"textures.compress: {ms:0} ms of thread-time over {n} textures "
+        string shape = wallMs > 1.0
+            ? $" in {wallMs:0} ms wall ({ms / wallMs:0.00}x parallel, {mainMs * 100.0 / Math.Max(ms, 0.001):0}% on the frame thread)"
+            : "";
+        return $"textures.compress: {ms:0} ms of thread-time over {n} textures{shape} "
              + $"(gl_texturecompression {TextureCompression} - {what}){cache}";
     }
 
@@ -1316,10 +1451,25 @@ public sealed class AssetSystem
             default: return;   // not a block format we can express; nothing to cache
         }
 
+        // (P6) Never cache a texture that CAME from the cache. The vpath here is where the bytes were found,
+        // so a texture loaded from dds/textures/foo.dds stems to "dds/textures/foo" and would be written to
+        // dds/dds/textures/foo.dds — a path nothing ever reads. That is not hypothetical: it had produced 39
+        // junk files on this machine. With the pass-through fix below such a texture no longer reaches the
+        // encoder at all, but the guard is the honest statement of the invariant either way.
+        if (vpath.StartsWith("dds/", StringComparison.OrdinalIgnoreCase)
+            || vpath.EndsWith(".dds", StringComparison.OrdinalIgnoreCase))
+            return;
+
         try
         {
+            // (P7) Into the MODE-TAGGED directory the resolver probes, not the shared dds/ tree — so a cache
+            // banked at gl_texturecompression 1 cannot silently satisfy a player who has since set 2, and so
+            // our writes never shadow the game's own shipped dds/ files.
+            string cacheDir = Formats.Vfs.VirtualFileSystem.DdsCacheDir;
+            if (cacheDir.Length == 0)
+                return;
             string stem = AssetPaths.StripImageExtension(AssetPaths.Normalize(vpath));
-            string rel = System.IO.Path.Combine("dds", stem.Replace('/', System.IO.Path.DirectorySeparatorChar)) + ".dds";
+            string rel = System.IO.Path.Combine(cacheDir, stem.Replace('/', System.IO.Path.DirectorySeparatorChar)) + ".dds";
             string full = System.IO.Path.Combine(UserPaths.GameDir, rel);
             string? dir = System.IO.Path.GetDirectoryName(full);
             if (dir is null)
@@ -1329,7 +1479,10 @@ public sealed class AssetSystem
             byte[] dds = DdsWriter.Write(image.GetWidth(), image.GetHeight(),
                 Math.Max(1, image.GetMipmapCount() + 1), fourCc, dxgi, image.GetData(), blockBytes);
             // Write-then-move so a crash mid-write cannot leave a truncated file the next run would trust.
-            string tmp = full + ".tmp";
+            // The temp name carries the thread id because two workers CAN encode the same vpath at once — the
+            // handoff's ContainsKey check is best-effort, not a lock — and a shared "<name>.dds.tmp" made that
+            // race a lost cache write (observed once per cold load with the pre-pass at 8 workers).
+            string tmp = $"{full}.{System.Environment.CurrentManagedThreadId}.tmp";
             System.IO.File.WriteAllBytes(tmp, dds);
             System.IO.File.Move(tmp, full, overwrite: true);
             System.Threading.Interlocked.Increment(ref _ddsSaved);
@@ -1410,6 +1563,20 @@ public sealed class AssetSystem
         }
         try
         {
+            // TEMP DIAGNOSTIC (P6): name every texture we are about to encode, and say whether a cache file for
+            // it already exists. A texture that re-encodes on EVERY launch despite a cached dds is a broken
+            // round trip, not a cold cache — and the two look identical in the summary line.
+            if (DdsDebug)
+            {
+                string stem = AssetPaths.StripImageExtension(AssetPaths.Normalize(vpath));
+                string cached = System.IO.Path.Combine(UserPaths.GameDir,
+                    "dds", stem.Replace('/', System.IO.Path.DirectorySeparatorChar) + ".dds");
+                bool onDisk = System.IO.File.Exists(cached);
+                GD.Print($"[dds-debug] encoding '{vpath}' {image.GetWidth()}x{image.GetHeight()} "
+                       + $"mips={image.GetMipmapCount()} fmt={image.GetFormat()} "
+                       + $"cachefile={(onDisk ? $"PRESENT ({new System.IO.FileInfo(cached).Length}b)" : "absent")}");
+            }
+
             // Scoped so the cost of this setting is attributable rather than folded into whatever frame the
             // texture happened to load on — the whole question of "is CPU compression too slow" is answerable
             // from a capture only if it has its own line.
@@ -1485,14 +1652,33 @@ public sealed class AssetSystem
     private Image? PrepareImage(string vpath)
     {
         // Consume the off-thread predecode when one is parked for this vpath (removed so memory is freed).
-        if (!_predecodedImages.TryRemove(vpath, out Image? image))
-            image = LoadImageFromVpath(vpath);
+        if (_predecodedImages.TryRemove(vpath, out Parked parked))
+        {
+            // Already fully prepped on the worker — running the prep again would halve a picmipped image a
+            // second time (MaybePicmip is not idempotent), so this early-out is load-bearing, not an optimisation.
+            if (parked.Prepared)
+                return parked.Image;
+            PrepareDecoded(vpath, parked.Image);
+            return parked.Image;
+        }
+        Image? image = LoadImageFromVpath(vpath);
         if (image == null)
             return null;
-        MaybePicmip(vpath, image);     // gl_picmip: halve the resolution N times before mips/compression
-        EnsureMipmaps(vpath, image);   // no-op when the worker predecode already generated them
-        MaybeCompress(vpath, image);   // gl_texturecompression: shrink RGBA8 to BC before it reaches VRAM
+        PrepareDecoded(vpath, image);
         return image;
+    }
+
+    /// <summary>
+    /// The CPU half of a texture load, in the order the three steps require: shrink, then build the mip chain
+    /// from the shrunk image, then block-compress the whole chain. Runs on the frame thread from
+    /// <see cref="PrepareImage"/>, or on a streamer worker from <see cref="PredecodeTexture"/> when
+    /// <see cref="CompressOffThread"/> is set. <b>Not idempotent</b> — see <see cref="Parked"/>.
+    /// </summary>
+    private static void PrepareDecoded(string vpath, Image image)
+    {
+        MaybePicmip(vpath, image);     // gl_picmip: halve the resolution N times before mips/compression
+        EnsureMipmaps(vpath, image);   // no-op when the image already carries them (a DDS can)
+        MaybeCompress(vpath, image);   // gl_texturecompression: shrink RGBA8 to BC before it reaches VRAM
     }
 
     // (BC5 normals 2026-08-02; widened to format+mips 2026-08-03) What each uploaded texture actually became

@@ -620,7 +620,39 @@ public sealed class VirtualFileSystem : IDisposable
 
     private static bool _preferDds = true;
 
-    /// <summary>Raised when <see cref="PreferDds"/> changes so live instances can drop their resolve caches.</summary>
+    /// <summary>
+    /// (P7) The directory OUR OWN texture cache is written to and read from — <c>"dds1"</c> for S3TC,
+    /// <c>"dds2"</c> for BC7, empty when compression is off. Probed ahead of the shared <c>dds/</c> tree.
+    ///
+    /// <para><b>Why the mode is in the path.</b> A DDS file records its own block format but nothing about
+    /// which setting produced it, and <c>MaybeCompress</c> skips any image that is already compressed. So a
+    /// single cache directory made <c>gl_texturecompression</c> inert after the first load: a player who
+    /// switched from 1 to 2 kept getting the DXT blocks the previous run had banked, for every texture already
+    /// cached, and would have had to find and delete the cache by hand to make the setting mean anything.
+    /// Verified directly — a warm load at mode 1 against a BC7-populated cache re-encoded only the same 22
+    /// textures a mode-2 run did, i.e. it was reading BC7 blocks throughout.</para>
+    ///
+    /// <para>This deliberately does NOT apply to the shared <c>dds/</c> tree, which is where Xonotic's own
+    /// 3,207 shipped files live. Those are used whatever the setting says, exactly as DarkPlaces uses them:
+    /// re-encoding shipped DXT1 to BC7 would cost a fortune to make the image worse.</para>
+    /// </summary>
+    public static string DdsCacheDir
+    {
+        get => _ddsCacheDir;
+        set
+        {
+            string v = value ?? string.Empty;
+            if (_ddsCacheDir == v)
+                return;
+            _ddsCacheDir = v;
+            ResolveCachesDirty?.Invoke();
+        }
+    }
+
+    private static string _ddsCacheDir = string.Empty;
+
+    /// <summary>Raised when <see cref="PreferDds"/> or <see cref="DdsCacheDir"/> changes so live instances can
+    /// drop their resolve caches — both change what every stem resolves to.</summary>
     public static event Action? ResolveCachesDirty;
 
     /// <summary>The ordered candidate vpaths <see cref="ResolveImage"/> probes, for a normalized stem.</summary>
@@ -629,6 +661,10 @@ public sealed class VirtualFileSystem : IDisposable
         // Pre-compressed first when r_texture_dds_load is on — see PreferDds for why this ordering matters.
         if (_preferDds)
         {
+            // Our own mode-tagged cache outranks the shared tree: it was produced by the setting in force now,
+            // where dds/ is whatever the game shipped. See DdsCacheDir.
+            if (_ddsCacheDir.Length != 0)
+                yield return _ddsCacheDir + "/" + stem + ".dds";
             yield return "dds/" + stem + ".dds";
             yield return stem + ".dds";
             yield return stem + ".tga.dds";
@@ -662,10 +698,23 @@ public sealed class VirtualFileSystem : IDisposable
             && !stem.StartsWith("gfx/", System.StringComparison.Ordinal)
             && !stem.StartsWith("locale/", System.StringComparison.Ordinal))
         {
+            // (P6) The pre-compressed form goes FIRST here for the same reason it does at the top of this
+            // method — and forgetting it on this branch alone was a real, measured cost. A bare model-shader
+            // name resolves through here to textures/<stem>.png, so r_texture_dds_save banks the result under
+            // the RESOLVED path (dds/textures/shellsammo.dds) while the next launch looks the stem up under
+            // the REQUESTED name (dds/shellsammo.dds) and misses. Those textures re-encoded on every single
+            // launch, for ever: 22 of them on stormkeep, ~5.0 s of an 11.0 s warm load at BC7.
+            if (_preferDds)
+            {
+                if (_ddsCacheDir.Length != 0)
+                    yield return _ddsCacheDir + "/textures/" + stem + ".dds";
+                yield return "dds/textures/" + stem + ".dds";
+            }
             yield return "textures/" + stem + ".tga";
             yield return "textures/" + stem + ".png";
             yield return "textures/" + stem + ".jpg";
-            yield return "dds/textures/" + stem + ".dds";
+            if (!_preferDds)
+                yield return "dds/textures/" + stem + ".dds";
         }
 
         // Legacy fallbacks.

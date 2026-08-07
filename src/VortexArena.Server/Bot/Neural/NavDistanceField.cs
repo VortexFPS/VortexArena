@@ -34,6 +34,12 @@ public sealed class NavDistanceField
     /// <summary>Unreachable spans carry this. Finite so arithmetic on it stays well-behaved.</summary>
     public const float Unreachable = 1e9f;
 
+    /// <summary>
+    /// How far a link may reach, in lattice cells. Ten cells is 320 qu, about what a running jump clears at
+    /// <c>sv_maxspeed</c>. Past this the router should be finding a way around, not a way across.
+    /// </summary>
+    public const int MaxJumpCells = 10;
+
     /// <summary>Spans that Dijkstra actually reached. Low coverage means the goal is walled off.</summary>
     public int ReachedSpans { get; private set; }
 
@@ -99,40 +105,62 @@ public sealed class NavDistanceField
 
             result.Locate(cur, out int cx, out int cy, out int slot);
             FloorSpan span = field.Column(cx, cy)[slot];
-            int mask = span.JumpReachMask;
-            if (mask == 0) continue;
 
             for (int dir = 0; dir < 8; dir++)
             {
-                if ((mask & (1 << dir)) == 0) continue;
-                int nx = cx + dxs[dir], ny = cy + dys[dir];
-                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-
-                ReadOnlySpan<FloorSpan> col = field.Column(nx, ny);
-                for (int t = 0; t < col.Length; t++)
+                // Walk OUTWARD along this direction until a standable span turns up, out to a running
+                // jump's reach. Whatever is skipped on the way is a gap, and crossing a gap is what a jump
+                // is for.
+                //
+                // The first version looked only at the ADJACENT cell, and gated on FloorSpan.JumpReachMask,
+                // which is built the same way. A 32 qu lattice linked at 32 qu cannot represent a jump:
+                // stage 3 puts its platforms 96 to 296 qu apart, so the field saw every course as a chain
+                // of islands and HALF of them had no route from spawn to target at all. The reward's
+                // geodesic term silently fell back to a padded straight line on those, and stage 6 rejected
+                // good A/B pairs on real maps for the same reason.
+                for (int step = 1; step <= MaxJumpCells; step++)
                 {
-                    if (((NavContent)col[t].Content & NavContent.Standable) == 0) continue;
-                    float dz = col[t].FloorZ - span.FloorZ;
-                    // Only cross to a neighbour the mask actually permits reaching; the mask is per-direction,
-                    // not per-span, so re-apply the height test to pick WHICH span in that column.
-                    if (dz > BotNavigation.JumpStepHeight || dz < -400f) continue;
+                    int nx = cx + dxs[dir] * step, ny = cy + dys[dir] * step;
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) break;
 
-                    // Horizontal cost is the lattice step (diagonals cost sqrt(2)). Climbing costs extra
-                    // because a jump takes time the flat step does not; dropping is free, which is correct —
-                    // falling is fast.
-                    float horiz = (dir % 2 == 1) ? NavField.CellSize * 1.41421f : NavField.CellSize;
-                    float climb = dz > BotNavigation.StepHeight ? dz * 2.5f : 0f;
-                    // Hazards are not forbidden, just expensive: a bot with health to spare should be free to
-                    // clip a slime corner if it saves a second, and making them impassable would hide routes
-                    // the policy could legitimately take.
-                    float hazard = ((NavContent)col[t].Content & NavContent.Harmful) != 0 ? 600f : 0f;
+                    ReadOnlySpan<FloorSpan> col = field.Column(nx, ny);
+                    int hit = -1;
+                    float hitDz = 0f;
+                    for (int t = 0; t < col.Length; t++)
+                    {
+                        if (((NavContent)col[t].Content & NavContent.Standable) == 0) continue;
+                        float dz = col[t].FloorZ - span.FloorZ;
+                        // A jump gains height only up to its apex, and the further it has to carry the
+                        // flatter it is; a drop is bounded by what a fall survives.
+                        float rise = step == 1
+                            ? BotNavigation.JumpStepHeight
+                            : BotNavigation.JumpStepHeight * (1f - (step - 1) / (float)MaxJumpCells);
+                        if (dz > rise || dz < -400f) continue;
+                        hit = t;
+                        hitDz = dz;
+                        break;
+                    }
+                    if (hit < 0) continue;   // nothing standable here; keep looking further out
 
-                    float nd = d + horiz + climb + hazard;
-                    int ni = result._start[ny * w + nx] + t;
-                    if (nd >= dist[ni]) continue;
-                    dist[ni] = nd;
-                    heap.Enqueue(ni, nd);
-                    break;   // the first standable span in range is the one we cross to
+                    float diag = (dir % 2 == 1) ? 1.41421f : 1f;
+                    float horiz = NavField.CellSize * diag * step;
+                    float climb = hitDz > BotNavigation.StepHeight ? hitDz * 2.5f : 0f;
+                    // A gap costs more than the ground it spans: the jump has to be set up and landing
+                    // short is a death. Without this the router prefers a chain of leaps to a walkway.
+                    float gap = step > 1 ? (step - 1) * NavField.CellSize * 1.5f : 0f;
+                    // Hazards are expensive, not forbidden: a bot with health to spare should be free to
+                    // clip a slime corner if it saves a second, and making them impassable would hide
+                    // routes the policy could legitimately take.
+                    float hazard = ((NavContent)col[hit].Content & NavContent.Harmful) != 0 ? 600f : 0f;
+
+                    float nd = d + horiz + climb + gap + hazard;
+                    int ni = result._start[ny * w + nx] + hit;
+                    if (nd < dist[ni])
+                    {
+                        dist[ni] = nd;
+                        heap.Enqueue(ni, nd);
+                    }
+                    break;   // the nearest standable span in this direction is the one we cross to
                 }
             }
         }
@@ -230,16 +258,27 @@ public sealed class NavDistanceField
             float bz = cur.Z;
             for (int d = 0; d < 8; d++)
             {
-                int nx = cx + dxs[d], ny = cy + dys[d];
-                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                int nc = ny * w + nx;
-                ReadOnlySpan<FloorSpan> col = _field.Column(nx, ny);
-                for (int t = 0; t < col.Length; t++)
+                // The same outward reach the Dijkstra used, or this walk stalls at the near lip of every
+                // gap the route crosses.
+                for (int step = 1; step <= MaxJumpCells; step++)
                 {
-                    float nd = _dist[_start[nc] + t];
-                    if (nd >= best) continue;
-                    best = nd;
-                    bx = nx; by = ny; bz = col[t].FloorZ + 24f;
+                    int nx = cx + dxs[d] * step, ny = cy + dys[d] * step;
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) break;
+                    int nc = ny * w + nx;
+                    ReadOnlySpan<FloorSpan> col = _field.Column(nx, ny);
+                    if (col.Length == 0) continue;
+
+                    bool routable = false;
+                    for (int t = 0; t < col.Length; t++)
+                    {
+                        float nd = _dist[_start[nc] + t];
+                        if (nd >= Unreachable) continue;
+                        routable = true;
+                        if (nd >= best) continue;
+                        best = nd;
+                        bx = nx; by = ny; bz = col[t].FloorZ + 24f;
+                    }
+                    if (routable) break;   // the nearest routable column in this direction
                 }
             }
             if (bx < 0) break;   // a local minimum: this is the goal, or as close as the graph gets

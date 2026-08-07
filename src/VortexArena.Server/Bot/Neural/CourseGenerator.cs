@@ -54,6 +54,15 @@ public static class CourseGenerator
         public Vector3 Target;
         /// <summary>Entity dictionaries the caller spawns into the world (jump pads, teleporters, hurt volumes).</summary>
         public List<(string ClassName, Vector3 Origin, Vector3 Mins, Vector3 Maxs, string Target, string TargetName)> Entities = new();
+        /// <summary>
+        /// Platform centres and half-extents, in route order, for the stages that decorate a terrain course.
+        ///
+        /// <para>Furniture has to be placed on the geometry, not on the straight line from spawn to target.
+        /// A terrain course wanders by up to half a radian per step, so that line mostly crosses empty air
+        /// and occasionally lands square on the one platform the route needs.</para>
+        /// </summary>
+        public List<(Vector3 Centre, float HalfExtent)> Platforms = new();
+
         /// <summary>Straight-line distance, for the log line and for sanity-checking a stage's difficulty.</summary>
         public float SpanLength => (Target - Spawn).Length();
     }
@@ -142,6 +151,7 @@ public static class CourseGenerator
         float heading = (float)(rng.NextDouble() * Math.Tau);
         c.Spawn = cursor + new Vector3(0f, 0f, 26f);
         AddSlab(world, cursor.X - 192f, cursor.Y - 192f, cursor.X + 192f, cursor.Y + 192f, cursor.Z);
+        c.Platforms.Add((cursor, 192f));
 
         for (int i = 0; i < steps; i++)
         {
@@ -155,6 +165,7 @@ public static class CourseGenerator
 
             Vector3 next = cursor + dir * (gap + pad) + new Vector3(0f, 0f, rise);
             AddSlab(world, next.X - pad, next.Y - pad, next.X + pad, next.Y + pad, next.Z);
+            c.Platforms.Add((next, pad));
 
             // Every third platform gets a ramp onto it, so ramp jumps appear in the distribution.
             if (i % 3 == 2)
@@ -170,36 +181,68 @@ public static class CourseGenerator
     }
 
     /// <summary>
-    /// Stage 4: the terrain course plus furniture. A jump pad that shortcuts a climb, a teleporter across a
-    /// gap, and a hurt volume on the tempting straight line, so avoidance and exploitation are both in the
-    /// same episode.
+    /// Stage 4: the terrain course plus map furniture, placed ON the platforms.
+    ///
+    /// <para><b>The first version placed it on the straight line from spawn to target and it broke the
+    /// stage.</b> A terrain course wanders by up to half a radian per step, so that line mostly crosses
+    /// empty air (furniture floating in the void, doing nothing) and occasionally lands square on the one
+    /// platform the route needs — a 256 x 256 lethal box across the only way through. Stage 4 became a
+    /// lottery between "irrelevant" and "impossible", and a policy trained on it learns caution, which is
+    /// why the arrival rate DECLINED over 12M steps. Measured: the scripted runner went 7.0% on stage 3 to
+    /// 0.7% on stage 4, and the trained policy 36.4% to 3.5%. Anything that halves a scripted baseline is
+    /// the course, not the policy.</para>
+    ///
+    /// <para>Now: a jump pad on a platform aimed two platforms ahead (a real shortcut over a real gap), a
+    /// teleporter between two platforms, and the hazard as a lethal floor UNDER the gaps. That last one is
+    /// the semantic that was wrong before — in a real arena a hurt volume punishes falling, it does not
+    /// wall off the route.</para>
     /// </summary>
     private static Course Furniture(Random rng)
     {
         Course c = Terrain(rng);
+        int n = c.Platforms.Count;
+        if (n < 4) return c;   // too short to decorate; the plain terrain course is still a valid episode
 
-        Vector3 mid = (c.Spawn + c.Target) * 0.5f;
-        var dir = Vector3.Normalize(new Vector3(c.Target.X - c.Spawn.X, c.Target.Y - c.Spawn.Y, 0f));
-        Vector3 right = new(dir.Y, -dir.X, 0f);
+        // A jump pad on an early platform, aimed two ahead so taking it skips a gap.
+        int padIdx = 1 + rng.Next(Math.Max(1, n / 2));
+        int padDest = Math.Min(n - 1, padIdx + 2);
+        if (padDest > padIdx)
+        {
+            (Vector3 from, _) = c.Platforms[padIdx];
+            (Vector3 to, _) = c.Platforms[padDest];
+            c.Entities.Add(("info_notnull", to + new Vector3(0f, 0f, 32f),
+                Vector3.Zero, Vector3.Zero, "", "nb_pad_dest"));
+            c.Entities.Add(("trigger_push", from + new Vector3(0f, 0f, 8f),
+                new Vector3(-56f, -56f, 0f), new Vector3(56f, 56f, 40f), "nb_pad_dest", ""));
+        }
 
-        // A jump pad partway along, aimed at the target. Taking it should beat running.
-        Vector3 padPos = c.Spawn + dir * ((c.Target - c.Spawn).Length() * 0.3f);
-        c.Entities.Add(("info_notnull", c.Target + new Vector3(0f, 0f, 32f),
-            Vector3.Zero, Vector3.Zero, "", "nb_pad_dest"));
-        c.Entities.Add(("trigger_push", padPos,
-            new Vector3(-64f, -64f, 0f), new Vector3(64f, 64f, 32f), "nb_pad_dest", ""));
+        // A teleporter later along the route, also skipping ahead.
+        int teleIdx = Math.Max(padDest + 1, n / 2);
+        int teleDest = Math.Min(n - 1, teleIdx + 2);
+        if (teleIdx < n - 1 && teleDest > teleIdx)
+        {
+            (Vector3 tin, _) = c.Platforms[teleIdx];
+            (Vector3 tout, _) = c.Platforms[teleDest];
+            c.Entities.Add(("info_teleport_destination", tout + new Vector3(0f, 0f, 26f),
+                Vector3.Zero, Vector3.Zero, "", "nb_tele_dest"));
+            c.Entities.Add(("trigger_teleport", tin + new Vector3(0f, 0f, 8f),
+                new Vector3(-40f, -40f, 0f), new Vector3(40f, 40f, 72f), "nb_tele_dest", ""));
+        }
 
-        // A teleporter pair offset from the direct line, so using it is a decision rather than an accident.
-        Vector3 teleIn = mid + right * 320f;
-        Vector3 teleOut = c.Target + right * 96f;
-        c.Entities.Add(("info_teleport_destination", teleOut + new Vector3(0f, 0f, 26f),
-            Vector3.Zero, Vector3.Zero, "", "nb_tele_dest"));
-        c.Entities.Add(("trigger_teleport", teleIn,
-            new Vector3(-48f, -48f, 0f), new Vector3(48f, 48f, 72f), "nb_tele_dest", ""));
-
-        // A hurt volume straddling the direct line.
-        c.Entities.Add(("trigger_hurt", mid - right * 64f,
-            new Vector3(-128f, -128f, 0f), new Vector3(128f, 128f, 96f), "", ""));
+        // The hazard: a lethal floor well below the platforms, covering the whole course. Falling off a
+        // ledge is now a death rather than a slow climb back, which is what a real arena pit does — and it
+        // blocks nothing, because it is under the geometry rather than across it.
+        Vector3 lo = c.Platforms[0].Centre, hi = lo;
+        foreach ((Vector3 centre, float half) in c.Platforms)
+        {
+            lo = Vector3.Min(lo, centre - new Vector3(half, half, 0f));
+            hi = Vector3.Max(hi, centre + new Vector3(half, half, 0f));
+        }
+        Vector3 mid = (lo + hi) * 0.5f;
+        var extent = new Vector3(MathF.Max(1024f, (hi.X - lo.X) * 0.5f + 512f),
+                                 MathF.Max(1024f, (hi.Y - lo.Y) * 0.5f + 512f), 0f);
+        c.Entities.Add(("trigger_hurt", new Vector3(mid.X, mid.Y, lo.Z - 320f),
+            new Vector3(-extent.X, -extent.Y, -256f), new Vector3(extent.X, extent.Y, 64f), "", ""));
 
         return c;
     }

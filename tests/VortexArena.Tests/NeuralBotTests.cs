@@ -829,6 +829,63 @@ public class NeuralBotTests
         Assert.True((atGoal - goal).Length() < 64f, $"walking from the goal moved {(atGoal - goal).Length():F0} qu");
     }
 
+    /// <summary>
+    /// Adding furniture to a terrain course must not make it dramatically harder to traverse.
+    ///
+    /// <para>Stage 4 is stage 3 plus a jump pad, a teleporter and a hazard. Those are shortcuts and a
+    /// penalty for falling; none of them should block the route. The first version placed them on the
+    /// straight line from spawn to target, which on a wandering terrain course either floats in the void or
+    /// lands square on the one platform the route needs — and a 256 qu lethal box across the only way
+    /// through makes the episode impossible. Measured, the scripted runner went from 7.0% arrivals on
+    /// stage 3 to 0.7% on stage 4, and twelve million steps of training on that lottery drove the policy
+    /// backwards.
+    ///
+    /// <para>Comparing the two generators' reachability directly is the cheap guard: if a stage-4 course
+    /// cannot route from spawn to target, the furniture is in the way.</para>
+    /// </summary>
+    [Fact]
+    public void Furniture_DoesNotBlockTheRouteItDecorates()
+    {
+        int terrainOk = 0, furnitureOk = 0;
+        const int trials = 12;
+
+        for (int seed = 0; seed < trials; seed++)
+        {
+            terrainOk += RouteExists(CourseGenerator.Stage.Terrain, seed) ? 1 : 0;
+            furnitureOk += RouteExists(CourseGenerator.Stage.Furniture, seed) ? 1 : 0;
+        }
+
+        Assert.True(terrainOk >= trials - 2, $"the terrain generator itself is broken: {terrainOk}/{trials} routable");
+        // Furniture is allowed to cost a course or two to chance, not most of them.
+        Assert.True(furnitureOk >= terrainOk - 2,
+            $"furniture blocked routes: terrain {terrainOk}/{trials} routable, furniture {furnitureOk}/{trials}");
+    }
+
+    /// <summary>Can the baked field route from this generated course's spawn to its target?</summary>
+    private static bool RouteExists(CourseGenerator.Stage stage, int seed)
+    {
+        CourseGenerator.Course course = CourseGenerator.Generate(stage, 7919 + seed);
+        Api.Services = new EngineServices(course.World);
+        Cvars.RegisterDefaults();
+
+        // The hazard volumes are entities, so spawn them before baking or the field cannot see them.
+        var es = (EngineServices)Api.Services!;
+        foreach ((string cn, Vector3 origin, Vector3 mins, Vector3 maxs, string tgt, string tname) in course.Entities)
+        {
+            Entity e = es.EntityTable.Spawn();
+            e.ClassName = cn;
+            e.Origin = origin;
+            e.Mins = mins; e.Maxs = maxs;
+            e.AbsMin = origin + mins; e.AbsMax = origin + maxs;
+            e.Target = tgt; e.TargetName = tname;
+            if (cn == "trigger_hurt") e.Dmg = 1000f;
+        }
+
+        NavField field = NavFieldBaker.Bake(course.World, $"{stage}{seed}", 1, es.EntityTable.All);
+        NavDistanceField dist = NavDistanceField.Build(field, course.Target);
+        return dist.IsReachable(course.Spawn);
+    }
+
     // =============================================================================================
     // stage 6: real maps and the held-out split
     // =============================================================================================

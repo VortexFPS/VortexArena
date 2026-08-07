@@ -234,6 +234,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     t0 = time.time()
     arrival_history: list[float] = []
     det_rate = 0.0
+    best_rate = 0.0
 
     while total_steps < budget:
         update += 1
@@ -293,9 +294,26 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         if update % eval_every == 0:
             det_rate = evaluate(policy, norm, run_dir, stage, eval_steps, eval_args)
             gate = f"gate {threshold:.0%}" if threshold > 0 else "no gate"
-            print(f"[s{stage}] shipped-path eval: {det_rate:.1%} arrivals ({gate})")
+
+            # Keep the best policy this stage has produced, separately from the rolling checkpoint.
+            #
+            # A stage can make the policy WORSE, and the rolling checkpoint happily records that. It
+            # happened: stage 4's course generator was broken, twelve million steps drove the arrival rate
+            # from 10% down to 5%, and the 71.6% policy that had just cleared stage 3 was overwritten a
+            # hundred times over. Recovering it meant retraining a stage. One extra file per stage is a
+            # cheap insurance premium against that.
+            if det_rate > best_rate:
+                best_rate = det_rate
+                save(policy, norm, optimizer, stage, run_dir, tag=f"stage{stage}-best")
+            elif best_rate - det_rate > 0.15:
+                print(f"[s{stage}] WARNING: {det_rate:.1%} is well below this stage's best of {best_rate:.1%}. "
+                      f"A stage that goes backwards is usually the course, not the policy — check the "
+                      f"scripted baseline with --scripted on the same stage before spending more compute.")
+
+            print(f"[s{stage}] shipped-path eval: {det_rate:.1%} arrivals ({gate}, best {best_rate:.1%})")
             if threshold > 0 and det_rate >= threshold:
                 save(policy, norm, optimizer, stage, run_dir)
+                save(policy, norm, optimizer, stage + 1, run_dir, tag=f"stage{stage}-done")
                 return True
             # The eval runs out-of-process now, so the rollout state is untouched and there is nothing
             # to reset.
@@ -304,7 +322,11 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     if threshold <= 0:
         return True
     final = evaluate(policy, norm, run_dir, stage, eval_steps, eval_args)
-    print(f"[s{stage}] final shipped-path eval: {final:.1%} arrivals (gate {threshold:.0%})")
+    print(f"[s{stage}] final shipped-path eval: {final:.1%} arrivals "
+          f"(gate {threshold:.0%}, best this stage {best_rate:.1%})")
+    if final < best_rate:
+        print(f"[s{stage}] the best policy this stage produced is in "
+              f"{run_dir / f'stage{stage}-best.pt'}, NOT the rolling checkpoint — resume from that one.")
     return final >= threshold
 
 
@@ -431,16 +453,23 @@ def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv,
     return out
 
 
-def save(policy, norm, optimizer, stage: int, run_dir: Path) -> None:
+def save(policy, norm, optimizer, stage: int, run_dir: Path, tag: str | None = None) -> None:
+    """Write a checkpoint plus its game-loadable weights.
+
+    ``tag`` names a keeper (``stage3-best``, ``stage3-done``); without it this is the rolling checkpoint,
+    which the next save overwrites.
+    """
+    name = tag or "checkpoint"
     torch.save({
         "policy": policy.state_dict(),
         "optimizer": optimizer.state_dict(),
         "norm": norm.state(),
         "stage": stage,
-    }, run_dir / "checkpoint.pt")
+    }, run_dir / f"{name}.pt")
     # Export the game-loadable weights alongside every checkpoint, so any run can be dropped straight into
     # a server without a separate step that someone will forget.
-    export_weights(policy, norm, run_dir / "policy.vxpw", label=f"{run_dir.name}-s{stage}")
+    export_weights(policy, norm, run_dir / f"{'policy' if tag is None else tag}.vxpw",
+                   label=f"{run_dir.name}-s{stage}{'' if tag is None else '-' + tag}")
 
 
 if __name__ == "__main__":

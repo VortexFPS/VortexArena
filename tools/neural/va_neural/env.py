@@ -13,6 +13,7 @@ import socket
 import struct
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -76,7 +77,8 @@ def _default_host_binary() -> Path:
 class HostEnv:
     """One host process and the socket to it."""
 
-    def __init__(self, cfg: EnvConfig, host_dll: Path | None = None, quiet: bool = True):
+    def __init__(self, cfg: EnvConfig, host_dll: Path | None = None, quiet: bool = True,
+                 host_args: list[str] | None = None):
         self.cfg = cfg
         dll = Path(host_dll) if host_dll else _default_host_binary()
         if not dll.exists():
@@ -91,7 +93,7 @@ class HostEnv:
         # --port 0 lets the OS pick, which is what makes launching a dozen of these safe. The host prints
         # the chosen port to stdout as its first line and everything else to stderr.
         self.proc = subprocess.Popen(
-            [dotnet, str(dll), "--port", "0"],
+            [dotnet, str(dll), "--port", "0", *(host_args or [])],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL if quiet else None,
             text=True,
@@ -103,6 +105,17 @@ class HostEnv:
         if not line.startswith("PORT "):
             raise RuntimeError(f"env host did not announce a port (said {line!r})")
         port = int(line.split()[1])
+
+        # Keep draining stdout for the life of the host.
+        #
+        # The host only writes PORT itself, but the GAME writes to stdout too — one "[bots] waypoints for
+        # ..." line per map load, and a map load is every episode. Reading the port and then never touching
+        # the pipe again means those lines accumulate in a 64 KB OS buffer until it fills, at which point
+        # the host blocks forever inside a write it cannot complete. The failure looked like a hard crash at
+        # a perfectly reproducible step number, which is exactly what a fixed-size buffer filling at a fixed
+        # rate produces.
+        self._drain = threading.Thread(target=self._drain_stdout, daemon=True)
+        self._drain.start()
 
         self.sock = socket.create_connection(("127.0.0.1", port))
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -120,6 +133,13 @@ class HostEnv:
 
         self._obs = np.zeros((self.agents, self.obs_size), dtype=np.float32)
         self.last_episode_stats: tuple[int, float, float] | None = None
+
+    def _drain_stdout(self) -> None:
+        try:
+            for _ in self.proc.stdout:   # type: ignore[union-attr]
+                pass
+        except (ValueError, OSError):
+            pass   # the pipe closed with the host
 
     # -- protocol --
 

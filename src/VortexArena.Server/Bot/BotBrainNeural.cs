@@ -131,8 +131,12 @@ public sealed partial class BotBrain
             intent = IntentOverride(intent);
 
         // ---- 4. run the policy ----
+        // The trace fan is cvar-gated rather than hardcoded on: it is the one part of perception that costs
+        // real traces (six box sweeps per think, about 5% of a core across 16 bots), so an operator chasing
+        // server CPU needs a way to turn it off. A registered cvar that nothing reads is worse than no cvar
+        // at all — see the parity report's list of exactly that.
         MovementInput input = loco.Think(bot, intent, svc.Field, svc.Features,
-            Aim.ViewAngles, now, thinkDt, Nav.MaxSpeed, traceFan: true);
+            Aim.ViewAngles, now, thinkDt, Nav.MaxSpeed, traceFan: Cvars.Bool("bot_neural_tracefan"));
 
         // ---- 5. the policy's weapon request ----
         // Only honoured while combat has released the weapon; ActionSpace.Decode already masked the request

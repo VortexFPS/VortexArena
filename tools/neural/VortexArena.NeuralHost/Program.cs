@@ -27,6 +27,21 @@ public static class Program
 
     public static int Main(string[] args)
     {
+        // A managed exception on a BACKGROUND thread terminates the process without ever reaching the
+        // try/catch around the message loop, so the trainer sees a bare connection reset and the reason is
+        // gone. These two handlers are the only way that failure mode says anything at all.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            Console.Error.WriteLine($"[neural-host] UNHANDLED on a background thread: {e.ExceptionObject}");
+            Console.Error.Flush();
+        };
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            Console.Error.WriteLine($"[neural-host] unobserved task exception: {e.Exception}");
+            Console.Error.Flush();
+            e.SetObserved();
+        };
+
         var opts = Options.Parse(args);
         if (opts.ShowHelp)
         {
@@ -135,6 +150,8 @@ public static class Program
         byte[] truncated = Array.Empty<byte>();
         float[] actions = Array.Empty<float>();
         var payload = new List<byte>(1 << 16);
+        int resets = 0;
+        long stepCount = 0;
 
         try
         {
@@ -174,7 +191,12 @@ public static class Program
                     case OpCode.Reset:
                     {
                         if (env is null) { SendError(frames, "reset before hello"); return 2; }
+                        resets++;
+                        if (opts.Debug)
+                            Console.Error.WriteLine($"[neural-host] reset {resets} begin, " +
+                                                    $"{GC.GetTotalMemory(false) / (1024 * 1024)} MB managed");
                         env.Reset(observations);
+                        if (opts.Debug) Console.Error.WriteLine($"[neural-host] reset {resets} ok");
                         frames.Write(OpCode.Observation, AsBytes(observations));
                         break;
                     }
@@ -189,6 +211,9 @@ public static class Program
                             return 2;
                         }
                         CopyToFloats(body, actions);
+                        stepCount++;
+                        if (opts.Debug && stepCount % 100 == 0)
+                            Console.Error.WriteLine($"[neural-host] step {stepCount}");
                         env.Step(actions, observations, rewards, dones, truncated);
 
                         payload.Clear();
@@ -365,7 +390,10 @@ public static class Program
             actions[o + 2] = 0f;                          // crouch
             actions[o + 3] = rng.NextDouble() < 0.05 ? 1f : 0f;  // attack1
             actions[o + 4] = 0f;                          // attack2
-            actions[o + 5] = 0f;                          // weapon: keep current
+            // Exercise the weapon head too. A sampled policy picks from it constantly, and leaving it at
+            // "keep current" here meant the bench never touched Inventory.SwitchWeapon — a whole code path
+            // the trainer hits every step and the bench claimed to cover.
+            actions[o + 5] = rng.Next(0, 4);
             actions[o + 6] = (float)(rng.NextDouble() * 2.0 - 1.0);
             actions[o + 7] = (float)(rng.NextDouble() * 0.4 - 0.2);
         }

@@ -131,7 +131,11 @@ def main() -> int:
     ap.add_argument("--eval-every", type=int, default=10,
                     help="updates between deterministic evals; the curriculum gate reads these, "
                          "not the sampled rollout rate")
-    ap.add_argument("--eval-steps", type=int, default=400, help="steps per deterministic eval pass")
+    ap.add_argument("--eval-steps", type=int, default=400,
+                    help="step cap per eval pass; the episode count is the real bound")
+    ap.add_argument("--eval-episodes", type=int, default=40,
+                    help="episodes per eval pass. Every eval scores the same courses, so this is what "
+                         "makes two evals comparable")
     ap.add_argument("--data", type=Path, default=None,
                     help="content root for stage 6 (default: <repo>/data)")
     ap.add_argument("--maps", type=str, default="",
@@ -235,6 +239,8 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     arrival_history: list[float] = []
     det_rate = 0.0
     best_rate = 0.0
+    recent_det: list[float] = []
+    ret_scale = ReturnScale()
 
     while total_steps < budget:
         update += 1
@@ -261,7 +267,20 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         with torch.no_grad():
             last_value = policy(torch.as_tensor(norm.normalize(obs), device=device))[1].cpu().numpy()
 
-        adv, ret = gae(rew_buf, val_buf, done_buf, last_value, hyper.gamma, hyper.gae_lambda)
+        # Scale the rewards by a running estimate of return magnitude before GAE.
+        #
+        # The reward mixes a per-step progress term around 0.2 with a one-off arrival bonus of 10 to 30 and
+        # a death penalty of -5. The critic has to fit both, and it does not: the value loss sat around 8.9
+        # while the policy loss was 0.02, so the advantages were dominated by value error and the policy
+        # oscillated between updates rather than converging. Measured on stage 3, consecutive shipped-path
+        # evals 25 updates apart swung between 20% and 59% -- and the eval is deterministic for a fixed
+        # policy, so that is the policy genuinely thrashing, not the measurement.
+        #
+        # Dividing by a running std leaves the reward's SHAPE untouched (no mean shift, so the relative
+        # value of arriving versus progressing is unchanged) and gives the critic a unit-scale target.
+        ret_scale.update(rew_buf, hyper.gamma)
+        scaled_rew = rew_buf / ret_scale.std()
+        adv, ret = gae(scaled_rew, val_buf, done_buf, last_value, hyper.gamma, hyper.gae_lambda)
 
         stats = ppo_update(policy, optimizer, hyper, obs_buf, act_buf, logp_buf, adv, ret, device)
 
@@ -276,7 +295,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         sps = total_steps / max(1e-6, time.time() - t0)
         print(f"[s{stage} u{update:4d}] steps {total_steps:>10,}  {sps:6.0f}/s  "
               f"reward {rew_buf.mean():+.4f}  sampled {sampled:5.1%}  shipped {det_rate:5.1%}  "
-              f"pi {stats['policy_loss']:+.4f}  v {stats['value_loss']:.4f}  "
+              f"pi {stats['policy_loss']:+.4f}  v {stats['value_loss']:.4f}  rs {ret_scale.std():.2f}  "
               f"ent {stats['entropy']:.3f}  kl {stats['kl']:.4f}")
 
         if update % 20 == 0:
@@ -305,10 +324,17 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
             if det_rate > best_rate:
                 best_rate = det_rate
                 save(policy, norm, optimizer, stage, run_dir, tag=f"stage{stage}-best")
-            elif best_rate - det_rate > 0.15:
-                print(f"[s{stage}] WARNING: {det_rate:.1%} is well below this stage's best of {best_rate:.1%}. "
-                      f"A stage that goes backwards is usually the course, not the policy — check the "
-                      f"scripted baseline with --scripted on the same stage before spending more compute.")
+            else:
+                recent_det.append(det_rate)
+                recent_det[:] = recent_det[-4:]
+                # Four consecutive readings well under the best, not one. A single low eval on a noisy
+                # measurement is noise, and a warning that cries wolf is a warning nobody reads.
+                if len(recent_det) == 4 and best_rate - max(recent_det) > 0.12:
+                    print(f"[s{stage}] WARNING: the last 4 evals peaked at {max(recent_det):.1%} against "
+                          f"this stage's best of {best_rate:.1%}. A stage that goes backwards is usually the "
+                          f"course, not the policy — check the scripted baseline with --scripted on the "
+                          f"same stage before spending more compute.")
+                    recent_det.clear()
 
             print(f"[s{stage}] shipped-path eval: {det_rate:.1%} arrivals ({gate}, best {best_rate:.1%})")
             if threshold > 0 and det_rate >= threshold:
@@ -353,7 +379,11 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args) -> float
     if not dll.exists():
         return float("nan")
 
-    cmd = [shutil.which("dotnet") or "dotnet", str(dll), "--bench", str(steps),
+    # Episode-bounded, with the step count as the safety cap. Every eval then scores the same courses;
+    # a step budget alone scores a fast policy on a different slice than a slow one, which turned the
+    # gate into a lottery (stage 3 swung between 20% and 59% on consecutive evals).
+    cmd = [shutil.which("dotnet") or "dotnet", str(dll),
+           "--bench", str(steps * 4), "--bench-episodes", str(args.eval_episodes),
            "--agents", str(args.agents), "--ticks", str(args.ticks),
            "--stage", str(stage), "--seed", str(args.seed + 9001),
            "--policy", str(weights)]
@@ -375,6 +405,41 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args) -> float
             except (IndexError, ValueError):
                 return float("nan")
     return float("nan")
+
+
+class ReturnScale:
+    """A running standard deviation of the discounted return, for scaling rewards.
+
+    Tracks the std of the discounted return accumulator rather than of the raw rewards, which is what the
+    critic actually has to predict. Std only, never the mean: subtracting a mean would change the relative
+    value of arriving versus making progress, and that ratio is the reward design.
+    """
+
+    def __init__(self):
+        self._ret = None
+        self._mean = 0.0
+        self._var = 1.0
+        self._count = 1e-4
+
+    def update(self, rewards: np.ndarray, gamma: float) -> None:
+        n_agents = rewards.shape[1]
+        if self._ret is None or self._ret.shape[0] != n_agents:
+            self._ret = np.zeros(n_agents, dtype=np.float64)
+        for t in range(rewards.shape[0]):
+            self._ret = self._ret * gamma + rewards[t]
+            batch_mean = float(self._ret.mean())
+            batch_var = float(self._ret.var())
+            delta = batch_mean - self._mean
+            total = self._count + n_agents
+            self._mean += delta * n_agents / total
+            m_a = self._var * self._count
+            m_b = batch_var * n_agents
+            self._var = (m_a + m_b + delta**2 * self._count * n_agents / total) / total
+            self._count = total
+
+    def std(self) -> float:
+        # Floored so an early, near-constant reward stream cannot divide by nothing and blow the gradients.
+        return max(float(np.sqrt(self._var)), 1e-3)
 
 
 def gae(rewards, values, dones, last_value, gamma: float, lam: float):

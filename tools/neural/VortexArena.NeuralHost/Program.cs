@@ -377,7 +377,17 @@ public static class Program
         var sw = Stopwatch.StartNew();
         int steps = 0, episodes = 0, arrivedTotal = 0, agentEpisodes = 0;
         double rewardSum = 0, remainingSum = 0;
-        while (steps < opts.BenchSteps)
+        // Bounded by EPISODES when --bench-episodes is given, by steps otherwise.
+        //
+        // A step budget makes an eval a lottery. The course sequence is seeded, so every run sees the same
+        // courses in the same order -- but a faster policy finishes them faster and so reaches MORE of them
+        // inside the budget, while a slower one times out on the early ones. The two are scored on
+        // different slices of the distribution. Measured on consecutive evals 25 updates apart, that swung
+        // stage 3 between 20% and 59%, and a curriculum gate reading those numbers passes on luck.
+        //
+        // An episode budget scores every eval on the identical set of courses.
+        while (opts.BenchEpisodes > 0 ? episodes < opts.BenchEpisodes && steps < opts.BenchSteps
+                                      : steps < opts.BenchSteps)
         {
             if (benchPolicy is not null) PolicyActions(benchPolicy, benchScratch!, benchLogits!, observations, actions, cfg.Agents);
             else if (opts.Scripted) ForwardActions(actions, cfg.Agents, steps);
@@ -579,6 +589,7 @@ public static class Program
         public int Stage = 1;
         public int Seed = 1;
         public int BenchSteps;
+        public int BenchEpisodes;
         public string? VerifyWeights;
         public bool NoTraceFan;
         public bool Scripted;
@@ -602,6 +613,11 @@ public static class Program
                               eval split is removed either way, whatever this says.
               --seed N        base RNG seed (default 1)
               --bench N       no trainer: run N steps with random actions and report throughput
+              --bench-episodes N
+                              stop after N episodes instead of N steps (--bench then caps the
+                              run). Scores every eval on the SAME courses, which a step budget
+                              does not: a faster policy reaches more of the sequence inside a
+                              step budget and is scored on a different slice.
               --verify-weights PATH
                               load an exported policy, time a forward pass, and report whether
                               this build can use it (run after every export)
@@ -634,6 +650,7 @@ public static class Program
                     case "--maps": o.MapList = Next() ?? ""; break;
                     case "--seed": o.Seed = ParseInt(Next(), 1); break;
                     case "--bench": o.BenchSteps = ParseInt(Next(), 1000); break;
+                    case "--bench-episodes": o.BenchEpisodes = ParseInt(Next(), 0); break;
                     case "--verify-weights": o.VerifyWeights = Next(); break;
                     case "--no-tracefan": o.NoTraceFan = true; break;
                     case "--scripted": o.Scripted = true; break;

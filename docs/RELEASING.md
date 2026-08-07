@@ -31,7 +31,7 @@ dropped.
 
 | Zip | Contents | Run |
 |---|---|---|
-| `VortexArena-<ver>-windows-x86_64.zip` | `VortexArena.exe` (+ console wrapper, `data_*` .NET folder), `data/` | double-click the `.exe` |
+| `VortexArena-<ver>-windows-x86_64.zip` | `VortexArena.exe` (+ the `data_*` .NET folder), `data/` | double-click the `.exe` |
 | `VortexArena-<ver>-windows-dedicated-x86_64.zip` | `vortexarena-dedicated.exe` (+ console wrapper), `run-dedicated.cmd`, `data/` | `run-dedicated.cmd [map]` |
 | `VortexArena-<ver>-linux-x86_64.zip` | `VortexArena.x86_64`, `run-client.sh`, `data/` | `./run-client.sh` |
 | `VortexArena-<ver>-linux-dedicated-x86_64.zip` | `vortexarena-dedicated.x86_64`, `run-dedicated.sh`, `data/` | `./run-dedicated.sh [map]` |

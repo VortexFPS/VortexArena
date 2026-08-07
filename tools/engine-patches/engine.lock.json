@@ -126,6 +126,26 @@
         "ever re-includes this file in a build, the check fails LOUDLY instead of silently becoming a tautology."
       ]
     },
+    "windows-dedicated": {
+      "required": [
+        "GetRawInputBuffer"
+      ],
+      "forbidden": [
+        "engine.lock.json"
+      ],
+      "$comment": [
+        "Same marker as windows-client, because it is the same pinned Windows template: a dedicated_server",
+        "export changes which resources are packed and which subsystem the binary asks for, not which engine",
+        "it was built from. VERIFIED rather than assumed - the exported dedicated binary was checked against",
+        "binary_markers['windows-client'] and reported 'GetRawInputBuffer present (1x)'.",
+        "",
+        "Added because the preset shipped without it, and the gap was the silent kind: verify-engine-template",
+        "printed 'NOT CONTENT-VERIFIED ... nothing here was asserted about the shipped binary' on every export",
+        "and still exited 0. Windows is the ONLY platform where this check can say anything at all (the patch",
+        "set touches platform/windows/ only), so leaving the second Windows preset canary-only gave up the one",
+        "assertion that speaks to what actually ships."
+      ]
+    },
     "linux-client": {
       "required": [],
       "forbidden": [

@@ -374,7 +374,11 @@ public static class Program
 
         Console.Error.WriteLine($"[bench] stage {cfg.Stage}, {cfg.Agents} agents, {cfg.TicksPerStep} ticks/step, " +
                                 $"trace fan {(cfg.TraceFan ? "on" : "off")}, obs {obsSize}, " +
-                                $"actions {(opts.PolicyPath is not null ? "POLICY" : opts.Scripted ? "SCRIPTED forward" : "random")}");
+                                $"actions {(opts.PolicyPath is not null ? "POLICY" : opts.Scripted ? "SCRIPTED forward" : "random")}, " +
+                                // Echoed because it is latched into a static on first touch of
+                                // NeuralLocomotor: if an option set it too late, the run silently uses the
+                                // other frame and the A/B compares a config against itself.
+                                $"frame {(NeuralLocomotor.UseCorridorFrame ? "CORRIDOR" : "target")}");
 
         env.Reset(observations);
 

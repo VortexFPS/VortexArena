@@ -136,6 +136,16 @@ public sealed class TrainingEnv
         /// <summary>How the episode ended: 0 running, 1 arrived, 2 died, 3 fell out of the world, 4 timed out.</summary>
         public int Outcome;
         public Vector3 Target;
+
+        /// <summary>
+        /// This agent's own goal-distance field, so every agent on a host can run a DIFFERENT route.
+        ///
+        /// <para>Geometry is per HOST -- one GameWorld, one map -- but a route is just a spawn/target pair
+        /// and a Dijkstra flood, which is a few milliseconds and a float per navigation cell. Sharing one
+        /// route across all sixteen agents made route diversity scale with host count when it did not have
+        /// to: 20 hosts x 16 agents is 320 distinct routes, not 20.</para>
+        /// </summary>
+        public NavDistanceField Distance = null!;
         public bool WeaponPermit;
         public int PermitFlipStep;
         public bool AimConstraint;
@@ -301,20 +311,21 @@ public sealed class TrainingEnv
     /// 4000, 2.3% beyond. A short route on a complex map is a genuinely easier problem than a long one, and
     /// it is the same geometry the policy has to end up handling.</para>
     ///
-    /// <para>Stages 1 and 2 also narrow the map set to the simplest arenas. That trades away some geometry
-    /// diversity, which is the single biggest measured effect in this whole system -- 6 distinct courses per
-    /// batch scored 46.3% on stage 1 where 24 scored 95.0%. If the early stages stall, WIDEN THIS LIST
-    /// FIRST; it is the most likely cause by a distance.</para>
+    /// <para>Every stage now uses the WHOLE map pool. Stages 1 and 2 were restricted to four simple
+    /// arenas, and it failed exactly as the note here predicted: 24 worlds held 24 routes across only 4
+    /// distinct geometries, and stage 1 plateaued at 52-56% shipped against an 85% gate -- below the 59.9%
+    /// a scripted straight-line runner scores on the same band -- for 20.7M steps. Four layouts is fewer
+    /// than the six that scored 46.3% in the diversity A/B, against 24 that scored 95.0%.</para>
+    ///
+    /// <para>Route length alone carries the ramp now. A short route on a complex map is a genuinely easier
+    /// problem than a long one, and it is the geometry the policy has to handle anyway.</para>
     /// </summary>
     public static (string[] Maps, float MinRoute, float MaxRoute) StageProfile(CourseGenerator.Stage stage)
     {
-        // Small, open arenas. eggandbacon is a large room with obstacles and has no waypoint graph at all,
-        // so it reaches the pool only via the spawn/item anchor fallback.
-        string[] simple = { "eggandbacon", "finalrage", "silentsiege", "darkzone" };
         return stage switch
         {
-            CourseGenerator.Stage.Flat      => (simple, 700f, 1200f),
-            CourseGenerator.Stage.Corridor  => (simple, 1200f, 2500f),
+            CourseGenerator.Stage.Flat      => (Array.Empty<string>(), 700f, 1200f),
+            CourseGenerator.Stage.Corridor  => (Array.Empty<string>(), 1200f, 2500f),
             CourseGenerator.Stage.Terrain   => (Array.Empty<string>(), 700f, 1500f),
             CourseGenerator.Stage.Furniture => (Array.Empty<string>(), 1500f, 3000f),
             _                               => (Array.Empty<string>(), 700f, float.PositiveInfinity),
@@ -403,7 +414,7 @@ public sealed class TrainingEnv
             // built: after the physics, not inside the think. See NeuralLocomotor.DeferObservationBuild.
             a.Loco.DeferObservationBuild = _evalPolicy is null;
             RefreshCorridor(a);
-            a.PrevPotential = Potential(a.Player.Origin);
+            a.PrevPotential = Potential(a, a.Player.Origin);
             a.StartPotential = a.PrevPotential;
             a.PrevHealth = Vitality(a.Player);
             // Build the opening observation through the locomotor, so it is produced by exactly the code
@@ -436,6 +447,19 @@ public sealed class TrainingEnv
 
     private static string Fmt(Vector3 v) => string.Create(CultureInfo.InvariantCulture, $"{v.X} {v.Y} {v.Z}");
 
+    /// <summary>
+    /// A target and its distance field for one agent. On a real map this is an independent draw; on a
+    /// generated course it is the host's shared route.
+    /// </summary>
+    private (Vector3 Target, NavDistanceField Distance) DrawAgentRoute()
+    {
+        if (_currentMap is null || _mapSource is null) return (_course.Target, _distance);
+
+        (_, float minRoute, float maxRoute) = StageProfile(_cfg.Stage);
+        var draw = _mapSource.NextRouteOn(_currentMap, _rng, minRoute, maxRoute);
+        return draw is null ? (_course.Target, _distance) : (draw.Value.Target, draw.Value.Distance);
+    }
+
     private Agent SpawnAgent(int index)
     {
         // ClientConnect's own OnBotConnected hook routes into BotPopulation.RegisterBot, so the brain
@@ -444,11 +468,19 @@ public sealed class TrainingEnv
         BotBrain brain = _world.Bots.BrainOf(p)
             ?? throw new InvalidOperationException("bot connected without a brain — OnBotConnected is unwired");
 
+        // Each agent draws its OWN route through this host's map, so route diversity does not scale with
+        // host count. Geometry cannot vary within a host -- one GameWorld, one map -- but a route is a
+        // spawn/target pair plus a Dijkstra flood, which costs a few milliseconds and a float per cell.
+        // Generated stages keep the shared course: there the geometry IS the course, so there is nothing
+        // else to draw.
+        (Vector3 agentTarget, NavDistanceField agentDist) = DrawAgentRoute();
+
         var a = new Agent
         {
             Brain = brain,
             Player = p,
-            Target = _course.Target,
+            Target = agentTarget,
+            Distance = agentDist,
             WeaponPermit = _rng.NextDouble() < _cfg.WeaponChance,
             PermitFlipStep = _rng.NextDouble() < _cfg.PermitFlipChance ? _rng.Next(60, Math.Max(61, _cfg.MaxSteps)) : -1,
             AimConstraint = _rng.NextDouble() < _cfg.AimConstraintChance,
@@ -456,7 +488,7 @@ public sealed class TrainingEnv
 
         if (a.AimConstraint)
         {
-            Vector3 toGoal = a.Target - _course.Spawn;
+            Vector3 toGoal = a.Target - p.Origin;
             float baseYaw = toGoal.LengthSquared() > 1f ? QMath.VecToAngles(QMath.Normalize(toGoal)).Y : 0f;
             a.AimTarget = new Vector3(
                 (float)(_rng.NextDouble() * 40.0 - 20.0),
@@ -493,8 +525,8 @@ public sealed class TrainingEnv
     /// </summary>
     private void RefreshCorridor(Agent a)
     {
-        a.CorridorNear = _distance.PointAlongRoute(a.Player.Origin, 320f);
-        a.CorridorFar = _distance.PointAlongRoute(a.CorridorNear, 320f);
+        a.CorridorNear = a.Distance.PointAlongRoute(a.Player.Origin, 320f);
+        a.CorridorFar = a.Distance.PointAlongRoute(a.CorridorNear, 320f);
     }
 
     private MoveIntent BuildIntent(Agent a)
@@ -631,7 +663,7 @@ public sealed class TrainingEnv
         {
             Agent a = _agents[i];
             if (a.Arrived) { arrived++; timeSum += a.ArrivalTime; }
-            float d = Potential(a.Player.Origin);
+            float d = Potential(a, a.Player.Origin);
             remainSum += MathF.Min(d, 8000f);
         }
         return (arrived,
@@ -774,7 +806,7 @@ public sealed class TrainingEnv
         // The difference form is zero for a stationary agent, positive only for real progress, and its total
         // over an episode is exactly the distance closed. Standard practice, and the one that survives
         // contact with a time penalty.
-        float potential = Potential(p.Origin);
+        float potential = Potential(a, p.Origin);
         r += (a.PrevPotential - potential) * ProgressScale;
         a.PrevPotential = potential;
 
@@ -845,12 +877,13 @@ public sealed class TrainingEnv
         return r;
     }
 
-    private float Potential(Vector3 at)
+    /// <summary>Geodesic distance from <paramref name="at"/> to THIS AGENT'S target.</summary>
+    private static float Potential(Agent a, Vector3 at)
     {
-        float d = _distance.DistanceAt(at);
+        float d = a.Distance.DistanceAt(at);
         // Off-graph (mid-air over a pit, mid jump-pad arc) has no graph distance. Fall back to a padded
         // straight line so the shaping term stays finite and airborne states are not all identical.
-        return d >= NavDistanceField.Unreachable ? (at - _course.Target).Length() * 1.5f : d;
+        return d >= NavDistanceField.Unreachable ? (at - a.Target).Length() * 1.5f : d;
     }
 
     private static Vector3 WrapPitchYaw(Vector3 v)

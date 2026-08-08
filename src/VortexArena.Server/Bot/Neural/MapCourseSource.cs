@@ -326,6 +326,35 @@ public sealed class MapCourseSource
         return null;
     }
 
+    /// <summary>
+    /// Another route through a map that is already prepared and already loaded into a world.
+    ///
+    /// <para>This is <see cref="NextEpisode"/> without the map draw, so every agent sharing a host can run
+    /// its own route. Geometry cannot vary within a host -- one GameWorld holds one map -- but the route
+    /// can, and it costs one Dijkstra flood plus a float per navigation cell. At 16 agents that turns 20
+    /// hosts into 320 distinct routes rather than 20.</para>
+    /// </summary>
+    public (Vector3 Spawn, Vector3 Target, NavDistanceField Distance)? NextRouteOn(
+        PreparedMap map, Random rng, float minRouteLength = 700f,
+        float maxRouteLength = float.PositiveInfinity)
+    {
+        for (int attempt = 0; attempt < 8; attempt++)
+        {
+            Vector3 target = map.Anchors[rng.Next(map.Anchors.Count)];
+            NavDistanceField dist = NavDistanceField.Build(map.Field, target);
+            if (dist.ReachedSpans < 32) continue;
+
+            for (int pick = 0; pick < 24; pick++)
+            {
+                Vector3 spawn = map.Anchors[rng.Next(map.Anchors.Count)];
+                float d = dist.DistanceAt(spawn);
+                if (d >= NavDistanceField.Unreachable || d < minRouteLength || d > maxRouteLength) continue;
+                return (spawn, target, dist);
+            }
+        }
+        return null;
+    }
+
     private NavField? TryReadCachedField(string name, ulong hash)
     {
         try

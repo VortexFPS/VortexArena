@@ -398,6 +398,9 @@ public static class Program
         double rewardSum = 0, remainingSum = 0;
         int[] bucketArrived = new int[TrainingEnv.RouteBuckets.Length];
         int[] bucketAttempts = new int[TrainingEnv.RouteBuckets.Length];
+        // Agent 0's observation, sampled sparsely so the statistics span whole episodes rather than one
+        // burst of consecutive and therefore nearly identical frames.
+        var obsSamples = new List<float[]>();
 
         // Bounded by EPISODES when --bench-episodes is given, by steps otherwise.
         //
@@ -417,6 +420,8 @@ public static class Program
             env.Step(actions, observations, rewards, dones, truncated);
             for (int i = 0; i < rewards.Length; i++) rewardSum += rewards[i];
             steps++;
+            if (steps % 17 == 0 && obsSamples.Count < 4000)
+                obsSamples.Add(observations[..obsSize].ToArray());
             if (opts.Debug && steps % 60 == 0)
                 Console.Error.WriteLine($"[dbg {steps,5}] {env.DebugAgent0()}");
             if (env.AllDone())
@@ -442,6 +447,44 @@ public static class Program
         double stepsPerSec = steps / sec;
         double agentStepsPerSec = stepsPerSec * cfg.Agents;
         double simSecondsPerSec = stepsPerSec * cfg.TicksPerStep / 72.0;
+
+        // Per-section observation statistics.
+        //
+        // A policy only stays at maximum entropy when no action is reliably better than another, and one way
+        // to arrange that is to feed it inputs that do not distinguish the states needing different actions.
+        // Every PPO knob (entropy, gamma, lr) has been moved across an order of magnitude without shifting
+        // arrivals, which puts the observation next in line. The comparison that matters is stage 3, where
+        // this policy reaches 71%, against stage 6, where it does not: a section that carries signal on one
+        // and is flat or empty on the other is the difference between navigating and guessing.
+        //
+        // Standard deviation, not mean: a constant input is worth exactly nothing to a network no matter how
+        // large the constant is.
+        Console.Error.WriteLine("[bench] observation sections (stddev across samples, and share of exact zeros):");
+        (string Name, int Off, int Len)[] sections =
+        {
+            ("proprio",   0,   15), ("weapon",   15, 12), ("goal",     27, 11),
+            ("aim",      38,    4), ("history",  42,  8), ("prevAct",  50,  8),
+            ("navfield", 58,   72), ("features",130, 64), ("traceFan",194, 12),
+        };
+        foreach ((string name, int off, int len) in sections)
+        {
+            double sum = 0, sumSq = 0, zeros = 0;
+            long n = 0;
+            for (int s = 0; s < obsSamples.Count; s++)
+            {
+                float[] o = obsSamples[s];
+                for (int k = off; k < off + len && k < o.Length; k++)
+                {
+                    sum += o[k]; sumSq += (double)o[k] * o[k];
+                    if (o[k] == 0f) zeros++;
+                    n++;
+                }
+            }
+            if (n == 0) continue;
+            double mean = sum / n;
+            double sd = Math.Sqrt(Math.Max(0, sumSq / n - mean * mean));
+            Console.Error.WriteLine($"[bench]   {name,-9} sd {sd,8:F4}  zeros {100.0 * zeros / n,5:F1}%");
+        }
 
         Console.Error.WriteLine("[bench] arrival by route length:");
         for (int b = 0; b < bucketAttempts.Length; b++)

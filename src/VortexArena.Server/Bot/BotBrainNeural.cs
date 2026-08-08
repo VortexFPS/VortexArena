@@ -41,6 +41,17 @@ public sealed partial class BotBrain
     /// work out where combat wants the crosshair, decide whether the trigger may be pulled, package both into
     /// a <see cref="MoveIntent"/>, and let the policy drive.</para>
     /// </summary>
+    /// <summary>
+    /// Health plus armour at or below which the policy loses the weapon for movement.
+    ///
+    /// <para>60 of a 100 baseline: enough of a margin that a blaster pop's self-damage cannot finish the
+    /// bot, without disabling weapon movement so early that the skill never shows up in play.</para>
+    /// </summary>
+    public const float WeaponMovementMinHealth = 60f;
+
+    /// <summary>Health plus armour, matching what the training reward's damage term counts.</summary>
+    private static float Vitality(Player p) => p.Health + p.GetResource(ResourceType.Armor);
+
     private MovementInput NeuralThinkProduce(Player bot, float dt, float now, bool jumpHeld)
     {
         using var _scope = VortexArena.Common.Diagnostics.Prof.Sample("bot.nn");
@@ -118,6 +129,18 @@ public sealed partial class BotBrain
             intent.WeaponMovementAllowed = true;
             IdleReload(bot, now);   // QC havocbot_ai:181-211, unchanged from the classic path
         }
+
+        // Hurt bots stop spending health on movement. Blaster and rocket jumps cost self-damage, which is a
+        // fine trade at full health and a way to die at low health, and the policy cannot make that call
+        // because it optimises arrival time and never has to survive the next fight.
+        //
+        // Applied AFTER the combat branches so it overrides both: whatever combat decided, a bot at or below
+        // this threshold does not get the weapon for movement. Withdrawing the permit is enough on its own --
+        // ActionSpace.Decode masks the attack and weapon-select heads off entirely, so there is nothing to
+        // penalise and nothing the policy can do about it. A reward penalty would only make firing
+        // expensive, and combat needs a guarantee rather than a price.
+        if (Vitality(bot) <= WeaponMovementMinHealth)
+            intent.WeaponMovementAllowed = false;
 
         // ---- 3. the destination ----
         Vector3 goal = Nav.Current ?? bot.Origin;

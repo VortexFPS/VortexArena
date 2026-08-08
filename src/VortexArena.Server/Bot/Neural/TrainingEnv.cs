@@ -678,6 +678,27 @@ public sealed class TrainingEnv
     /// </summary>
     public const float ProgressScale = 0.01f;
 
+    /// <summary>Paid for arriving at all, regardless of how long it took.</summary>
+    public const float ArriveBase = 10f;
+
+    /// <summary>
+    /// Paid for arriving FAST, scaled by the fraction of the step budget still unspent.
+    ///
+    /// <para>Speed is the goal, so this is the term that has to dominate, and it is the only safe place to
+    /// put that pressure. Arriving at step 100 of 900 pays this almost in full; arriving at step 800 pays
+    /// about a ninth of it. Raising it cannot make any failure more attractive, because it is only ever paid
+    /// on success.</para>
+    ///
+    /// <para>The tempting alternative -- a bigger per-step time penalty -- is the one to avoid. The time
+    /// cost is already -0.02 x 900 = -18 over a full episode against a death penalty of -20, so doubling it
+    /// would make surviving to the cap cost -36 and dying cost -20, and dying would be the cheaper option
+    /// again. That is exactly the bug that had the policy killing itself in 65% of stage-6 episodes.</para>
+    ///
+    /// <para>At 60, arriving at step 100 is worth about 63 against 17 for arriving at step 800, and the time
+    /// term adds another 14 to the gap: roughly 60 for speed against 17 for merely finishing.</para>
+    /// </summary>
+    public const float ArriveSpeedBonus = 60f;
+
     private static float Vitality(Player p) => p.Health + p.GetResource(ResourceType.Armor);
 
     private float Reward(Agent a, out bool terminal, out bool truncatedOut)
@@ -748,7 +769,7 @@ public sealed class TrainingEnv
             // Scaled by the step budget left, so a faster route pays strictly more. A flat bonus makes
             // "arrive eventually" as good as "arrive fast" once the time cost is amortised.
             float budgetLeft = 1f - a.Step / (float)_cfg.MaxSteps;
-            r += 10f + 20f * MathF.Max(0f, budgetLeft);
+            r += ArriveBase + ArriveSpeedBonus * MathF.Max(0f, budgetLeft);
             terminal = true;
             return r;
         }

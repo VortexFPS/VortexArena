@@ -63,7 +63,12 @@ class Hyper:
     # compute-bound and bigger batches are close to free.
     minibatches: int = 4
     lr: float = 3e-4
-    gamma: float = 0.995        # 0.055 s per step, so this is a ~9 s horizon
+    # 0.0556 s per step, so 1/(1-gamma) = 200 steps is an ~11 s horizon -- against episodes of MaxSteps=900,
+    # which are 50 s. The arrival bonus at the end of a long route is discounted by 0.995^900 = 0.011, so a
+    # policy starting a 3000 qu course cannot see it at all and correctly optimises local progress instead.
+    # This is the shape of the stage-6 plateau: arrivals fall off with route length (60.9% under 1000 qu,
+    # 2.7% over 4000) exactly as a horizon shorter than the task predicts. See --gamma.
+    gamma: float = 0.995
     gae_lambda: float = 0.95
     clip: float = 0.2
     value_coef: float = 0.5
@@ -170,6 +175,10 @@ def main() -> int:
                          "strong once arrivals get rare: on stage 6 it made the entropy bonus twice the "
                          "policy gradient, entropy rose 6.91 -> 7.63 of a 8.19 maximum, and the eval never "
                          "left 3-9%%. Watch the e/p column -- keep it below about 1.0.")
+    ap.add_argument("--gamma", type=float, default=None,
+                    help="override Hyper.gamma. The default 0.995 is an 11 s horizon against 50 s episodes, "
+                         "which discounts the arrival bonus to 0.011 at step 900. 0.999 makes the horizon "
+                         "1000 steps, about the episode length.")
     ap.add_argument("--device", type=str, default="cpu",
                     help="cpu is usually right: the net is 45k parameters and the bottleneck is the env")
     ap.add_argument("--verbose-hosts", action="store_true", help="let the env hosts write to stderr")
@@ -231,6 +240,8 @@ def main() -> int:
     hyper = Hyper()
     if args.entropy_coef is not None:
         hyper.entropy_coef = args.entropy_coef
+    if args.gamma is not None:
+        hyper.gamma = args.gamma
     optimizer = torch.optim.Adam(policy.parameters(), lr=hyper.lr, eps=1e-5)
 
     start_stage = args.stage

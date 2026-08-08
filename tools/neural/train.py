@@ -322,6 +322,8 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     logp_buf = np.zeros((rollout, n_agents), dtype=np.float32)
     rew_buf = np.zeros((rollout, n_agents), dtype=np.float32)
     done_buf = np.zeros((rollout, n_agents), dtype=np.float32)
+    # True where the agent was still running when the step began; see the note by `alive` below.
+    alive_buf = np.zeros((rollout, n_agents), dtype=bool)
     val_buf = np.zeros((rollout, n_agents), dtype=np.float32)
 
     obs = env.reset()
@@ -334,12 +336,31 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     recent_det: list[float] = []
     ret_scale = ReturnScale()
 
+    # Which agents are still running. TrainingEnv keeps reporting an agent that has finished -- reward 0,
+    # done 1, and an observation slice Clear()ed to all zeros -- every step until EVERY agent finishes and
+    # Reset() is called. Those are not transitions, and three things must not see them:
+    #
+    #   - RunningNorm, whose mean and variance are BAKED INTO the exported weight file. Feeding it all-zero
+    #     vectors biases the mean toward zero and inflates the variance, so the shipped policy normalises
+    #     real observations with statistics computed from padding. RunningNorm.count accumulates across the
+    #     whole curriculum, so this does not wash out between stages.
+    #   - The PPO losses, which would otherwise average over dead samples and shrink the real gradient.
+    #   - GAE, which reads done=1 on every padded step and chops its accumulation there.
+    #
+    # Measured share of agent-steps that are padding, holding forward: 83.5% on stage 1, 19.6% on stage 6.
+    # Stage 1 agents arrive in a fraction of the 900-step cap and then idle; stage 6 agents mostly run to
+    # the cap. So this is worst on the stage that trains BEST, and it is not the stage-6 plateau -- it is a
+    # correctness bug in its own right.
+    alive = np.ones(n_agents, dtype=bool)
+
     while total_steps < budget:
         update += 1
         t_env = t_pol = 0.0
         for t in range(rollout):
             _p0 = time.perf_counter()
-            norm.update(obs)
+            alive_buf[t] = alive
+            if alive.any():
+                norm.update(obs[alive])
             nobs = norm.normalize(obs)
             obs_buf[t] = nobs
 
@@ -360,7 +381,21 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
             # ended only because the clock ran out. Conflating them teaches the policy that time limits are
             # a form of death and makes it hurry into walls near the cap.
             done_buf[t] = done.astype(np.float32)
-            total_steps += n_agents
+            # This step counted only for agents that were still running when it began. An agent that was
+            # already finished contributes padding, not experience.
+            total_steps += int(alive.sum())
+            # Finished means done OR truncated, and the distinction matters here in a way it does not in
+            # done_buf. A timeout reports done=0, truncated=1, and TrainingEnv still marks that agent
+            # finished and pads it from then on -- so masking on done alone would leave the majority of
+            # stage 6 unmasked, where most agents reach the step cap rather than dying or arriving.
+            finished = done.astype(bool) | trunc.astype(bool)
+            alive &= ~finished
+            # VectorEnv resets a host the moment all of its agents are finished, inside this same step call,
+            # so that host's observations are already fresh and its agents are live again.
+            for h in range(args.hosts):
+                lo, hi = h * cfg.agents, (h + 1) * cfg.agents
+                if finished[lo:hi].all():
+                    alive[lo:hi] = True
 
         with torch.inference_mode():
             last_value = policy(torch.as_tensor(norm.normalize(obs), device=device))[1].cpu().numpy()
@@ -381,7 +416,8 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         adv, ret = gae(scaled_rew, val_buf, done_buf, last_value, hyper.gamma, hyper.gae_lambda)
 
         _u0 = time.perf_counter()
-        stats = ppo_update(policy, optimizer, hyper, obs_buf, act_buf, logp_buf, adv, ret, device)
+        stats = ppo_update(policy, optimizer, hyper, obs_buf, act_buf, logp_buf, adv, ret, device,
+                           alive_buf=alive_buf)
         t_upd = time.perf_counter() - _u0
 
         # Rollout arrivals, from SAMPLED actions. A progress signal, not a gate: see the eval below.
@@ -561,16 +597,25 @@ def gae(rewards, values, dones, last_value, gamma: float, lam: float):
     return adv, adv + values
 
 
-def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv, ret, device) -> dict:
+def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv, ret, device,
+               alive_buf=None) -> dict:
     T, N = adv.shape
-    b_obs = torch.as_tensor(obs_buf.reshape(T * N, -1), device=device)
-    b_act = torch.as_tensor(act_buf.reshape(T * N, -1), device=device)
-    b_logp = torch.as_tensor(logp_buf.reshape(T * N), device=device)
-    b_adv = torch.as_tensor(adv.reshape(T * N), device=device)
-    b_ret = torch.as_tensor(ret.reshape(T * N), device=device)
+    # Drop padding outright rather than weighting it to zero. An agent that has already finished keeps
+    # being reported every step -- zero reward, done 1, all-zero observation -- until the whole host
+    # resets, and those rows are not transitions. Selecting them out here also normalises the advantages
+    # over real experience only, which weighting after the fact would not do.
+    keep = (torch.as_tensor(alive_buf.reshape(T * N), device=device)
+            if alive_buf is not None else torch.ones(T * N, dtype=torch.bool, device=device))
+    b_obs = torch.as_tensor(obs_buf.reshape(T * N, -1), device=device)[keep]
+    b_act = torch.as_tensor(act_buf.reshape(T * N, -1), device=device)[keep]
+    b_logp = torch.as_tensor(logp_buf.reshape(T * N), device=device)[keep]
+    b_adv = torch.as_tensor(adv.reshape(T * N), device=device)[keep]
+    b_ret = torch.as_tensor(ret.reshape(T * N), device=device)[keep]
     b_adv = (b_adv - b_adv.mean()) / (b_adv.std() + 1e-8)
 
-    total = T * N
+    # The masked row count, NOT T*N: selecting padding out above shortened every buffer, and indexing the
+    # short tensors with the full range walks off the end.
+    total = int(b_obs.shape[0])
     batch = max(1, total // hyper.minibatches)
     idx = np.arange(total)
 

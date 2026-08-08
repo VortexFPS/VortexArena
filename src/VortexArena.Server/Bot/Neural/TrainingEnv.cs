@@ -644,6 +644,34 @@ public sealed class TrainingEnv
     public const float ArriveRadius = 96f;
 
     /// <summary>
+    /// Cost of dying, or of falling out of the world.
+    ///
+    /// <para>This has to beat the whole remaining cost of staying alive, or ending the episode early is
+    /// simply the cheaper option and a policy maximising return will take it. It did not, and the policy
+    /// did. The dense terms -- aim error, turn, and progress once the bot is stuck -- run about -0.007 per
+    /// step for every arm including the scripted one, so surviving to the 900-step cap accrues roughly
+    /// -6.3, while dying at step 100 cost about -0.7 of dense terms plus the old -5 penalty: -5.7, and
+    /// therefore strictly better than living.</para>
+    ///
+    /// <para>Measured on stage 6 at -5, against the scripted "run at the target" baseline:</para>
+    /// <code>
+    ///              arrived   died    timed out   return
+    ///   scripted    20.6%     6.8%     72.4%     -6.594
+    ///   policy       8.6%    65.1%     26.2%     -6.672
+    /// </code>
+    /// <para>Ten times the death rate for less than half the arrivals, and the objective scored the two
+    /// within 0.08 of each other. That is not a policy that failed to learn; it is a policy that learned
+    /// exactly what it was asked. It also explains why entropy, the action frame, gamma, the learning rate,
+    /// the view-delta sigma and the padding mask all moved their own diagnostics and never moved arrivals:
+    /// each one only helped the search find this optimum faster.</para>
+    ///
+    /// <para>-20 puts death clearly below the worst survival outcome while staying within the arrival
+    /// bonus's own 10-30 range, so the gradient toward arriving is not swamped by the one away from
+    /// dying.</para>
+    /// </summary>
+    public const float DeathPenalty = 20f;
+
+    /// <summary>
     /// Reward per Quake unit of geodesic distance closed. At a 400 qu/s run and 4 ticks per step that is
     /// about 0.22 per step, an order above the 0.02 time cost, so progress dominates and standing still
     /// loses.
@@ -706,7 +734,7 @@ public sealed class TrainingEnv
         // --- terminal states ---
         if (p.IsDead || p.Health <= 0f)
         {
-            r -= 5f;
+            r -= DeathPenalty;
             terminal = true;
             a.Outcome = 2;
             return r;
@@ -727,7 +755,7 @@ public sealed class TrainingEnv
 
         if (p.Origin.Z < _course.World.WorldMins.Z - 512f)
         {
-            r -= 5f;
+            r -= DeathPenalty;
             terminal = true;
             a.Outcome = 3;
             return r;

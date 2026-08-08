@@ -181,6 +181,10 @@ def main() -> int:
                          "maximum, meaning the actor head has barely moved off its deliberately tiny "
                          "orthogonal(gain=0.01) initialisation. target_kl is the safety net -- raise this "
                          "until kl approaches it.")
+    ap.add_argument("--log-std-max", type=float, default=None,
+                    help="override Policy.LOG_STD_MAX, the cap on view-delta exploration noise. -1.386 is "
+                         "sigma 0.25 of range (5.5 deg/step of yaw); the network initialises at -0.5, "
+                         "which is 13.4 deg/step, so the default cap sits well below the starting point.")
     ap.add_argument("--gamma", type=float, default=None,
                     help="override Hyper.gamma. The default 0.995 is an 11 s horizon against 50 s episodes, "
                          "which discounts the arrival bonus to 0.011 at step 900. 0.999 makes the horizon "
@@ -248,6 +252,8 @@ def main() -> int:
         hyper.entropy_coef = args.entropy_coef
     if args.gamma is not None:
         hyper.gamma = args.gamma
+    if args.log_std_max is not None:
+        Policy.LOG_STD_MAX = args.log_std_max
     if args.lr is not None:
         hyper.lr = args.lr
     optimizer = torch.optim.Adam(policy.parameters(), lr=hyper.lr, eps=1e-5)

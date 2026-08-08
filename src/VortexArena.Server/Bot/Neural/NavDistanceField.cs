@@ -51,6 +51,24 @@ public sealed class NavDistanceField
         _count = count;
     }
 
+    /// <summary>The distance buffer, so a probing caller can hand it back to the next <see cref="Build"/>.</summary>
+    public float[] Buffer => _dist;
+
+    /// <summary>
+    /// A copy that owns its distance buffer, so the shared probe buffer can keep being reused.
+    ///
+    /// <para>The span index is shared deliberately -- it is per-field and immutable, and sharing it is the
+    /// point of caching it.</para>
+    /// </summary>
+    public NavDistanceField DetachCopy()
+    {
+        var copy = new NavDistanceField(_field, (float[])_dist.Clone(), _start, _count)
+        {
+            ReachedSpans = ReachedSpans,
+        };
+        return copy;
+    }
+
     /// <summary>
     /// Build the distance field for one goal position. Cost is O(spans log spans); on a 15,000-column map
     /// that is a few milliseconds, so the training env rebuilds it per episode.
@@ -97,7 +115,15 @@ public sealed class NavDistanceField
     // Keyed weakly so a field that falls out of the map cache does not pin its index here.
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<NavField, SpanIndex> _indexCache = new();
 
-    public static NavDistanceField Build(NavField field, Vector3 goal)
+    /// <param name="reuse">
+    /// A distance buffer to write into instead of allocating one, or null.
+    ///
+    /// <para>For callers that flood repeatedly and keep only some of the results. MapCourseSource retries
+    /// up to eight times per agent when a drawn target turns out unreachable, and every rejected attempt
+    /// used to allocate and discard a float[spans] on the Large Object Heap. The accepted field must not
+    /// share a buffer with the next probe, so a caller that keeps one calls <see cref="DetachCopy"/>.</para>
+    /// </param>
+    public static NavDistanceField Build(NavField field, Vector3 goal, float[]? reuse = null)
     {
         int w = field.Width, h = field.Height;
         SpanIndex index = _indexCache.GetValue(field, static f => new SpanIndex(f));
@@ -106,8 +132,9 @@ public sealed class NavDistanceField
         int total = index.Total;
 
         // The one genuinely per-goal allocation left. Still large, but one array per call rather than
-        // three, and no lattice sweep.
-        var dist = new float[total];
+        // three, and no lattice sweep -- and a caller probing for a reachable target can hand the same
+        // buffer back on every attempt so only the accepted route allocates.
+        float[] dist = reuse is not null && reuse.Length >= total ? reuse : new float[total];
         for (int i = 0; i < total; i++) dist[i] = Unreachable;
 
         var result = new NavDistanceField(field, dist, start, count);

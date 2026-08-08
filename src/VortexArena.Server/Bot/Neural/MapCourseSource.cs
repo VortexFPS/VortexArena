@@ -339,6 +339,16 @@ public sealed class MapCourseSource
     /// can, and it costs one Dijkstra flood plus a float per navigation cell. At 16 agents that turns 20
     /// hosts into 320 distinct routes rather than 20.</para>
     /// </summary>
+    /// <summary>
+    /// A scratch distance buffer, reused across probe attempts.
+    ///
+    /// <para>Every rejected attempt used to allocate and discard a float[spans] on the Large Object Heap,
+    /// and with per-agent routes this runs up to eight times per agent -- 160 floods an episode at 20
+    /// agents. Measured before this: a 120-episode bench peaked at 5.6 GB resident and every training run
+    /// on the box ended in an out-of-memory kill. Only the accepted route allocates now.</para>
+    /// </summary>
+    private float[]? _probeBuffer;
+
     public (Vector3 Spawn, Vector3 Target, NavDistanceField Distance)? NextRouteOn(
         PreparedMap map, Random rng, float minRouteLength = 700f,
         float maxRouteLength = float.PositiveInfinity)
@@ -346,15 +356,18 @@ public sealed class MapCourseSource
         for (int attempt = 0; attempt < 8; attempt++)
         {
             Vector3 target = map.Anchors[rng.Next(map.Anchors.Count)];
-            NavDistanceField dist = NavDistanceField.Build(map.Field, target);
-            if (dist.ReachedSpans < 32) continue;
+            NavDistanceField probe = NavDistanceField.Build(map.Field, target, _probeBuffer);
+            _probeBuffer = probe.Buffer;
+            if (probe.ReachedSpans < 32) continue;
 
             for (int pick = 0; pick < 24; pick++)
             {
                 Vector3 spawn = map.Anchors[rng.Next(map.Anchors.Count)];
-                float d = dist.DistanceAt(spawn);
+                float d = probe.DistanceAt(spawn);
                 if (d >= NavDistanceField.Unreachable || d < minRouteLength || d > maxRouteLength) continue;
-                return (spawn, target, dist);
+                // The caller keeps this one, so it needs its own buffer; the probe buffer goes on being
+                // reused by the next agent's draw.
+                return (spawn, target, probe.DetachCopy());
             }
         }
         return null;

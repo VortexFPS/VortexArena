@@ -54,6 +54,20 @@ class Hyper:
     # full 1.2M-step pass bought only 101 gradient updates and stage 1 was still at 3% arrivals; halving
     # the rollout doubles the updates for the same samples, which is the axis that was short.
     rollout: int = 128          # steps per host per update
+    #
+    # This is half of the batch-size decision; --hosts x --agents is the other half, and only this one is
+    # usually thought of as a hyperparameter. Batch = rollout x hosts x agents, while gradient steps per
+    # update stay fixed at epochs x minibatches = 16, so growing the agent count without shrinking this
+    # buys samples at the cost of updates.
+    #
+    # Measured, stage 1, shipped-path eval at ~2.0M steps:
+    #
+    #     v3   20 hosts x 16 agents, rollout 128   ->  40,960 per update   43.3%
+    #     v4   24 hosts x 20 agents, rollout 128   ->  61,440 per update   27.1%
+    #
+    # The scale-up was meant to be free and was not: all three of v4's lr-tournament branches also came in
+    # 25-40% below v3's, so it was not the learning rate. Halving the rollout at the larger agent count
+    # restores ~40k per update and doubles updates per sample.
     epochs: int = 4             # passes over each rollout; low, because samples are cheap to replace
     # 4, not the more usual 8 or 32. Measured on stage 1 with 6 hosts: 8 minibatches gives 5,475
     # agent-steps/s with the PPO update taking 0.42 s of a 1.06 s iteration; 4 gives 6,905 with the update
@@ -207,6 +221,12 @@ def main() -> int:
                          "strong once arrivals get rare: on stage 6 it made the entropy bonus twice the "
                          "policy gradient, entropy rose 6.91 -> 7.63 of a 8.19 maximum, and the eval never "
                          "left 3-9%%. Watch the e/p column -- keep it below about 1.0.")
+    ap.add_argument("--rollout", type=int, default=None,
+                    help="override Hyper.rollout, the steps per host per update. This sets the BATCH SIZE "
+                         "jointly with --hosts and --agents (batch = rollout x hosts x agents) while the "
+                         "number of gradient steps per update stays fixed at epochs x minibatches, so "
+                         "raising agents without lowering this trades gradient steps for sample count -- "
+                         "the axis this system has repeatedly been short of.")
     ap.add_argument("--lr", type=float, default=None,
                     help="override Hyper.lr. The default 3e-4 leaves the trust region almost unused: kl "
                          "runs 0.003-0.006 against target_kl 0.03, and entropy sits at 8.2 of a 8.19 "
@@ -295,6 +315,8 @@ def main() -> int:
         Policy.LOG_STD_MAX = args.log_std_max
     if args.lr is not None:
         hyper.lr = args.lr
+    if args.rollout is not None:
+        hyper.rollout = args.rollout
     optimizer = torch.optim.Adam(policy.parameters(), lr=hyper.lr, eps=1e-5)
 
     start_stage = args.stage

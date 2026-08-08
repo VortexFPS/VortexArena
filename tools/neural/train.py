@@ -121,26 +121,39 @@ class Hyper:
 
 # Stage, minimum steps, and the arrival rate that says it is done.
 #
-# Every gate is set against that stage's OWN measured baseline: a scripted straight-line runner on the same
-# maps and the same route band, 192 agent-episodes each. The standard is roughly "double the dumb
-# baseline", which is a claim about the policy rather than about whether a run happens to be passing.
+# Every gate is 2x that stage's measured scripted baseline -- a straight-line runner on the same maps and
+# route band. Measured 2026-08-08 at 800 agent-episodes (40 episodes x 20 agents), THREE seeds, mean:
 #
-#     stage   band                          scripted   gate
-#       1     full pool,    700-1200 qu       50.9%     80%
-#       2     full pool,   1200-2500          28.4%     60%
-#       3     full pool,    700-1500          29.7%     60%
-#       4     full pool,   1500-3000          22.9%     50%
-#       5     GENERATED weapon gaps              --     45%
-#       6     full pool,   uncapped           37.0%     55%
+#     stage   band                        baseline   gate
+#       1     full pool,    700-1200 qu     24.6%     50%
+#       2     full pool,   1200-2500        26.6%     55%
+#       3     full pool,    700-1500        32.6%     65%
+#       4     full pool,   1500-3000        27.2%     55%
+#       5     GENERATED weapon gaps            --     45%
+#       6     full pool,   uncapped         27.9%     55%
 #
-# Stages 1-2 re-measured 2026-08-08 after their four-simple-maps restriction was removed (it capped the
-# distinct geometries per batch at 4 and held the policy below the baseline for 20M steps). The bands do
-# not make each stage strictly harder than the last, deliberately: each stage ramps ONE axis.
+# THE EPISODE COUNT IS THE POINT. The previous baselines were taken at 320 agent-episodes (20 x 16), and
+# stages 3/4/6 at 192 (12 x 16), which cannot support a number. Measured spread on stage 1 at 320
+# agent-episodes, seeds 9001/9002/9003: 50.9 / 36.2 / 27.5 -- a 23-point range. The 50.9 became the
+# published baseline and set an 80% gate, which is 3.3x the true figure and unreachable by construction;
+# the policy was then reported as "below baseline" for hours against a number that was a coin flip. At 800
+# agent-episodes the same three seeds give 26.3 / 24.4 / 22.9, a 3.4-point range.
+#
+# Do not re-measure a baseline at fewer than 800 agent-episodes, and average at least three seeds.
+#
+# The eval itself is already past the point of diminishing returns at 800: a fixed policy scored sigma 2.46
+# over six seeds at 800 agent-episodes and sigma 2.52 at 2400, so tripling the episodes buys no precision.
+# About 1.2 of that sigma is execution nondeterminism -- an identical command three times gave 34.6 / 32.3 /
+# 32.9 -- so differences under about 5 points are not resolvable by a single eval at any episode count.
+#
+# The bands do not make each stage strictly harder than the last, deliberately: each ramps ONE axis. That
+# the baselines land in a tight 24.6-32.6% band says the scripted runner fails for similar reasons at every
+# route length, which is itself worth knowing.
 CURRICULUM = [
-    (1, 1_000_000, 0.80),   # full pool, short routes: run and turn on real geometry
-    (2, 2_000_000, 0.60),   # full pool, longer routes: build and hold speed
-    (3, 3_000_000, 0.60),   # full pool, short-but-complex: stairwells, doorways, railings
-    (4, 4_000_000, 0.50),   # full pool, medium routes
+    (1, 1_000_000, 0.50),   # full pool, short routes: run and turn on real geometry
+    (2, 2_000_000, 0.55),   # full pool, longer routes: build and hold speed
+    (3, 3_000_000, 0.65),   # full pool, short-but-complex: stairwells, doorways, railings
+    (4, 4_000_000, 0.55),   # full pool, medium routes
     (5, 6_000_000, 0.45),   # generated weapon gaps: the one skill real maps cannot guarantee
     (6, 20_000_000, 0.55),  # full pool, uncapped: the real distribution
 ]

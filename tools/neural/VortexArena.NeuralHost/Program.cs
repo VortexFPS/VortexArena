@@ -136,6 +136,11 @@ public static class Program
 
         using TcpClient client = listener.AcceptTcpClient();
         client.NoDelay = true;   // a step is a request/response round trip; Nagle would add 40 ms to each
+        // Big enough to hold a whole step result. At 64 agents that is 53 KB of observation, which overruns
+        // the default and leaves this process blocked mid-write until the trainer gets around to reading
+        // it -- and the trainer reads its hosts in order, so everyone behind the current one stalls too.
+        client.SendBufferSize = 4 << 20;
+        client.ReceiveBufferSize = 4 << 20;
         listener.Stop();
         Console.Error.WriteLine("[neural-host] trainer connected");
 

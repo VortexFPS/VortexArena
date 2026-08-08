@@ -131,7 +131,19 @@ class HostEnv:
 
         self.sock = socket.create_connection(("127.0.0.1", port))
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self._file = self.sock.makefile("rwb")
+        # Room for a whole step result without the writer blocking.
+        #
+        # At 64 agents an observation frame is 64 x 206 x 4 = 53 KB, which overruns the default socket
+        # buffer. The host then blocks part-way through its write until someone reads, and VectorEnv reads
+        # its hosts strictly in order -- so hosts 1..N-1 sat stalled mid-write while host 0 was drained.
+        # Measured before this: six hosts at ~10% CPU each on a 28-vCPU box that was 96% idle, with the env
+        # phase at 0.98 s per iteration for about 0.8 ms of actual host work per step.
+        for opt in (socket.SO_RCVBUF, socket.SO_SNDBUF):
+            try:
+                self.sock.setsockopt(socket.SOL_SOCKET, opt, 4 << 20)
+            except OSError:
+                pass   # the OS may clamp this; the larger buffer is an optimisation, not a requirement
+        self._file = self.sock.makefile("rwb", buffering=1 << 20)
 
         self._send(OP_HELLO, cfg.pack())
         op, body = self._recv()

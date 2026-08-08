@@ -44,8 +44,39 @@ The full loop gets a fraction of that, and it is worth knowing which fraction be
 | 8 hosts through the socket, no forward pass | 384 | 55,381 |
 | 6 hosts + torch on CPU + the PPO update | 41 | ~6,600 |
 
-The 12x drop is Python-side: a synchronous round trip per step plus a per-step CPU forward pass. The game
-is not the bottleneck.
+## Where the time actually goes, and what scaling buys
+
+Per PPO iteration, 6 hosts x 8 agents, stage 1, measured with the phase timers the trainer prints:
+
+```
+env 0.25s (27%)   pol 0.30s (33%)   upd 0.38s (40%)
+```
+
+`env` is waiting for the hosts, `pol` is the rollout forward pass, `upd` is the PPO update. Two thirds is
+per-sample Python work, and it grows with the samples collected, not with the cores available. That is why
+throughput scales sublinearly:
+
+| hosts | agents | agent-steps/s | vs previous |
+|---|---|---|---|
+| 3 | 24 | 3,926 | |
+| 6 | 48 | 6,261 | 1.59x |
+| 12 | 96 | 8,684 | 1.39x |
+
+**Doubling the machine buys about 1.5x, and the return is falling.** A 64-core server is worth roughly 2x
+over a 6-host run, not 10x. Budget accordingly, and spend the first effort on the Python side rather than
+on hardware.
+
+Two things measured there, one of which was not what I expected:
+
+* **PPO minibatches: 4, not 8.** The update was 40% of the iteration. 8 minibatches gives 5,475
+  agent-steps/s; 4 gives 6,905 and stage 1 still solves (98.6% sampled arrivals against 97.8%); 2 gives
+  8,191 but arrivals fall to 90.1%, because sixteen gradient steps per update is too few. The network is
+  45,000 parameters, so on CPU each step is dispatch-bound and bigger batches are nearly free.
+* **Torch threads: leave them alone.** Pinning to 1 thread looked obviously right -- 12 threads on a
+  48x206 matmul is fork/join overhead, and they compete with the env hosts. Measured 5,269 against 5,514
+  for the default. The rollout does not want threads but the update's minibatches do, and the update is
+  the bigger share. `--torch-threads` exists for when host count crowds the cores: at 12 hosts on 24 the
+  env phase went 0.23s to 0.40s.
 
 ## Train
 

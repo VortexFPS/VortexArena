@@ -54,7 +54,14 @@ class Hyper:
     # the rollout doubles the updates for the same samples, which is the axis that was short.
     rollout: int = 128          # steps per host per update
     epochs: int = 4             # passes over each rollout; low, because samples are cheap to replace
-    minibatches: int = 8
+    # 4, not the more usual 8 or 32. Measured on stage 1 with 6 hosts: 8 minibatches gives 5,475
+    # agent-steps/s with the PPO update taking 0.42 s of a 1.06 s iteration; 4 gives 6,905 with the update
+    # at 0.28 s, and stage 1 still solves (98.6% sampled arrivals against 97.8%). 2 is faster again at
+    # 8,191 but the arrival rate drops to 90.1% -- sixteen gradient steps per update is too few.
+    #
+    # The network is 45,000 parameters, so on CPU each gradient step is dispatch-bound rather than
+    # compute-bound and bigger batches are close to free.
+    minibatches: int = 4
     lr: float = 3e-4
     gamma: float = 0.995        # 0.055 s per step, so this is a ~9 s horizon
     gae_lambda: float = 0.95
@@ -125,6 +132,12 @@ def main() -> int:
     ap.add_argument("--name", type=str, default=None)
     ap.add_argument("--resume", type=Path, default=None)
     ap.add_argument("--width", type=int, default=128)
+    ap.add_argument("--torch-threads", type=int, default=0,
+                    help="intra-op threads for torch; 0 leaves its default alone. Lower it when the host "
+                         "count approaches the core count -- torch and the env hosts compete, and at 12 "
+                         "hosts on 24 cores the env phase went 0.23s to 0.40s. Setting it to 1 measured "
+                         "WORSE overall (5,269 vs 5,514 agent-steps/s at 6 hosts): the rollout's 48-sample "
+                         "forward pass does not want threads but the update's minibatches do.")
     ap.add_argument("--device", type=str, default="cpu",
                     help="cpu is usually right: the net is 45k parameters and the bottleneck is the env")
     ap.add_argument("--verbose-hosts", action="store_true", help="let the env hosts write to stderr")
@@ -159,6 +172,19 @@ def main() -> int:
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     device = torch.device(args.device)
+
+    # Torch threading is left alone by default, which is not what I expected before measuring.
+    #
+    # The intuition was that torch's 12 intra-op threads on a 48x206 rollout matmul are pure overhead and
+    # steal cores from the env hosts. Half true: pinning it to 1 thread measured 5,269 agent-steps/s
+    # against 5,514 for the default. The rollout does not want threads, but the PPO update's 1,536-sample
+    # minibatches do, and the update is the larger share. Lower this only when host count crowds the cores.
+    if args.torch_threads > 0:
+        torch.set_num_threads(args.torch_threads)
+
+    # Distribution argument validation runs on every construction, and the rollout builds seven
+    # distributions per step. Nothing here feeds torch a malformed parameter; the checks are pure overhead.
+    torch.distributions.Distribution.set_default_validate_args(False)
 
     policy = Policy(obs_size=layout.OBS_SIZE, width=args.width).to(device)
     norm = RunningNorm(layout.OBS_SIZE)
@@ -244,19 +270,25 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
 
     while total_steps < budget:
         update += 1
+        t_env = t_pol = 0.0
         for t in range(rollout):
+            _p0 = time.perf_counter()
             norm.update(obs)
             nobs = norm.normalize(obs)
             obs_buf[t] = nobs
 
-            with torch.no_grad():
+            with torch.inference_mode():
                 tobs = torch.as_tensor(nobs, device=device)
                 wire, logp, _, value = policy.act(tobs)
+            # Copied out to numpy immediately: inference-mode tensors cannot participate in the autograd
+            # graph the PPO update builds, and these values are only ever read as data.
             act_buf[t] = wire.cpu().numpy()
             logp_buf[t] = logp.cpu().numpy()
             val_buf[t] = value.cpu().numpy()
+            _p1 = time.perf_counter(); t_pol += _p1 - _p0
 
             obs, reward, done, trunc = env.step(act_buf[t])
+            t_env += time.perf_counter() - _p1
             rew_buf[t] = reward
             # Truncation is NOT termination: the value function must still bootstrap through a step that
             # ended only because the clock ran out. Conflating them teaches the policy that time limits are
@@ -264,7 +296,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
             done_buf[t] = done.astype(np.float32)
             total_steps += n_agents
 
-        with torch.no_grad():
+        with torch.inference_mode():
             last_value = policy(torch.as_tensor(norm.normalize(obs), device=device))[1].cpu().numpy()
 
         # Scale the rewards by a running estimate of return magnitude before GAE.
@@ -282,7 +314,9 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         scaled_rew = rew_buf / ret_scale.std()
         adv, ret = gae(scaled_rew, val_buf, done_buf, last_value, hyper.gamma, hyper.gae_lambda)
 
+        _u0 = time.perf_counter()
         stats = ppo_update(policy, optimizer, hyper, obs_buf, act_buf, logp_buf, adv, ret, device)
+        t_upd = time.perf_counter() - _u0
 
         # Rollout arrivals, from SAMPLED actions. A progress signal, not a gate: see the eval below.
         ep = env.episode_stats()
@@ -296,7 +330,8 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         print(f"[s{stage} u{update:4d}] steps {total_steps:>10,}  {sps:6.0f}/s  "
               f"reward {rew_buf.mean():+.4f}  sampled {sampled:5.1%}  shipped {det_rate:5.1%}  "
               f"pi {stats['policy_loss']:+.4f}  v {stats['value_loss']:.4f}  rs {ret_scale.std():.2f}  "
-              f"ent {stats['entropy']:.3f}  kl {stats['kl']:.4f}")
+              f"ent {stats['entropy']:.3f}  kl {stats['kl']:.4f}  "
+              f"[env {t_env:.2f}s pol {t_pol:.2f}s upd {t_upd:.2f}s]")
 
         if update % 20 == 0:
             save(policy, norm, optimizer, stage, run_dir)

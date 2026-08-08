@@ -104,18 +104,34 @@ class Hyper:
     target_kl: float = 0.03     # stop the epoch loop early rather than let one update wreck the policy
 
 
-# Stage, minimum steps, and the arrival rate that says it is done. The rates are deliberately not 100%:
-# a course generator that produces the occasional near-impossible layout is doing its job, and waiting for
-# perfection on stage 3 means never reaching stage 5.
+# Stage, minimum steps, and the arrival rate that says it is done.
+#
+# Every gate is set against that stage's OWN measured baseline: a scripted straight-line runner on the same
+# maps and the same route band, 192 agent-episodes each. The standard is roughly "double the dumb
+# baseline", which is a claim about the policy rather than about whether a run happens to be passing.
+#
+#     stage   band                        scripted   gate
+#       1     simple maps,  700-1200 qu     59.9%     85%
+#       2     simple maps, 1200-2500        24.5%     60%
+#       3     full pool,    700-1500        29.7%     60%
+#       4     full pool,   1500-3000        22.9%     50%
+#       5     GENERATED weapon gaps            --     45%
+#       6     full pool,   uncapped         37.0%     55%
+#
+# Stage 6's baseline was 23.2% before eggandbacon entered the pool -- it has no waypoint graph and was
+# skipped until spawn/item anchors were added -- and it is a large simple room, so it pulls the average up.
+# That is the only reason the 55% gate, which looked unreachable against a 23% baseline, is now defensible.
+#
+# The bands do not make each stage strictly harder than the last, and that is deliberate: stage 3 resets
+# route length while adding map complexity, so it scores easier than stage 2 on the baseline. Each stage
+# ramps ONE axis.
 CURRICULUM = [
-    (1, 2_000_000, 0.90),   # flat: run and turn
-    (2, 4_000_000, 0.85),   # corridor: build and hold speed
-    (3, 8_000_000, 0.70),   # terrain: jump timing
-    (4, 8_000_000, 0.65),   # furniture: pads, teleporters, hazards
-    (5, 10_000_000, 0.45),  # weapon gaps: rocket and blaster jumps
-    # Real maps, held-out split excluded. The threshold is low because a shipped arena route is a harder
-    # problem than any generated course: measured 12.5% arrivals for a policy that scores 71% on stage 3.
-    (6, 20_000_000, 0.55),
+    (1, 1_000_000, 0.85),   # simple maps, short routes: run and turn on real geometry
+    (2, 2_000_000, 0.60),   # simple maps, longer routes: build and hold speed
+    (3, 3_000_000, 0.60),   # full pool, short routes: stairwells, doorways, railings
+    (4, 4_000_000, 0.50),   # full pool, medium routes
+    (5, 6_000_000, 0.45),   # generated weapon gaps: the one skill real maps cannot guarantee
+    (6, 20_000_000, 0.55),  # full pool, uncapped: the real distribution
 ]
 
 

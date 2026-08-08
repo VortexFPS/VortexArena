@@ -182,9 +182,33 @@ public sealed class MapCourseSource
             foreach (Waypoint w in net.Nodes)
                 anchors.Add(w.Center + new Vector3(0f, 0f, 24f));
         }
+        // Fall back to the map's own spawn points and item pickups when there is no waypoint graph.
+        //
+        // Both are hand-placed by the mapper at standable, reachable positions -- that is what they are FOR
+        // -- so they satisfy the one thing an anchor has to be. They are sparser and less evenly spread than
+        // a waypoint graph, which is why they are the fallback rather than the default, but a map with no
+        // waypoints was previously skipped outright: eggandbacon, a large room with obstacles and the most
+        // useful simple map in the pool, never appeared in training at all.
+        //
+        // Reachability is not assumed from this. NextEpisode still floods the baked field from the target
+        // and rejects any pair it cannot route between, so a badly placed anchor costs a redraw, not a
+        // broken episode.
         if (anchors.Count < 4)
         {
-            Log?.Invoke($"[maps] {name} has no usable waypoint graph ({anchors.Count} nodes) — skipping");
+            foreach (Dictionary<string, string> e in bsp.Entities)
+            {
+                if (!e.TryGetValue("classname", out string? cn) || cn is null) continue;
+                if (!IsAnchorEntity(cn)) continue;
+                if (!e.TryGetValue("origin", out string? os) || !TryVec(os, out Vector3 at)) continue;
+                anchors.Add(at + new Vector3(0f, 0f, 24f));
+            }
+            if (anchors.Count >= 4)
+                Log?.Invoke($"[maps] {name} has no waypoint graph; using {anchors.Count} spawn/item anchors");
+        }
+
+        if (anchors.Count < 4)
+        {
+            Log?.Invoke($"[maps] {name} has no usable anchors ({anchors.Count}) — skipping");
             return null;
         }
 
@@ -228,6 +252,19 @@ public sealed class MapCourseSource
                     $"field {(fromCache ? "cached" : "baked")})");
         return prepared;
     }
+
+    /// <summary>
+    /// Entity classes whose origin is a position a player can stand at.
+    ///
+    /// <para>Spawn points first, because a mapper guarantees those are legal standing positions. Item and
+    /// weapon pickups are placed where a player is expected to run, which is the same property an episode
+    /// endpoint wants. Deliberately NOT included: projectiles, triggers, lights, and anything whose origin
+    /// is a brush centre rather than a floor position.</para>
+    /// </summary>
+    private static bool IsAnchorEntity(string classname) =>
+        classname.StartsWith("info_player_", StringComparison.OrdinalIgnoreCase)
+        || classname.StartsWith("item_", StringComparison.OrdinalIgnoreCase)
+        || classname.StartsWith("weapon_", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Mark a map as most recently used.</summary>
     private void Touch(string name)

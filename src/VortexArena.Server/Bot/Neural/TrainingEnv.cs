@@ -129,6 +129,18 @@ public sealed class TrainingEnv
         public bool AimConstraint;
         public Vector3 AimTarget;
         public float AimWeight;
+
+        /// <summary>
+        /// Corridor look-ahead, refreshed once per env step by <see cref="RefreshCorridor"/>.
+        ///
+        /// <para>These come from walking the distance field, which costs up to eight directions by ten
+        /// outward probes per lattice step. BuildIntent is called three times per env step -- once from the
+        /// brain's IntentOverride on every think, twice more from the observation builds -- so computing
+        /// them inline ran the walk six times for one answer, and cost stage-1 throughput a factor of
+        /// nearly four (70,589 agent-steps/s down to 18,969 on the same box).</para>
+        /// </summary>
+        public Vector3 CorridorNear;
+        public Vector3 CorridorFar;
     }
 
     public TrainingEnv(Config cfg)
@@ -311,6 +323,7 @@ public sealed class TrainingEnv
             // With external actions the env owns the step boundary, so it also owns when the observation is
             // built: after the physics, not inside the think. See NeuralLocomotor.DeferObservationBuild.
             a.Loco.DeferObservationBuild = _evalPolicy is null;
+            RefreshCorridor(a);
             a.PrevPotential = Potential(a.Player.Origin);
             a.PrevHealth = Vitality(a.Player);
             // Build the opening observation through the locomotor, so it is produced by exactly the code
@@ -393,19 +406,30 @@ public sealed class TrainingEnv
             Inventory.SwitchWeapon(p, b);
     }
 
+    /// <summary>
+    /// Recompute one agent's corridor look-ahead. Called once per env step, before anything reads the
+    /// intent, because the walk is the most expensive thing in BuildIntent and the answer does not change
+    /// within a step.
+    /// </summary>
+    private void RefreshCorridor(Agent a)
+    {
+        a.CorridorNear = _distance.PointAlongRoute(a.Player.Origin, 320f);
+        a.CorridorFar = _distance.PointAlongRoute(a.CorridorNear, 320f);
+    }
+
     private MoveIntent BuildIntent(Agent a)
     {
         bool permit = a.WeaponPermit && (a.PermitFlipStep < 0 || a.Step < a.PermitFlipStep);
 
-        // Corridor look-ahead, walked down the distance field from where the agent actually is.
+        // Corridor look-ahead, walked down the distance field once per step by RefreshCorridor.
         //
         // Both of these used to be set to the target, which made six of the 206 observation floats constant
         // for the whole of training. At runtime they carry the next two waypoint-route nodes
         // (BotBrainNeural reads Nav.RouteNode), so the policy was learning to ignore an input that then
         // started carrying information. Walking the field produces the same quantity from the same
         // geometry, and unlike the waypoint graph it exists on generated courses too.
-        Vector3 near = _distance.PointAlongRoute(a.Player.Origin, 320f);
-        Vector3 far = _distance.PointAlongRoute(near, 320f);
+        Vector3 near = a.CorridorNear;
+        Vector3 far = a.CorridorFar;
 
         return new MoveIntent
         {
@@ -453,7 +477,9 @@ public sealed class TrainingEnv
         for (int i = 0; i < _agents.Count; i++)
         {
             Agent a = _agents[i];
-            if (a.Done || _evalPolicy is not null) continue;
+            if (a.Done) continue;
+            RefreshCorridor(a);
+            if (_evalPolicy is not null) continue;
             a.Loco.PendingExternalAction = ActionEncoding.Decode(actions.Slice(i * ActionEncoding.Size, ActionEncoding.Size));
         }
 

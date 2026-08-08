@@ -385,6 +385,7 @@ public static class Program
 
         var sw = Stopwatch.StartNew();
         int steps = 0, episodes = 0, arrivedTotal = 0, agentEpisodes = 0;
+        double resetMsTotal = 0;
         double rewardSum = 0, remainingSum = 0;
         // Bounded by EPISODES when --bench-episodes is given, by steps otherwise.
         //
@@ -415,7 +416,9 @@ public static class Program
                 if (episodes < 6)
                     Console.Error.WriteLine($"[bench] episode {episodes}: {arrived}/{cfg.Agents} arrived, " +
                                             $"mean arrival {meanTime:F1}s, mean distance left {meanRemaining:F0} qu");
+                long _rs = Stopwatch.GetTimestamp();
                 env.Reset(observations);
+                resetMsTotal += (Stopwatch.GetTimestamp() - _rs) * 1000.0 / Stopwatch.Frequency;
                 episodes++;
             }
         }
@@ -429,6 +432,9 @@ public static class Program
         Console.WriteLine($"steps          {steps}");
         Console.WriteLine($"episodes       {episodes}");
         Console.WriteLine($"wall seconds   {sec:F2}");
+        Console.WriteLine($"  of which:    {resetMsTotal / 1000.0:F2} s in {episodes} resets " +
+                          $"({resetMsTotal / Math.Max(1, episodes):F0} ms each), " +
+                          $"{sec - resetMsTotal / 1000.0:F2} s stepping");
         Console.WriteLine($"steps/s        {stepsPerSec:F0}");
         Console.WriteLine($"agent-steps/s  {agentStepsPerSec:F0}");
         Console.WriteLine($"realtime x     {simSecondsPerSec:F1}");

@@ -44,29 +44,52 @@ The full loop gets a fraction of that, and it is worth knowing which fraction be
 | 8 hosts through the socket, no forward pass | 384 | 55,381 |
 | 6 hosts + torch on CPU + the PPO update | 41 | ~6,600 |
 
-## Where the time actually goes, and what scaling buys
+## Where the time actually goes, and how to go faster
 
-Per PPO iteration, 6 hosts x 8 agents, stage 1, measured with the phase timers the trainer prints:
+The trainer prints a phase breakdown per iteration: `env` waiting on the hosts, `pol` the rollout forward
+pass, `upd` the PPO update. Two settings dominate everything else, and both were counter-intuitive.
 
-```
-env 0.25s (27%)   pol 0.30s (33%)   upd 0.38s (40%)
-```
+### Cap torch's threads. This is the biggest single lever.
 
-`env` is waiting for the hosts, `pol` is the rollout forward pass, `upd` is the PPO update. Two thirds is
-per-sample Python work, and it grows with the samples collected, not with the cores available. That is why
-throughput scales sublinearly:
+Torch defaults to one intra-op thread per core and spends them on tensors far too small to parallelise,
+while competing with the env hosts for the same cores. Measured at 6 hosts x 64 agents on a 28-thread VM:
 
-| hosts | agents | agent-steps/s | env / pol / upd |
-|---|---|---|---|
-| 6 | 48 | 8,798 | 0.25 / 0.19 / 0.24 |
-| 12 | 96 | 12,989 | 0.40 / 0.23 / 0.34 |
-| 18 | 144 | 14,867 | 0.79 / 0.27 / 0.47 |
+| torch threads | agent-steps/s | env / pol / upd |
+|---|---|---|
+| 28 (default) | 17,153 | 0.69 / 1.04 / 0.45 |
+| **8** | **49,222** | 0.21 / 0.17 / 0.45 |
 
-Measured on a 24-thread box. **Roughly half as many hosts as hardware threads is the sweet spot**: at 18
-hosts the env phase triples because the hosts are fighting each other rather than the trainer.
+**2.9x from one setting**, and note the ENV phase improves most: the trainer had been starving the
+simulation. 1 thread is too few, 4 and 14 both measure worse than 8.
 
-The env is now the largest phase, so cores do help -- but sublinearly, and the ceiling is the machine. Take
-a projection for new hardware from the 12-host row scaled by thread count, not from a core count alone.
+An earlier pass on a different box compared only 1 thread against the default, found 1 slightly worse, and
+concluded "leave it alone." The answer was in the middle the whole time. Two-point comparisons find the
+wrong answer when the curve is not monotonic.
+
+### Fat hosts, not many thin ones
+
+Every step is a request/response round trip per host, and each is a scheduler wake-up. More agents per
+host means more work per trip. Same 28-thread VM, torch=8 throughout:
+
+| hosts x agents | total agents | agent-steps/s |
+|---|---|---|
+| 16 x 8 | 128 | 9,981 |
+| 8 x 32 | 256 | 15,036 |
+| 4 x 64 | 256 | 42,603 |
+| 8 x 48 | 384 | 47,297 |
+| **6 x 64** | **384** | **49,222** |
+
+Note 4 x 64 and 8 x 32 are the same 256 agents and the same tensor shapes, 2.2x apart. That is contention,
+not compute.
+
+**`--hosts` is also the diversity knob.** Every agent in a host runs the same course, so 6 hosts means 6
+distinct courses per batch. Do not trade it far down for throughput.
+
+### Which box
+
+The dev workstation returned anywhere from 17,688 to 70,589 agent-steps/s for identical work depending on
+what else was running. The dedicated VM repeats within 2.5% (23,859 / 23,436 / 23,279). Tune on the quiet
+box; treat numbers from a desktop as indicative only.
 
 ### If you run this in a VM
 
@@ -74,21 +97,13 @@ a projection for new hardware from the 12-host row scaled by thread count, not f
 and torch silently falls back to unvectorised kernels. Nothing errors; the trainer is just severalfold
 slower for no visible reason.
 
-Sizing: about 250 MB of RAM per env host plus ~2 GB for Python and torch, so 16 GB is comfortable for 16
-hosts and 8 GB works. Disk wants room for the repo, the .NET SDK and the map packs -- 40 GB is ample. No
-Godot and no display: the whole training stack is Godot-free by construction (ADR-0008).
+Sizing: RAM is not the constraint -- 6 x 64 agents on stage 1 sat at under 1 GiB, and stage 6 with all 29
+maps cached per host reached 3 of 15 GiB. Disk wants room for the repo, the .NET SDK and the map packs; 40 G
+is ample. No Godot and no display: the training stack is Godot-free by construction (ADR-0008).
 
-Two things measured there, one of which was not what I expected:
-
-* **PPO minibatches: 4, not 8.** The update was 40% of the iteration. 8 minibatches gives 5,475
-  agent-steps/s; 4 gives 6,905 and stage 1 still solves (98.6% sampled arrivals against 97.8%); 2 gives
-  8,191 but arrivals fall to 90.1%, because sixteen gradient steps per update is too few. The network is
-  45,000 parameters, so on CPU each step is dispatch-bound and bigger batches are nearly free.
-* **Torch threads: leave them alone.** Pinning to 1 thread looked obviously right -- 12 threads on a
-  48x206 matmul is fork/join overhead, and they compete with the env hosts. Measured 5,269 against 5,514
-  for the default. The rollout does not want threads but the update's minibatches do, and the update is
-  the bigger share. `--torch-threads` exists for when host count crowds the cores: at 12 hosts on 24 the
-  env phase went 0.23s to 0.40s.
+**PPO minibatches: 4, not 8.** 8 gives 5,475 agent-steps/s; 4 gives 6,905 and stage 1 still solves (98.6%
+sampled arrivals against 97.8%); 2 gives 8,191 but arrivals fall to 90.1%, because sixteen gradient steps
+per update is too few.
 
 ## Train
 

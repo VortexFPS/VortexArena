@@ -124,20 +124,25 @@ def main() -> int:
     ap.add_argument("--stage", type=int, default=1, help="curriculum stage 1-5")
     ap.add_argument("--curriculum", action="store_true", help="run every stage in order, advancing on arrival rate")
     ap.add_argument("--steps", type=int, default=2_000_000, help="total agent-steps (per stage with --curriculum)")
-    ap.add_argument("--hosts", type=int, default=4, help="env host processes; one core each")
-    ap.add_argument("--agents", type=int, default=8, help="agents per host")
+    ap.add_argument("--hosts", type=int, default=6,
+                    help="env host processes. Note each one is a distinct COURSE per batch, so this is the "
+                         "diversity knob as well as the parallelism one -- do not drop it far for speed.")
+    ap.add_argument("--agents", type=int, default=64,
+                    help="agents per host. Fat hosts beat many thin ones: each round trip is a scheduler "
+                         "wake-up, so more work per trip amortises it. 6 x 64 measured best; 16 x 8 was "
+                         "half the throughput for the same cores.")
     ap.add_argument("--ticks", type=int, default=4, help="sim ticks per policy step")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--out", type=Path, default=Path("runs"))
     ap.add_argument("--name", type=str, default=None)
     ap.add_argument("--resume", type=Path, default=None)
     ap.add_argument("--width", type=int, default=128)
-    ap.add_argument("--torch-threads", type=int, default=0,
-                    help="intra-op threads for torch; 0 leaves its default alone. Lower it when the host "
-                         "count approaches the core count -- torch and the env hosts compete, and at 12 "
-                         "hosts on 24 cores the env phase went 0.23s to 0.40s. Setting it to 1 measured "
-                         "WORSE overall (5,269 vs 5,514 agent-steps/s at 6 hosts): the rollout's 48-sample "
-                         "forward pass does not want threads but the update's minibatches do.")
+    ap.add_argument("--torch-threads", type=int, default=8,
+                    help="intra-op threads for torch. 8 is not a guess: torch defaults to one thread per "
+                         "core and spends them starving the env hosts. At 6 hosts x 64 agents on a "
+                         "28-thread box, the default (28) gave 17,153 agent-steps/s and 8 gave 49,222 -- "
+                         "the env phase alone fell from 0.69s to 0.21s. 1 is too few, 4 and 14 are both "
+                         "worse than 8. 0 leaves torch alone.")
     ap.add_argument("--device", type=str, default="cpu",
                     help="cpu is usually right: the net is 45k parameters and the bottleneck is the env")
     ap.add_argument("--verbose-hosts", action="store_true", help="let the env hosts write to stderr")
@@ -173,12 +178,20 @@ def main() -> int:
     np.random.seed(args.seed)
     device = torch.device(args.device)
 
-    # Torch threading is left alone by default, which is not what I expected before measuring.
+    # Cap torch's intra-op threads. This is the single largest throughput lever measured on this project.
     #
-    # The intuition was that torch's 12 intra-op threads on a 48x206 rollout matmul are pure overhead and
-    # steal cores from the env hosts. Half true: pinning it to 1 thread measured 5,269 agent-steps/s
-    # against 5,514 for the default. The rollout does not want threads, but the PPO update's 1,536-sample
-    # minibatches do, and the update is the larger share. Lower this only when host count crowds the cores.
+    # Torch defaults to one thread per core and spends them on tensors far too small to parallelise, while
+    # competing with the env host processes for the same cores -- and the hosts are the thing actually
+    # producing samples. Measured at 6 hosts x 64 agents on a 28-thread box:
+    #
+    #     torch threads   agent-steps/s   env / pol / upd
+    #     28 (default)          17,153     0.69 / 1.04 / 0.45
+    #      8                    49,222     0.21 / 0.17 / 0.45
+    #
+    # A 2.9x difference from one setting, and note it is the ENV phase that improves most -- the trainer
+    # was starving the simulation. An earlier test on a different box compared only 1 thread against the
+    # default, found 1 slightly worse, and concluded "leave it alone". The answer was in the middle the
+    # whole time; 4 and 14 both measure worse than 8 here.
     if args.torch_threads > 0:
         torch.set_num_threads(args.torch_threads)
 

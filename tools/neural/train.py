@@ -151,13 +151,26 @@ def main() -> int:
     ap.add_argument("--stage", type=int, default=1, help="curriculum stage 1-5")
     ap.add_argument("--curriculum", action="store_true", help="run every stage in order, advancing on arrival rate")
     ap.add_argument("--steps", type=int, default=2_000_000, help="total agent-steps (per stage with --curriculum)")
-    ap.add_argument("--hosts", type=int, default=6,
+    # This help text was already correct and was ignored. Going 8 hosts -> 6 and 32 -> 64 agents for
+    # throughput cut the distinct courses in a rollout from 8 to 6 while the agent count went up, and the
+    # cost was measured only much later. Stage 1, constant 384 agents:
+    #
+    #     6 hosts x 64 agents    6 courses    sampled 27.1%   shipped 46.3%
+    #    12 hosts x 32 agents   12 courses    sampled 51.8%   shipped 66.2%
+    #
+    # Same totals, same throughput (9,623 vs 10,896 agent-steps/s), nearly double the arrivals. The eval
+    # draws courses the policy never trained on, so a batch spanning few layouts overfits to them and the
+    # shipped number is what pays for it.
+    ap.add_argument("--hosts", type=int, default=12,
                     help="env host processes. Note each one is a distinct COURSE per batch, so this is the "
                          "diversity knob as well as the parallelism one -- do not drop it far for speed.")
-    ap.add_argument("--agents", type=int, default=64,
-                    help="agents per host. Fat hosts beat many thin ones: each round trip is a scheduler "
-                         "wake-up, so more work per trip amortises it. 6 x 64 measured best; 16 x 8 was "
-                         "half the throughput for the same cores.")
+    ap.add_argument("--agents", type=int, default=32,
+                    help="agents per host. This trades against --hosts, and THROUGHPUT IS THE WRONG THING "
+                         "TO TUNE IT ON: agents are parallelism, hosts are course diversity. 6x64 and "
+                         "12x32 measure the same speed (9,623 vs 10,896 agent-steps/s) and 12x32 nearly "
+                         "doubles arrivals, because a rollout spanning 6 layouts overfits to them. Push "
+                         "--hosts up first; raise this only once cores run out. 24x16 does lose on "
+                         "throughput, 6,174 agent-steps/s, so the trade is not free at the far end.")
     ap.add_argument("--ticks", type=int, default=4, help="sim ticks per policy step")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--out", type=Path, default=Path("runs"))

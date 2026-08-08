@@ -72,8 +72,40 @@ class Policy(nn.Module):
         return self.actor_head(self.actor_trunk(obs)), self.critic(obs).squeeze(-1)
 
     # -- distributions --
+    #
+    # Hand-rolled rather than torch.distributions, and the reason is measured. Profiling one rollout step
+    # (48 agents, 206 inputs) split 2.79 ms/call as:
+    #
+    #     forward (trunk+head+critic)   0.306 ms   11%
+    #     Categorical/Normal construct  0.647 ms   23%
+    #     .sample()  x7                 0.503 ms   18%
+    #     .log_prob() x7                0.584 ms   21%
+    #     .entropy() x7                 0.186 ms    7%   <- and act()'s caller discards it
+    #
+    # Sixty-nine per cent of the cost was distribution-object machinery around a network that is eleven per
+    # cent. The heads are six categoricals of size 9/2/2/2/2/4 and two Gaussians; the objects spend their
+    # time on argument validation, lazy properties and broadcasting checks that none of these need.
+    #
+    # act() and evaluate() MUST agree on log-prob to the last bit, or PPO's importance ratio is wrong on the
+    # first epoch when it should be exactly 1 -- the same class of bug as storing a clamped action against
+    # an unclamped log-prob. They share _heads() for exactly that reason, and
+    # NeuralPolicyParityTests keeps them matching torch.distributions.
+
+    _LOG_2PI = float(np.log(2.0 * np.pi))
+
+    def _heads(self, logits: torch.Tensor):
+        """Per-head log-softmax and the Gaussian parameters. The one place the head layout is decoded."""
+        logp_segments = []
+        off = 0
+        for _, size in layout.CATEGORICAL_HEADS:
+            seg = logits[..., off : off + size]
+            logp_segments.append(seg - seg.logsumexp(-1, keepdim=True))
+            off += size
+        mean = torch.tanh(logits[..., off : off + layout.N_CONTINUOUS])
+        return logp_segments, mean
 
     def distributions(self, logits: torch.Tensor) -> tuple[list[Categorical], Normal]:
+        """torch.distributions view of the same heads. Used only by the parity test, never on a hot path."""
         cats, off = [], 0
         for _, size in layout.CATEGORICAL_HEADS:
             cats.append(Categorical(logits=logits[..., off : off + size]))
@@ -83,20 +115,33 @@ class Policy(nn.Module):
         return cats, Normal(mean, std)
 
     def act(self, obs: torch.Tensor, deterministic: bool = False):
-        """Sample an action. Returns (wire action, log-prob, entropy, value)."""
+        """Sample an action. Returns (wire action, log-prob, entropy, value).
+
+        Entropy is returned as None: every caller of act() discards it, and computing it cost 7% of the
+        rollout. evaluate() computes it properly, which is where the entropy bonus actually reads it.
+        """
         logits, value = self(obs)
-        cats, normal = self.distributions(logits)
+        logp_segments, mean = self._heads(logits)
 
-        if deterministic:
-            discrete = [c.probs.argmax(dim=-1) for c in cats]
-            continuous = normal.mean
-        else:
-            discrete = [c.sample() for c in cats]
-            continuous = normal.sample()
+        logp = None
+        discrete = []
+        for logp_seg in logp_segments:
+            if deterministic:
+                idx = logp_seg.argmax(dim=-1)
+            else:
+                # Gumbel-max: argmax(logp + Gumbel(0,1)) is an exact categorical sample, and costs one
+                # uniform draw plus an argmax instead of a distribution object.
+                u = torch.rand_like(logp_seg).clamp_(min=1e-20)
+                idx = (logp_seg - torch.log(-torch.log(u))).argmax(dim=-1)
+            picked = logp_seg.gather(-1, idx.unsqueeze(-1)).squeeze(-1)
+            logp = picked if logp is None else logp + picked
+            discrete.append(idx)
 
-        logp = sum(c.log_prob(d) for c, d in zip(cats, discrete))
-        logp = logp + normal.log_prob(continuous).sum(-1)
-        entropy = sum(c.entropy() for c in cats) + normal.entropy().sum(-1)
+        std = self.log_std.exp()
+        continuous = mean if deterministic else mean + std * torch.randn_like(mean)
+        # log N(x; mu, sigma), summed over the two view-delta dimensions.
+        z = (continuous - mean) / std
+        logp = logp + (-0.5 * z * z - self.log_std - 0.5 * self._LOG_2PI).sum(-1)
 
         # ActionEncoding.Size: six indices then the two continuous values, UNCLAMPED.
         #
@@ -108,16 +153,28 @@ class Policy(nn.Module):
         #
         # ActionEncoding.Decode clamps on the C# side, so the environment still only ever sees [-1,1].
         wire = torch.stack([d.float() for d in discrete] + [continuous[..., 0], continuous[..., 1]], dim=-1)
-        return wire, logp, entropy, value
+        return wire, logp, None, value
 
     def evaluate(self, obs: torch.Tensor, wire: torch.Tensor):
         """Log-prob, entropy and value of actions already taken — the PPO ratio's denominator."""
         logits, value = self(obs)
-        cats, normal = self.distributions(logits)
-        logp = sum(c.log_prob(wire[..., i].long()) for i, c in enumerate(cats))
+        logp_segments, mean = self._heads(logits)
+
+        logp = None
+        entropy = None
+        for i, logp_seg in enumerate(logp_segments):
+            idx = wire[..., i].long()
+            picked = logp_seg.gather(-1, idx.unsqueeze(-1)).squeeze(-1)
+            logp = picked if logp is None else logp + picked
+            head_entropy = -(logp_seg.exp() * logp_seg).sum(-1)
+            entropy = head_entropy if entropy is None else entropy + head_entropy
+
+        std = self.log_std.exp()
         continuous = wire[..., len(layout.CATEGORICAL_HEADS) :]
-        logp = logp + normal.log_prob(continuous).sum(-1)
-        entropy = sum(c.entropy() for c in cats) + normal.entropy().sum(-1)
+        z = (continuous - mean) / std
+        logp = logp + (-0.5 * z * z - self.log_std - 0.5 * self._LOG_2PI).sum(-1)
+        # Differential entropy of a Gaussian: 0.5*log(2*pi*e*sigma^2), summed over dimensions.
+        entropy = entropy + (self.log_std + 0.5 * (self._LOG_2PI + 1.0)).sum()
         return logp, entropy, value
 
 

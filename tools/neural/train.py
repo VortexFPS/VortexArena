@@ -392,10 +392,10 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
             alive &= ~finished
             # VectorEnv resets a host the moment all of its agents are finished, inside this same step call,
             # so that host's observations are already fresh and its agents are live again.
-            for h in range(args.hosts):
-                lo, hi = h * cfg.agents, (h + 1) * cfg.agents
-                if finished[lo:hi].all():
-                    alive[lo:hi] = True
+            per_host = env.agents_per_host
+            for lo in range(0, n_agents, per_host):
+                if finished[lo:lo + per_host].all():
+                    alive[lo:lo + per_host] = True
 
         with torch.inference_mode():
             last_value = policy(torch.as_tensor(norm.normalize(obs), device=device))[1].cpu().numpy()

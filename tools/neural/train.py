@@ -553,10 +553,11 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args) -> float
            "--agents", str(args.agents), "--ticks", str(args.ticks),
            "--stage", str(stage), "--seed", str(args.seed + 9001),
            "--policy", str(weights)]
-    if stage == 6:
-        cmd += ["--data", str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data")]
-        if args.maps:
-            cmd += ["--maps", args.maps]
+    # Every stage but 5 now draws from shipped maps, so the data root goes on unconditionally. Passing it
+    # only for stage 6 would make the eval for stages 1-4 fail to find any map and score zero.
+    cmd += ["--data", str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data")]
+    if args.maps:
+        cmd += ["--maps", args.maps]
 
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=900).stdout

@@ -292,14 +292,22 @@ public sealed class MapCourseSource
     /// baked field. An unreachable pair is not a hard episode, it is an impossible one, and a curriculum
     /// full of impossible episodes teaches the policy that arriving is not achievable.</para>
     /// </summary>
+    /// <summary>
+    /// Restrict draws to these maps, or empty for the whole pool. Names only; the held-out split is still
+    /// refused even if named here.
+    /// </summary>
+    public string[] Only = Array.Empty<string>();
+
     public (PreparedMap Map, Vector3 Spawn, Vector3 Target, NavDistanceField Distance)? NextEpisode(
-        Random rng, float minRouteLength = 700f)
+        Random rng, float minRouteLength = 700f, float maxRouteLength = float.PositiveInfinity)
     {
         // A handful of attempts, then give up for this episode rather than spin: a map whose graph is all
         // short hops has no long routes to find however long we look for one.
         for (int attempt = 0; attempt < 12; attempt++)
         {
-            string name = _pool[rng.Next(_pool.Count)];
+            string name = Only.Length > 0
+                ? Only[rng.Next(Only.Length)]
+                : _pool[rng.Next(_pool.Count)];
             PreparedMap? map = Prepare(name);
             if (map is null) continue;
 
@@ -311,7 +319,7 @@ public sealed class MapCourseSource
             {
                 Vector3 spawn = map.Anchors[rng.Next(map.Anchors.Count)];
                 float d = dist.DistanceAt(spawn);
-                if (d >= NavDistanceField.Unreachable || d < minRouteLength) continue;
+                if (d >= NavDistanceField.Unreachable || d < minRouteLength || d > maxRouteLength) continue;
                 return (map, spawn, target, dist);
             }
         }

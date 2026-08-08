@@ -181,7 +181,19 @@ public sealed class TrainingEnv
     public void Reset(Span<float> observations)
     {
         _episodeIndex++;
-        if (_cfg.Stage == CourseGenerator.Stage.RealMaps) { ResetOnRealMap(observations); return; }
+        // Stage 5 is the only generated stage left. Everything else runs on shipped maps.
+        //
+        // The generated curriculum taught locomotion and did not transfer: 71% on generated terrain against
+        // 12.5% on real arenas for the same policy. The generator's own note says why -- stairwells, tight
+        // doorways, railings and multi-level loops are not in it -- so the early stages were teaching a
+        // world the bot would never see, and stage 6 was where it met the real one all at once.
+        //
+        // Stage 5 stays generated because it is the only way to GUARANTEE the skill it teaches. It builds a
+        // 560 qu gap against a ~320 qu running jump, and a 250 qu ledge against a ~105 qu jump apex, so a
+        // rocket or blaster jump is the only way through. A real map's route almost always has a walkable
+        // path, so a bot trained only on real maps is never forced to weapon-jump and would likely never
+        // find it.
+        if (StageUsesRealMaps(_cfg.Stage)) { ResetOnRealMap(observations); return; }
         _currentMap = null;
         _course = CourseGenerator.Generate(_cfg.Stage, _cfg.Seed * 7919 + _episodeIndex);
 
@@ -272,11 +284,47 @@ public sealed class TrainingEnv
     /// around it. The map's collision, entity lump and navigation field are prepared once and reused; only
     /// the goal-relative distance field is rebuilt, which is a few milliseconds.
     /// </summary>
+    /// <summary>Every stage but <see cref="CourseGenerator.Stage.WeaponGaps"/> draws from shipped maps.</summary>
+    public static bool StageUsesRealMaps(CourseGenerator.Stage stage) =>
+        stage != CourseGenerator.Stage.WeaponGaps;
+
+    /// <summary>
+    /// Difficulty ramp for the real-map stages: which maps, and how long a route.
+    ///
+    /// <para>Route length is the ramp, because it is what arrival rate actually tracks. Measured on stage 6
+    /// with a scripted straight-line runner: 60.9% under 1000 qu, 38.9% to 1500, 20.5% to 2500, 8.0% to
+    /// 4000, 2.3% beyond. A short route on a complex map is a genuinely easier problem than a long one, and
+    /// it is the same geometry the policy has to end up handling.</para>
+    ///
+    /// <para>Stages 1 and 2 also narrow the map set to the simplest arenas. That trades away some geometry
+    /// diversity, which is the single biggest measured effect in this whole system -- 6 distinct courses per
+    /// batch scored 46.3% on stage 1 where 24 scored 95.0%. If the early stages stall, WIDEN THIS LIST
+    /// FIRST; it is the most likely cause by a distance.</para>
+    /// </summary>
+    public static (string[] Maps, float MinRoute, float MaxRoute) StageProfile(CourseGenerator.Stage stage)
+    {
+        // Small, open arenas. eggandbacon is a large room with obstacles and has no waypoint graph at all,
+        // so it reaches the pool only via the spawn/item anchor fallback.
+        string[] simple = { "eggandbacon", "finalrage", "silentsiege", "darkzone" };
+        return stage switch
+        {
+            CourseGenerator.Stage.Flat      => (simple, 700f, 1200f),
+            CourseGenerator.Stage.Corridor  => (simple, 1200f, 2500f),
+            CourseGenerator.Stage.Terrain   => (Array.Empty<string>(), 700f, 1500f),
+            CourseGenerator.Stage.Furniture => (Array.Empty<string>(), 1500f, 3000f),
+            _                               => (Array.Empty<string>(), 700f, float.PositiveInfinity),
+        };
+    }
+
     private void ResetOnRealMap(Span<float> observations)
     {
         _mapSource ??= new MapCourseSource(_cfg.DataRoot, _cfg.MapList) { Log = Log };
 
-        var draw = _mapSource.NextEpisode(_rng);
+        (string[] maps, float minRoute, float maxRoute) = StageProfile(_cfg.Stage);
+        // An explicit --maps list from the caller wins over the stage's own subset.
+        if (_cfg.MapList.Length == 0) _mapSource.Only = maps;
+
+        var draw = _mapSource.NextEpisode(_rng, minRoute, maxRoute);
         if (draw is null)
             throw new InvalidOperationException(
                 "no map in the pool produced a reachable A/B pair — check the map list and the held-out set");

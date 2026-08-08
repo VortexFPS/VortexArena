@@ -54,6 +54,25 @@ public sealed class MapCourseSource
     /// </summary>
     public static readonly string[] HeldOut = { "catharsis", "fuse", "afterslime" };
 
+    /// <summary>
+    /// Where baked fields are cached between runs and between host processes.
+    ///
+    /// <para>Without this every host bakes every map it draws, so a six-host run does the same work six
+    /// times and pays it again on the next run. The bake is deterministic given the geometry, and the
+    /// stored hash means a recompiled map is re-baked rather than silently reused.</para>
+    /// </summary>
+    public string CacheDir = Path.Combine("_scratch", "navfields");
+
+    /// <summary>
+    /// Bake threads per map. Deliberately small, because several host processes share one machine: at the
+    /// default of "all but two cores" a six-host run spawns 132 threads onto 24 and they mostly wait for
+    /// each other.
+    /// </summary>
+    public int BakeThreads = 2;
+
+    /// <summary>Exposes the VFS so a caller can wire GameWorld.ConfigReader to the same mounted content.</summary>
+    public VirtualFileSystem Vfs => _vfs;
+
     private readonly VirtualFileSystem _vfs = new();
     private readonly Dictionary<string, PreparedMap> _prepared = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _pool = new();
@@ -148,7 +167,14 @@ public sealed class MapCourseSource
             return null;
         }
 
-        NavField field = NavFieldBaker.BakeParallel(built.World, name, NavFieldIo.GeometryHash(built.World));
+        ulong hash = NavFieldIo.GeometryHash(built.World);
+        NavField? field = TryReadCachedField(name, hash);
+        bool fromCache = field is not null;
+        if (field is null)
+        {
+            field = NavFieldBaker.BakeParallel(built.World, name, hash, threads: BakeThreads);
+            TryWriteCachedField(name, field);
+        }
 
         var entities = new List<EntityDict>();
         foreach (Dictionary<string, string> e in bsp.Entities)
@@ -175,7 +201,8 @@ public sealed class MapCourseSource
         };
         _prepared[name] = prepared;
         Log?.Invoke($"[maps] prepared {name} in {sw.Elapsed.TotalMilliseconds:F0} ms " +
-                    $"({anchors.Count} anchors, {field.OccupiedColumns} columns, {field.SpanCount} spans)");
+                    $"({anchors.Count} anchors, {field.OccupiedColumns} columns, {field.SpanCount} spans, " +
+                    $"field {(fromCache ? "cached" : "baked")})");
         return prepared;
     }
 
@@ -210,6 +237,38 @@ public sealed class MapCourseSource
             }
         }
         return null;
+    }
+
+    private NavField? TryReadCachedField(string name, ulong hash)
+    {
+        try
+        {
+            string path = Path.Combine(CacheDir, name + ".navfield");
+            if (!File.Exists(path)) return null;
+            using FileStream fs = File.OpenRead(path);
+            NavField? f = NavFieldIo.Read(fs);
+            if (f is null) return null;
+            if (f.GeometryHash == hash) return f;
+            Log?.Invoke($"[maps] cached field for {name} was baked against different geometry; re-baking");
+            return null;
+        }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
+    }
+
+    private void TryWriteCachedField(string name, NavField field)
+    {
+        // Best effort, and racy by design: several hosts may bake the same map at once and the last write
+        // wins. They are writing identical bytes, so the only cost is duplicated work on the first run.
+        try
+        {
+            Directory.CreateDirectory(CacheDir);
+            string tmp = Path.Combine(CacheDir, name + $".navfield.{Environment.ProcessId}.tmp");
+            using (FileStream fs = File.Create(tmp)) NavFieldIo.Write(fs, field);
+            File.Move(tmp, Path.Combine(CacheDir, name + ".navfield"), overwrite: true);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     private static bool TryVec(string s, out Vector3 v)

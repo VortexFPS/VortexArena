@@ -167,7 +167,7 @@ public static class Program
                             SendError(frames, $"protocol version {version}, host speaks {ProtocolVersion}");
                             return 2;
                         }
-                        env = new TrainingEnv(cfg);
+                        env = new TrainingEnv(cfg) { Log = m => Console.Error.WriteLine(m) };
                         agents = cfg.Agents;
                         obsSize = TrainingEnv.ObservationSize;
                         observations = new float[agents * obsSize];
@@ -192,11 +192,20 @@ public static class Program
                     {
                         if (env is null) { SendError(frames, "reset before hello"); return 2; }
                         resets++;
+                        // Always time the reset, and always complain about a slow one. A reset that takes
+                        // minutes looks exactly like a hung host from the trainer's side, and the first
+                        // stage-6 run spent ninety minutes in one before anyone could see why.
+                        long resetStart = Stopwatch.GetTimestamp();
                         if (opts.Debug)
                             Console.Error.WriteLine($"[neural-host] reset {resets} begin, " +
                                                     $"{GC.GetTotalMemory(false) / (1024 * 1024)} MB managed");
                         env.Reset(observations);
-                        if (opts.Debug) Console.Error.WriteLine($"[neural-host] reset {resets} ok");
+                        double resetMs = (Stopwatch.GetTimestamp() - resetStart) * 1000.0 / Stopwatch.Frequency;
+                        if (opts.Debug)
+                            Console.Error.WriteLine($"[neural-host] reset {resets} ok in {resetMs:F0} ms");
+                        else if (resetMs > 3000)
+                            Console.Error.WriteLine($"[neural-host] reset {resets} took {resetMs / 1000.0:F1} s " +
+                                                    $"-- that is slow enough to look like a hang; run with --debug");
                         frames.Write(OpCode.Observation, AsBytes(observations));
                         break;
                     }
@@ -312,7 +321,7 @@ public static class Program
             PermitFlipChance = opts.Stage <= 3 ? 0f : 0.35f,
             AimConstraintChance = opts.Stage <= 2 ? 0f : 0.4f,
         };
-        var env = new TrainingEnv(cfg);
+        var env = new TrainingEnv(cfg) { Log = m => Console.Error.WriteLine(m) };
         PolicyNetwork? benchPolicy = null;
         PolicyNetwork.Scratch? benchScratch = null;
         float[]? benchLogits = null;

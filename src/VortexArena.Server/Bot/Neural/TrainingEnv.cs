@@ -254,6 +254,15 @@ public sealed class TrainingEnv
         _world = new GameWorld(map.World, dicts) { MapName = map.Name };
         _world.BrushModels = map.Submodels;
         _world.MapBsp = map.Bsp;
+        // Wire the content reader so the bot population loads the map's SHIPPED waypoint file.
+        //
+        // Without it, WaypointNetwork.ForMap falls back to GenerateFromEntities(autoLink: true), an O(N^2)
+        // tracewalk over every item and spawn point. A fresh GameWorld is built per episode, so that ran on
+        // every single reset. Measured: 1341 ms on stormkeep, 630 on catharsis, 541 on courtfun, against
+        // 10-11 ms to read the file. The graph is not even used by a neural bot -- the policy navigates on
+        // the baked field and the destination comes from the environment -- but the population loads it
+        // lazily whichever way, so the cheap path is the one to be on.
+        _world.ConfigReader = path => _mapSource!.Vfs.Exists(path) ? _mapSource.Vfs.ReadText(path) : null;
         _world.Boot("dm");
         ApplyTrainingCvars();
 

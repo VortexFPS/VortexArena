@@ -116,6 +116,13 @@ public sealed class NeuralLocomotor
     public const float GoalSlewRate = 2600f;
 
     /// <summary>
+    /// Express the shared observation/action frame along the corridor look-ahead rather than at the final
+    /// target. Read once per process because it changes what every action index means: flipping it under a
+    /// policy trained the other way does not degrade that policy, it scrambles it.
+    /// </summary>
+    public static readonly bool UseCorridorFrame = Cvars.FloatOr("bot_neural_corridor_frame", 0f) != 0f;
+
+    /// <summary>
     /// Run one think. <paramref name="dt"/> is the time since the previous think (not the tick length), so
     /// the slew limiter and the view delta scale correctly under the skill-varying think throttle.
     /// </summary>
@@ -129,7 +136,7 @@ public sealed class NeuralLocomotor
 
         // The frame everything is expressed in, recomputed here so the action projection at the end uses
         // exactly the frame the observation was built in.
-        _lastFrame = ResolveFrame(bot, goal, currentView);
+        _lastFrame = ResolveFrame(bot, goal, currentView, intent.CorridorA);
 
         // The environment builds the observation itself when it is driving the step boundary; see
         // DeferObservationBuild.
@@ -208,9 +215,30 @@ public sealed class NeuralLocomotor
     /// <summary>
     /// The horizontal frame the observation and action share: toward the goal, falling back to the velocity
     /// and then to the view when the bot is stationary and goalless.
+    ///
+    /// <para>When <c>bot_neural_corridor_frame</c> is set, the frame points along the corridor look-ahead
+    /// instead of at the final target. The two agree in open space and diverge at every corner, which is
+    /// exactly where a real arena route differs from a generated one -- see the note on
+    /// <paramref name="corridor"/>.</para>
     /// </summary>
-    private static Vector3 ResolveFrame(Player bot, Vector3 goal, Vector3 view)
+    /// <param name="corridor">
+    /// The corridor look-ahead, walked from the distance field, or a zero vector when there is none.
+    ///
+    /// <para>Why this is a candidate frame at all: the action's "forward" is whatever direction the frame
+    /// names, so the frame decides what the policy's most-used action MEANS. Pointed at the final target it
+    /// means "toward the target through whatever wall is in the way", and the policy has to learn to convert
+    /// the route direction into target-relative coordinates -- a rotation that changes at every corner.
+    /// Pointed along the corridor it means "the way to go", and that conversion disappears.</para>
+    /// </param>
+    private static Vector3 ResolveFrame(Player bot, Vector3 goal, Vector3 view, Vector3 corridor)
     {
+        if (UseCorridorFrame)
+        {
+            Vector3 c = corridor - bot.Origin;
+            c.Z = 0f;
+            if (c.LengthSquared() >= 64f) return QMath.Normalize(c);
+        }
+
         Vector3 f = goal - bot.Origin;
         f.Z = 0f;
         if (f.LengthSquared() >= 1f) return QMath.Normalize(f);

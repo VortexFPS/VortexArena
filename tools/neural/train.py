@@ -80,6 +80,20 @@ class Hyper:
     # the eval sat between 3% and 9%. The policy was being pushed back toward uniform faster than the
     # reward pulled it off. See --entropy-coef, and watch the ent/pi ratio the update line now prints:
     # above about 1.0 the regulariser is steering and the reward is a passenger.
+    #
+    # Do not re-run the obvious experiment: it has been run. Three arms from one stage-6 checkpoint, same
+    # seed, 2.5M steps each, coefficient spanning two orders of magnitude:
+    #
+    #     coef       e/p    entropy        sampled   shipped
+    #     0.002      4.63   7.50 -> 7.85     2.1%      8.3%
+    #     0.0003     0.70   7.49 -> 7.17     2.2%      8.3%
+    #     0.00005    0.23   7.34             1.8%      5.6%
+    #
+    # The knob does exactly what it says -- entropy reverses direction -- and arrivals do not move. Rising
+    # entropy was a real defect and worth fixing, but it was NOT what held stage 6 down. Keep the low
+    # coefficient because a regulariser that overpowers the gradient is wrong on its own terms, and look
+    # elsewhere for the plateau. kl running at 0.001-0.005 against target_kl 0.03 is the live lead: the
+    # updates are an order of magnitude smaller than the trust region allows.
     entropy_coef: float = 0.002
     max_grad_norm: float = 0.5
     target_kl: float = 0.03     # stop the epoch loop early rather than let one update wreck the policy

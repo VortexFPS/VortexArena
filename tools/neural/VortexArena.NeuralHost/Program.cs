@@ -689,6 +689,15 @@ public static class Program
                     case "--verify-weights": o.VerifyWeights = Next(); break;
                     case "--no-tracefan": o.NoTraceFan = true; break;
                     case "--scripted": o.Scripted = true; break;
+                    // Applied immediately rather than stored, because some cvars are read into statics on
+                    // first touch of the type that uses them and a deferred Set would land too late.
+                    case "--cvar":
+                    {
+                        string kv = Next() ?? "";
+                        int eq = kv.IndexOf('=');
+                        if (eq > 0) VortexArena.Server.Cvars.Set(kv[..eq], kv[(eq + 1)..]);
+                        break;
+                    }
                     case "--debug": o.Debug = true; break;
                     case "--policy": o.PolicyPath = Next(); break;
                     case "--policy-external": o.PolicyExternal = true; break;

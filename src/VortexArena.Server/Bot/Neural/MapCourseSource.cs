@@ -74,7 +74,24 @@ public sealed class MapCourseSource
     public VirtualFileSystem Vfs => _vfs;
 
     private readonly VirtualFileSystem _vfs = new();
+    /// <summary>
+    /// How many prepared maps to keep resident. Least-recently-used beyond this are dropped.
+    ///
+    /// <para>This cache used to be unbounded, which is fine for one process and not fine for twenty. A
+    /// prepared map holds its BSP, collision world, submodels and baked nav field, and the training run
+    /// puts one of these sources in EVERY host process -- so the footprint is per-host and the pool is the
+    /// whole installed map set. A 24-host run was killed by the OOM killer at roughly 650 MB per host
+    /// against 16 GB total, and stage 6 is the only stage that loads real maps at all, so the growth
+    /// arrives exactly where there is least headroom left.</para>
+    ///
+    /// <para>Dropping a map costs a re-prepare if it comes back, but the nav field is cached on disk under
+    /// <see cref="CacheDir"/>, so that re-prepare is a BSP parse and a field load rather than a re-bake.</para>
+    /// </summary>
+    public int MaxResidentMaps = 4;
+
     private readonly Dictionary<string, PreparedMap> _prepared = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Preparation order, oldest first. Used to pick the eviction victim.</summary>
+    private readonly List<string> _residentOrder = new();
     private readonly List<string> _pool = new();
     private readonly string _dataRoot;
 
@@ -141,7 +158,11 @@ public sealed class MapCourseSource
     /// </summary>
     public PreparedMap? Prepare(string name)
     {
-        if (_prepared.TryGetValue(name, out PreparedMap? cached)) return cached;
+        if (_prepared.TryGetValue(name, out PreparedMap? cached))
+        {
+            Touch(name);
+            return cached;
+        }
 
         string bspPath = $"maps/{name}.bsp";
         if (!_vfs.Exists(bspPath)) return null;
@@ -200,10 +221,31 @@ public sealed class MapCourseSource
             Entities = entities,
         };
         _prepared[name] = prepared;
+        Touch(name);
+        Evict();
         Log?.Invoke($"[maps] prepared {name} in {sw.Elapsed.TotalMilliseconds:F0} ms " +
                     $"({anchors.Count} anchors, {field.OccupiedColumns} columns, {field.SpanCount} spans, " +
                     $"field {(fromCache ? "cached" : "baked")})");
         return prepared;
+    }
+
+    /// <summary>Mark a map as most recently used.</summary>
+    private void Touch(string name)
+    {
+        _residentOrder.Remove(name);
+        _residentOrder.Add(name);
+    }
+
+    /// <summary>Drop least-recently-used maps until at most <see cref="MaxResidentMaps"/> remain.</summary>
+    private void Evict()
+    {
+        while (_residentOrder.Count > MaxResidentMaps && _residentOrder.Count > 1)
+        {
+            string victim = _residentOrder[0];
+            _residentOrder.RemoveAt(0);
+            _prepared.Remove(victim);
+            Log?.Invoke($"[maps] evicted {victim} ({_residentOrder.Count} resident)");
+        }
     }
 
     /// <summary>

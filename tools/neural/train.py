@@ -111,25 +111,21 @@ class Hyper:
 # maps and the same route band, 192 agent-episodes each. The standard is roughly "double the dumb
 # baseline", which is a claim about the policy rather than about whether a run happens to be passing.
 #
-#     stage   band                        scripted   gate
-#       1     simple maps,  700-1200 qu     59.9%     85%
-#       2     simple maps, 1200-2500        24.5%     60%
-#       3     full pool,    700-1500        29.7%     60%
-#       4     full pool,   1500-3000        22.9%     50%
-#       5     GENERATED weapon gaps            --     45%
-#       6     full pool,   uncapped         37.0%     55%
+#     stage   band                          scripted   gate
+#       1     full pool,    700-1200 qu       50.9%     80%
+#       2     full pool,   1200-2500          28.4%     60%
+#       3     full pool,    700-1500          29.7%     60%
+#       4     full pool,   1500-3000          22.9%     50%
+#       5     GENERATED weapon gaps              --     45%
+#       6     full pool,   uncapped           37.0%     55%
 #
-# Stage 6's baseline was 23.2% before eggandbacon entered the pool -- it has no waypoint graph and was
-# skipped until spawn/item anchors were added -- and it is a large simple room, so it pulls the average up.
-# That is the only reason the 55% gate, which looked unreachable against a 23% baseline, is now defensible.
-#
-# The bands do not make each stage strictly harder than the last, and that is deliberate: stage 3 resets
-# route length while adding map complexity, so it scores easier than stage 2 on the baseline. Each stage
-# ramps ONE axis.
+# Stages 1-2 re-measured 2026-08-08 after their four-simple-maps restriction was removed (it capped the
+# distinct geometries per batch at 4 and held the policy below the baseline for 20M steps). The bands do
+# not make each stage strictly harder than the last, deliberately: each stage ramps ONE axis.
 CURRICULUM = [
-    (1, 1_000_000, 0.85),   # simple maps, short routes: run and turn on real geometry
-    (2, 2_000_000, 0.60),   # simple maps, longer routes: build and hold speed
-    (3, 3_000_000, 0.60),   # full pool, short routes: stairwells, doorways, railings
+    (1, 1_000_000, 0.80),   # full pool, short routes: run and turn on real geometry
+    (2, 2_000_000, 0.60),   # full pool, longer routes: build and hold speed
+    (3, 3_000_000, 0.60),   # full pool, short-but-complex: stairwells, doorways, railings
     (4, 4_000_000, 0.50),   # full pool, medium routes
     (5, 6_000_000, 0.45),   # generated weapon gaps: the one skill real maps cannot guarantee
     (6, 20_000_000, 0.55),  # full pool, uncapped: the real distribution

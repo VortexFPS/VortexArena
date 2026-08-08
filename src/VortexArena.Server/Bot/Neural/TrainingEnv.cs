@@ -226,6 +226,16 @@ public sealed class TrainingEnv
     }
 
     /// <summary>The cvar state every training episode runs under, shared by both reset paths.</summary>
+    /// <summary>
+    /// Cvars to apply after the training defaults, for the host's <c>--cvar</c> option.
+    ///
+    /// <para>This exists because <see cref="Cvars.Set"/> is a silent no-op until <c>Api.Services</c> is
+    /// built, which is long after command-line parsing. Setting a cvar from an option handler therefore
+    /// does nothing and <see cref="Cvars.FloatOr"/> later returns the fallback -- an A/B run that way
+    /// compares a configuration against itself and reads exactly like a rejected hypothesis.</para>
+    /// </summary>
+    public static readonly Dictionary<string, string> ExtraCvars = new();
+
     private void ApplyTrainingCvars()
     {
         Cvars.Set("bot_join_empty", "1");
@@ -248,6 +258,10 @@ public sealed class TrainingEnv
         // One think per env step, exactly. The policy's decision rate is part of what it learns, so the
         // trainer's step rate and the runtime's bot_neural_hz have to be the same number.
         Cvars.Set("bot_neural_hz", (72f / _cfg.TicksPerStep).ToString(CultureInfo.InvariantCulture));
+
+        // Last, so an explicit --cvar wins over the training defaults above.
+        foreach (KeyValuePair<string, string> kv in ExtraCvars)
+            Cvars.Set(kv.Key, kv.Value);
     }
 
     /// <summary>

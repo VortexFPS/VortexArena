@@ -117,10 +117,16 @@ public sealed class NeuralLocomotor
 
     /// <summary>
     /// Express the shared observation/action frame along the corridor look-ahead rather than at the final
-    /// target. Read once per process because it changes what every action index means: flipping it under a
-    /// policy trained the other way does not degrade that policy, it scrambles it.
+    /// target. Changes what every action index MEANS, so it is fixed for a policy's lifetime: flipping it
+    /// under a policy trained the other way scrambles that policy rather than degrading it.
+    ///
+    /// <para>A property rather than a <c>static readonly</c>, and that is not a style choice. A static
+    /// initialiser latches on first touch of this type, which happens before anything has had a chance to
+    /// set the cvar -- and <see cref="Cvars.Set"/> is itself a silent no-op until <c>Api.Services</c>
+    /// exists. Latched, this read the fallback forever: an A/B across it compared a configuration against
+    /// itself and looked exactly like a cleanly rejected hypothesis.</para>
     /// </summary>
-    public static readonly bool UseCorridorFrame = Cvars.FloatOr("bot_neural_corridor_frame", 0f) != 0f;
+    public static bool UseCorridorFrame => Cvars.FloatOr("bot_neural_corridor_frame", 0f) != 0f;
 
     /// <summary>
     /// Run one think. <paramref name="dt"/> is the time since the previous think (not the tick length), so

@@ -693,13 +693,13 @@ public static class Program
                     case "--verify-weights": o.VerifyWeights = Next(); break;
                     case "--no-tracefan": o.NoTraceFan = true; break;
                     case "--scripted": o.Scripted = true; break;
-                    // Applied immediately rather than stored, because some cvars are read into statics on
-                    // first touch of the type that uses them and a deferred Set would land too late.
+                    // Stored, not applied here: Cvars.Set is a silent no-op until Api.Services exists, which
+                    // is long after argument parsing. TrainingEnv applies these once the world is up.
                     case "--cvar":
                     {
                         string kv = Next() ?? "";
                         int eq = kv.IndexOf('=');
-                        if (eq > 0) VortexArena.Server.Cvars.Set(kv[..eq], kv[(eq + 1)..]);
+                        if (eq > 0) TrainingEnv.ExtraCvars[kv[..eq]] = kv[(eq + 1)..];
                         break;
                     }
                     case "--debug": o.Debug = true; break;

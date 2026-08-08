@@ -113,7 +113,7 @@ public static class ActionSpace
             MoveForward = fwd,
             MoveRight = right,
             Jump = ArgMax(output.Slice(JumpStart, JumpCount)) == 1,
-            Crouch = ArgMax(output.Slice(CrouchStart, CrouchCount)) == 1,
+            Crouch = !ForceNoCrouch && ArgMax(output.Slice(CrouchStart, CrouchCount)) == 1,
             YawDelta = Squash(output[YawIndex]) * NeuralAction.MaxYawRate,
             PitchDelta = Squash(output[PitchIndex]) * NeuralAction.MaxPitchRate,
             WeaponSelect = -1,
@@ -187,6 +187,17 @@ public static class ActionSpace
     /// <param name="frameForward">The unit goal-frame forward, XY only.</param>
     /// <param name="viewYaw">The view yaw AFTER the action's delta has been applied, in degrees.</param>
     /// <param name="maxSpeed">Wish-move magnitude the caller scales to (QC sv_maxspeed).</param>
+    /// <summary>
+    /// Diagnostic: hold crouch off regardless of what the crouch head says.
+    ///
+    /// <para>Measured on a stage-1 policy, per-head entropy over 12,800 real observations: the crouch head
+    /// sits at 93.1% of its own uniform maximum, so it carries almost no preference -- yet its argmax is
+    /// "crouch" on 96% of states, and the shipped policy takes the argmax. An arbitrary coin flip on a head
+    /// training never gave a reason to set therefore becomes "crouch always". This measures what that
+    /// costs.</para>
+    /// </summary>
+    public static bool ForceNoCrouch => Cvars.FloatOr("bot_neural_force_nocrouch", 0f) != 0f;
+
     public static Vector3 ToMoveValues(in NeuralAction action, Vector3 frameForward, float viewYaw, float maxSpeed)
     {
         // World-space wish direction: the action's (forward, right) rotated out of the goal frame. The

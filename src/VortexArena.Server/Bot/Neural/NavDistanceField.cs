@@ -55,26 +55,58 @@ public sealed class NavDistanceField
     /// Build the distance field for one goal position. Cost is O(spans log spans); on a 15,000-column map
     /// that is a few milliseconds, so the training env rebuilds it per episode.
     /// </summary>
+    /// <summary>
+    /// The span index for a field: where each column's spans start, and how many. Goal-independent, so it
+    /// is built once per field and shared by every distance field over it.
+    ///
+    /// <para>This used to be rebuilt inside every <see cref="Build"/>, which meant an int[cells] and a
+    /// byte[cells] allocation plus a full sweep of the lattice per call. Both arrays are large enough to
+    /// land on the Large Object Heap, which .NET does not compact by default, and Build is called far more
+    /// often than it looks: <see cref="MapCourseSource.NextRouteOn"/> retries up to eight times per agent
+    /// when a drawn target turns out unreachable, and routes are now per agent. At 20 agents that is up to
+    /// 160 calls per episode. Measured: a 120-episode bench peaked at 5.6 GB resident, about 46 MB per
+    /// episode, and every training run this session ended in an out-of-memory kill because of it.</para>
+    /// </summary>
+    private sealed class SpanIndex
+    {
+        public readonly int[] Start;
+        public readonly byte[] Count;
+        public readonly int Total;
+
+        public SpanIndex(NavField field)
+        {
+            int w = field.Width, h = field.Height;
+            Start = new int[w * h];
+            Count = new byte[w * h];
+            int total = 0;
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    int c = y * w + x;
+                    Start[c] = total;
+                    int n = field.Column(x, y).Length;
+                    Count[c] = (byte)n;
+                    total += n;
+                }
+            }
+            Total = total;
+        }
+    }
+
+    // Keyed weakly so a field that falls out of the map cache does not pin its index here.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<NavField, SpanIndex> _indexCache = new();
+
     public static NavDistanceField Build(NavField field, Vector3 goal)
     {
         int w = field.Width, h = field.Height;
-        int cells = w * h;
-        var start = new int[cells];
-        var count = new byte[cells];
+        SpanIndex index = _indexCache.GetValue(field, static f => new SpanIndex(f));
+        int[] start = index.Start;
+        byte[] count = index.Count;
+        int total = index.Total;
 
-        int total = 0;
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                int c = y * w + x;
-                start[c] = total;
-                int n = field.Column(x, y).Length;
-                count[c] = (byte)n;
-                total += n;
-            }
-        }
-
+        // The one genuinely per-goal allocation left. Still large, but one array per call rather than
+        // three, and no lattice sweep.
         var dist = new float[total];
         for (int i = 0; i < total; i++) dist[i] = Unreachable;
 

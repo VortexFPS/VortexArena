@@ -392,6 +392,9 @@ public static class Program
         int steps = 0, episodes = 0, arrivedTotal = 0, agentEpisodes = 0;
         double resetMsTotal = 0;
         double rewardSum = 0, remainingSum = 0;
+        int[] bucketArrived = new int[TrainingEnv.RouteBuckets.Length];
+        int[] bucketAttempts = new int[TrainingEnv.RouteBuckets.Length];
+
         // Bounded by EPISODES when --bench-episodes is given, by steps otherwise.
         //
         // A step budget makes an eval a lottery. The course sequence is seeded, so every run sees the same
@@ -418,6 +421,8 @@ public static class Program
                 arrivedTotal += arrived;
                 agentEpisodes += cfg.Agents;
                 remainingSum += meanRemaining;
+                (int[] bArr, int[] bAtt) = env.ArrivalByRouteLength();
+                for (int b = 0; b < bArr.Length; b++) { bucketArrived[b] += bArr[b]; bucketAttempts[b] += bAtt[b]; }
                 if (episodes < 6)
                     Console.Error.WriteLine($"[bench] episode {episodes}: {arrived}/{cfg.Agents} arrived, " +
                                             $"mean arrival {meanTime:F1}s, mean distance left {meanRemaining:F0} qu");
@@ -433,6 +438,16 @@ public static class Program
         double stepsPerSec = steps / sec;
         double agentStepsPerSec = stepsPerSec * cfg.Agents;
         double simSecondsPerSec = stepsPerSec * cfg.TicksPerStep / 72.0;
+
+        Console.Error.WriteLine("[bench] arrival by route length:");
+        for (int b = 0; b < bucketAttempts.Length; b++)
+        {
+            if (bucketAttempts[b] == 0) continue;
+            string lo = b == 0 ? "0" : $"{TrainingEnv.RouteBuckets[b - 1]:F0}";
+            string hi = float.IsInfinity(TrainingEnv.RouteBuckets[b]) ? "inf" : $"{TrainingEnv.RouteBuckets[b]:F0}";
+            Console.Error.WriteLine($"[bench]   {lo,5}-{hi,-5} qu  {bucketArrived[b],5}/{bucketAttempts[b],-5} " +
+                                    $"{100.0 * bucketArrived[b] / bucketAttempts[b],5:F1}%");
+        }
 
         Console.WriteLine($"steps          {steps}");
         Console.WriteLine($"episodes       {episodes}");

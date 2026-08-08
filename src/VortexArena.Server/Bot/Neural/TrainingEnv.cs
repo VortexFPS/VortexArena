@@ -123,6 +123,15 @@ public sealed class TrainingEnv
         public bool Done;
         public bool Arrived;
         public float ArrivalTime;
+
+        /// <summary>
+        /// Geodesic distance from the spawn to the target, measured once at episode start.
+        ///
+        /// <para>Diagnostic only -- nothing in the reward reads it. It exists so an eval can report arrival
+        /// rate as a function of how long the course actually was, which is the difference between "the
+        /// policy cannot navigate" and "the policy is being handed courses nothing could finish".</para>
+        /// </summary>
+        public float StartPotential;
         public Vector3 Target;
         public bool WeaponPermit;
         public int PermitFlipStep;
@@ -325,6 +334,7 @@ public sealed class TrainingEnv
             a.Loco.DeferObservationBuild = _evalPolicy is null;
             RefreshCorridor(a);
             a.PrevPotential = Potential(a.Player.Origin);
+            a.StartPotential = a.PrevPotential;
             a.PrevHealth = Vitality(a.Player);
             // Build the opening observation through the locomotor, so it is produced by exactly the code
             // that will produce every later one.
@@ -557,6 +567,31 @@ public sealed class TrainingEnv
         return (arrived,
             arrived > 0 ? timeSum / arrived : 0f,
             _agents.Count > 0 ? remainSum / _agents.Count : 0f);
+    }
+
+    /// <summary>Upper edge, in qu, of each route-length bucket reported by <see cref="ArrivalByRouteLength"/>.</summary>
+    public static readonly float[] RouteBuckets = { 1000f, 1500f, 2500f, 4000f, float.PositiveInfinity };
+
+    /// <summary>
+    /// Arrivals and attempts per starting-route-length bucket, for the current episode.
+    ///
+    /// <para>A single arrival rate cannot distinguish a policy that never learned to navigate from one that
+    /// navigates well over 900 qu and is being handed 4000 qu courses. Bucketing separates them: skill that
+    /// exists shows up as a rate that falls with distance, and skill that does not shows up as a flat line.</para>
+    /// </summary>
+    public (int[] Arrived, int[] Attempts) ArrivalByRouteLength()
+    {
+        int[] arrived = new int[RouteBuckets.Length];
+        int[] attempts = new int[RouteBuckets.Length];
+        for (int i = 0; i < _agents.Count; i++)
+        {
+            Agent a = _agents[i];
+            int b = 0;
+            while (b < RouteBuckets.Length - 1 && a.StartPotential > RouteBuckets[b]) b++;
+            attempts[b]++;
+            if (a.Arrived) arrived[b]++;
+        }
+        return (arrived, attempts);
     }
 
     // =============================================================================================

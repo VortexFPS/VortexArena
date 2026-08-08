@@ -193,7 +193,12 @@ public sealed class TrainingEnv
         // rocket or blaster jump is the only way through. A real map's route almost always has a walkable
         // path, so a bot trained only on real maps is never forced to weapon-jump and would likely never
         // find it.
-        if (StageUsesRealMaps(_cfg.Stage)) { ResetOnRealMap(observations); return; }
+        //
+        // Without a data root there are no maps to draw from, so the stage falls back to generated
+        // geometry. That path exists for tests and for anyone running the env without a content install;
+        // a training run always sets DataRoot, and a data root that exists but holds no usable map fails
+        // loudly in ResetOnRealMap rather than quietly generating something instead.
+        if (StageUsesRealMaps(_cfg.Stage) && _cfg.DataRoot.Length > 0) { ResetOnRealMap(observations); return; }
         _currentMap = null;
         _course = CourseGenerator.Generate(_cfg.Stage, _cfg.Seed * 7919 + _episodeIndex);
 

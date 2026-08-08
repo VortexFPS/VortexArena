@@ -463,6 +463,12 @@ public static class Program
         Console.WriteLine($"agent-steps/s  {agentStepsPerSec:F0}");
         Console.WriteLine($"realtime x     {simSecondsPerSec:F1}");
         Console.WriteLine($"mean reward    {rewardSum / Math.Max(1, steps * cfg.Agents):F4}");
+        // Per EPISODE, not per step, and this is the one to compare arms on. Per-step mean is confounded by
+        // arrival rate itself: an agent that arrives early stops earning, so its remaining steps dilute the
+        // average and a better policy can post the same per-step number as a worse one. Return per episode
+        // is also what PPO actually maximises, so it is the number that says whether a gap between two arms
+        // is the objective disagreeing with the metric or the optimiser failing to reach the objective.
+        Console.WriteLine($"mean return    {rewardSum / Math.Max(1, agentEpisodes):F3} per agent-episode");
         Console.WriteLine($"arrival rate   {arrivedTotal / (double)Math.Max(1, agentEpisodes):P1} " +
                           $"({arrivedTotal}/{agentEpisodes} agent-episodes)");
         Console.WriteLine($"distance left  {remainingSum / Math.Max(1, episodes):F0} qu mean at episode end");

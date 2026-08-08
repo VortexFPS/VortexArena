@@ -546,6 +546,7 @@ public sealed class TrainingEnv
         return new MoveIntent
         {
             GoalPos = a.Target,
+            Route = a.Distance,
             CorridorA = near,
             CorridorB = far,
             Urgency = 1f,

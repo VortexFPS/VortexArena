@@ -42,6 +42,16 @@ public struct MoveIntent
     public float Urgency;
 
     /// <summary>
+    /// The goal's distance field over the baked navigation lattice, or null while one is still building.
+    ///
+    /// <para>This is the policy's map knowledge: the observation reads it for the per-probe
+    /// distance-to-goal deltas and the route ribbon. It is DERIVED from map geometry (a Dijkstra flood over
+    /// the baked field), never from authored waypoint data, so it exists on any map -- which is the whole
+    /// point. Null degrades every reader to a straight-line-to-goal approximation.</para>
+    /// </summary>
+    public NavDistanceField? Route;
+
+    /// <summary>
     /// False = the deterministic combat logic has claimed the weapon this think and the policy MUST NOT
     /// fire. Enforced as a hard mask on the attack logits before the argmax, not as a reward penalty: a
     /// soft penalty would let a well-trained policy occasionally override combat, and that bug would be

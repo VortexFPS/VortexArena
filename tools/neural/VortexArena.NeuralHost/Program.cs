@@ -465,9 +465,10 @@ public static class Program
         Console.Error.WriteLine("[bench] observation sections (stddev across samples, and share of exact zeros):");
         (string Name, int Off, int Len)[] sections =
         {
-            ("proprio",   0,   15), ("weapon",   15, 12), ("goal",     27, 11),
-            ("aim",      38,    4), ("history",  42,  8), ("prevAct",  50,  8),
-            ("navfield", 58,   72), ("features",130, 64), ("traceFan",194, 12),
+            ("proprio",   0,   15), ("weapon",   15, 12), ("goal",      27, 11),
+            ("aim",      38,    4), ("history",  42,  8), ("prevAct",   50,  8),
+            ("navfield", 58,   96), ("navUp",   154, 48), ("route",    202, 24),
+            ("features",226,   64), ("traceFan",290, 12),
         };
         foreach ((string name, int off, int len) in sections)
         {

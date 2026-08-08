@@ -110,16 +110,23 @@ public class NeuralBotTests
         NavField field = NavFieldBaker.Bake(w, "ledge", 1);
         var probes = new float[NavField.ProbeFloats];
         // Stand near the edge looking at the void (+X is empty).
-        field.SampleRing(new Vector3(-64f, 0f, 26f), Vector3.UnitX, probes);
+        field.SampleRing(new Vector3(-64f, 0f, 26f), Vector3.UnitX, probes, null, new Vector3(512f, 0f, 26f));
 
-        Assert.Equal(72, NavField.ProbeFloats);
+        Assert.Equal(96, NavField.ProbeFloats);
         // The forward probe of the outer ring is over the hole, so its hazard channel reads maximal.
-        // Index: ring 2 (outermost), direction 0 (frame-forward), channel 2 (hazard).
-        int idx = (2 * NavField.ProbeDirections + 0) * 3 + 2;
+        // Index: ring 2 (outermost), direction 0 (frame-forward), channel 2 (hazard) -- 4 channels now,
+        // the fourth being the route delta.
+        int idx = (2 * NavField.ProbeDirections + 0) * 4 + 2;
         Assert.Equal(1f, probes[idx]);
         // The backward probe is over solid floor, which reads safe.
-        int back = (0 * NavField.ProbeDirections + 4) * 3 + 2;
+        int back = (0 * NavField.ProbeDirections + 4) * 4 + 2;
         Assert.Equal(-1f, probes[back]);
+        // With no route field the fourth channel is the straight-line delta: negative toward the goal
+        // (+X), positive away from it.
+        Assert.True(probes[(0 * NavField.ProbeDirections + 0) * 4 + 3] < 0f,
+            "forward probe should close straight-line distance to the +X goal");
+        Assert.True(probes[(0 * NavField.ProbeDirections + 4) * 4 + 3] > 0f,
+            "backward probe should open straight-line distance to the +X goal");
     }
 
     [Fact]
@@ -307,10 +314,12 @@ public class NeuralBotTests
         Assert.Equal(4, NeuralObservation.AimFloats);
         Assert.Equal(8, NeuralObservation.HistoryFloats);
         Assert.Equal(8, NeuralObservation.PrevActionFloats);
-        Assert.Equal(72, NavField.ProbeFloats);
+        Assert.Equal(96, NavField.ProbeFloats);
+        Assert.Equal(48, NavField.UpperProbeFloats);
+        Assert.Equal(24, NeuralObservation.RouteFloats);
         Assert.Equal(64, MapFeatures.ObservationFloats);
         Assert.Equal(12, NeuralObservation.TraceFanFloats);
-        Assert.Equal(206, NeuralObservation.Size);
+        Assert.Equal(302, NeuralObservation.Size);
 
         // Offsets are a prefix sum of the sections; a gap or an overlap means someone edited one and not
         // the other.
@@ -321,7 +330,9 @@ public class NeuralBotTests
         Assert.Equal(NeuralObservation.OffAim + NeuralObservation.AimFloats, NeuralObservation.OffHistory);
         Assert.Equal(NeuralObservation.OffHistory + NeuralObservation.HistoryFloats, NeuralObservation.OffPrevAction);
         Assert.Equal(NeuralObservation.OffPrevAction + NeuralObservation.PrevActionFloats, NeuralObservation.OffNavField);
-        Assert.Equal(NeuralObservation.OffNavField + NavField.ProbeFloats, NeuralObservation.OffFeatures);
+        Assert.Equal(NeuralObservation.OffNavField + NavField.ProbeFloats, NeuralObservation.OffNavFieldUp);
+        Assert.Equal(NeuralObservation.OffNavFieldUp + NavField.UpperProbeFloats, NeuralObservation.OffRoute);
+        Assert.Equal(NeuralObservation.OffRoute + NeuralObservation.RouteFloats, NeuralObservation.OffFeatures);
         Assert.Equal(NeuralObservation.OffFeatures + MapFeatures.ObservationFloats, NeuralObservation.OffTraceFan);
         Assert.Equal(NeuralObservation.OffTraceFan + NeuralObservation.TraceFanFloats, NeuralObservation.Size);
     }

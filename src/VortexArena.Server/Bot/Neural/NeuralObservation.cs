@@ -51,6 +51,13 @@ public sealed class NeuralObservation
     /// <summary>The previous action vector, which is what makes the jerk penalty learnable.</summary>
     public const int PrevActionFloats = 8;
 
+    /// <summary>Points along the geodesic the route ribbon reports, and how far apart they are.</summary>
+    public const int RouteSamples = 6;
+    public const float RouteSpacing = 200f;
+
+    /// <summary>Route ribbon: per sample, egocentric offset (2), relative height, and hazard.</summary>
+    public const int RouteFloats = RouteSamples * 4;
+
     /// <summary>Short box sweeps for what the baked field cannot know: doors mid-travel, players, movers.</summary>
     public const int TraceFanRays = 6;
     public const int TraceFanFloats = TraceFanRays * 2;
@@ -58,7 +65,8 @@ public sealed class NeuralObservation
     /// <summary>Total observation length. The weight file carries the same number and load fails on a mismatch.</summary>
     public static int Size =>
         ProprioFloats + WeaponFloats + GoalFloats + AimFloats + HistoryFloats + PrevActionFloats
-        + NavField.ProbeFloats + MapFeatures.ObservationFloats + TraceFanFloats;
+        + NavField.ProbeFloats + NavField.UpperProbeFloats + RouteFloats
+        + MapFeatures.ObservationFloats + TraceFanFloats;
 
     // ---- section offsets, for the tests and the Python mirror ----
     public static int OffProprio => 0;
@@ -68,7 +76,9 @@ public sealed class NeuralObservation
     public static int OffHistory => OffAim + AimFloats;
     public static int OffPrevAction => OffHistory + HistoryFloats;
     public static int OffNavField => OffPrevAction + PrevActionFloats;
-    public static int OffFeatures => OffNavField + NavField.ProbeFloats;
+    public static int OffNavFieldUp => OffNavField + NavField.ProbeFloats;
+    public static int OffRoute => OffNavFieldUp + NavField.UpperProbeFloats;
+    public static int OffFeatures => OffRoute + RouteFloats;
     public static int OffTraceFan => OffFeatures + MapFeatures.ObservationFloats;
 
     /// <summary>The movement weapons the policy may select, in action-head order.</summary>
@@ -225,9 +235,20 @@ public sealed class NeuralObservation
 
         // ---- baked geometry ----
         if (field is not null)
-            field.SampleRing(bot.Origin, new Vector3(fx, fy, 0f), dest.Slice(OffNavField, NavField.ProbeFloats));
+            field.SampleRing(bot.Origin, new Vector3(fx, fy, 0f),
+                dest.Slice(OffNavField, NavField.ProbeFloats), intent.Route, intent.GoalPos);
         else
             FillNoField(dest.Slice(OffNavField, NavField.ProbeFloats));
+
+        // ---- surfaces overhead ----
+        if (field is not null)
+            field.SampleRingAbove(bot.Origin, new Vector3(fx, fy, 0f),
+                dest.Slice(OffNavFieldUp, NavField.UpperProbeFloats));
+        else
+            FillNoFieldAbove(dest.Slice(OffNavFieldUp, NavField.UpperProbeFloats));
+
+        // ---- the route ribbon ----
+        WriteRouteRibbon(bot.Origin, in intent, field, fx, fy, dest.Slice(OffRoute, RouteFloats));
 
         // ---- map furniture ----
         features?.WriteObservation(bot.Origin, new Vector3(fx, fy, 0f),
@@ -249,11 +270,61 @@ public sealed class NeuralObservation
     /// </summary>
     private static void FillNoField(Span<float> dest)
     {
-        for (int i = 0; i + 2 < dest.Length; i += 3)
+        for (int i = 0; i + 3 < dest.Length; i += 4)
         {
             dest[i] = 0f;
             dest[i + 1] = 1f;
             dest[i + 2] = -1f;
+            dest[i + 3] = 0f;   // no route data either: neutral delta
+        }
+    }
+
+    /// <summary>No field: open sky in every overhead probe.</summary>
+    private static void FillNoFieldAbove(Span<float> dest)
+    {
+        for (int i = 0; i + 2 < dest.Length; i += 3)
+        {
+            dest[i] = 4f;
+            dest[i + 1] = 0f;
+            dest[i + 2] = 0f;
+        }
+    }
+
+    /// <summary>
+    /// The next <see cref="RouteSamples"/> points of the geodesic, as an egocentric strip: where the route
+    /// goes, how it climbs, and what it crosses. This is the map-knowledge section. It is derived from the
+    /// baked field's distance transform rather than from any authored waypoint data, so it exists on any
+    /// map -- including ones that ship without waypoints -- and it can see around corners the straight
+    /// goal direction cannot.
+    /// </summary>
+    private void WriteRouteRibbon(Vector3 origin, in MoveIntent intent, NavField? field,
+        float fx, float fy, Span<float> dest)
+    {
+        NavDistanceField? route = intent.Route;
+        Vector3 p = origin;
+        int w = 0;
+        for (int i = 0; i < RouteSamples; i++)
+        {
+            if (route is not null)
+            {
+                p = route.PointAlongRoute(p, RouteSpacing);
+            }
+            else
+            {
+                // Degraded but truthful: march the straight line toward the goal and stop there. The same
+                // fallback the probe deltas use, so the two sections never disagree about the world.
+                Vector3 to = intent.GoalPos - p;
+                float len = to.Length();
+                p = len <= RouteSpacing ? intent.GoalPos : p + to * (RouteSpacing / len);
+            }
+
+            Vector3 rel = ToFrame(p - origin, fx, fy);
+            float norm = 1f / (RouteSpacing * (i + 1));
+            dest[w++] = Math.Clamp(rel.X * norm, -2f, 2f);
+            dest[w++] = Math.Clamp(rel.Y * norm, -2f, 2f);
+            dest[w++] = Math.Clamp((p.Z - origin.Z) / 128f, -4f, 4f);
+            dest[w++] = field is not null && field.TrySampleBelow(p, out FloorSpan s)
+                ? NavField.HazardScore(s) : 0f;
         }
     }
 

@@ -25,10 +25,18 @@ OBS_AIM = 4
 OBS_HISTORY = 8
 OBS_PREV_ACTION = 8
 
-# NavField.cs: 3 radii x 8 directions x (height, clearance, hazard)
+# NavField.cs: 3 radii x 8 directions x (height, clearance, hazard, route delta)
 NAVFIELD_RINGS = 3
 NAVFIELD_DIRECTIONS = 8
-OBS_NAVFIELD = NAVFIELD_RINGS * NAVFIELD_DIRECTIONS * 3
+OBS_NAVFIELD = NAVFIELD_RINGS * NAVFIELD_DIRECTIONS * 4
+
+# NavField.cs SampleRingAbove: the 2 outer radii x 8 directions x (height above, clearance, hazard)
+NAVFIELD_UP_RINGS = 2
+OBS_NAVFIELD_UP = NAVFIELD_UP_RINGS * NAVFIELD_DIRECTIONS * 3
+
+# NeuralObservation.cs route ribbon: 6 geodesic samples x (offset 2, rel height, hazard)
+ROUTE_SAMPLES = 6
+OBS_ROUTE = ROUTE_SAMPLES * 4
 
 # MapFeatures.cs: 4 nearest x (dir 3, log distance 1, kind one-hot 7, exit dir 3, transit 1, state 1)
 FEATURES_OBSERVED = 4
@@ -47,6 +55,8 @@ OBS_SIZE = (
     + OBS_HISTORY
     + OBS_PREV_ACTION
     + OBS_NAVFIELD
+    + OBS_NAVFIELD_UP
+    + OBS_ROUTE
     + OBS_FEATURES
     + OBS_TRACE_FAN
 )
@@ -59,7 +69,9 @@ OFF_AIM = OFF_GOAL + OBS_GOAL
 OFF_HISTORY = OFF_AIM + OBS_AIM
 OFF_PREV_ACTION = OFF_HISTORY + OBS_HISTORY
 OFF_NAVFIELD = OFF_PREV_ACTION + OBS_PREV_ACTION
-OFF_FEATURES = OFF_NAVFIELD + OBS_NAVFIELD
+OFF_NAVFIELD_UP = OFF_NAVFIELD + OBS_NAVFIELD
+OFF_ROUTE = OFF_NAVFIELD_UP + OBS_NAVFIELD_UP
+OFF_FEATURES = OFF_ROUTE + OBS_ROUTE
 OFF_TRACE_FAN = OFF_FEATURES + OBS_FEATURES
 
 # --- action heads (ActionSpace in NeuralAction.cs) ---
@@ -120,6 +132,8 @@ def section_slices() -> dict[str, slice]:
         "history": slice(OFF_HISTORY, OFF_HISTORY + OBS_HISTORY),
         "prev_action": slice(OFF_PREV_ACTION, OFF_PREV_ACTION + OBS_PREV_ACTION),
         "navfield": slice(OFF_NAVFIELD, OFF_NAVFIELD + OBS_NAVFIELD),
+        "navfield_up": slice(OFF_NAVFIELD_UP, OFF_NAVFIELD_UP + OBS_NAVFIELD_UP),
+        "route": slice(OFF_ROUTE, OFF_ROUTE + OBS_ROUTE),
         "features": slice(OFF_FEATURES, OFF_FEATURES + OBS_FEATURES),
         "trace_fan": slice(OFF_TRACE_FAN, OFF_TRACE_FAN + OBS_TRACE_FAN),
     }

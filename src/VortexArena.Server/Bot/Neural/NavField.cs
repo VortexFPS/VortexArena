@@ -191,7 +191,7 @@ public sealed class NavField
 
     /// <summary>
     /// The egocentric probe pattern the observation uses: <see cref="ProbeRings"/> radii by
-    /// <see cref="ProbeDirections"/> compass directions, each yielding three numbers. Written into
+    /// <see cref="ProbeDirections"/> compass directions, each yielding four numbers: floor height, headroom, hazard, and the geodesic distance-to-goal delta. Written into
     /// <paramref name="dest"/>, which must hold at least <see cref="ProbeFloats"/> entries.
     ///
     /// <para>The pattern is rotated into the goal frame by <paramref name="forward"/> rather than the view
@@ -199,7 +199,8 @@ public sealed class NavField
     /// it, every observation during a fight would be a fresh distribution. Anchoring on the direction of
     /// travel keeps "there is a ledge on my left" meaning the same thing whichever way the bot is looking.</para>
     /// </summary>
-    public void SampleRing(Vector3 origin, Vector3 forward, Span<float> dest)
+    public void SampleRing(Vector3 origin, Vector3 forward, Span<float> dest,
+        NavDistanceField? route, Vector3 goal)
     {
         if (dest.Length < ProbeFloats) throw new ArgumentException($"need {ProbeFloats} floats", nameof(dest));
 
@@ -207,6 +208,14 @@ public sealed class NavField
         float flen = MathF.Sqrt(fx * fx + fy * fy);
         if (flen < 1e-4f) { fx = 1f; fy = 0f; }
         else { fx /= flen; fy /= flen; }
+
+        // The fourth channel per probe: the geodesic distance-to-goal delta at the probe, against the
+        // bot's own. Perception of which directions make progress THROUGH the geometry -- a probe on the
+        // far side of a wall shows a worse delta, so walls are implicit. Straight-line fallback when there
+        // is no route field (live, while a goal's flood is still building) or the bot is off-graph mid-air.
+        float dHere = route is not null ? route.DistanceAt(origin) : NavDistanceField.Unreachable;
+        bool useRoute = dHere < NavDistanceField.Unreachable;
+        if (!useRoute) dHere = (origin - goal).Length();
 
         int w = 0;
         for (int r = 0; r < ProbeRings; r++)
@@ -220,6 +229,11 @@ public sealed class NavField
                 float dy = fx * sn + fy * cs;
                 var probe = new Vector3(origin.X + dx * radius, origin.Y + dy * radius, origin.Z);
 
+                float dProbe = useRoute ? route!.DistanceAt(probe) : (probe - goal).Length();
+                float delta = dProbe >= NavDistanceField.Unreachable
+                    ? 1.5f
+                    : Clamp((dProbe - dHere) / radius, -1.5f, 1.5f);
+
                 if (TrySampleBelow(probe, out FloorSpan s))
                 {
                     // Floor height relative to the bot's own feet, in step-heights. Positive = a step up.
@@ -228,6 +242,7 @@ public sealed class NavField
                     dest[w++] = Clamp((s.FloorZ - origin.Z) / BotNavigation.StepHeight, -8f, 8f);
                     dest[w++] = Clamp(s.Clearance / (float)MinStandClearance, 0f, 4f);
                     dest[w++] = HazardScore(s);
+                    dest[w++] = delta;
                 }
                 else
                 {
@@ -237,13 +252,88 @@ public sealed class NavField
                     dest[w++] = -8f;
                     dest[w++] = 0f;
                     dest[w++] = 1f;
+                    dest[w++] = delta;
                 }
             }
         }
     }
 
+    /// <summary>First ring index <see cref="SampleRingAbove"/> reads: the outer two radii only.</summary>
+    public const int UpperProbeRingStart = 1;
+
+    /// <summary>Floats <see cref="SampleRingAbove"/> writes: outer rings x directions x (height, clearance, hazard).</summary>
+    public static int UpperProbeFloats => (ProbeRings - UpperProbeRingStart) * ProbeDirections * 3;
+
+    /// <summary>
+    /// The overhead counterpart of <see cref="SampleRing"/>: for the outer probe rings, the nearest
+    /// walkable surface ABOVE the bot's level. The floor probes collapse each column to the bot's own
+    /// storey, which left mezzanines, walkways and rocket-jumpable ledges invisible on exactly the
+    /// multi-level maps the curriculum now trains on. The spans were always in the baked field; this reads
+    /// them. The inner ring is skipped because directly overhead is already the proprioceptive clearance.
+    /// </summary>
+    public void SampleRingAbove(Vector3 origin, Vector3 forward, Span<float> dest)
+    {
+        if (dest.Length < UpperProbeFloats) throw new ArgumentException($"need {UpperProbeFloats} floats", nameof(dest));
+
+        float fx = forward.X, fy = forward.Y;
+        float flen = MathF.Sqrt(fx * fx + fy * fy);
+        if (flen < 1e-4f) { fx = 1f; fy = 0f; }
+        else { fx /= flen; fy /= flen; }
+
+        int w = 0;
+        for (int r = UpperProbeRingStart; r < ProbeRings; r++)
+        {
+            float radius = ProbeRadii[r];
+            for (int d = 0; d < ProbeDirections; d++)
+            {
+                float cs = RingCos[d], sn = RingSin[d];
+                var probe = new Vector3(origin.X + (fx * cs - fy * sn) * radius,
+                                        origin.Y + (fx * sn + fy * cs) * radius, origin.Z);
+                if (TrySampleAbove(probe, out FloorSpan s))
+                {
+                    // Height in jump-relevant units: 128 qu is about one blaster jump, 4.0 the ceiling of
+                    // anything reachable by movement tricks.
+                    dest[w++] = Clamp((s.FloorZ - origin.Z) / 128f, 0f, 4f);
+                    dest[w++] = Clamp(s.Clearance / (float)MinStandClearance, 0f, 4f);
+                    dest[w++] = HazardScore(s);
+                }
+                else
+                {
+                    // Open sky. "Far away, no hazard" -- deliberately distinct from the floor probes
+                    // sentinel, which means "do not walk there".
+                    dest[w++] = 4f;
+                    dest[w++] = 0f;
+                    dest[w++] = 0f;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The lowest walkable span strictly ABOVE the bot at <paramref name="world"/> -- the surface a jump, a
+    /// pad or a rocket jump could put it on. Two step-heights of margin keeps the bot's own floor (and the
+    /// physics' small ground embed) out of the answer.
+    /// </summary>
+    public bool TrySampleAbove(Vector3 world, out FloorSpan span)
+    {
+        span = default;
+        if (!TryCell(world, out int cx, out int cy)) return false;
+        ReadOnlySpan<FloorSpan> col = Column(cx, cy);
+        float floorAbove = world.Z + BotNavigation.StepHeight * 2f;
+        bool found = false;
+        // The column is stored in descending order, so keep overwriting while spans sit above the
+        // threshold: the LAST hit is the lowest such span, the one the bot could actually reach first.
+        for (int i = 0; i < col.Length; i++)
+        {
+            if (col[i].FloorZ <= floorAbove) break;
+            span = col[i];
+            found = true;
+        }
+        return found;
+    }
+
     /// <summary>-1 (safe and standable) through +1 (lethal), the single hazard number a probe reports.</summary>
-    private static float HazardScore(in FloorSpan s)
+    public static float HazardScore(in FloorSpan s)
     {
         if (s.Has(NavContent.Lethal) || s.Has(NavContent.Void)) return 1f;
         if (s.Has(NavContent.Harmful)) return 0.5f;
@@ -262,7 +352,7 @@ public sealed class NavField
     public const int ProbeDirections = 8;
 
     /// <summary>Floats <see cref="SampleRing"/> writes: rings x directions x (height, clearance, hazard).</summary>
-    public static int ProbeFloats => ProbeRings * ProbeDirections * 3;
+    public static int ProbeFloats => ProbeRings * ProbeDirections * 4;
 
     private static readonly float[] RingCos = BuildCos();
     private static readonly float[] RingSin = BuildSin();

@@ -52,6 +52,43 @@ public sealed partial class BotBrain
     /// <summary>Health plus armour, matching what the training reward's damage term counts.</summary>
     private static float Vitality(Player p) => p.Health + p.GetResource(ResourceType.Armor);
 
+    // ---- the live route: a Dijkstra flood over the baked field, per goal ----
+    private Vector3 _routeGoal;
+    private NavDistanceField? _routeField;
+    private System.Threading.Tasks.Task? _routeBuild;
+
+    /// <summary>
+    /// The distance field for <paramref name="goal"/>, rebuilt asynchronously when the goal moves.
+    ///
+    /// <para>This replaces the waypoint graph as the neural bots' router. In training, the corridor
+    /// look-aheads and the observation's route channels all come from a Dijkstra flood over the baked
+    /// navigation field; at runtime they used to come from the classic waypoint route -- a different
+    /// generator for the same inputs, which is a train/deploy distribution gap, and a hard dependency on
+    /// authored waypoint data that many maps simply do not ship. Building the same flood live closes
+    /// both.</para>
+    ///
+    /// <para>The build is a few milliseconds, so it runs on the pool rather than the frame. Until it lands,
+    /// the previous goal's field keeps serving -- goals move gradually, so stale is close -- and before the
+    /// first build the observation's straight-line fallback covers it. The per-think reads sit inside the
+    /// existing <c>bot.think</c> profiler scope.</para>
+    /// </summary>
+    private NavDistanceField? RouteFor(NavField field, Vector3 goal)
+    {
+        if (_routeField is not null && (goal - _routeGoal).LengthSquared() < 96f * 96f) return _routeField;
+        if (_routeBuild is { IsCompleted: false }) return _routeField;
+        Vector3 target = goal;
+        _routeBuild = System.Threading.Tasks.Task.Run(() =>
+        {
+            NavDistanceField built = NavDistanceField.Build(field, target);
+            // Goal first, field second: a reader that sees the new field sees its goal too. The reverse
+            // order could pair the new field with the old goal for one think, and the 96 qu tolerance
+            // above would then skip the rebuild that fixes it.
+            _routeGoal = target;
+            _routeField = built;
+        });
+        return _routeField;
+    }
+
     private MovementInput NeuralThinkProduce(Player bot, float dt, float now, bool jumpHeld)
     {
         using var _scope = VortexArena.Common.Diagnostics.Prof.Sample("bot.nn");
@@ -146,8 +183,21 @@ public sealed partial class BotBrain
         Vector3 goal = Nav.Current ?? bot.Origin;
         intent.GoalPos = goal;
         intent.GoalEntity = Nav.GoalEntity;
-        intent.CorridorA = Nav.RouteNode(1, goal);
-        intent.CorridorB = Nav.RouteNode(2, intent.CorridorA);
+        // Corridor and route come from the baked field's distance transform -- the same source the trainer
+        // used -- with the classic waypoint route only as the fallback while the first flood builds. See
+        // RouteFor for why this replaces the waypoint graph rather than supplementing it.
+        NavDistanceField? route = svc.Field is { } fieldForRoute ? RouteFor(fieldForRoute, goal) : null;
+        intent.Route = route;
+        if (route is not null)
+        {
+            intent.CorridorA = route.PointAlongRoute(bot.Origin, 320f);
+            intent.CorridorB = route.PointAlongRoute(intent.CorridorA, 320f);
+        }
+        else
+        {
+            intent.CorridorA = Nav.RouteNode(1, goal);
+            intent.CorridorB = Nav.RouteNode(2, intent.CorridorA);
+        }
         intent.Urgency = ResolveUrgency(enemy);
 
         if (IntentOverride is not null)

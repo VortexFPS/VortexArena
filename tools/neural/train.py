@@ -21,6 +21,7 @@ Design notes live in planning/neural-bots-2026-08-07.md. The two that matter whe
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import shutil
 import subprocess
@@ -224,6 +225,13 @@ def main() -> int:
                     help="override Hyper.gamma. The default 0.995 is an 11 s horizon against 50 s episodes, "
                          "which discounts the arrival bonus to 0.011 at step 900. 0.999 makes the horizon "
                          "1000 steps, about the episode length.")
+    ap.add_argument("--no-evolve", action="store_true",
+                    help="disable the plateau perturb-and-select loop (G2): when the shipped eval makes no "
+                         "new best for 4 evals, 6 noise-perturbed copies of the weights are scored through "
+                         "the bench and the best is adopted if it beats the parent")
+    ap.add_argument("--no-tournament", action="store_true",
+                    help="disable the stage-entry lr tournament (G4): 3 branches at lr x0.5/x1/x2 run a "
+                         "short probe budget from the same snapshot; the winner and ITS lr continue")
     ap.add_argument("--device", type=str, default="cpu",
                     help="cpu is usually right: the net is 45k parameters and the bottleneck is the env")
     ap.add_argument("--verbose-hosts", action="store_true", help="let the env hosts write to stderr")
@@ -319,6 +327,41 @@ def main() -> int:
 
     for stage, budget, threshold in plan:
         print(f"\n[train] === stage {stage}: {budget:,} agent-steps, advance at {threshold:.0%} arrivals ===")
+
+        # G4: a short lr tournament at stage entry. Each stage's reward scale differs (the return-scale
+        # normaliser resets, the arrival rate changes by an order of magnitude), so the lr that served the
+        # previous stage is a guess for this one. Three branches probe from the SAME snapshot; the winner
+        # continues -- with its lr, which is the point. Bounded: ~500k steps per branch, and a branch is
+        # scored by the same shipped-path bench the gate uses, not by its own rollout numbers.
+        if args.curriculum and threshold > 0 and not args.no_tournament:
+            snap_p = copy.deepcopy(policy.state_dict())
+            snap_o = copy.deepcopy(optimizer.state_dict())
+            snap_n = norm.state()
+            probe_budget = 500_000
+            results = []
+            for b, mult in enumerate([0.5, 1.0, 2.0]):
+                policy.load_state_dict(copy.deepcopy(snap_p))
+                optimizer.load_state_dict(copy.deepcopy(snap_o))
+                norm.load(copy.deepcopy(snap_n))
+                for g in optimizer.param_groups:
+                    g["lr"] = hyper.lr * mult
+                torch.manual_seed(args.seed + stage * 613 + b)
+                print(f"[tournament s{stage}] branch lr x{mult:g}: probing {probe_budget:,} steps")
+                train_stage(policy, norm, optimizer, hyper, args, stage, probe_budget, 0.0, run_dir, device)
+                r = evaluate(policy, norm, run_dir, stage, args.eval_steps, args)
+                print(f"[tournament s{stage}] branch lr x{mult:g}: shipped {r:.1%}")
+                results.append((r if r == r else -1.0, mult,
+                                copy.deepcopy(policy.state_dict()),
+                                copy.deepcopy(optimizer.state_dict()),
+                                copy.deepcopy(norm.state())))
+            r, mult, ps, po, pn = max(results, key=lambda x: x[0])
+            policy.load_state_dict(ps)
+            optimizer.load_state_dict(po)
+            norm.load(pn)
+            for g in optimizer.param_groups:
+                g["lr"] = hyper.lr * mult
+            print(f"[tournament s{stage}] winner lr x{mult:g} at {r:.1%}; continuing the stage with it")
+
         ok = train_stage(policy, norm, optimizer, hyper, args, stage, budget, threshold, run_dir, device)
         if not ok:
             print(f"[train] stage {stage} did not reach {threshold:.0%}; stopping rather than "
@@ -375,6 +418,11 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     det_rate = 0.0
     best_rate = 0.0
     recent_det: list[float] = []
+    # G2 state: how many evals since the shipped rate last improved, and how many perturbation rounds this
+    # stage has spent. See the block after the gate check.
+    evals_since_best = 0
+    perturb_rounds = 0
+    baseline_logged = False
     ret_scale = ReturnScale()
 
     # Which agents are still running. TrainingEnv keeps reporting an agent that has finished -- reward 0,
@@ -505,8 +553,10 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
             # cheap insurance premium against that.
             if det_rate > best_rate:
                 best_rate = det_rate
+                evals_since_best = 0
                 save(policy, norm, optimizer, stage, run_dir, tag=f"stage{stage}-best")
             else:
+                evals_since_best += 1
                 recent_det.append(det_rate)
                 recent_det[:] = recent_det[-4:]
                 # Four consecutive readings well under the best, not one. A single low eval on a noisy
@@ -525,6 +575,49 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                 return True
             # The eval runs out-of-process now, so the rollout state is untouched and there is nothing
             # to reset.
+
+            # G2: plateau perturb-and-select. A single GA generation -- mutation and selection, no
+            # crossover -- stacked on PPO, firing only when gradient descent has stopped paying: no new
+            # best for 4 consecutive evals. Candidates are scored through the same shipped-path bench as
+            # the gate, so "better" means better on the number that matters.
+            #
+            # The history that shapes this block: every plateau so far was an objective or data defect, not
+            # an optimiser trap. So the FIRST thing a firing does is re-measure the scripted baseline on
+            # this stage as it is right now -- if that has moved, the task is mis-specified and no amount
+            # of weight noise will fix it -- and the whole mechanism is capped at 3 rounds per stage.
+            if (not eval_args.no_evolve) and evals_since_best >= 4 and perturb_rounds < 3:
+                perturb_rounds += 1
+                evals_since_best = 0
+                if not baseline_logged:
+                    base = evaluate_scripted(stage, eval_steps, eval_args)
+                    print(f"[evolve s{stage}] scripted baseline right now: {base:.1%} "
+                          f"(gate {threshold:.0%}) — if these disagree with the gate's assumptions, "
+                          f"fix the task before blaming the policy")
+                    baseline_logged = True
+                print(f"[evolve s{stage}] round {perturb_rounds}: no new best in 4 evals; "
+                      f"perturb-and-select from {det_rate:.1%}")
+                parent = copy.deepcopy(policy.state_dict())
+                best_c_rate, best_c_state = max(det_rate, best_rate), None
+                for k, sigma in enumerate([0.02, 0.02, 0.05, 0.05, 0.1, 0.1]):
+                    with torch.no_grad():
+                        for _, prm in policy.named_parameters():
+                            prm.add_(torch.randn_like(prm) * sigma * (prm.std() + 1e-8))
+                    r = evaluate(policy, norm, run_dir, stage, eval_steps, eval_args)
+                    print(f"[evolve s{stage}]   candidate {k} sigma {sigma:g}: "
+                          f"{r if r == r else float('nan'):.1%}")
+                    if r == r and r > best_c_rate + 0.005:
+                        best_c_rate = r
+                        best_c_state = copy.deepcopy(policy.state_dict())
+                    policy.load_state_dict(parent)
+                if best_c_state is not None:
+                    # Adam's moments now describe the parent, not the child; they are close enough that the
+                    # next few updates re-estimate them, and resetting them entirely would forget more.
+                    policy.load_state_dict(best_c_state)
+                    best_rate = best_c_rate
+                    save(policy, norm, optimizer, stage, run_dir, tag=f"stage{stage}-best")
+                    print(f"[evolve s{stage}] adopted a candidate at {best_c_rate:.1%}")
+                else:
+                    print(f"[evolve s{stage}] no candidate beat the parent; PPO continues unchanged")
 
     save(policy, norm, optimizer, stage, run_dir)
     if threshold <= 0:
@@ -587,6 +680,9 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args) -> float
                 return float(line.split()[2]) / 100.0
             except (IndexError, ValueError):
                 return float("nan")
+    # The bench ran but printed no arrival line -- a load failure or a crash. NaN, explicitly: it
+    # loses every comparison, so a broken eval can never pass a gate or win a tournament.
+    return float("nan")
     return float("nan")
 
 
@@ -623,6 +719,30 @@ class ReturnScale:
     def std(self) -> float:
         # Floored so an early, near-constant reward stream cannot divide by nothing and blow the gradients.
         return max(float(np.sqrt(self._var)), 1e-3)
+
+
+def evaluate_scripted(stage: int, steps: int, args) -> float:
+    """Arrival rate of the scripted hold-forward baseline on this stage, right now.
+
+    The number a gate should be calibrated against. G2 logs it once per stage before spending any
+    perturbation budget, because a plateau against a moved baseline is a task problem, not a policy one.
+    """
+    dll = Path(__file__).resolve().parent / "VortexArena.NeuralHost" / "bin" / "Release" / "net8.0" / "va-neural-host.dll"
+    cmd = [shutil.which("dotnet") or "dotnet", str(dll),
+           "--bench", str(steps * 4), "--bench-episodes", str(args.eval_episodes),
+           "--agents", str(args.agents), "--ticks", str(args.ticks),
+           "--stage", str(stage), "--seed", str(args.seed + 9001), "--scripted"]
+    cmd += ["--data", str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data")]
+    if args.maps:
+        cmd += ["--maps", args.maps]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=900).stdout
+    except (subprocess.TimeoutExpired, OSError):
+        return float("nan")
+    for line in out.splitlines():
+        if line.startswith("arrival rate"):
+            return float(line.split()[2]) / 100.0
+    return float("nan")
 
 
 def gae(rewards, values, dones, last_value, gamma: float, lam: float):

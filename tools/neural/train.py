@@ -72,6 +72,14 @@ class Hyper:
     # near 2. At 0.01 the bonus contributed 0.082 to the loss against a policy loss of 0.006: measured over
     # 1.2M steps on stage 1, entropy never moved off uniform and arrivals crawled to 3%. Scale the
     # coefficient with the number of heads, not with habit.
+    #
+    # This value was tuned on stage 1 and does NOT survive the trip to stage 6. Stage 6 draws routes of
+    # 700 qu to most of the width of an arena, so arrivals are rarer and the policy gradient is smaller,
+    # while the entropy bonus is unchanged. Measured over 3.3M stage-6 steps: |policy loss| fell to 0.0076
+    # against a bonus of 0.002 x 7.63 = 0.0153, entropy ROSE from 6.91 to 7.63 out of a 8.19 maximum, and
+    # the eval sat between 3% and 9%. The policy was being pushed back toward uniform faster than the
+    # reward pulled it off. See --entropy-coef, and watch the ent/pi ratio the update line now prints:
+    # above about 1.0 the regulariser is steering and the reward is a passenger.
     entropy_coef: float = 0.002
     max_grad_norm: float = 0.5
     target_kl: float = 0.03     # stop the epoch loop early rather than let one update wreck the policy
@@ -143,6 +151,11 @@ def main() -> int:
                          "28-thread box, the default (28) gave 17,153 agent-steps/s and 8 gave 49,222 -- "
                          "the env phase alone fell from 0.69s to 0.21s. 1 is too few, 4 and 14 are both "
                          "worse than 8. 0 leaves torch alone.")
+    ap.add_argument("--entropy-coef", type=float, default=None,
+                    help="override Hyper.entropy_coef. The default 0.002 was tuned on stage 1 and is too "
+                         "strong once arrivals get rare: on stage 6 it made the entropy bonus twice the "
+                         "policy gradient, entropy rose 6.91 -> 7.63 of a 8.19 maximum, and the eval never "
+                         "left 3-9%%. Watch the e/p column -- keep it below about 1.0.")
     ap.add_argument("--device", type=str, default="cpu",
                     help="cpu is usually right: the net is 45k parameters and the bottleneck is the env")
     ap.add_argument("--verbose-hosts", action="store_true", help="let the env hosts write to stderr")
@@ -202,6 +215,8 @@ def main() -> int:
     policy = Policy(obs_size=layout.OBS_SIZE, width=args.width).to(device)
     norm = RunningNorm(layout.OBS_SIZE)
     hyper = Hyper()
+    if args.entropy_coef is not None:
+        hyper.entropy_coef = args.entropy_coef
     optimizer = torch.optim.Adam(policy.parameters(), lr=hyper.lr, eps=1e-5)
 
     start_stage = args.stage
@@ -344,6 +359,10 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
               f"reward {rew_buf.mean():+.4f}  sampled {sampled:5.1%}  shipped {det_rate:5.1%}  "
               f"pi {stats['policy_loss']:+.4f}  v {stats['value_loss']:.4f}  rs {ret_scale.std():.2f}  "
               f"ent {stats['entropy']:.3f}  kl {stats['kl']:.4f}  "
+              # Entropy bonus over policy gradient. Above ~1.0 the regulariser is the larger term in the
+              # loss and the policy drifts toward uniform no matter what the reward says -- the failure
+              # that held stage 6 at 3-9% for 8.8M steps while entropy climbed.
+              f"e/p {hyper.entropy_coef * stats['entropy'] / max(1e-9, abs(stats['policy_loss'])):5.2f}  "
               f"[env {t_env:.2f}s pol {t_pol:.2f}s upd {t_upd:.2f}s]")
 
         if update % 20 == 0:

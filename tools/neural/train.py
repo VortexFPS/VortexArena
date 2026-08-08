@@ -155,22 +155,28 @@ def main() -> int:
     # throughput cut the distinct courses in a rollout from 8 to 6 while the agent count went up, and the
     # cost was measured only much later. Stage 1, constant 384 agents:
     #
-    #     6 hosts x 64 agents    6 courses    sampled 27.1%   shipped 46.3%
-    #    12 hosts x 32 agents   12 courses    sampled 51.8%   shipped 66.2%
+    #     6 hosts x 64 agents    6 courses    sampled 27.1%   shipped 46.3%    9,623 steps/s
+    #    12 hosts x 32 agents   12 courses    sampled 51.8%   shipped 66.2%   10,896 steps/s
+    #    24 hosts x 16 agents   24 courses    sampled 96.2%   shipped 95.0%   22,260 steps/s
     #
-    # Same totals, same throughput (9,623 vs 10,896 agent-steps/s), nearly double the arrivals. The eval
-    # draws courses the policy never trained on, so a batch spanning few layouts overfits to them and the
-    # shipped number is what pays for it.
-    ap.add_argument("--hosts", type=int, default=12,
+    # Monotone, and 24 hosts clears the 90% gate that 6 hosts could not get halfway to. The eval draws
+    # courses the policy never trained on, so a batch spanning few layouts overfits to them and the shipped
+    # number is what pays for it.
+    #
+    # 24 hosts is also the FASTEST arm, which contradicts a throughput measurement taken earlier in the
+    # same session that put it at 6,174 agent-steps/s. That measurement was made on an untrained policy,
+    # where every episode runs to the 900-step cap; once agents actually arrive the episodes are short and
+    # real throughput more than triples. Benchmarking env throughput against a policy that cannot finish an
+    # episode measures the cap, not the environment.
+    ap.add_argument("--hosts", type=int, default=24,
                     help="env host processes. Note each one is a distinct COURSE per batch, so this is the "
                          "diversity knob as well as the parallelism one -- do not drop it far for speed.")
-    ap.add_argument("--agents", type=int, default=32,
+    ap.add_argument("--agents", type=int, default=16,
                     help="agents per host. This trades against --hosts, and THROUGHPUT IS THE WRONG THING "
-                         "TO TUNE IT ON: agents are parallelism, hosts are course diversity. 6x64 and "
-                         "12x32 measure the same speed (9,623 vs 10,896 agent-steps/s) and 12x32 nearly "
-                         "doubles arrivals, because a rollout spanning 6 layouts overfits to them. Push "
-                         "--hosts up first; raise this only once cores run out. 24x16 does lose on "
-                         "throughput, 6,174 agent-steps/s, so the trade is not free at the far end.")
+                         "TO TUNE IT ON: agents are parallelism, hosts are course diversity. At a constant "
+                         "384 agents, 24x16 beat 6x64 96.2%% to 27.1%% sampled -- and was more than twice "
+                         "as fast, because a policy that arrives ends its episodes early. Push --hosts up "
+                         "first and raise this only once cores run out.")
     ap.add_argument("--ticks", type=int, default=4, help="sim ticks per policy step")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--out", type=Path, default=Path("runs"))

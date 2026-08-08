@@ -86,8 +86,13 @@ public sealed class MapCourseSource
     ///
     /// <para>Dropping a map costs a re-prepare if it comes back, but the nav field is cached on disk under
     /// <see cref="CacheDir"/>, so that re-prepare is a BSP parse and a field load rather than a re-bake.</para>
+    ///
+    /// <para>This is the per-host memory dial, and per-host memory is what caps the host count -- which is
+    /// the most valuable axis in the system, since distinct map geometries per gradient batch is the single
+    /// biggest measured effect. Tunable at runtime via <c>bot_neural_map_cache</c> so host count can be
+    /// traded against cache depth without a rebuild.</para>
     /// </summary>
-    public int MaxResidentMaps = 4;
+    public int MaxResidentMaps = (int)Cvars.FloatOr("bot_neural_map_cache", 3f);
 
     private readonly Dictionary<string, PreparedMap> _prepared = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Preparation order, oldest first. Used to pick the eviction victim.</summary>

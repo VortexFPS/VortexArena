@@ -56,15 +56,27 @@ env 0.25s (27%)   pol 0.30s (33%)   upd 0.38s (40%)
 per-sample Python work, and it grows with the samples collected, not with the cores available. That is why
 throughput scales sublinearly:
 
-| hosts | agents | agent-steps/s | vs previous |
+| hosts | agents | agent-steps/s | env / pol / upd |
 |---|---|---|---|
-| 3 | 24 | 3,926 | |
-| 6 | 48 | 6,261 | 1.59x |
-| 12 | 96 | 8,684 | 1.39x |
+| 6 | 48 | 8,798 | 0.25 / 0.19 / 0.24 |
+| 12 | 96 | 12,989 | 0.40 / 0.23 / 0.34 |
+| 18 | 144 | 14,867 | 0.79 / 0.27 / 0.47 |
 
-**Doubling the machine buys about 1.5x, and the return is falling.** A 64-core server is worth roughly 2x
-over a 6-host run, not 10x. Budget accordingly, and spend the first effort on the Python side rather than
-on hardware.
+Measured on a 24-thread box. **Roughly half as many hosts as hardware threads is the sweet spot**: at 18
+hosts the env phase triples because the hosts are fighting each other rather than the trainer.
+
+The env is now the largest phase, so cores do help -- but sublinearly, and the ceiling is the machine. Take
+a projection for new hardware from the 12-host row scaled by thread count, not from a core count alone.
+
+### If you run this in a VM
+
+**Set the CPU type to `host` (or anything exposing AVX2).** Proxmox defaults to `kvm64`, which does not,
+and torch silently falls back to unvectorised kernels. Nothing errors; the trainer is just severalfold
+slower for no visible reason.
+
+Sizing: about 250 MB of RAM per env host plus ~2 GB for Python and torch, so 16 GB is comfortable for 16
+hosts and 8 GB works. Disk wants room for the repo, the .NET SDK and the map packs -- 40 GB is ample. No
+Godot and no display: the whole training stack is Godot-free by construction (ADR-0008).
 
 Two things measured there, one of which was not what I expected:
 

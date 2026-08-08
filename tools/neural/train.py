@@ -175,6 +175,12 @@ def main() -> int:
                          "strong once arrivals get rare: on stage 6 it made the entropy bonus twice the "
                          "policy gradient, entropy rose 6.91 -> 7.63 of a 8.19 maximum, and the eval never "
                          "left 3-9%%. Watch the e/p column -- keep it below about 1.0.")
+    ap.add_argument("--lr", type=float, default=None,
+                    help="override Hyper.lr. The default 3e-4 leaves the trust region almost unused: kl "
+                         "runs 0.003-0.006 against target_kl 0.03, and entropy sits at 8.2 of a 8.19 "
+                         "maximum, meaning the actor head has barely moved off its deliberately tiny "
+                         "orthogonal(gain=0.01) initialisation. target_kl is the safety net -- raise this "
+                         "until kl approaches it.")
     ap.add_argument("--gamma", type=float, default=None,
                     help="override Hyper.gamma. The default 0.995 is an 11 s horizon against 50 s episodes, "
                          "which discounts the arrival bonus to 0.011 at step 900. 0.999 makes the horizon "
@@ -242,6 +248,8 @@ def main() -> int:
         hyper.entropy_coef = args.entropy_coef
     if args.gamma is not None:
         hyper.gamma = args.gamma
+    if args.lr is not None:
+        hyper.lr = args.lr
     optimizer = torch.optim.Adam(policy.parameters(), lr=hyper.lr, eps=1e-5)
 
     start_stage = args.stage
@@ -249,9 +257,14 @@ def main() -> int:
         ckpt = torch.load(args.resume, map_location=device)
         policy.load_state_dict(ckpt["policy"])
         optimizer.load_state_dict(ckpt["optimizer"])
+        # load_state_dict restores the checkpoint's param_groups, INCLUDING its learning rate, which
+        # silently overrides anything set on the command line. An --lr A/B run across a --resume would
+        # otherwise compare three identical configurations and read as a cleanly rejected hypothesis.
+        for group in optimizer.param_groups:
+            group["lr"] = hyper.lr
         norm.load(ckpt["norm"])
         start_stage = ckpt.get("stage", args.stage)
-        print(f"[train] resumed {args.resume} at stage {start_stage}")
+        print(f"[train] resumed {args.resume} at stage {start_stage}, lr {hyper.lr:g}")
 
     plan = [(s, args.steps, thresh) for s, _, thresh in CURRICULUM if s >= start_stage] \
         if args.curriculum else [(args.stage, args.steps, 0.0)]

@@ -1,0 +1,778 @@
+<title>Neural movement bots — technical brief</title>
+<style>
+  :root {
+    --bg:        #F7F8FA;
+    --surface:   #FFFFFF;
+    --sunken:    #F0F2F6;
+    --ink:       #14161C;
+    --muted:     #596074;
+    --faint:     #858DA0;
+    --rule:      #E0E3EA;
+    --accent:    #A25A16;
+    --accent-dim:#C98A46;
+    --good:      #2C6E4E;
+    --bad:       #9E2B45;
+    --shadow:    0 1px 2px rgba(20,22,28,.05), 0 8px 24px -12px rgba(20,22,28,.12);
+
+    --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans:  ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --mono:  ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+
+    --measure: 68ch;
+    --wide: 104ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #0D0F14;
+      --surface:   #14171E;
+      --sunken:    #191D25;
+      --ink:       #E4E7EE;
+      --muted:     #9AA2B2;
+      --faint:     #6D7688;
+      --rule:      #242935;
+      --accent:    #E0A45E;
+      --accent-dim:#9A6D34;
+      --good:      #6FCF97;
+      --bad:       #E8798F;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0D0F14; --surface:#14171E; --sunken:#191D25; --ink:#E4E7EE; --muted:#9AA2B2;
+    --faint:#6D7688; --rule:#242935; --accent:#E0A45E; --accent-dim:#9A6D34;
+    --good:#6FCF97; --bad:#E8798F;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+  :root[data-theme="light"] {
+    --bg:#F7F8FA; --surface:#FFFFFF; --sunken:#F0F2F6; --ink:#14161C; --muted:#596074;
+    --faint:#858DA0; --rule:#E0E3EA; --accent:#A25A16; --accent-dim:#C98A46;
+    --good:#2C6E4E; --bad:#9E2B45;
+    --shadow:0 1px 2px rgba(20,22,28,.05), 0 8px 24px -12px rgba(20,22,28,.12);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    padding: 0 6vw 8rem;
+  }
+
+  .shell { max-width: var(--wide); margin: 0 auto; }
+  .col   { max-width: var(--measure); }
+
+  /* ---- masthead ---- */
+  header.masthead {
+    padding: 5.5rem 0 2.5rem;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 3.5rem;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 1.4rem;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(2.3rem, 5.5vw, 3.4rem);
+    line-height: 1.08;
+    letter-spacing: -.015em;
+    text-wrap: balance;
+    margin: 0 0 1.2rem;
+  }
+  .standfirst {
+    font-size: 1.15rem;
+    color: var(--muted);
+    max-width: 60ch;
+    margin: 0;
+  }
+  .askbox {
+    margin-top: 2.5rem;
+    padding: 1.1rem 1.3rem;
+    background: var(--sunken);
+    border-left: 2px solid var(--accent);
+    max-width: var(--measure);
+  }
+  .askbox p { margin: 0; font-size: .95rem; color: var(--muted); }
+  .askbox strong { color: var(--ink); }
+
+  /* ---- structure ---- */
+  section { margin: 0 0 4.5rem; }
+  h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1.72rem;
+    letter-spacing: -.01em;
+    line-height: 1.2;
+    text-wrap: balance;
+    margin: 0 0 .5rem;
+    padding-top: 1.6rem;
+    border-top: 1px solid var(--rule);
+  }
+  h3 {
+    font-family: var(--sans);
+    font-weight: 650;
+    font-size: 1.02rem;
+    letter-spacing: .005em;
+    margin: 2.4rem 0 .6rem;
+  }
+  h2 + .lede { color: var(--muted); margin-top: 0; margin-bottom: 2rem; max-width: 62ch; }
+  p { margin: 0 0 1.1rem; max-width: var(--measure); }
+  ul, ol { max-width: var(--measure); padding-left: 1.15rem; margin: 0 0 1.1rem; }
+  li { margin-bottom: .5rem; }
+  li::marker { color: var(--faint); }
+  a { color: var(--accent); text-underline-offset: .18em; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px;
+  }
+  strong { font-weight: 650; }
+
+  code, .n {
+    font-family: var(--mono);
+    font-size: .875em;
+    font-variant-numeric: tabular-nums;
+  }
+  code { background: var(--sunken); padding: .1em .38em; border-radius: 3px; }
+
+  /* ---- tables ---- */
+  .tablewrap { overflow-x: auto; margin: 0 0 1.4rem; max-width: var(--wide); }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 33rem;
+    font-size: .9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: .58rem .9rem .58rem 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  thead th {
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    border-bottom-color: var(--ink);
+    white-space: nowrap;
+  }
+  td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  .pos { color: var(--good); font-weight: 600; }
+  .neg { color: var(--bad); font-weight: 600; }
+
+  /* ---- callouts ---- */
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 1.15rem 1.3rem;
+    margin: 0 0 1.4rem;
+    max-width: var(--measure);
+    box-shadow: var(--shadow);
+  }
+  .note > :last-child { margin-bottom: 0; }
+  .note .tag {
+    font-family: var(--mono);
+    font-size: .66rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: .5rem;
+  }
+
+  /* ---- diagram ---- */
+  figure { margin: 2rem 0 1.6rem; max-width: var(--wide); }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption {
+    font-size: .85rem;
+    color: var(--muted);
+    margin-top: .9rem;
+    max-width: 62ch;
+  }
+  .svg-ink    { fill: var(--ink); }
+  .svg-muted  { fill: var(--muted); }
+  .svg-faint  { fill: var(--faint); }
+  .svg-accent { fill: var(--accent); }
+  .st-rule   { stroke: var(--rule); }
+  .st-muted  { stroke: var(--muted); }
+  .st-accent { stroke: var(--accent); }
+  .mono-label { font-family: var(--mono); font-size: 11px; }
+
+  /* ---- stage list ---- */
+  ol.stages { list-style: none; padding: 0; max-width: var(--wide); }
+  ol.stages li {
+    display: grid;
+    grid-template-columns: 2.6rem 1fr;
+    gap: 0 1.1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--rule);
+    margin: 0;
+  }
+  ol.stages .idx {
+    font-family: var(--mono);
+    font-size: .95rem;
+    color: var(--accent);
+    padding-top: .1rem;
+  }
+  ol.stages .body h4 {
+    margin: 0 0 .3rem;
+    font-size: 1rem;
+    font-weight: 650;
+  }
+  ol.stages .body p { margin: 0; font-size: .93rem; color: var(--muted); max-width: 62ch; }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.6rem;
+    color: var(--faint);
+    font-size: .85rem;
+  }
+
+  @media (max-width: 640px) {
+    body { padding: 0 5vw 5rem; font-size: 16px; }
+    header.masthead { padding-top: 3rem; }
+    ol.stages li { grid-template-columns: 1.9rem 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="shell">
+
+<header class="masthead">
+  <p class="eyebrow">Technical brief · reinforcement learning</p>
+  <h1>Teaching a bot to move fast through an arena shooter</h1>
+  <p class="standfirst">
+    A PPO policy that replaces hand-written movement code in a Quake-lineage arena FPS. It runs inside the
+    real game simulation, sees the world through a precomputed geometry lattice rather than pixels or
+    raycasts, and is scored on how quickly it gets from A to B.
+  </p>
+  <div class="askbox">
+    <p><strong>What I'd like advice on.</strong> The system works, but most of the hard-won progress came
+    from finding defects in the objective and the data rather than from tuning. The last section lists
+    what broke — it is the part worth your scepticism, and the shape of those failures explains most of
+    the design choices above it.</p>
+  </div>
+</header>
+
+<section>
+  <h2>The problem</h2>
+  <p class="lede">Get from a start point to a target as fast as possible, on maps the policy has never seen.</p>
+
+  <p>
+    Classic bots in this genre navigate a hand-authored waypoint graph and move with scripted rules. They
+    are reliable and slow — they don't bunnyhop, don't chain strafe jumps, and don't use weapons for
+    movement. A skilled human does all three and is roughly twice as fast across a map.
+  </p>
+  <p>
+    The policy owns <em>movement only</em>. Deterministic game code still decides <em>where</em> to go and
+    handles combat targeting; the policy decides how to get there. That split matters for the design: the
+    policy has to accept a goal that can change mid-route, and it has to hand back control of the crosshair
+    when the combat code needs to shoot something.
+  </p>
+
+  <h3>Hard constraints</h3>
+  <ul>
+    <li><strong>No rendering, no per-frame raycasting.</strong> Sixteen bots share a server tick. The whole
+      perception budget is a few microseconds per bot per decision.</li>
+    <li><strong>No waypoint data as a policy input.</strong> The waypoint graph is used as training
+      scaffolding to pick start/target pairs, but it is never fed to the network — otherwise the policy
+      learns to follow a graph rather than to read geometry.</li>
+    <li><strong>Must generalise to unseen maps.</strong> Three maps are held out of training entirely and
+      refused at load, so the generalisation number can't be quietly contaminated.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Setup</h2>
+  <p class="lede">The environment is the actual game, run headless.</p>
+
+  <p>
+    The engine's simulation, collision, weapon and trigger code are all portable and have no rendering
+    dependency, so the trainer runs the real game loop rather than a reimplementation. That costs about
+    30&nbsp;microseconds per sample — five orders of magnitude more than a toy environment — and every
+    batch-size decision follows from that.
+  </p>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Parameter</th><th class="num">Value</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Simulation tick</td><td class="num">72 Hz</td><td>Fixed, matches the shipping server</td></tr>
+        <tr><td>Ticks per decision</td><td class="num">4</td><td>Policy decides at 18 Hz, 55.6 ms</td></tr>
+        <tr><td>Episode cap</td><td class="num">900 steps</td><td>50 seconds</td></tr>
+        <tr><td>Parallel worlds</td><td class="num">20</td><td>Separate processes, one map each</td></tr>
+        <tr><td>Agents per world</td><td class="num">16</td><td>320 agents total</td></tr>
+        <tr><td>Routes per batch</td><td class="num">320</td><td>Every agent draws its own verified start/target pair</td></tr>
+        <tr><td>Throughput</td><td class="num">~5–45k steps/s</td><td>Stage-dependent; real transitions only, padding masked</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The environment is C#; the trainer is Python and PyTorch. They talk over a local socket: observations
+    out, actions back, one round trip per decision step. Worlds run concurrently and are stepped in
+    lockstep.
+  </p>
+
+  <div class="note">
+    <span class="tag">Design consequence</span>
+    <p>
+      Geometry is per <strong>world</strong> — one process holds one map — but every agent on it draws its
+      <strong>own route</strong> (a start/target pair plus a Dijkstra flood, a few milliseconds each). Distinct
+      geometries per gradient batch therefore equal the world count, and distinct routes the agent count.
+      Both matter: going from 6 to 24 distinct layouts per batch took a stage from 46% to 95% arrivals
+      before anything else changed, which makes world count the single most important "hyperparameter" in
+      the system — and it does not look like one.
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>Network</h2>
+  <p class="lede">Small on purpose — it has to run for every bot on a live server.</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Component</th><th>Shape</th><th class="num">Parameters</th></tr></thead>
+      <tbody>
+        <tr><td>Actor</td><td><code>302 → 128 → 128 → 23</code>, tanh</td><td class="num">58,263</td></tr>
+        <tr><td>Critic</td><td><code>302 → 128 → 128 → 1</code>, tanh, separate trunk</td><td class="num">55,425</td></tr>
+        <tr><td>Action log-std</td><td>2 free parameters</td><td class="num">2</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Only the actor ships — 228&nbsp;KB in fp32, small enough to sit in L2 and be shared by every bot on the
+    server. The critic is discarded after training. The trunks are deliberately <em>not</em> shared: sharing
+    couples the value loss to the policy gradient, which in early runs produced a converged value function
+    and a policy that stopped moving.
+  </p>
+  <p>
+    Width and depth are fixed, not searched. They were chosen from the per-frame CPU budget rather than from
+    what trains best, which is an obvious place to ask whether we're leaving accuracy on the table.
+  </p>
+</section>
+
+<section>
+  <h2>How the policy sees the world</h2>
+  <p class="lede">A precomputed geometry lattice, sampled in a polar pattern around the bot.</p>
+
+  <p>
+    This is the part I'd most like scrutinised. Instead of rendering or casting rays each frame, every map is
+    baked once into a <strong>navigation field</strong>: a 32-unit horizontal grid where each column stores
+    the walkable floor spans above it. Each span is 12 bytes — floor height, ceiling height, surface slope,
+    a content flag (lava, water, void), and a bitmask of which neighbouring cells are reachable by jumping.
+  </p>
+  <p>
+    Perception is then an array lookup, not a trace. The bot samples the field at
+    <strong>three radii × eight compass directions</strong>, taking four values at each of the 24 sample
+    points: floor height relative to the bot, headroom, a hazard flag, and the <strong>geodesic
+    distance-to-goal delta</strong> at that probe versus the bot's own — which directions make progress
+    <em>through</em> the geometry, so walls are implicit. That is the 96-float <code>navfield</code> block
+    below.
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 620 330" role="img" aria-label="Top-down diagram: the bot at centre, eight sampling spokes, three concentric sampling rings at 48, 144 and 352 units.">
+      <g transform="translate(190,165)">
+        <circle r="150" fill="none" class="st-rule" stroke-width="1"/>
+        <circle r="61"  fill="none" class="st-rule" stroke-width="1"/>
+        <circle r="20"  fill="none" class="st-rule" stroke-width="1"/>
+        <g class="st-muted" stroke-width="1" opacity=".45">
+          <line x1="-150" y1="0" x2="150" y2="0"/>
+          <line x1="0" y1="-150" x2="0" y2="150"/>
+          <line x1="-106" y1="-106" x2="106" y2="106"/>
+          <line x1="-106" y1="106"  x2="106" y2="-106"/>
+        </g>
+        <g class="svg-accent">
+          <circle cx="20" cy="0" r="3.4"/><circle cx="61" cy="0" r="3.4"/><circle cx="150" cy="0" r="3.4"/>
+          <circle cx="-20" cy="0" r="3.4"/><circle cx="-61" cy="0" r="3.4"/><circle cx="-150" cy="0" r="3.4"/>
+          <circle cx="0" cy="20" r="3.4"/><circle cx="0" cy="61" r="3.4"/><circle cx="0" cy="150" r="3.4"/>
+          <circle cx="0" cy="-20" r="3.4"/><circle cx="0" cy="-61" r="3.4"/><circle cx="0" cy="-150" r="3.4"/>
+          <circle cx="14" cy="14" r="3.4"/><circle cx="43" cy="43" r="3.4"/><circle cx="106" cy="106" r="3.4"/>
+          <circle cx="-14" cy="-14" r="3.4"/><circle cx="-43" cy="-43" r="3.4"/><circle cx="-106" cy="-106" r="3.4"/>
+          <circle cx="14" cy="-14" r="3.4"/><circle cx="43" cy="-43" r="3.4"/><circle cx="106" cy="-106" r="3.4"/>
+          <circle cx="-14" cy="14" r="3.4"/><circle cx="-43" cy="43" r="3.4"/><circle cx="-106" cy="106" r="3.4"/>
+        </g>
+        <circle r="6.5" class="svg-ink"/>
+        <path d="M 0 -13 L 5.5 -3 L -5.5 -3 Z" class="svg-accent"/>
+      </g>
+      <g class="mono-label svg-faint">
+        <text x="196" y="160">48</text>
+        <text x="237" y="160">144</text>
+        <text x="326" y="160">352</text>
+      </g>
+      <g transform="translate(400,54)">
+        <text class="mono-label svg-muted" x="0" y="0">3 radii × 8 directions = 24 probes</text>
+        <text class="mono-label svg-muted" x="0" y="22">× 4 values each</text>
+        <text class="mono-label svg-accent" x="0" y="44">= 96 floats</text>
+        <text class="mono-label svg-muted" x="0" y="84">floor height (relative)</text>
+        <text class="mono-label svg-muted" x="0" y="104">headroom</text>
+        <text class="mono-label svg-muted" x="0" y="124">hazard flag</text>
+        <text class="mono-label svg-muted" x="0" y="144">route delta (geodesic)</text>
+        <text class="mono-label svg-faint"  x="0" y="164">all array lookups —</text>
+        <text class="mono-label svg-faint"  x="0" y="182">no traces, no rendering</text>
+      </g>
+    </svg>
+    <figcaption>
+      The sampling pattern, top-down. Radii are 48, 144 and 352 units — roughly one player width, one jump,
+      and one long strafe-jump ahead. Everything is expressed relative to the direction of travel, not the
+      view direction.
+    </figcaption>
+  </figure>
+
+  <h3>Seeing up, and seeing ahead</h3>
+  <p>
+    Two further blocks come from the same auto-generated structures. The floor probes collapse each grid
+    column to the bot's own storey, so an <strong>overhead ring</strong> re-samples the outer two radii for
+    the nearest walkable surface <em>above</em> the bot — mezzanines, walkways, rocket-jumpable ledges —
+    which were previously invisible despite being stored in the field. And a <strong>route ribbon</strong>
+    reports six points along the geodesic at 200-unit spacing (egocentric offset, relative height, hazard):
+    "the route climbs 128 units, turns hard left, then crosses a gap", a full second before arriving there.
+  </p>
+  <p>
+    The ribbon and the probe deltas are the system's map knowledge, and the constraint on them is the
+    design: both derive from a distance transform computed for any map at load. No authored navigation
+    data is ever an input, so nothing degrades on maps that ship without it.
+  </p>
+  <p>
+    Three things the baked field cannot know — doors mid-swing, other players, moving platforms — are
+    covered by <strong>six short box sweeps</strong>, the only actual traces in the observation.
+  </p>
+
+  <div class="note">
+    <span class="tag">Same router in training and live</span>
+    <p>
+      The distance field is also the <em>runtime</em> router. Live bots used to take their course from the
+      game's classic waypoint route while training took it from the field's Dijkstra flood — a
+      train/deploy distribution gap, and a hard dependency on hand-authored data. The flood is now built
+      per goal on a worker thread (a few milliseconds, goals change every ~6 s), so trained and deployed
+      bots read the same signals from the same source on any map.
+    </p>
+  </div>
+
+  <div class="note">
+    <span class="tag">Frame choice</span>
+    <p>
+      Everything egocentric is anchored on the <strong>direction of travel</strong>, not the camera. The
+      view can be yanked anywhere by combat; if perception rotated with it, every observation during a fight
+      would come from a distribution the policy had barely trained on. Anchoring on the goal direction keeps
+      "ledge on my left" meaning one thing regardless of where the crosshair points.
+    </p>
+  </div>
+
+  <h3>Full observation layout — 302 floats</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Block</th><th class="num">Floats</th><th>Contents</th></tr></thead>
+      <tbody>
+        <tr><td>Proprioception</td><td class="num">15</td><td>Velocity, speed, on-ground, slope underfoot, height above floor, headroom, airtime, ducked, water level, health, armour, on-ladder, on-mover</td></tr>
+        <tr><td>Weapon state</td><td class="num">12</td><td>Current weapon one-hot (8), movement-weapon ammo (3), weapon-permit flag</td></tr>
+        <tr><td>Goal</td><td class="num">11</td><td>Direction to target, log distance, two look-ahead points along the route, urgency</td></tr>
+        <tr><td>Aim constraint</td><td class="num">4</td><td>Angular delta from where combat wants the crosshair, how much it matters, whether it's required</td></tr>
+        <tr><td>Motion history</td><td class="num">8</td><td>Two previous ticks of velocity + on-ground, so bunnyhop phase is observable</td></tr>
+        <tr><td>Previous action</td><td class="num">8</td><td>What it just did — makes the smoothness penalty learnable</td></tr>
+        <tr><td><strong>Navigation field</strong></td><td class="num">96</td><td>3 radii × 8 directions × (floor height, headroom, hazard, route delta)</td></tr>
+        <tr><td><strong>Overhead ring</strong></td><td class="num">48</td><td>Outer 2 radii × 8 directions × (height above, clearance, hazard)</td></tr>
+        <tr><td><strong>Route ribbon</strong></td><td class="num">24</td><td>6 geodesic samples × (egocentric offset 2, relative height, hazard)</td></tr>
+        <tr><td>Map features</td><td class="num">64</td><td>4 nearest of: jump pads, teleporters, hurt triggers, elevators, warpzones — direction, distance, type, exit direction, state</td></tr>
+        <tr><td>Live traces</td><td class="num">12</td><td>6 box sweeps × (fraction, surface normal Z)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Observations are normalised by a running mean/variance whose statistics are baked into the exported
+    weight file, so the shipped policy normalises exactly as it trained.
+  </p>
+</section>
+
+<section>
+  <h2>Actions</h2>
+  <p class="lede">Six discrete heads and two continuous, sampled independently.</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Head</th><th class="num">Size</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>move</td><td class="num">9</td><td>8 compass directions <em>relative to the goal</em>, or stand still</td></tr>
+        <tr><td>jump</td><td class="num">2</td><td></td></tr>
+        <tr><td>crouch</td><td class="num">2</td><td></td></tr>
+        <tr><td>attack1 / attack2</td><td class="num">2 + 2</td><td>Primary / secondary fire, for movement use</td></tr>
+        <tr><td>weapon</td><td class="num">4</td><td>Keep current, blaster, crylink, devastator</td></tr>
+        <tr><td>yaw / pitch</td><td class="num">2 Gaussian</td><td>View delta this step, capped at 22°/12°</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The three weapons are the movement toolkit: a blaster shot at the floor mid-jump gives a large vertical
+    boost, the crylink's secondary gives a forward push while bunnyhopping, and the rocket launcher can be
+    fired downward and detonated to save a fall or cross a wide gap.
+  </p>
+
+  <div class="note">
+    <span class="tag">Masking, not penalising</span>
+    <p>
+      When the deterministic combat code needs the weapon, or when the bot's health drops below a threshold,
+      the attack and weapon-select heads are <strong>masked off entirely</strong> — the action is
+      unavailable, not merely expensive. A reward penalty would give a bot that <em>mostly</em> complies,
+      and combat code can't build on "mostly". The permit is also a policy input, and it is flipped randomly
+      mid-episode during training so the policy learns to handle losing the weapon at any moment.
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>Reward</h2>
+  <p class="lede">Dense progress shaping, a time cost, and terminal outcomes.</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Term</th><th class="num">Weight</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Geodesic progress</td><td class="num">+0.01 / unit</td><td>Distance closed along the actual route, not straight-line. ≈ +0.22/step at running speed</td></tr>
+        <tr><td>Time</td><td class="num">−0.02 / step</td><td>Flat. ≈ −18 over a full episode</td></tr>
+        <tr><td>Damage taken</td><td class="num">−0.004 / point</td><td>Non-zero so it doesn't rocket-jump at 15 health; small so it still learns to rocket-jump</td></tr>
+        <tr><td>Aim error</td><td class="num">−0.03 × error</td><td>Only when combat demands the crosshair</td></tr>
+        <tr><td>Turn / jerk</td><td class="num">−0.004 × turn</td><td>Buys smooth motion instead of twitching</td></tr>
+        <tr><td>Arrival</td><td class="num pos">+10 + 60 × budget left</td><td>+63 at step 100, +17 at step 800</td></tr>
+        <tr><td>Death / fell out of world</td><td class="num neg">−20</td><td></td></tr>
+        <tr><td>Timeout</td><td class="num">0</td><td>Truncation, not termination — the value function still bootstraps</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Progress uses the plain difference <code>d − d′</code> rather than the discounted potential form
+    <code>γφ(s′) − φ(s)</code>. The discounted form is what the shaping theorem is stated in, and it pays a
+    stationary agent <code>d(1−γ)</code> per step: at 1000 units from the target that was +0.1 per step for
+    standing still, and random actions scored a positive mean reward. The plain difference is zero for a
+    stationary agent and telescopes to exactly the distance closed.
+  </p>
+
+  <div class="note">
+    <span class="tag">The interaction that bit us</span>
+    <p>
+      Note the arithmetic between the time cost and the death penalty. Surviving a full episode accrues
+      about <strong>−18</strong> from the time term alone. The death penalty was originally
+      <strong>−5</strong>. Dying at step 100 therefore cost about −5.7 against −6.3 for surviving to the
+      cap — <strong>suicide was strictly cheaper than finishing</strong>, and the policy found it: 65% of
+      episodes ended in deliberate death against 6.5% for a scripted straight-line baseline, and the
+      objective scored the two strategies within 0.08 of each other.
+    </p>
+    <p>
+      This also means the obvious lever for "make it faster" — a bigger time penalty — is the one to avoid.
+      Speed pressure lives in the arrival bonus instead, because a bonus paid only on success cannot make
+      any failure more attractive.
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>Curriculum</h2>
+  <p class="lede">Six stages, ramping on route length and map complexity.</p>
+
+  <p>
+    Five of the six stages run on the game's real shipped maps. Start and target positions are drawn from
+    the map's own waypoint nodes (or, on maps without a waypoint graph, from spawn points and item pickups),
+    then <strong>verified reachable</strong>: a Dijkstra flood over the baked navigation field from the
+    target, rejecting any pair with no walkable path or a route shorter than the stage's minimum.
+  </p>
+
+  <ol class="stages">
+    <li><span class="idx">01</span><div class="body">
+      <h4>Full map pool, 700–1200 unit routes</h4>
+      <p>Run and turn on real geometry. Gate 80% against a 50.9% scripted baseline.</p>
+    </div></li>
+    <li><span class="idx">02</span><div class="body">
+      <h4>Full map pool, 1200–2500</h4>
+      <p>Long enough that the only route to a good time is building and holding speed — which is what makes
+      bunnyhopping reward-maximising rather than a trick we have to demonstrate. Gate 60% / 28.4%.</p>
+    </div></li>
+    <li><span class="idx">03</span><div class="body">
+      <h4>Full map pool, 700–1500</h4>
+      <p>Stairwells, tight doorways, railings, multi-level loops. Gate 60% / 29.7%.</p>
+    </div></li>
+    <li><span class="idx">04</span><div class="body">
+      <h4>Full map pool, 1500–3000</h4>
+      <p>Gate 50% / 22.9%.</p>
+    </div></li>
+    <li><span class="idx">05</span><div class="body">
+      <h4>Generated weapon-jump courses</h4>
+      <p>The only synthetic stage. It builds a 560-unit gap against a ~320-unit running jump, and a
+      250-unit ledge against a ~105-unit jump apex, so a rocket or blaster jump is the <em>only</em> way
+      through. A real map's route almost always has a walkable path, so a policy trained only on real maps
+      is never forced to weapon-jump and would likely never discover it. Gate 45%.</p>
+    </div></li>
+    <li><span class="idx">06</span><div class="body">
+      <h4>Full map pool, uncapped route length</h4>
+      <p>The real distribution, including routes spanning most of an arena. Gate 55% / 37.0%.</p>
+    </div></li>
+  </ol>
+
+  <p>
+    Every gate is set against a measured baseline: a scripted "run straight at the target, hop rhythmically"
+    policy on that stage's own maps and route band, at roughly double the baseline. The point of measuring
+    first is that the gate then makes a claim about the policy rather than about whether a run happens to be
+    passing it.
+  </p>
+</section>
+
+<section>
+  <h2>Training loop</h2>
+  <p class="lede">Standard PPO, with batch sizes driven by how expensive a sample is.</p>
+
+  <ol>
+    <li>Each of 20 worlds loads a map and spawns 16 agents, each drawing its own verified route.</li>
+    <li>Every agent builds its 302-float observation after the step's physics, at the step boundary.</li>
+    <li>The trainer normalises, runs the actor, and <strong>samples</strong> an action from the six discrete heads and two Gaussians.</li>
+    <li>Actions go back; each world advances 4 simulation ticks and returns rewards, done and truncated flags.</li>
+    <li>After 128 steps, compute GAE and run 4 epochs × 4 minibatches of clipped PPO, with a KL early-stop.</li>
+    <li>Every 25 updates, export the weights and evaluate them <em>through the shipping code path</em> — the network running inside the game's own bot locomotor, with sampling off.</li>
+    <li>When that evaluation clears the stage gate, advance.</li>
+  </ol>
+
+  <h3>Two evolutionary layers</h3>
+  <p>
+    Both are bounded, both are scored by the same deterministic bench as the gate, and both exist because
+    of a measured failure mode rather than on principle.
+  </p>
+  <ul>
+    <li>
+      <strong>Stage-entry learning-rate tournament.</strong> Each stage's reward scale differs, so at stage
+      entry three branches probe ~500k steps from one snapshot at lr ×0.5 / ×1 / ×2; the winner continues
+      <em>with its lr</em>. Automates a selection we kept making by hand.
+    </li>
+    <li>
+      <strong>Plateau perturb-and-select.</strong> If the shipped eval makes no new best for four
+      consecutive evaluations, one GA generation fires: six noise-perturbed copies of the weights
+      (σ = 2–10% of each tensor's scale), each scored through the bench, adopted only on a +0.5&nbsp;pp
+      win, at most three rounds per stage. Its first act is re-measuring the scripted baseline — in this
+      project's history every plateau was a task defect rather than an optimiser trap, and weight noise
+      cannot fix a mis-specified task.
+    </li>
+  </ul>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Hyperparameter</th><th class="num">Value</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>Rollout</td><td class="num">128</td><td>Short: samples are expensive, gradient updates are not</td></tr>
+        <tr><td>Epochs × minibatches</td><td class="num">4 × 4</td><td>16 gradient steps per update</td></tr>
+        <tr><td>Learning rate</td><td class="num">3e-4</td><td>Adam; the stage-entry tournament may run a stage at ×0.5 or ×2</td></tr>
+        <tr><td>γ / λ</td><td class="num">0.995 / 0.95</td><td>200-step discount horizon against 900-step episodes</td></tr>
+        <tr><td>Clip / target KL</td><td class="num">0.2 / 0.03</td><td>Observed KL runs 0.003–0.015</td></tr>
+        <tr><td>Entropy coefficient</td><td class="num">0.0003</td><td>Low: 8 heads sum to ~8 nats, so the usual 0.01 swamps the policy gradient</td></tr>
+        <tr><td>Action log-std cap</td><td class="num">−1.386</td><td>σ = 0.25 of range ≈ 5.5°/step of yaw</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="tag">Evaluation detail worth copying</span>
+    <p>
+      Training <em>samples</em> actions; the evaluation takes the <em>argmax</em>. Those score very
+      differently, and the gap is diagnostic rather than noise — a near-uniform distribution can still have
+      an informative argmax. We gate on the deterministic shipping path because that's what a live server
+      runs; gating on the sampled rate would gate on a number the shipped bot never experiences.
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>What actually went wrong</h2>
+  <p class="lede">Nearly all real progress came from finding defects, not from tuning.</p>
+
+  <p>
+    Listing these because they're the most transferable part, and because the pattern in them is the thing
+    I'd like a second opinion on. A long plateau was attacked with entropy coefficient, discount factor,
+    learning rate, action-space framing and exploration noise — <strong>five hyperparameters, each of which
+    moved its own diagnostic and none of which moved the metric.</strong> That pattern was itself the
+    signal, and it took far too long to read it as "the objective or the data is wrong, not the optimiser".
+  </p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Defect</th><th>Symptom</th><th>Effect of fix</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Dying cheaper than surviving</td>
+          <td>65% of episodes ended in deliberate death; the objective ranked that equal to a strategy arriving 2.4× more often</td>
+          <td class="pos">Deaths → 0% on early stages; returns turned positive</td>
+        </tr>
+        <tr>
+          <td>Too few distinct courses per batch</td>
+          <td>6 layouts per gradient update; policy overfit to them and the held-out evaluation stalled at 46%</td>
+          <td class="pos">24 layouts → <strong>95%</strong>, and it was also the fastest configuration</td>
+        </tr>
+        <tr>
+          <td>Early stages restricted to four "simple" maps</td>
+          <td>Distinct geometries per batch fell to 4; the policy plateaued at 52–56% for 20M steps — <em>below</em> the straight-line baseline's 59.9%</td>
+          <td class="pos">Full pool at every stage; difficulty carried by route length alone</td>
+        </tr>
+        <tr>
+          <td>Finished agents padded the batch</td>
+          <td>An agent that finished kept emitting zero-observation, zero-reward rows until its whole world reset — up to 83% of the buffer, fed straight into the observation normaliser whose statistics ship in the weight file</td>
+          <td>Corrected; didn't move arrivals but was wrong on its own terms</td>
+        </tr>
+        <tr>
+          <td>Exploration noise ran away</td>
+          <td>The Gaussian log-std drifted to σ = 0.91 of range — 20°/step of yaw, ~360°/s of random spin. Differential entropy is unbounded above, so the entropy bonus kept buying more</td>
+          <td>Capped; sampled behaviour became coherent</td>
+        </tr>
+        <tr>
+          <td>Clamped action, unclamped log-prob</td>
+          <td>Stored the post-clamp action against the pre-clamp log-prob, so PPO's importance ratio was wrong on the first epoch when it should be exactly 1. Symptom was a <em>negative</em> KL estimate</td>
+          <td class="pos">Unblocked learning entirely</td>
+        </tr>
+        <tr>
+          <td>Discounted potential shaping</td>
+          <td>Paid a stationary agent <code>d(1−γ)</code> per step; random actions scored positive mean reward</td>
+          <td class="pos">Plain difference form; random went negative</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="tag">Methodology lesson</span>
+    <p>
+      Three separate times a knob under test turned out <strong>not to be connected</strong> — a config
+      setter that silently no-opped before initialisation, a checkpoint restore that overwrote the learning
+      rate being swept, a flag latched into a static before it was set. Each produced results
+      indistinguishable from a cleanly rejected hypothesis. Every tunable now echoes its resolved value at
+      startup, and it's the cheapest reliability improvement in the project.
+    </p>
+  </div>
+</section>
+
+
+
+<footer>
+  <p>
+    Movement policy for a Quake-lineage arena FPS · PPO with bounded evolutionary layers ·
+    real-simulation environment · ~58k shipped parameters · all navigation signals derived from geometry,
+    none authored.
+  </p>
+</footer>
+
+</div>

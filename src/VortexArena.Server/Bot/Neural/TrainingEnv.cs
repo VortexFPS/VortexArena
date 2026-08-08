@@ -132,6 +132,9 @@ public sealed class TrainingEnv
         /// policy cannot navigate" and "the policy is being handed courses nothing could finish".</para>
         /// </summary>
         public float StartPotential;
+
+        /// <summary>How the episode ended: 0 running, 1 arrived, 2 died, 3 fell out of the world, 4 timed out.</summary>
+        public int Outcome;
         public Vector3 Target;
         public bool WeaponPermit;
         public int PermitFlipStep;
@@ -583,6 +586,31 @@ public sealed class TrainingEnv
             _agents.Count > 0 ? remainSum / _agents.Count : 0f);
     }
 
+    /// <summary>
+    /// How the current episode ended for each agent, indexed by outcome: arrived, died, fell, timed out.
+    ///
+    /// <para>The reward's dense terms are net negative -- measured mean per-step reward is about -0.007 for
+    /// every arm including the scripted one -- so surviving to the 900-step cap accrues roughly -6.3, while
+    /// dying at step 100 costs about -0.7 of dense terms plus the -5 death penalty. If that arithmetic
+    /// holds, ending the episode early is competitive with finishing it, and a policy that optimises the
+    /// objective will find that out. This counts whether it has.</para>
+    /// </summary>
+    public (int Arrived, int Died, int Fell, int TimedOut) OutcomeCounts()
+    {
+        int arrived = 0, died = 0, fell = 0, timedOut = 0;
+        for (int i = 0; i < _agents.Count; i++)
+        {
+            switch (_agents[i].Outcome)
+            {
+                case 1: arrived++; break;
+                case 2: died++; break;
+                case 3: fell++; break;
+                case 4: timedOut++; break;
+            }
+        }
+        return (arrived, died, fell, timedOut);
+    }
+
     /// <summary>Upper edge, in qu, of each route-length bucket reported by <see cref="ArrivalByRouteLength"/>.</summary>
     public static readonly float[] RouteBuckets = { 1000f, 1500f, 2500f, 4000f, float.PositiveInfinity };
 
@@ -680,12 +708,14 @@ public sealed class TrainingEnv
         {
             r -= 5f;
             terminal = true;
+            a.Outcome = 2;
             return r;
         }
 
         if ((p.Origin - a.Target).Length() <= ArriveRadius)
         {
             a.Arrived = true;
+            a.Outcome = 1;
             a.ArrivalTime = _world.Time;
             // Scaled by the step budget left, so a faster route pays strictly more. A flat bonus makes
             // "arrive eventually" as good as "arrive fast" once the time cost is amortised.
@@ -699,12 +729,14 @@ public sealed class TrainingEnv
         {
             r -= 5f;
             terminal = true;
+            a.Outcome = 3;
             return r;
         }
 
         if (a.Step >= _cfg.MaxSteps)
         {
             truncatedOut = true;
+            a.Outcome = 4;
             return r;
         }
 

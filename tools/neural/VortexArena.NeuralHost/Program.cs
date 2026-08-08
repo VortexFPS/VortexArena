@@ -401,6 +401,7 @@ public static class Program
         // Agent 0's observation, sampled sparsely so the statistics span whole episodes rather than one
         // burst of consecutive and therefore nearly identical frames.
         var obsSamples = new List<float[]>();
+        int outArrived = 0, outDied = 0, outFell = 0, outTimedOut = 0;
 
         // Bounded by EPISODES when --bench-episodes is given, by steps otherwise.
         //
@@ -432,6 +433,8 @@ public static class Program
                 remainingSum += meanRemaining;
                 (int[] bArr, int[] bAtt) = env.ArrivalByRouteLength();
                 for (int b = 0; b < bArr.Length; b++) { bucketArrived[b] += bArr[b]; bucketAttempts[b] += bAtt[b]; }
+                (int oa, int od, int of, int ot) = env.OutcomeCounts();
+                outArrived += oa; outDied += od; outFell += of; outTimedOut += ot;
                 if (episodes < 6)
                     Console.Error.WriteLine($"[bench] episode {episodes}: {arrived}/{cfg.Agents} arrived, " +
                                             $"mean arrival {meanTime:F1}s, mean distance left {meanRemaining:F0} qu");
@@ -486,6 +489,12 @@ public static class Program
             Console.Error.WriteLine($"[bench]   {name,-9} sd {sd,8:F4}  zeros {100.0 * zeros / n,5:F1}%");
         }
 
+        {
+            int tot = Math.Max(1, outArrived + outDied + outFell + outTimedOut);
+            Console.Error.WriteLine($"[bench] outcomes: arrived {100.0 * outArrived / tot:F1}%  " +
+                                    $"died {100.0 * outDied / tot:F1}%  fell {100.0 * outFell / tot:F1}%  " +
+                                    $"timed out {100.0 * outTimedOut / tot:F1}%");
+        }
         Console.Error.WriteLine("[bench] arrival by route length:");
         for (int b = 0; b < bucketAttempts.Length; b++)
         {

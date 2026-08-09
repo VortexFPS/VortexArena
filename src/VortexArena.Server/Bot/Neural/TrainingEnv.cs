@@ -5,6 +5,7 @@ using System.Numerics;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Math;
+using VortexArena.Common.Services;
 using VortexArena.Engine.Collision;
 using VortexArena.Engine.Simulation;
 
@@ -1046,6 +1047,28 @@ public sealed class TrainingEnv
             // Commas would break whitespace-delimited aggregation, so flag sets join on '|'.
             string content = ((NavContent)span.Content).ToString().Replace(", ", "|");
             line += $"{F(span.FloorZ - ownFloor)}/{span.Clearance}/{content}";
+        }
+
+        // Does the observation's trace fan see what the bot is actually stuck on?
+        //
+        // The fan sweeps a box shrunk to 0.6x the hull, deliberately, so it clears doorways the real hull
+        // squeezes through. The cost of that is the opposite error: a gap the shrunken box passes and the
+        // real hull jams on reads as open ground. Lateral wedging -- an agent pinned with nothing on its
+        // route line, moving 0 qu -- is exactly what that would look like from the outside, so this reports
+        // both traces along the route direction and lets the aggregate say whether the fan was blind.
+        Vector3 fwd = a.Distance.PointAlongRoute(at, 64f) - at;
+        fwd.Z = 0f;
+        if (fwd.LengthSquared() > 1f)
+        {
+            fwd = Vector3.Normalize(fwd);
+            Vector3 eye = at + new Vector3(0f, 0f, 8f);
+            Vector3 mins = a.Player.Mins, maxs = a.Player.Maxs;
+            var fanMins = new Vector3(mins.X * 0.6f, mins.Y * 0.6f, mins.Z * 0.5f);
+            var fanMaxs = new Vector3(maxs.X * 0.6f, maxs.Y * 0.6f, maxs.Z * 0.5f);
+            Vector3 end = eye + fwd * NeuralObservation.TraceFanReach;
+            TraceResult fan = Api.Trace.Trace(eye, fanMins, fanMaxs, end, MoveFilter.Normal, a.Player);
+            TraceResult hull = Api.Trace.Trace(eye, mins, maxs, end, MoveFilter.Normal, a.Player);
+            line += $" fanFrac={fan.Fraction:F2} hullFrac={hull.Fraction:F2}";
         }
         Log(line);
     }

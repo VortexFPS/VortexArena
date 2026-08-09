@@ -58,6 +58,9 @@ public sealed class NeuralObservation
     /// <summary>Route ribbon: per sample, egocentric offset (2), relative height, and hazard.</summary>
     public const int RouteFloats = RouteSamples * 4;
 
+    /// <summary>How far each fan ray reaches, in qu.</summary>
+    public const float TraceFanReach = 224f;
+
     /// <summary>Short box sweeps for what the baked field cannot know: doors mid-travel, players, movers.</summary>
     public const int TraceFanRays = 6;
     public const int TraceFanFloats = TraceFanRays * 2;
@@ -339,7 +342,7 @@ public sealed class NeuralObservation
     private static void WriteTraceFan(Player bot, in MoveIntent intent, float fx, float fy, Span<float> dest)
     {
         ReadOnlySpan<float> angles = stackalloc float[TraceFanRays] { 0f, 0.5f, -0.5f, 1.4f, -1.4f, 0f };
-        const float reach = 224f;
+        const float reach = TraceFanReach;
 
         Vector3 mins = intent.HullMins, maxs = intent.HullMaxs;
         // Shrink the sweep box a little so it clears doorways the real hull squeezes through; a full-width

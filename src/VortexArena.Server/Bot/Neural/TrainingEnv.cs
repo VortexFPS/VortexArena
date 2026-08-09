@@ -41,8 +41,14 @@ public sealed class TrainingEnv
         /// <summary>Sim ticks per policy action. 4 ticks at 72 Hz is an 18 Hz decision rate.</summary>
         public int TicksPerStep = 4;
 
+        /// <summary>The episode cap every stage trains at: 900 policy steps at 18 Hz is 50 s of game time.</summary>
+        public const int DefaultMaxSteps = 900;
+
         /// <summary>Episode cap in policy steps. 900 at 18 Hz is 50 s of game time.</summary>
-        public int MaxSteps = 900;
+        public int MaxSteps = DefaultMaxSteps;
+
+        /// <summary>Emit a <c>[stuck]</c> line characterising where each timed-out agent stopped. Diagnostic.</summary>
+        public bool StuckReport;
 
         /// <summary>Curriculum stage, which picks the course generator.</summary>
         public CourseGenerator.Stage Stage = CourseGenerator.Stage.Flat;
@@ -136,6 +142,28 @@ public sealed class TrainingEnv
         /// <summary>How the episode ended: 0 running, 1 arrived, 2 died, 3 fell out of the world, 4 timed out.</summary>
         public int Outcome;
         public Vector3 Target;
+
+        /// <summary>
+        /// Closest geodesic approach to the target this episode, and the step it happened on.
+        ///
+        /// <para>Diagnostic only. The gap between this and the final distance separates "never got near the
+        /// target" from "got near and then wedged", and <see cref="BestStep"/> against the episode cap says
+        /// how long it stayed wedged -- which is what distinguishes a slow policy from a blocked one.</para>
+        /// </summary>
+        public float BestPotential = float.MaxValue;
+        public int BestStep;
+
+        /// <summary>
+        /// A position sample refreshed every <see cref="StuckAnchorPeriod"/> steps, so a timeout can report
+        /// how far the agent moved recently.
+        ///
+        /// <para>This is what separates the two failures that look identical in the distance trace: an agent
+        /// physically wedged against geometry moves ~0 qu, while one circling in open ground moves hundreds
+        /// without ever closing on the goal. They need opposite fixes, so the report has to tell them
+        /// apart.</para>
+        /// </summary>
+        public Vector3 RecentAnchor;
+        public int RecentAnchorStep;
 
         /// <summary>
         /// This agent's own goal-distance field, so every agent on a host can run a DIFFERENT route.
@@ -866,6 +894,57 @@ public sealed class TrainingEnv
 
     private static float Vitality(Player p) => p.Health + p.GetResource(ResourceType.Armor);
 
+    /// <summary>Lookaheads along the route, in qu, used by <see cref="ReportStuck"/>.</summary>
+    /// <remarks>
+    /// Chosen against the movement envelope rather than round numbers: a standing jump clears about 105 qu
+    /// of ledge and a running one about 320 qu of gap, so 64 is "inside one step", 160 is "past anything
+    /// walkable", and 320 is "at the limit of a running jump". An obstacle that shows up at 64 is something
+    /// the bot is standing against; one that only shows at 320 is something it would have to commit to.
+    /// </remarks>
+    private static readonly float[] StuckLookaheads = { 64f, 160f, 320f };
+
+    /// <summary>How often <see cref="Agent.RecentAnchor"/> is refreshed, in policy steps (90 = 5 s at 18 Hz).</summary>
+    private const int StuckAnchorPeriod = 90;
+
+    /// <summary>
+    /// Characterise where a timed-out agent actually stopped, so a plateau can be attributed to a named
+    /// obstacle rather than to "the policy is bad".
+    ///
+    /// <para>One line per timeout. <c>left</c> against <c>best</c> separates "never got near the target"
+    /// from "got near and then wedged", and <c>stalled</c> -- steps since the closest approach -- says how
+    /// long it stayed wedged. <c>reach</c> is the one that matters most: 0 means the goal is no longer
+    /// reachable from where it stands, so it has fallen somewhere it cannot climb out of and the episode
+    /// was unwinnable from that moment, which is a course-generation problem and not a policy one.</para>
+    ///
+    /// <para>The trailing <c>+N=dz/clearance/content</c> triples are the floor profile along the descending
+    /// route. A large positive dz is a ledge, NOFLOOR is a gap, and a Lethal/Harmful/Water content bit is a
+    /// hazard the route runs straight through.</para>
+    /// </summary>
+    private void ReportStuck(Agent a)
+    {
+        if (Log is null) return;
+        Vector3 at = a.Player.Origin;
+        float ownFloor = _field.GroundHeight(at, at.Z);
+        string F(float v) => v.ToString("F0", CultureInfo.InvariantCulture);
+
+        string line = $"[stuck] map={_world.MapName} left={F(a.Distance.DistanceAt(at))}"
+                    + $" best={F(a.BestPotential)} stalled={_cfg.MaxSteps - a.BestStep}"
+                    + $" reach={(a.Distance.IsReachable(at) ? 1 : 0)} goalDZ={F(a.Target.Z - at.Z)}"
+                    + $" moved={F((at - a.RecentAnchor).Length())}/{a.Step - a.RecentAnchorStep}"
+                    + $" spd={F(a.Player.Velocity.Length())}";
+
+        foreach (float look in StuckLookaheads)
+        {
+            Vector3 ahead = a.Distance.PointAlongRoute(at, look);
+            line += $" +{F(look)}=";
+            if (!_field.TrySampleBelow(ahead, out FloorSpan span)) { line += "NOFLOOR"; continue; }
+            // Commas would break whitespace-delimited aggregation, so flag sets join on '|'.
+            string content = ((NavContent)span.Content).ToString().Replace(", ", "|");
+            line += $"{F(span.FloorZ - ownFloor)}/{span.Clearance}/{content}";
+        }
+        Log(line);
+    }
+
     private float Reward(Agent a, out bool terminal, out bool truncatedOut)
     {
         terminal = false;
@@ -889,6 +968,12 @@ public sealed class TrainingEnv
         float potential = Potential(a, p.Origin);
         r += (a.PrevPotential - potential) * ProgressScale;
         a.PrevPotential = potential;
+        if (potential < a.BestPotential) { a.BestPotential = potential; a.BestStep = a.Step; }
+        if (a.Step <= 1 || a.Step - a.RecentAnchorStep >= StuckAnchorPeriod)
+        {
+            a.RecentAnchor = p.Origin;
+            a.RecentAnchorStep = a.Step;
+        }
 
         // --- time ---
         // Small, constant, and the only reason bunnyhopping is worth the trouble.
@@ -951,6 +1036,7 @@ public sealed class TrainingEnv
         {
             truncatedOut = true;
             a.Outcome = 4;
+            if (_cfg.StuckReport) ReportStuck(a);
             return r;
         }
 

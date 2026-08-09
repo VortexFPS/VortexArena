@@ -313,6 +313,8 @@ public static class Program
         {
             Agents = opts.Agents,
             TicksPerStep = opts.TicksPerStep,
+            MaxSteps = opts.MaxSteps,
+            StuckReport = opts.StuckReport,
             Stage = (CourseGenerator.Stage)opts.Stage,
             Seed = opts.Seed,
             TraceFan = !opts.NoTraceFan,
@@ -704,6 +706,8 @@ public static class Program
         public int Seed = 1;
         public int BenchSteps;
         public int BenchEpisodes;
+        public int MaxSteps = TrainingEnv.Config.DefaultMaxSteps;
+        public bool StuckReport;
         public string? VerifyWeights;
         public bool NoTraceFan;
         public bool Scripted;
@@ -765,6 +769,13 @@ public static class Program
                     case "--seed": o.Seed = ParseInt(Next(), 1); break;
                     case "--bench": o.BenchSteps = ParseInt(Next(), 1000); break;
                     case "--bench-episodes": o.BenchEpisodes = ParseInt(Next(), 0); break;
+                    // Episode cap in policy steps, for separating "too slow" from "stuck". A policy that
+                    // merely moves slowly converts extra clock into arrivals; one wedged against geometry
+                    // does not. Same courses, same seed, only the deadline moves.
+                    case "--max-steps":
+                        o.MaxSteps = Math.Clamp(ParseInt(Next(), TrainingEnv.Config.DefaultMaxSteps), 60, 20000);
+                        break;
+                    case "--stuck-report": o.StuckReport = true; break;
                     case "--verify-weights": o.VerifyWeights = Next(); break;
                     case "--no-tracefan": o.NoTraceFan = true; break;
                     case "--scripted": o.Scripted = true; break;

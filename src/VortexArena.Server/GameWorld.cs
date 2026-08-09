@@ -1929,6 +1929,24 @@ public sealed class GameWorld
             PlayerStats.GameReport(finished: false, Clients.Players, Time, Teamplay.IsTeamGame);
 
         Services.CvarsImpl.Changed -= OnServerCvarChanged;
+
+        // Detach the score table from the PROCESS-WIDE obituary bus and the accuracy events.
+        //
+        // Boot calls Scores.SubscribeToDeaths, which does Combat.Death.Add(_deathHandler) on a static
+        // HookChain plus three static WeaponAccuracyEvents handlers. UnsubscribeFromDeaths is the
+        // documented counterpart ("QC teardown on map end") and had no callers anywhere in the tree, so
+        // every world's Scores stayed in the chain forever -- and Scores holds an Action<string> that
+        // closes over the GameWorld, so every world ever built stayed rooted.
+        //
+        // The runtime named this exactly. gcroot on a retained world in a heap dump:
+        //
+        //   static IDamageSystem.System -> HookChain<DeathEvent> -> List<(HookOrder, HookHandler)>
+        //     -> HookHandler<DeathEvent> -> Server.Scores -> Action<string> -> Server.GameWorld
+        //
+        // A listen server changes map a few times a session so this leaked invisibly. The RL training env
+        // builds a world per EPISODE: about 1.6 MB retained each time, a managed heap climbing through
+        // gen2, and an out-of-memory kill on every training run at every host count tried.
+        Scores.UnsubscribeFromDeaths();
     }
 
     /// <summary>Cached deferred-command executor (see OnStartFrame — avoids a per-tick closure).</summary>

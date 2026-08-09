@@ -221,6 +221,21 @@ public sealed class TrainingEnv
         // and the trainer saw only "connection forcibly closed".
         Cvars.Set("bot_neural", "0");
 
+        // Detach the OUTGOING world before building the next one.
+        //
+        // GameWorld.Shutdown removes its OnServerCvarChanged handler from the cvar store, and that store is
+        // process-wide -- every episode's world subscribes to the same one. Without this, every world ever
+        // built stays reachable from the store's event list and is never collected. Its own doc comment
+        // says so ("a map change builds a fresh world on the same store, so it must be detached or every
+        // retired world keeps re-deriving balance on every cvar change"); the listen-server host calls it
+        // and this env did not.
+        //
+        // Measured: about 1.6 MB retained per episode, a managed heap climbing straight through gen2
+        // collections, and roughly 3.4 MB/s of RSS growth in a flat-out bench. It is the cause of every
+        // out-of-memory kill in this training setup -- at 16 GB, at 24 GB, and at every host count from 14
+        // to 24. Host count only ever changed how long a run survived it.
+        _world?.Shutdown();
+
         _world = new GameWorld(_course.World, BuildEntityDicts()) { MapName = $"nbcourse{_episodeIndex}" };
         _world.Boot("dm");
         ApplyTrainingCvars();
@@ -353,6 +368,9 @@ public sealed class TrainingEnv
         var dicts = new List<EntityDict>(map.Entities) { new("info_player_deathmatch", spawn) };
 
         Cvars.Set("bot_neural", "0");   // see the note in the generated-course reset
+
+        _world?.Shutdown();             // see the note in the generated-course reset: this is the leak fix
+
         _world = new GameWorld(map.World, dicts) { MapName = map.Name };
         _world.BrushModels = map.Submodels;
         _world.MapBsp = map.Bsp;

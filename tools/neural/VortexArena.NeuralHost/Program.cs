@@ -423,6 +423,21 @@ public static class Program
             steps++;
             if (steps % 17 == 0 && obsSamples.Count < 4000)
                 obsSamples.Add(observations[..obsSize].ToArray());
+            // Managed heap against process RSS, every 2000 steps.
+            //
+            // RSS grows linearly at about 3.4 MB/s in this bench and does not plateau, on a SINGLE map with
+            // no preparation, cache eviction or re-baking -- so it is not map handling, which is where three
+            // hypotheses already died. This says whether the growth is managed objects being retained (heap
+            // climbs with RSS) or native/GC behaviour (heap flat, RSS climbs anyway). Those need completely
+            // different fixes, and guessing between them has cost several runs.
+            if (steps % 2000 == 0)
+            {
+                using var proc = System.Diagnostics.Process.GetCurrentProcess();
+                Console.Error.WriteLine(
+                    $"[mem] step {steps,6}  managed {GC.GetTotalMemory(false) / (1024 * 1024),5} MB  " +
+                    $"rss {proc.WorkingSet64 / (1024 * 1024),5} MB  " +
+                    $"gen0 {GC.CollectionCount(0)} gen1 {GC.CollectionCount(1)} gen2 {GC.CollectionCount(2)}");
+            }
             if (opts.Debug && steps % 60 == 0)
                 Console.Error.WriteLine($"[dbg {steps,5}] {env.DebugAgent0()}");
             if (env.AllDone())

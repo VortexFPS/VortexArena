@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -781,6 +782,27 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args) -> float
             pr.kill()
             outs.append("")
     out = "\n".join(outs)
+
+    # Surface how often the course draw had to relax its constraints.
+    #
+    # The filters reject roughly 70% of candidates on stage 2, and when a draw exhausts its attempts
+    # NextEpisode falls back through looser tiers rather than throwing -- which is what stops a run dying the
+    # way v15 did, and also what could quietly turn a stage into a different stage. A stage that spends most
+    # of its draws below the strict tier is not the stage its profile describes, and the arrival rate alone
+    # will never say so. The eval shards run the same pool as training, so this is the cheapest honest read.
+    tiers = [0] * 4
+    for line in out.splitlines():
+        m = re.search(r"draws by tier \[strict (\d+), no-step-bound (\d+), no-exposure (\d+), unfiltered (\d+)\]",
+                      line)
+        if m:
+            for i in range(4):
+                tiers[i] += int(m.group(i + 1))
+    drawn = sum(tiers)
+    if drawn and tiers[0] < drawn:
+        print(f"[s{stage}] course draws relaxed: strict {tiers[0] * 100.0 / drawn:.0f}%, "
+              f"no-step-bound {tiers[1] * 100.0 / drawn:.0f}%, no-exposure {tiers[2] * 100.0 / drawn:.0f}%, "
+              f"unfiltered {tiers[3] * 100.0 / drawn:.0f}% of {drawn} draws — the stage's bounds are not "
+              f"binding on this map pool", flush=True)
 
     # Weighted by each shard's agent-episodes, so a shard cut short by the step budget does not count the
     # same as a complete one.

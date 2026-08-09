@@ -557,6 +557,9 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
               # loss and the policy drifts toward uniform no matter what the reward says -- the failure
               # that held stage 6 at 3-9% for 8.8M steps while entropy climbed.
               f"e/p {hyper.entropy_coef * stats['entropy'] / max(1e-9, abs(stats['policy_loss'])):5.2f}  "
+              # Non-zero means minibatches were skipped for a non-finite loss. Silence here is the healthy
+              # case; a run that starts printing this is diverging and the weights are being protected.
+              + (f"SKIPPED {int(stats['nonfinite'])}  " if stats.get("nonfinite") else "")
               f"[env {t_env:.2f}s pol {t_pol:.2f}s upd {t_upd:.2f}s]")
 
         if update % 20 == 0:
@@ -812,7 +815,7 @@ def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv,
     batch = max(1, total // hyper.minibatches)
     idx = np.arange(total)
 
-    out = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0, "kl": 0.0}
+    out = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0, "kl": 0.0, "nonfinite": 0.0}
     n = 0
     stop = False
     for _ in range(hyper.epochs):
@@ -823,7 +826,19 @@ def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv,
             mb = torch.as_tensor(idx[start : start + batch], device=device, dtype=torch.long)
             logp, entropy, value = policy.evaluate(b_obs[mb], b_act[mb])
 
-            ratio = (logp - b_logp[mb]).exp()
+            # Clamp the log-ratio before exponentiating.
+            #
+            # A run diverged to NaN at update 301 of stage 2 with the reward and the return scale still
+            # finite, so the NaN was born here rather than in the environment. As entropy falls the logits
+            # spread, and a log-softmax can underflow to -inf for an action the policy now considers
+            # impossible. If the stored log-prob is also -inf, logp - b_logp is (-inf) - (-inf) = NaN, and
+            # exp carries it into every loss. Even without the NaN, an unclamped ratio can overflow to inf
+            # on one unlucky sample and blow the update.
+            #
+            # +/-20 is far outside anything PPO's 0.2 clip can use -- exp(20) is 4.9e8 -- so this changes
+            # no healthy update, it only stops a pathological one.
+            log_ratio_raw = (logp - b_logp[mb]).clamp(-20.0, 20.0)
+            ratio = log_ratio_raw.exp()
             surr1 = ratio * b_adv[mb]
             surr2 = torch.clamp(ratio, 1 - hyper.clip, 1 + hyper.clip) * b_adv[mb]
             policy_loss = -torch.min(surr1, surr2).mean()
@@ -831,6 +846,15 @@ def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv,
             ent = entropy.mean()
 
             loss = policy_loss + hyper.value_coef * value_loss - hyper.entropy_coef * ent
+
+            # Never step on a non-finite loss. The diverged run trained 32 more updates on NaN before a
+            # human noticed, destroying a policy that was at 46.8% -- sampled arrivals fell 45.6% to 5.3%
+            # while the shipped eval kept reporting ~44%, because the eval scores the last EXPORTED weights
+            # rather than the live ones. Skipping the batch keeps the previous weights intact.
+            if not torch.isfinite(loss):
+                out["nonfinite"] += 1
+                optimizer.zero_grad()
+                continue
 
             optimizer.zero_grad()
             loss.backward()

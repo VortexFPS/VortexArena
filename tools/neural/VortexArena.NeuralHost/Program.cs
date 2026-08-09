@@ -125,14 +125,28 @@ public static class Program
 
     private static int RunServer(Options opts)
     {
-        var listener = new TcpListener(IPAddress.Loopback, opts.Port);
+        // Loopback unless told otherwise, deliberately.
+        //
+        // This protocol has no authentication and no encryption: it accepts one connection and then takes
+        // observation requests and action payloads from whoever is on the other end. On loopback that is
+        // fine, because only this machine can reach it. Binding wider is what makes multi-machine training
+        // possible and it also exposes the port to everything that can route to the address, so it has to be
+        // an explicit choice by whoever launches the host, on a network they trust.
+        IPAddress bind = IPAddress.Loopback;
+        if (opts.Bind.Length > 0 && !IPAddress.TryParse(opts.Bind, out bind!))
+        {
+            Console.Error.WriteLine($"[neural-host] --bind {opts.Bind} is not an IP address");
+            return 2;
+        }
+
+        var listener = new TcpListener(bind, opts.Port);
         listener.Start();
         // The port goes to stdout before anything else so a trainer launching with --port 0 can read the
         // assigned one. Every other message goes to stderr, keeping stdout a clean machine-readable channel.
         int port = ((IPEndPoint)listener.LocalEndpoint).Port;
         Console.WriteLine($"PORT {port}");
         Console.Out.Flush();
-        Console.Error.WriteLine($"[neural-host] listening on 127.0.0.1:{port}");
+        Console.Error.WriteLine($"[neural-host] listening on {bind}:{port}");
 
         using TcpClient client = listener.AcceptTcpClient();
         client.NoDelay = true;   // a step is a request/response round trip; Nagle would add 40 ms to each
@@ -704,6 +718,7 @@ public static class Program
     private sealed class Options
     {
         public int Port;
+        public string Bind = "";
         public int Agents = 8;
         public int TicksPerStep = 4;
         public int Stage = 1;
@@ -766,6 +781,8 @@ public static class Program
                 switch (a)
                 {
                     case "--port": o.Port = ParseInt(Next(), 0); break;
+                    // Address to listen on. Loopback by default; see RunServer for why widening it is opt-in.
+                    case "--bind": o.Bind = Next() ?? ""; break;
                     case "--agents": o.Agents = Math.Clamp(ParseInt(Next(), 8), 1, 64); break;
                     case "--ticks": o.TicksPerStep = Math.Clamp(ParseInt(Next(), 4), 1, 32); break;
                     case "--stage": o.Stage = Math.Clamp(ParseInt(Next(), 1), 1, 6); break;

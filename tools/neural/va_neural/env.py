@@ -90,8 +90,24 @@ class HostEnv:
     """One host process and the socket to it."""
 
     def __init__(self, cfg: EnvConfig, host_dll: Path | None = None, quiet: bool = True,
-                 host_args: list[str] | None = None):
+                 host_args: list[str] | None = None, remote: tuple[str, int] | None = None):
+        """``remote`` attaches to a host already listening at (address, port) instead of spawning one.
+
+        The protocol was always a socket; only the launching was local. A worker machine runs
+        tools/neural/worker.sh to bring up N hosts on consecutive ports, and the trainer dials them. Nothing
+        about the wire format changes, so a remote host and a local one are the same object from here on.
+
+        The trainer stays single: one policy, one optimiser, one batch. What moves across the network is
+        simulation, which is the part that actually costs -- at 16 agents an observation frame is about 19 KB
+        and a step is a single round trip, so a LAN carries this comfortably. A WAN would not: the round trip
+        is synchronous and per rollout step, so latency lands directly on throughput.
+        """
         self.cfg = cfg
+        self.proc = None
+        self.remote = remote
+        if remote is not None:
+            self._connect(remote[0], remote[1], cfg)
+            return
         dll = Path(host_dll) if host_dll else _default_host_binary()
         if not dll.exists():
             raise FileNotFoundError(
@@ -129,7 +145,11 @@ class HostEnv:
         self._drain = threading.Thread(target=self._drain_stdout, daemon=True)
         self._drain.start()
 
-        self.sock = socket.create_connection(("127.0.0.1", port))
+        self._connect("127.0.0.1", port, cfg)
+
+    def _connect(self, address: str, port: int, cfg: EnvConfig) -> None:
+        self.sock = socket.create_connection((address, port), timeout=30)
+        self.sock.settimeout(None)
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         # Room for a whole step result without the writer blocking.
         #
@@ -257,13 +277,15 @@ class HostEnv:
         self._send(OP_SET_STAGE, struct.pack("<i", stage))
 
     def close(self) -> None:
+        # A remote host has no process here to reap, but it still needs telling: without OP_CLOSE it sits on
+        # a half-open socket and the worker cannot reuse the port until someone notices.
+        try:
+            self._send(OP_CLOSE)
+        except (OSError, AttributeError):
+            pass
         proc = getattr(self, "proc", None)
         if proc is None or proc.poll() is not None:
             return
-        try:
-            self._send(OP_CLOSE)
-        except OSError:
-            pass
         try:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
@@ -278,8 +300,21 @@ class VectorEnv:
     keeps every host contributing to every batch instead of the batch shrinking as episodes end.
     """
 
+    @staticmethod
+    def parse_remotes(specs: list[str] | None) -> list[tuple[str, int]]:
+        """``host:port`` or ``host:port:count`` (consecutive ports) into a flat endpoint list."""
+        out: list[tuple[str, int]] = []
+        for spec in specs or []:
+            parts = spec.split(":")
+            if len(parts) not in (2, 3):
+                raise ValueError(f"--remote wants host:port or host:port:count, got {spec!r}")
+            addr, port = parts[0], int(parts[1])
+            count = int(parts[2]) if len(parts) == 3 else 1
+            out.extend((addr, port + i) for i in range(count))
+        return out
+
     def __init__(self, cfg: EnvConfig, num_hosts: int = 4, host_dll: Path | None = None, quiet: bool = True,
-                 host_args: list[str] | None = None):
+                 host_args: list[str] | None = None, remotes: list[tuple[str, int]] | None = None):
         """host_args goes verbatim to every host process.
 
         Router and observation switches live on the host, not in the trainer, so without this a run cannot
@@ -288,11 +323,19 @@ class VectorEnv:
         shift into whatever the run was supposed to be measuring.
         """
         self.envs: list[HostEnv] = []
-        for i in range(num_hosts):
-            # A distinct seed per host, or every host generates the identical course sequence and the batch
-            # is num_hosts copies of one experience.
+        remotes = remotes or []
+        # Remote hosts first, then local ones, and the seed stride runs across BOTH -- a remote host that
+        # reused a local host's seed would generate the identical course sequence and the batch would hold
+        # two copies of one experience, which is the failure this stride exists to prevent.
+        for i, (addr, port) in enumerate(remotes):
+            sub = EnvConfig(**{**cfg.__dict__, "seed": cfg.seed + i * 1_000_003})
+            self.envs.append(HostEnv(sub, remote=(addr, port)))
+        for j in range(num_hosts):
+            i = len(remotes) + j
             sub = EnvConfig(**{**cfg.__dict__, "seed": cfg.seed + i * 1_000_003})
             self.envs.append(HostEnv(sub, host_dll=host_dll, quiet=quiet, host_args=host_args))
+        if not self.envs:
+            raise ValueError("no hosts: --hosts is 0 and no --remote endpoints were given")
         self.agents_per_host = self.envs[0].agents
         self.obs_size = self.envs[0].obs_size
         self.num_agents = self.agents_per_host * len(self.envs)

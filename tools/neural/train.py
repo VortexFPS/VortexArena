@@ -282,6 +282,12 @@ def main() -> int:
                          "strong once arrivals get rare: on stage 6 it made the entropy bonus twice the "
                          "policy gradient, entropy rose 6.91 -> 7.63 of a 8.19 maximum, and the eval never "
                          "left 3-9%%. Watch the e/p column -- keep it below about 1.0.")
+    ap.add_argument("--remote", action="append", default=[],
+                    help="attach to hosts already running elsewhere: host:port, or host:port:count for "
+                         "consecutive ports. Repeatable. Remote hosts are indistinguishable from local ones "
+                         "once connected -- what crosses the network is simulation, not gradients. Start them "
+                         "with tools/neural/worker.sh on the far machine. LAN only: the step is a synchronous "
+                         "round trip, so WAN latency lands straight on throughput.")
     ap.add_argument("--host-arg", action="append", default=[],
                     help="pass a flag through to every host process, repeatable. Router and observation "
                          "switches (--no-warps, --no-feet-resolution, --no-course-filters) live on the host, "
@@ -474,8 +480,12 @@ def train_stage(policy, norm, optimizer, hyper: Hyper, args, stage: int, budget:
         data_root=str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data"),
         map_list=args.maps,
     )
+    remotes = VectorEnv.parse_remotes(args.remote)
     env = VectorEnv(cfg, num_hosts=args.hosts, quiet=not args.verbose_hosts,
-                    host_args=args.host_arg or None)
+                    host_args=args.host_arg or None, remotes=remotes)
+    if remotes:
+        print(f"[train] {len(remotes)} remote host(s) + {args.hosts} local = {len(env.envs)} total, "
+              f"{env.num_agents} agents", flush=True)
     try:
         return _run(policy, norm, optimizer, hyper, env, stage, budget, threshold, run_dir, device,
                     args.eval_every, args.eval_steps, args)

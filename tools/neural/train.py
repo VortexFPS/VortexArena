@@ -159,6 +159,14 @@ CURRICULUM = [
 ]
 
 
+# Agents per world during evaluation. PINNED, and deliberately independent of --agents.
+#
+# Agents per world changes the task: bots crowd each other, so the same policy over the same number of
+# agent-episodes scores 31.7% at 20 agents, 21.4% at 40 and 15.2% at 80. Every curriculum baseline was
+# measured at 20, so the eval has to use 20 or the gate is comparing two different problems.
+EvalAgents = 20
+
+
 class _Tee:
     """Write to two streams at once, flushing each line. Used for the run log."""
 
@@ -234,6 +242,10 @@ def main() -> int:
                          "strong once arrivals get rare: on stage 6 it made the entropy bonus twice the "
                          "policy gradient, entropy rose 6.91 -> 7.63 of a 8.19 maximum, and the eval never "
                          "left 3-9%%. Watch the e/p column -- keep it below about 1.0.")
+    ap.add_argument("--eval-shards", type=int, default=4,
+                    help="split the eval episodes across this many parallel processes. Each keeps the same "
+                         "agents-per-world (crowding is part of the task) and uses its own seed, so this "
+                         "divides eval wall-clock AND averages down the eval's variance.")
     ap.add_argument("--rollout", type=int, default=None,
                     help="override Hyper.rollout, the steps per host per update. This sets the BATCH SIZE "
                          "jointly with --hosts and --agents (batch = rollout x hosts x agents) while the "
@@ -692,29 +704,69 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args) -> float
     # Episode-bounded, with the step count as the safety cap. Every eval then scores the same courses;
     # a step budget alone scores a fast policy on a different slice than a slow one, which turned the
     # gate into a lottery (stage 3 swung between 20% and 59% on consecutive evals).
-    cmd = [shutil.which("dotnet") or "dotnet", str(dll),
-           "--bench", str(steps * 4), "--bench-episodes", str(args.eval_episodes),
-           "--agents", str(args.agents), "--ticks", str(args.ticks),
-           "--stage", str(stage), "--seed", str(args.seed + 9001),
-           "--policy", str(weights)]
-    # Every stage but 5 now draws from shipped maps, so the data root goes on unconditionally. Passing it
-    # only for stage 6 would make the eval for stages 1-4 fail to find any map and score zero.
-    cmd += ["--data", str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data")]
-    if args.maps:
-        cmd += ["--maps", args.maps]
+    # Shard the episodes across parallel processes, each with the SAME agent count and a different seed.
+    #
+    # Wall-clock was the problem: one 120-episode eval takes 374 s against 137 s of training per 60
+    # updates, so evaluation was about 73% of the run. The obvious fix -- more agents, fewer episodes --
+    # is wrong, because agents per world is a task parameter rather than a throughput knob. Same policy,
+    # same 2,400 agent-episodes: 120x20 scored 31.7%, 60x40 scored 21.4%, 30x80 scored 15.2%. Bots
+    # physically crowd each other, so packing more into one world quietly makes the task harder.
+    #
+    # Sharding keeps each world's crowding identical and divides the wall-clock by the shard count. The
+    # shards also use different seeds, so averaging them reduces the eval's own variance instead of just
+    # preserving it -- sigma ~2.5 on one run, and about half that across four.
+    shards = max(1, int(getattr(args, "eval_shards", 4)))
+    per = max(1, args.eval_episodes // shards)
+    data_root = str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data")
 
+    def shard_cmd(i: int) -> list[str]:
+        c = [shutil.which("dotnet") or "dotnet", str(dll),
+             "--bench", str(steps * 4), "--bench-episodes", str(per),
+             # Pinned, NOT args.agents. Every curriculum baseline was measured at EvalAgents while this
+             # passed the training value, so gates and evals were scored on different difficulties.
+             "--agents", str(EvalAgents), "--ticks", str(args.ticks),
+             "--stage", str(stage), "--seed", str(args.seed + 9001 + i * 7919),
+             "--policy", str(weights),
+             "--data", data_root]
+        if args.maps:
+            c += ["--maps", args.maps]
+        return c
+
+    procs = []
     try:
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=900).stdout
-    except (subprocess.TimeoutExpired, OSError):
+        for i in range(shards):
+            procs.append(subprocess.Popen(shard_cmd(i), stdout=subprocess.PIPE,
+                                          stderr=subprocess.DEVNULL, text=True))
+    except OSError:
+        for pr in procs:
+            pr.kill()
         return float("nan")
 
+    outs = []
+    for pr in procs:
+        try:
+            outs.append(pr.communicate(timeout=900)[0] or "")
+        except subprocess.TimeoutExpired:
+            pr.kill()
+            outs.append("")
+    out = "\n".join(outs)
+
+    # Weighted by each shard's agent-episodes, so a shard cut short by the step budget does not count the
+    # same as a complete one.
+    hits, total = 0.0, 0.0
     for line in out.splitlines():
-        if line.startswith("arrival rate"):
-            # "arrival rate   34.7 % (161/464 agent-episodes)"
-            try:
-                return float(line.split()[2]) / 100.0
-            except (IndexError, ValueError):
-                return float("nan")
+        if not line.startswith("arrival rate"):
+            continue
+        # "arrival rate   34.7 % (161/464 agent-episodes)"
+        try:
+            frac = line.split("(")[1].split(")")[0].split()[0]
+            a, b = frac.split("/")
+            hits += float(a)
+            total += float(b)
+        except (IndexError, ValueError):
+            continue
+    if total > 0:
+        return hits / total
     # The bench ran but printed no arrival line -- a load failure or a crash. NaN, explicitly: it
     # loses every comparison, so a broken eval can never pass a gate or win a tournament.
     return float("nan")
@@ -765,7 +817,9 @@ def evaluate_scripted(stage: int, steps: int, args) -> float:
     dll = Path(__file__).resolve().parent / "VortexArena.NeuralHost" / "bin" / "Release" / "net8.0" / "va-neural-host.dll"
     cmd = [shutil.which("dotnet") or "dotnet", str(dll),
            "--bench", str(steps * 4), "--bench-episodes", str(args.eval_episodes),
-           "--agents", str(args.agents), "--ticks", str(args.ticks),
+           # Same pinned count as evaluate(): a baseline measured at a different crowding level is not a
+           # baseline for this gate.
+           "--agents", str(EvalAgents), "--ticks", str(args.ticks),
            "--stage", str(stage), "--seed", str(args.seed + 9001), "--scripted"]
     cmd += ["--data", str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data")]
     if args.maps:

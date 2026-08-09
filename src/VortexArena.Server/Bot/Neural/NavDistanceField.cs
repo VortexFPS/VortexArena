@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 
 namespace VortexArena.Server.Bot.Neural;
@@ -115,6 +116,127 @@ public sealed class NavDistanceField
     // Keyed weakly so a field that falls out of the map cache does not pin its index here.
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<NavField, SpanIndex> _indexCache = new();
 
+    /// <summary>
+    /// One-way connections the 32 qu lattice cannot express: jump pads and teleporters.
+    /// </summary>
+    /// <remarks>
+    /// The lattice links neighbours by walking and jumping, which covers everything a bot can do under its
+    /// own power and nothing a map does for it. So a pit whose only exit is a launch, or a room reached only
+    /// through a teleporter, was simply absent from the graph -- the flood reported the goal unreachable and
+    /// the bot was standing somewhere it could in fact leave.
+    ///
+    /// <para>Measured before this existed: of agents that read "goal unreachable" while standing on the
+    /// ground, 86.6% recovered within the same episode and 35.7% went on to ARRIVE. Reachability was not a
+    /// fact about the map, it was a fact about what the graph happened to model.</para>
+    ///
+    /// <para>Stored per field rather than baked into it, because the links come from entities and the field
+    /// is disk-cached: putting them in the field would mean a format version and a cache invalidation for
+    /// data that is free to rebuild.</para>
+    /// </remarks>
+    private sealed class WarpLinks
+    {
+        /// <summary>Destination span -> the spans that can reach it by entering a pad or teleporter, and at what cost.</summary>
+        public readonly Dictionary<int, List<(int Source, float Cost)>> IntoDest = new();
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<NavField, WarpLinks> _warpCache = new();
+
+    /// <summary>
+    /// What entering a pad or teleporter costs the router, over and above its flight time.
+    /// </summary>
+    /// <remarks>
+    /// Not free. A pad has to be walked onto and committed to, and a router that treats one as a zero-cost
+    /// edge will thread every route through the nearest one. 128 qu is four cells: cheap against the
+    /// hundreds or thousands of qu a launch actually covers, dear enough that a short walk still wins.
+    /// </remarks>
+    private const float WarpBaseCost = 128f;
+
+    /// <summary>Flight time converted to route cost at roughly running speed, so a slow arc reads as further.</summary>
+    private const float WarpSpeedEquivalent = 400f;
+
+    /// <summary>Vertical slack when deciding which spans sit inside a trigger volume, in qu.</summary>
+    private const float WarpVolumeSlack = 64f;
+
+    /// <summary>
+    /// Teach every distance field over <paramref name="field"/> about the map's pads and teleporters.
+    /// </summary>
+    /// <remarks>
+    /// Idempotent and cheap; call it once per prepared map, after <see cref="MapFeatures.Build"/>. A field
+    /// with no registration behaves exactly as before, which is what keeps generated courses and the tests
+    /// unaffected.
+    /// </remarks>
+    /// <summary>Set false to build no warp links at all, for A/B against the pre-warp router.</summary>
+    public static bool WarpsEnabled = true;
+
+    /// <returns>How many destination spans and how many riding spans were linked. Zero means the map has no
+    /// usable pads or teleporters -- worth logging, because a feature that silently never fires looks
+    /// exactly like one that works.</returns>
+    public static (int Dests, int Sources) RegisterWarps(NavField field, MapFeatures features)
+    {
+        // Once per field. The links come from the map's entities, which do not change while it is resident,
+        // and the training env resets on the same field every episode.
+        if (_warpCache.TryGetValue(field, out WarpLinks? existing))
+            return (existing.IntoDest.Count, existing.IntoDest.Sum(kv => kv.Value.Count));
+        if (!WarpsEnabled)
+        {
+            _warpCache.Add(field, new WarpLinks());
+            return (0, 0);
+        }
+
+        SpanIndex index = _indexCache.GetValue(field, static f => new SpanIndex(f));
+        var links = new WarpLinks();
+
+        foreach (MapFeature f in features.All)
+        {
+            if (f.Kind is not (MapFeatureKind.JumpPad or MapFeatureKind.Teleporter)) continue;
+            // An unresolved exit means the map names a destination that is not in the entity table. Skipping
+            // is right: inventing an edge to nowhere is worse than the missing edge it replaces.
+            if (f.Exit == Vector3.Zero) continue;
+            if (!field.TryCell(f.Exit, out int ex, out int ey)) continue;
+
+            int dest = SpanUnderStatic(field, index, ex, ey, f.Exit.Z);
+            if (dest < 0) continue;
+
+            float cost = WarpBaseCost + f.TransitTime * WarpSpeedEquivalent;
+            if (!links.IntoDest.TryGetValue(dest, out var sources))
+                links.IntoDest[dest] = sources = new List<(int, float)>();
+
+            // Every standable span inside the trigger volume can take this ride.
+            for (float wy = f.Mins.Y; wy <= f.Maxs.Y + NavField.CellSize; wy += NavField.CellSize)
+            {
+                for (float wx = f.Mins.X; wx <= f.Maxs.X + NavField.CellSize; wx += NavField.CellSize)
+                {
+                    if (!field.TryCell(new Vector3(wx, wy, f.Centre.Z), out int cx, out int cy)) continue;
+                    ReadOnlySpan<FloorSpan> col = field.Column(cx, cy);
+                    for (int t = 0; t < col.Length; t++)
+                    {
+                        if (((NavContent)col[t].Content & NavContent.Standable) == 0) continue;
+                        if (col[t].FloorZ < f.Mins.Z - WarpVolumeSlack) continue;
+                        if (col[t].FloorZ > f.Maxs.Z + WarpVolumeSlack) continue;
+                        int src = index.Start[cy * field.Width + cx] + t;
+                        if (src != dest) sources.Add((src, cost));
+                    }
+                }
+            }
+            if (sources.Count == 0) links.IntoDest.Remove(dest);
+        }
+
+        // Stored even when empty, so the early-out above works and a map with no pads is not rescanned
+        // every episode.
+        _warpCache.Add(field, links);
+        return (links.IntoDest.Count, links.IntoDest.Sum(kv => kv.Value.Count));
+    }
+
+    /// <summary>Mirrors <see cref="SpanIndexUnder"/> for callers that have the index but no built field yet.</summary>
+    private static int SpanUnderStatic(NavField field, SpanIndex index, int cx, int cy, float z)
+    {
+        ReadOnlySpan<FloorSpan> col = field.Column(cx, cy);
+        float probe = z + BotNavigation.StepHeight;
+        for (int i = 0; i < col.Length; i++)
+            if (col[i].FloorZ <= probe) return index.Start[cy * field.Width + cx] + i;
+        return -1;
+    }
+
     /// <param name="reuse">
     /// A distance buffer to write into instead of allocating one, or null.
     ///
@@ -156,11 +278,35 @@ public sealed class NavDistanceField
         ReadOnlySpan<int> dxs = stackalloc int[] { 1, 1, 0, -1, -1, -1, 0, 1 };
         ReadOnlySpan<int> dys = stackalloc int[] { 0, 1, 1, 1, 0, -1, -1, -1 };
 
+        _warpCache.TryGetValue(field, out WarpLinks? warps);
+        // Null it out when the map has none, so the inner loop skips a dictionary lookup per popped span.
+        if (warps is not null && warps.IntoDest.Count == 0) warps = null;
+
         int reached = 0;
         while (heap.TryDequeue(out int cur, out float d))
         {
             if (d > dist[cur]) continue;   // a stale heap entry
             reached++;
+
+            // Pads and teleporters, relaxed in the direction the flood actually runs.
+            //
+            // This flood is seeded at the GOAL and spreads outward, so dist[i] is the cost from i to the
+            // goal. A pad is one-way: riding it takes you from its trigger volume to its exit, never back.
+            // So the edge to relax is the reverse of the ride -- popping the EXIT span at cost d makes every
+            // span inside the trigger volume cost d + ride. Relaxing it the other way round would tell the
+            // router it can reach the pad by standing on the landing pad, which is exactly backwards.
+            if (warps is not null && warps.IntoDest.TryGetValue(cur, out var riders))
+            {
+                foreach ((int src, float cost) in riders)
+                {
+                    float nd = d + cost;
+                    if (nd < dist[src])
+                    {
+                        dist[src] = nd;
+                        heap.Enqueue(src, nd);
+                    }
+                }
+            }
 
             result.Locate(cur, out int cx, out int cy, out int slot);
             FloorSpan span = field.Column(cx, cy)[slot];

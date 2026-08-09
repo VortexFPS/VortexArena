@@ -172,6 +172,22 @@ public sealed class TrainingEnv
         public int RecentAnchorStep;
 
         /// <summary>
+        /// How long this agent has read "goal unreachable" while standing on the ground, and whether it ever
+        /// recovered from such a spell.
+        /// </summary>
+        /// <remarks>
+        /// These exist to answer one question before acting on it: is <see cref="NavDistanceField.IsReachable"/>
+        /// trustworthy enough to END an episode on? It has at least two known false-negative sources. Airborne
+        /// bots have no graph distance at all -- <see cref="Potential"/> already works around exactly that --
+        /// and the flood carries no jump-pad or teleporter edges, so a pit whose only exit is a launch reads
+        /// unreachable while the bot can in fact leave. The ground requirement removes the first; the recovery
+        /// tally measures whatever is left.
+        /// </remarks>
+        public int UnreachStreak;
+        public int UnreachLongest;
+        public int UnreachRecovered;
+
+        /// <summary>
         /// This agent's own goal-distance field, so every agent on a host can run a DIFFERENT route.
         ///
         /// <para>Geometry is per HOST -- one GameWorld, one map -- but a route is just a spawn/target pair
@@ -437,6 +453,12 @@ public sealed class TrainingEnv
         _field = map.Field;
         _features = new MapFeatures();
         _features.Build(_world.Services.EntityTable.All);
+        // Pads and teleporters into the router, before any route is flooded over this field. Without it the
+        // graph models only what the bot can do under its own power, and a pit whose exit is a launch reads
+        // as unreachable when it is not.
+        (int warpDests, int warpSources) = NavDistanceField.RegisterWarps(_field, _features);
+        if (_cfg.StuckReport)
+            Log?.Invoke($"[warps] map={map.Name} destSpans={warpDests} ridingSpans={warpSources}");
         _distance = dist;
 
         // The generated-course record the rest of the class reads for spawn, target and world bounds.
@@ -744,7 +766,15 @@ public sealed class TrainingEnv
             rewards[i] = Reward(a, out bool terminal, out bool cut);
             dones[i] = (byte)(terminal ? 1 : 0);
             truncated[i] = (byte)(cut ? 1 : 0);
-            if (terminal || cut) a.Done = true;
+            if (terminal || cut)
+            {
+                a.Done = true;
+                // Every outcome, not just timeouts: the question is what fraction of agents that looked
+                // permanently stranded went on to ARRIVE, and those never reach the timeout path.
+                if (_cfg.StuckReport && (a.UnreachLongest > 0 || a.UnreachRecovered > 0))
+                    Log?.Invoke($"[reach] longest={a.UnreachLongest} recovered={a.UnreachRecovered} "
+                              + $"outcome={a.Outcome} arrived={(a.Outcome == 1 ? 1 : 0)}");
+            }
 
             // Build the observation HERE, after the step's physics, so what the trainer sees is the state
             // its next action will act on. Reading whatever the last think happened to build put a
@@ -993,6 +1023,21 @@ public sealed class TrainingEnv
         {
             a.RecentAnchor = p.Origin;
             a.RecentAnchorStep = a.Step;
+        }
+
+        // Reachability streak, for the S1 question. Only counted on the ground, because an airborne bot has
+        // no graph distance and would otherwise register a false spell every jump.
+        if (a.Distance.DistanceAt(p.Origin) < NavDistanceField.Unreachable)
+        {
+            // Recovered: whatever spell just ended was survivable, so ending an episode on it would have
+            // been wrong.
+            if (a.UnreachStreak > a.UnreachRecovered) a.UnreachRecovered = a.UnreachStreak;
+            a.UnreachStreak = 0;
+        }
+        else if (p.OnGround)
+        {
+            a.UnreachStreak++;
+            if (a.UnreachStreak > a.UnreachLongest) a.UnreachLongest = a.UnreachStreak;
         }
 
         // --- time ---

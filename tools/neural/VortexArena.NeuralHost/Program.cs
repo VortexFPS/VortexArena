@@ -782,6 +782,7 @@ public static class Program
                         break;
                     case "--stuck-report": o.StuckReport = true; break;
                     case "--no-course-filters": o.CourseFilters = false; break;
+                    case "--no-warps": NavDistanceField.WarpsEnabled = false; break;
                     case "--verify-weights": o.VerifyWeights = Next(); break;
                     case "--no-tracefan": o.NoTraceFan = true; break;
                     case "--scripted": o.Scripted = true; break;

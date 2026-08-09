@@ -1033,7 +1033,8 @@ public sealed class TrainingEnv
 
         string line = $"[stuck] map={_world.MapName} left={F(a.Distance.DistanceAt(at))}"
                     + $" best={F(a.BestPotential)} stalled={_cfg.MaxSteps - a.BestStep}"
-                    + $" reach={(a.Distance.IsReachable(at) ? 1 : 0)} goalDZ={F(a.Target.Z - at.Z)}"
+                    + $" reach={(a.Distance.IsReachable(at) ? 1 : 0)} longest={a.UnreachLongest}"
+                    + $" goalDZ={F(a.Target.Z - at.Z)}"
                     + $" moved={F((at - a.RecentAnchor).Length())}/{a.Step - a.RecentAnchorStep}"
                     + $" spd={F(a.Player.Velocity.Length())}";
 

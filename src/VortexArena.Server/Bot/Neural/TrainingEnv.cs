@@ -204,6 +204,23 @@ public sealed class TrainingEnv
         public bool UnreachNbrAny;
 
         /// <summary>
+        /// How often the route's own suggested direction reversed between consecutive steps, and how many
+        /// steps were sampled.
+        /// </summary>
+        /// <remarks>
+        /// 94.5% of agents that look pinned are in fact moving -- oscillating without net progress, two
+        /// fifths of them in open space with nothing near them. <see cref="NavDistanceField.PointAlongRoute"/>
+        /// descends the flood greedily, and its own comment says the walk is step-bounded because "a
+        /// numerically flat region could otherwise oscillate between two equal-cost neighbours". The corridor
+        /// and route-ribbon observations are built from that walk, so if the direction flips on alternate
+        /// steps the policy is being told to go left, then right, then left. That would be our bug, not the
+        /// policy's, and this counts it rather than assuming it.
+        /// </remarks>
+        public int RouteFlips;
+        public int RouteSamples;
+        public Vector3 PrevRouteDir;
+
+        /// <summary>
         /// This agent's own goal-distance field, so every agent on a host can run a DIFFERENT route.
         ///
         /// <para>Geometry is per HOST -- one GameWorld, one map -- but a route is just a spawn/target pair
@@ -1070,6 +1087,7 @@ public sealed class TrainingEnv
             TraceResult hull = Api.Trace.Trace(eye, mins, maxs, end, MoveFilter.Normal, a.Player);
             line += $" fanFrac={fan.Fraction:F2} hullFrac={hull.Fraction:F2}";
         }
+        line += $" routeFlips={a.RouteFlips}/{a.RouteSamples}";
         Log(line);
     }
 
@@ -1101,6 +1119,26 @@ public sealed class TrainingEnv
         {
             a.RecentAnchor = p.Origin;
             a.RecentAnchorStep = a.Step;
+        }
+
+        // Route stability. Sampled only while on the ground: an airborne bot is off-graph, so PointAlongRoute
+        // returns its input and the "direction" is meaningless rather than reversed.
+        if (_cfg.StuckReport && p.OnGround)
+        {
+            Vector3 dir = a.Distance.PointAlongRoute(p.Origin, 96f) - p.Origin;
+            dir.Z = 0f;
+            if (dir.LengthSquared() > 1f)
+            {
+                dir = Vector3.Normalize(dir);
+                if (a.PrevRouteDir != Vector3.Zero)
+                {
+                    a.RouteSamples++;
+                    // A reversal, not a turn: real corners are gradual over 18 Hz steps, so only a direction
+                    // that swings past 90 degrees in one step counts.
+                    if (Vector3.Dot(dir, a.PrevRouteDir) < 0f) a.RouteFlips++;
+                }
+                a.PrevRouteDir = dir;
+            }
         }
 
         // Reachability streak, for the S1 question. Only counted on the ground, because an airborne bot has

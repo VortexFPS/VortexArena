@@ -185,8 +185,16 @@ class HostEnv:
 
     # -- gym-ish surface --
 
-    def reset(self) -> np.ndarray:
+    def send_reset(self) -> None:
+        """Ask for a reset without waiting for it.
+
+        Split from recv_reset so a fleet of hosts can rebuild concurrently. A reset is a whole GameWorld
+        teardown and rebuild plus a nav flood -- 280 to 650 ms measured -- and doing them one at a time
+        leaves every other host idle for the duration.
+        """
         self._send(OP_RESET)
+
+    def recv_reset(self) -> np.ndarray:
         op, body = self._recv()
         if op == OP_ERROR:
             raise RuntimeError(body.decode("utf-8", "replace"))
@@ -194,6 +202,10 @@ class HostEnv:
             raise RuntimeError(f"expected OBSERVATION, got {op}")
         self._obs = np.frombuffer(body, dtype=np.float32).reshape(self.agents, self.obs_size).copy()
         return self._obs
+
+    def reset(self) -> np.ndarray:
+        self.send_reset()
+        return self.recv_reset()
 
     def step(self, actions: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """``actions`` is (agents, WIRE_ACTION_SIZE) float32. Returns obs, reward, done, truncated."""
@@ -288,7 +300,10 @@ class VectorEnv:
 
     def reset(self) -> np.ndarray:
         self._done_hosts = [False] * len(self.envs)
-        return np.concatenate([e.reset() for e in self.envs], axis=0)
+        # Every host rebuilds at once rather than in turn: N resets cost one reset's wall time, not N.
+        for e in self.envs:
+            e.send_reset()
+        return np.concatenate([e.recv_reset() for e in self.envs], axis=0)
 
     def step(self, actions: np.ndarray):
         # Two phases. Every host is handed its actions before any reply is awaited, so N hosts compute
@@ -298,16 +313,29 @@ class VectorEnv:
             env.send_step(actions[lo : lo + self.agents_per_host])
 
         obs_parts, rew_parts, done_parts, trunc_parts = [], [], [], []
-        for env in self.envs:
+        needs_reset = []
+        for i, env in enumerate(self.envs):
             o, r, d, t = env.recv_step()
-            # An all-finished host is restarted immediately so it keeps producing experience. The done flags
-            # for this step are still reported, so the trainer bootstraps the value function correctly.
+            # An all-finished host is restarted so it keeps producing experience. The done flags for this
+            # step are still reported, so the trainer bootstraps the value function correctly.
+            #
+            # The restart is DEFERRED rather than done here. A reset blocks for a world teardown, rebuild and
+            # nav flood -- 280 to 650 ms -- and doing it inside this loop stalls the whole fleet, because
+            # every other host has already replied and is sitting idle waiting for the next action batch.
+            # Measured before this: 34% CPU across 28 cores with 33 of 37 processes asleep and no I/O wait.
             if bool(np.all(d | t)):
-                o = env.reset()
+                needs_reset.append(i)
             obs_parts.append(o)
             rew_parts.append(r)
             done_parts.append(d)
             trunc_parts.append(t)
+
+        # Same two-phase shape as the step itself: ask everyone, then collect.
+        if needs_reset:
+            for i in needs_reset:
+                self.envs[i].send_reset()
+            for i in needs_reset:
+                obs_parts[i] = self.envs[i].recv_reset()
         return (
             np.concatenate(obs_parts, axis=0),
             np.concatenate(rew_parts, axis=0),

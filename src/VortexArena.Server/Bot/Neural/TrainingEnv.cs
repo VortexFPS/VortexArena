@@ -234,8 +234,7 @@ public sealed class TrainingEnv
         // collections, and roughly 3.4 MB/s of RSS growth in a flat-out bench. It is the cause of every
         // out-of-memory kill in this training setup -- at 16 GB, at 24 GB, and at every host count from 14
         // to 24. Host count only ever changed how long a run survived it.
-        _world?.Shutdown();
-        if (_world is not null) _retired.Add(new WeakReference<GameWorld>(_world));
+        RetireWorld();
 
         _world = new GameWorld(_course.World, BuildEntityDicts()) { MapName = $"nbcourse{_episodeIndex}" };
         _world.Boot("dm");
@@ -370,8 +369,7 @@ public sealed class TrainingEnv
 
         Cvars.Set("bot_neural", "0");   // see the note in the generated-course reset
 
-        _world?.Shutdown();             // see the note in the generated-course reset
-        if (_world is not null) _retired.Add(new WeakReference<GameWorld>(_world));
+        RetireWorld();                  // see RetireWorld: detaches everything this env attached
 
         _world = new GameWorld(map.World, dicts) { MapName = map.Name };
         _world.BrushModels = map.Submodels;
@@ -418,6 +416,43 @@ public sealed class TrainingEnv
     /// candidate.</para>
     /// </summary>
     private readonly List<WeakReference<GameWorld>> _retired = new();
+
+    /// <summary>
+    /// Break every reference this env attached to the outgoing world, then record it weakly.
+    ///
+    /// <para>Diagnostic as much as fix. Retired worlds survive a forced collect one per episode, and
+    /// detaching the cvar-store subscription -- the only retainer the code documents -- changed nothing.
+    /// If clearing all of these drives retiredWorldsAlive to zero, the retainer is one of them and can be
+    /// bisected; if the count keeps climbing, it is held by something outside this class and the search
+    /// moves to the engine.</para>
+    /// </summary>
+    private void RetireWorld()
+    {
+        if (_world is null) return;
+
+        // Detach from the process-wide cvar store: GameWorld.Shutdown's whole purpose.
+        _world.Shutdown();
+
+        // The closure here captures THIS env, so it makes the world hold the env rather than the reverse --
+        // but it also keeps the world's own graph alive through the delegate, so clear it anyway.
+        _world.ConfigReader = null;
+        _world.BrushModels = null;
+        _world.MapBsp = null;
+        _world.Bots.Neural = null;
+
+        // Agents hold Player and BotBrain, which belong to the outgoing world.
+        foreach (Agent a in _agents)
+        {
+            a.Brain = null!;
+            a.Player = null!;
+            a.Loco = null!;
+            a.Distance = null!;
+        }
+        _agents.Clear();
+        _service = null;
+
+        _retired.Add(new WeakReference<GameWorld>(_world));
+    }
 
     /// <summary>How many retired worlds are still reachable. 0-1 is healthy; a rising count is the leak.</summary>
     public int LiveRetiredWorlds()

@@ -842,6 +842,20 @@ public sealed class GameWorld
         // QC num_autoscreenshot is a server global cleared each map; reset before the BSP lump spawns any
         // info_autoscreenshot so the g_max_info_autoscreenshot cap counts per-map (not across the process run).
         VortexArena.Common.Gameplay.InfoAutoScreenshot.ResetForMap();
+        // The targetname index and the map-object globals are PROCESS-WIDE and hold entities strongly:
+        // MapMover keeps Dictionary<string, List<Entity>> and Dictionary<Entity, string>, and
+        // MapObjectsState keeps counter and location entity lists plus the conveyed/laddered tracking.
+        // Both have a documented "QC implicitly clears this on map (re)load" reset, and neither had a
+        // single caller anywhere in the tree.
+        //
+        // A listen server changes map a handful of times a session, so this leaked slowly enough to look
+        // like nothing. The RL training env builds a fresh world per EPISODE against the same statics, and
+        // there it is fatal: every entity from every episode stayed indexed, every entity holds its world,
+        // and so every world ever built stayed reachable. Measured about 1.6 MB retained per episode, a
+        // managed heap climbing straight through gen2 collections, and an out-of-memory kill on every
+        // training run regardless of host count -- 16 GB, 24 GB, 14 hosts through 24.
+        VortexArena.Common.Gameplay.MapMover.ClearIndex();
+        VortexArena.Common.Gameplay.MapObjectsState.Reset();
         // QC sv_monsters.qc:846/1165 `(autocvar_g_campaign && !campaign_bots_may_start)`: in a campaign, monsters
         // freeze (like bots) until the human spawns. Wired here every Boot so it never goes stale; previously the
         // monster move/think gate ignored Campaign.BotsMayStart entirely.

@@ -315,6 +315,7 @@ public static class Program
             TicksPerStep = opts.TicksPerStep,
             MaxSteps = opts.MaxSteps,
             StuckReport = opts.StuckReport,
+            CourseFilters = opts.CourseFilters,
             Stage = (CourseGenerator.Stage)opts.Stage,
             Seed = opts.Seed,
             TraceFan = !opts.NoTraceFan,
@@ -543,6 +544,9 @@ public static class Program
         Console.WriteLine($"arrival rate   {arrivedTotal / (double)Math.Max(1, agentEpisodes):P1} " +
                           $"({arrivedTotal}/{agentEpisodes} agent-episodes)");
         Console.WriteLine($"distance left  {remainingSum / Math.Max(1, episodes):F0} qu mean at episode end");
+        // Which acceptance tests actually fired. A filter that never fires is indistinguishable from a
+        // working one in the arrival rate alone, because the run-to-run spread is larger than the effect.
+        if (env.CourseFilterStats is { } filters) Console.WriteLine(filters);
         return 0;
     }
 
@@ -708,6 +712,7 @@ public static class Program
         public int BenchEpisodes;
         public int MaxSteps = TrainingEnv.Config.DefaultMaxSteps;
         public bool StuckReport;
+        public bool CourseFilters = true;
         public string? VerifyWeights;
         public bool NoTraceFan;
         public bool Scripted;
@@ -776,6 +781,7 @@ public static class Program
                         o.MaxSteps = Math.Clamp(ParseInt(Next(), TrainingEnv.Config.DefaultMaxSteps), 60, 20000);
                         break;
                     case "--stuck-report": o.StuckReport = true; break;
+                    case "--no-course-filters": o.CourseFilters = false; break;
                     case "--verify-weights": o.VerifyWeights = Next(); break;
                     case "--no-tracefan": o.NoTraceFan = true; break;
                     case "--scripted": o.Scripted = true; break;

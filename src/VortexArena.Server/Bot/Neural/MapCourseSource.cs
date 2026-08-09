@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Numerics;
+using VortexArena.Common.Gameplay;
 using VortexArena.Engine.Collision;
 using VortexArena.Formats.Bsp;
 using VortexArena.Formats.Vfs;
@@ -303,8 +304,151 @@ public sealed class MapCourseSource
     /// </summary>
     public string[] Only = Array.Empty<string>();
 
+    // =============================================================================================
+    // course acceptance
+    //
+    // Measured on stage 2 with --stuck-report: of 396 agents that timed out, 11.6% were standing at
+    // geodesic distance 0 from a target several hundred qu over their heads, and 27.3% were somewhere the
+    // goal was no longer reachable from at all. Both are unwinnable by construction, and together they were
+    // about a fifth of every agent-episode on the stage. A policy cannot train its way out of either.
+    // =============================================================================================
+
+    /// <summary>
+    /// How many candidates each acceptance test threw out, and how many routes survived.
+    /// </summary>
+    /// <remarks>
+    /// Reported rather than assumed. A filter that silently never fires looks exactly like a filter that
+    /// works, and the downstream arrival rate cannot tell them apart: run-to-run spread on an 800
+    /// agent-episode bench is about 2.5 points, which is larger than the effect any one of these should have.
+    /// </remarks>
+    public long RejectedUntouchable, RejectedStepUp, RejectedExposed, AcceptedRoutes;
+
+    /// <summary>
+    /// Whether the acceptance tests run at all. Off restores the pre-filter course pool exactly, so the
+    /// filters can be A/B'd as a single binary difference over the same seeds rather than across builds.
+    /// </summary>
+    public bool FiltersEnabled = true;
+
+    /// <summary>One line of <see cref="RejectedUntouchable"/> and friends, for a bench summary.</summary>
+    public string FilterStats()
+    {
+        long seen = RejectedUntouchable + RejectedStepUp + RejectedExposed + AcceptedRoutes;
+        if (seen == 0) return "course filters: no candidates seen";
+        float Pct(long v) => v * 100f / seen;
+        return $"course filters: accepted {AcceptedRoutes} ({Pct(AcceptedRoutes):F1}%), "
+             + $"rejected untouchable-target {RejectedUntouchable} ({Pct(RejectedUntouchable):F1}%), "
+             + $"step-up {RejectedStepUp} ({Pct(RejectedStepUp):F1}%), "
+             + $"exposed-route {RejectedExposed} ({Pct(RejectedExposed):F1}%)";
+    }
+
+    /// <summary>
+    /// Can a player standing on the surface the route floods from actually touch this target?
+    /// </summary>
+    /// <remarks>
+    /// Targets are anchored to map entities, and plenty of them sit on geometry the baker never marked
+    /// standable -- a railing, a thin ledge, a crate. The flood then roots at the floor <i>underneath</i>,
+    /// so the bot navigates correctly to distance 0, stands there, and fails the arrival test forever
+    /// because that is a 3D radius check against a point 350 qu overhead.
+    ///
+    /// <para>Standing directly beneath the target spends none of the radius horizontally, so the whole of
+    /// it is available vertically. That makes this the most generous form of the test the runtime will
+    /// actually apply: anything this rejects was genuinely impossible.</para>
+    /// </remarks>
+    private static bool TargetIsTouchable(NavField field, Vector3 target)
+    {
+        if (!field.TrySampleBelow(target, out FloorSpan span)) return false;
+        float originZ = span.FloorZ - SpawnSystem.PlayerMins.Z;
+        return MathF.Abs(target.Z - originZ) <= TrainingEnv.ArriveRadius;
+    }
+
+    /// <summary>Spacing of the walk along a candidate route, in qu. Finer than a nav cell diagonal.</summary>
+    private const float RouteSampleSpacing = 48f;
+
+    /// <summary>Cap on route samples, so a pathological descent cannot spin. 96 x 48 qu covers 4600 qu.</summary>
+    private const int RouteSampleLimit = 96;
+
+    /// <summary>
+    /// The tallest upward step along the route, in qu, or 0 for a route that only ever descends or stays level.
+    /// </summary>
+    /// <remarks>
+    /// Walks the same greedy descent the observation's corridor uses, so this measures the route the bot is
+    /// actually being pointed down rather than the straight line to the target.
+    /// </remarks>
+    private static float MaxStepUpAlongRoute(NavField field, NavDistanceField dist, Vector3 spawn)
+    {
+        float worst = 0f;
+        Vector3 cur = spawn;
+        float prevFloor = field.GroundHeight(cur, cur.Z);
+
+        for (int i = 0; i < RouteSampleLimit; i++)
+        {
+            Vector3 next = dist.PointAlongRoute(cur, RouteSampleSpacing);
+            // PointAlongRoute returns its input when the position is off-graph, and the goal itself once the
+            // route is shorter than the look-ahead. Either way there is nothing further to walk.
+            if ((next - cur).LengthSquared() < 1f) break;
+
+            float floor = field.GroundHeight(next, next.Z);
+            worst = MathF.Max(worst, floor - prevFloor);
+            prevFloor = floor;
+            cur = next;
+        }
+        return worst;
+    }
+
+    /// <summary>A drop this deep or deeper cannot be climbed back up without a jump pad or a weapon.</summary>
+    private const float UnrecoverableDrop = 128f;
+
+    /// <summary>Lateral probe distance when testing what a route runs alongside, in qu (one nav cell).</summary>
+    private const float LedgeProbe = 32f;
+
+    /// <summary>
+    /// Reject if more than this share of route samples sit beside space the goal is unreachable from.
+    /// </summary>
+    /// <remarks>
+    /// Not zero: real arenas are full of railed walkways over pits, and a route is allowed to pass one. What
+    /// this rejects is a route that spends much of its length on the lip of one, where a single missed input
+    /// ends the episode with 45 s left on the clock and no path back.
+    /// </remarks>
+    private const float MaxExposedShare = 0.25f;
+
+    /// <summary>
+    /// Does this route spend much of its length beside a drop the goal is not reachable from?
+    /// </summary>
+    private static bool RouteHugsUnrecoverableDrop(NavField field, NavDistanceField dist, Vector3 spawn)
+    {
+        ReadOnlySpan<float> dxs = stackalloc float[] { 1f, 0.707f, 0f, -0.707f, -1f, -0.707f, 0f, 0.707f };
+        ReadOnlySpan<float> dys = stackalloc float[] { 0f, 0.707f, 1f, 0.707f, 0f, -0.707f, -1f, -0.707f };
+
+        Vector3 cur = spawn;
+        int samples = 0, exposed = 0;
+
+        for (int i = 0; i < RouteSampleLimit; i++)
+        {
+            float floor = field.GroundHeight(cur, cur.Z);
+            samples++;
+
+            for (int d = 0; d < 8; d++)
+            {
+                var probe = new Vector3(cur.X + dxs[d] * LedgeProbe, cur.Y + dys[d] * LedgeProbe, cur.Z);
+                // No floor at all beneath the probe is the void: falling there is a death, not a strand.
+                if (!field.TrySampleBelow(probe, out FloorSpan span)) continue;
+                if (floor - span.FloorZ < UnrecoverableDrop) continue;
+
+                // Deep enough to be one-way. Only counts if you also cannot route to the goal from down there.
+                var landing = new Vector3(probe.X, probe.Y, span.FloorZ + 1f);
+                if (dist.DistanceAt(landing) >= NavDistanceField.Unreachable) { exposed++; break; }
+            }
+
+            Vector3 next = dist.PointAlongRoute(cur, RouteSampleSpacing);
+            if ((next - cur).LengthSquared() < 1f) break;
+            cur = next;
+        }
+        return samples > 0 && exposed / (float)samples > MaxExposedShare;
+    }
+
     public (PreparedMap Map, Vector3 Spawn, Vector3 Target, NavDistanceField Distance)? NextEpisode(
-        Random rng, float minRouteLength = 700f, float maxRouteLength = float.PositiveInfinity)
+        Random rng, float minRouteLength = 700f, float maxRouteLength = float.PositiveInfinity,
+        float maxStepUp = float.PositiveInfinity)
     {
         // A handful of attempts, then give up for this episode rather than spin: a map whose graph is all
         // short hops has no long routes to find however long we look for one.
@@ -317,6 +461,8 @@ public sealed class MapCourseSource
             if (map is null) continue;
 
             Vector3 target = map.Anchors[rng.Next(map.Anchors.Count)];
+            // F1: unwinnable however well it navigates.
+            if (FiltersEnabled && !TargetIsTouchable(map.Field, target)) { RejectedUntouchable++; continue; }
             NavDistanceField dist = NavDistanceField.Build(map.Field, target);
             if (dist.ReachedSpans < 32) continue;   // the target sits somewhere the field cannot route to
 
@@ -325,6 +471,11 @@ public sealed class MapCourseSource
                 Vector3 spawn = map.Anchors[rng.Next(map.Anchors.Count)];
                 float d = dist.DistanceAt(spawn);
                 if (d >= NavDistanceField.Unreachable || d < minRouteLength || d > maxRouteLength) continue;
+                // Route shape last: both walk the descent, so they only run on a candidate that already
+                // passed the cheap length test.
+                if (FiltersEnabled && MaxStepUpAlongRoute(map.Field, dist, spawn) > maxStepUp) { RejectedStepUp++; continue; }
+                if (FiltersEnabled && RouteHugsUnrecoverableDrop(map.Field, dist, spawn)) { RejectedExposed++; continue; }
+                AcceptedRoutes++;
                 return (map, spawn, target, dist);
             }
         }
@@ -351,11 +502,13 @@ public sealed class MapCourseSource
 
     public (Vector3 Spawn, Vector3 Target, NavDistanceField Distance)? NextRouteOn(
         PreparedMap map, Random rng, float minRouteLength = 700f,
-        float maxRouteLength = float.PositiveInfinity)
+        float maxRouteLength = float.PositiveInfinity,
+        float maxStepUp = float.PositiveInfinity)
     {
         for (int attempt = 0; attempt < 8; attempt++)
         {
             Vector3 target = map.Anchors[rng.Next(map.Anchors.Count)];
+            if (FiltersEnabled && !TargetIsTouchable(map.Field, target)) { RejectedUntouchable++; continue; }
             NavDistanceField probe = NavDistanceField.Build(map.Field, target, _probeBuffer);
             _probeBuffer = probe.Buffer;
             if (probe.ReachedSpans < 32) continue;
@@ -365,6 +518,9 @@ public sealed class MapCourseSource
                 Vector3 spawn = map.Anchors[rng.Next(map.Anchors.Count)];
                 float d = probe.DistanceAt(spawn);
                 if (d >= NavDistanceField.Unreachable || d < minRouteLength || d > maxRouteLength) continue;
+                if (FiltersEnabled && MaxStepUpAlongRoute(map.Field, probe, spawn) > maxStepUp) { RejectedStepUp++; continue; }
+                if (FiltersEnabled && RouteHugsUnrecoverableDrop(map.Field, probe, spawn)) { RejectedExposed++; continue; }
+                AcceptedRoutes++;
                 // The caller keeps this one, so it needs its own buffer; the probe buffer goes on being
                 // reused by the next agent's draw.
                 return (spawn, target, probe.DetachCopy());

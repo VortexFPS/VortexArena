@@ -50,6 +50,9 @@ public sealed class TrainingEnv
         /// <summary>Emit a <c>[stuck]</c> line characterising where each timed-out agent stopped. Diagnostic.</summary>
         public bool StuckReport;
 
+        /// <summary>Run the course acceptance tests. Off restores the pre-filter course pool, for A/B.</summary>
+        public bool CourseFilters = true;
+
         /// <summary>Curriculum stage, which picks the course generator.</summary>
         public CourseGenerator.Stage Stage = CourseGenerator.Stage.Flat;
 
@@ -91,6 +94,9 @@ public sealed class TrainingEnv
     private NavDistanceField _distance = null!;
     private CourseGenerator.Course _course = null!;
     private MapCourseSource? _mapSource;
+
+    /// <summary>Course-filter accept/reject tallies, or null before any real-map episode has been drawn.</summary>
+    public string? CourseFilterStats => _mapSource?.FilterStats();
     private MapCourseSource.PreparedMap? _currentMap;
     private PolicyNetwork _dummyNet = null!;
     private NeuralBotService _service = null!;
@@ -360,30 +366,44 @@ public sealed class TrainingEnv
     /// a scripted straight-line runner scores on the same band -- for 20.7M steps. Four layouts is fewer
     /// than the six that scored 46.3% in the diversity A/B, against 24 that scored 95.0%.</para>
     ///
-    /// <para>Route length alone carries the ramp now. A short route on a complex map is a genuinely easier
-    /// problem than a long one, and it is the geometry the policy has to handle anyway.</para>
+    /// <para><b>Route length is no longer the only ramp, because it was not carrying the one the stage names.</b>
+    /// Stage 2 is defined as "flat, but long -- learns bunnyhop and strafe-jump chaining", with jump timing
+    /// deferred to stage 3. With length as the only filter it was serving stairwells and ledges instead: of
+    /// 396 stage-2 timeouts, 31.6% were pinned at the foot of a step up taller than a jump clears, on a stage
+    /// that hands out no weapons and follows nothing that ever taught jumping. MaxStepUp restores the stated
+    /// ordering by filtering on the vertical profile of the route the bot is actually pointed down.</para>
+    ///
+    /// <para>The numbers are the movement envelope, not round figures: a step is 18 qu, a standing jump apex
+    /// is about 105, and a running jump clears about 320 of gap. So stage 1 and 2 stay under a standing jump,
+    /// stage 3 opens up to the full jump, and stages 4 and up take whatever the map has.</para>
     /// </summary>
-    public static (string[] Maps, float MinRoute, float MaxRoute) StageProfile(CourseGenerator.Stage stage)
+    public static (string[] Maps, float MinRoute, float MaxRoute, float MaxStepUp) StageProfile(
+        CourseGenerator.Stage stage)
     {
         return stage switch
         {
-            CourseGenerator.Stage.Flat      => (Array.Empty<string>(), 700f, 1200f),
-            CourseGenerator.Stage.Corridor  => (Array.Empty<string>(), 1200f, 2500f),
-            CourseGenerator.Stage.Terrain   => (Array.Empty<string>(), 700f, 1500f),
-            CourseGenerator.Stage.Furniture => (Array.Empty<string>(), 1500f, 3000f),
-            _                               => (Array.Empty<string>(), 700f, float.PositiveInfinity),
+            CourseGenerator.Stage.Flat      => (Array.Empty<string>(), 700f, 1200f, 64f),
+            CourseGenerator.Stage.Corridor  => (Array.Empty<string>(), 1200f, 2500f, 64f),
+            CourseGenerator.Stage.Terrain   => (Array.Empty<string>(), 700f, 1500f, 112f),
+            CourseGenerator.Stage.Furniture => (Array.Empty<string>(), 1500f, 3000f, float.PositiveInfinity),
+            _                               => (Array.Empty<string>(), 700f, float.PositiveInfinity,
+                                                float.PositiveInfinity),
         };
     }
 
     private void ResetOnRealMap(Span<float> observations)
     {
-        _mapSource ??= new MapCourseSource(_cfg.DataRoot, _cfg.MapList) { Log = Log };
+        _mapSource ??= new MapCourseSource(_cfg.DataRoot, _cfg.MapList)
+        {
+            Log = Log,
+            FiltersEnabled = _cfg.CourseFilters,
+        };
 
-        (string[] maps, float minRoute, float maxRoute) = StageProfile(_cfg.Stage);
+        (string[] maps, float minRoute, float maxRoute, float maxStepUp) = StageProfile(_cfg.Stage);
         // An explicit --maps list from the caller wins over the stage's own subset.
         if (_cfg.MapList.Length == 0) _mapSource.Only = maps;
 
-        var draw = _mapSource.NextEpisode(_rng, minRoute, maxRoute);
+        var draw = _mapSource.NextEpisode(_rng, minRoute, maxRoute, maxStepUp);
         if (draw is null)
             throw new InvalidOperationException(
                 "no map in the pool produced a reachable A/B pair — check the map list and the held-out set");
@@ -562,8 +582,8 @@ public sealed class TrainingEnv
     {
         if (_currentMap is null || _mapSource is null) return (_course.Target, _distance);
 
-        (_, float minRoute, float maxRoute) = StageProfile(_cfg.Stage);
-        var draw = _mapSource.NextRouteOn(_currentMap, _rng, minRoute, maxRoute);
+        (_, float minRoute, float maxRoute, float maxStepUp) = StageProfile(_cfg.Stage);
+        var draw = _mapSource.NextRouteOn(_currentMap, _rng, minRoute, maxRoute, maxStepUp);
         return draw is null ? (_course.Target, _distance) : (draw.Value.Target, draw.Value.Distance);
     }
 

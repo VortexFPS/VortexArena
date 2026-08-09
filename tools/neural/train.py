@@ -166,6 +166,12 @@ CURRICULUM = [
 # measured at 20, so the eval has to use 20 or the gate is comparing two different problems.
 EvalAgents = 20
 
+# Consecutive fully-non-finite updates before a run gives up.
+#
+# Twenty is roughly half a million steps at the current batch -- long enough that a transient cannot trip
+# it, short enough that the 27M-step silent freeze in v14 would have been caught in about two minutes.
+DeadUpdateLimit = 20
+
 
 class _Tee:
     """Write to two streams at once, flushing each line. Used for the run log."""
@@ -465,6 +471,8 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     # stage has spent. See the block after the gate check.
     evals_since_best = 0
     perturb_rounds = 0
+    # Consecutive updates in which every single minibatch was non-finite. See the abort below.
+    dead_updates = 0
     baseline_logged = False
     ret_scale = ReturnScale()
 
@@ -549,7 +557,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
 
         _u0 = time.perf_counter()
         stats = ppo_update(policy, optimizer, hyper, obs_buf, act_buf, logp_buf, adv, ret, device,
-                           alive_buf=alive_buf)
+                           alive_buf=alive_buf, update=update)
         t_upd = time.perf_counter() - _u0
 
         # Rollout arrivals, from SAMPLED actions. A progress signal, not a gate: see the eval below.
@@ -574,6 +582,24 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
               # case; a run that starts printing this is diverging and the weights are being protected.
               f"{skipped_note}"
               f"[env {t_env:.2f}s pol {t_pol:.2f}s upd {t_upd:.2f}s]")
+
+        # Stop a run that has stopped learning, instead of letting it look busy.
+        #
+        # Skipping a non-finite minibatch protects the weights, but it does not end anything: v14 diverged at
+        # update 1201 and then skipped EVERY minibatch of every update for the remaining 1013 -- roughly 27M
+        # steps, about 45% of the run, training nothing at all. It was invisible from the outside because the
+        # eval scores the last exported weights, so it kept reporting 41-43% the whole time. Gradient steps
+        # per update is epochs x minibatches, so "all skipped" is the whole update wasted.
+        if stats.get("nonfinite", 0) >= hyper.epochs * hyper.minibatches:
+            dead_updates += 1
+            if dead_updates >= DeadUpdateLimit:
+                print(f"[s{stage}] ABORTING: {dead_updates} consecutive updates where every minibatch was "
+                      f"non-finite, so nothing has been learned since update {update - dead_updates + 1}. "
+                      f"The last good weights are in {run_dir}/stage{stage}-best.pt. See the [diverge] dump "
+                      f"above for where it was born.")
+                break
+        else:
+            dead_updates = 0
 
         if update % 20 == 0:
             save(policy, norm, optimizer, stage, run_dir)
@@ -848,8 +874,50 @@ def gae(rewards, values, dones, last_value, gamma: float, lam: float):
     return adv, adv + values
 
 
+def _tensor_health(name: str, t) -> str:
+    """One-line finiteness and range summary for a tensor, for the first-divergence dump."""
+    with torch.no_grad():
+        finite = torch.isfinite(t)
+        n_bad = int((~finite).sum())
+        if n_bad == t.numel():
+            return f"{name}: ALL {t.numel()} non-finite"
+        good = t[finite]
+        lo = float(good.min()) if good.numel() else float("nan")
+        hi = float(good.max()) if good.numel() else float("nan")
+        flag = f"  <-- {n_bad} NON-FINITE" if n_bad else ""
+        return f"{name}: n={t.numel()} range [{lo:.4g}, {hi:.4g}]{flag}"
+
+
+# Dump the first divergence once per process, not every update: the failure repeats for hundreds of
+# updates and the log is unreadable if each one prints a block.
+_DIVERGENCE_DUMPED = False
+
+
+def _dump_divergence(policy, tensors: dict, update: int) -> None:
+    """Report where a non-finite loss was born, instead of leaving it to be guessed at later.
+
+    A run diverged at update 1201 of stage 2 and then skipped every minibatch of every update for the
+    remaining 1013 -- about 27M steps that trained nothing, while the eval kept reporting ~42% because it
+    scores the last EXPORTED weights rather than the live ones. Three plausible causes were checked by hand
+    afterwards and all three were wrong (the unreachable sentinel is clamped in the observation, it is
+    clamped in the reward potential, and the saved weights are finite). Guessing is what cost the time, so
+    the next occurrence reports its own cause.
+    """
+    global _DIVERGENCE_DUMPED
+    if _DIVERGENCE_DUMPED:
+        return
+    _DIVERGENCE_DUMPED = True
+    print(f"[diverge] first non-finite loss at update {update}", flush=True)
+    for name, t in tensors.items():
+        print(f"[diverge]   {_tensor_health(name, t)}", flush=True)
+    bad_w = [k for k, v in policy.state_dict().items() if not torch.isfinite(v).all()]
+    print(f"[diverge]   live weights: {len(bad_w)} non-finite tensors"
+          + (f" {bad_w[:6]}" if bad_w else " (all clean -- born in the data or the forward pass)"),
+          flush=True)
+
+
 def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv, ret, device,
-               alive_buf=None) -> dict:
+               alive_buf=None, update: int = -1) -> dict:
     T, N = adv.shape
     # Drop padding outright rather than weighting it to zero. An agent that has already finished keeps
     # being reported every step -- zero reward, done 1, all-zero observation -- until the whole host
@@ -908,12 +976,36 @@ def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv,
             # rather than the live ones. Skipping the batch keeps the previous weights intact.
             if not torch.isfinite(loss):
                 out["nonfinite"] += 1
+                _dump_divergence(policy, {
+                    # Inputs first, then the forward pass, then the loss terms: reading down the list, the
+                    # first line flagged NON-FINITE is where it was born.
+                    "b_obs   (env observations)": b_obs[mb],
+                    "b_logp  (stored log-probs)": b_logp[mb],
+                    "b_adv   (normalised advantages)": b_adv[mb],
+                    "b_ret   (GAE returns)": b_ret[mb],
+                    "logp    (fresh log-probs)": logp,
+                    "entropy (fresh)": entropy,
+                    "value   (critic out)": value,
+                    "log_ratio (clamped)": log_ratio_raw,
+                    "ratio": ratio,
+                    "policy_loss": policy_loss,
+                    "value_loss": value_loss,
+                    "ent": ent,
+                }, update)
                 optimizer.zero_grad()
                 continue
 
             optimizer.zero_grad()
             loss.backward()
-            nn.utils.clip_grad_norm_(policy.parameters(), hyper.max_grad_norm)
+            # A finite loss can still backward into non-finite gradients, and clip_grad_norm_ on a
+            # non-finite total norm scales EVERY gradient to NaN -- so the corrupting step is one where the
+            # loss looked healthy. Checking the norm it returns costs nothing and is the only thing standing
+            # between one bad batch and weights that can never recover.
+            gnorm = nn.utils.clip_grad_norm_(policy.parameters(), hyper.max_grad_norm)
+            if not torch.isfinite(gnorm):
+                out["nonfinite"] += 1
+                optimizer.zero_grad()
+                continue
             optimizer.step()
 
             with torch.no_grad():

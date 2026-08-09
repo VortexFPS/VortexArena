@@ -235,6 +235,7 @@ public sealed class TrainingEnv
         // out-of-memory kill in this training setup -- at 16 GB, at 24 GB, and at every host count from 14
         // to 24. Host count only ever changed how long a run survived it.
         _world?.Shutdown();
+        if (_world is not null) _retired.Add(new WeakReference<GameWorld>(_world));
 
         _world = new GameWorld(_course.World, BuildEntityDicts()) { MapName = $"nbcourse{_episodeIndex}" };
         _world.Boot("dm");
@@ -369,7 +370,8 @@ public sealed class TrainingEnv
 
         Cvars.Set("bot_neural", "0");   // see the note in the generated-course reset
 
-        _world?.Shutdown();             // see the note in the generated-course reset: this is the leak fix
+        _world?.Shutdown();             // see the note in the generated-course reset
+        if (_world is not null) _retired.Add(new WeakReference<GameWorld>(_world));
 
         _world = new GameWorld(map.World, dicts) { MapName = map.Name };
         _world.BrushModels = map.Submodels;
@@ -404,6 +406,30 @@ public sealed class TrainingEnv
 
     /// <summary>Console sink for the map loader; null stays silent.</summary>
     public Action<string>? Log;
+
+    /// <summary>
+    /// Weak handles on retired worlds, so the env can say how many are still reachable.
+    ///
+    /// <para>Diagnostic for the leak that has killed every training run: about 1.6 MB is retained per
+    /// episode, the managed heap climbs straight through gen2 collections, and it happens on a single map
+    /// so it is not map handling. Detaching the world's cvar-store subscription -- the one retainer the
+    /// code documents -- changed nothing, which means either the world is not what leaks or something else
+    /// holds it too. Counting live retired worlds separates those two cases instead of guessing at a third
+    /// candidate.</para>
+    /// </summary>
+    private readonly List<WeakReference<GameWorld>> _retired = new();
+
+    /// <summary>How many retired worlds are still reachable. 0-1 is healthy; a rising count is the leak.</summary>
+    public int LiveRetiredWorlds()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        int alive = 0;
+        foreach (WeakReference<GameWorld> w in _retired)
+            if (w.TryGetTarget(out _)) alive++;
+        return alive;
+    }
 
     /// <summary>Connect the roster, let the world settle, and write the opening observations.</summary>
     private void SpawnRosterAndSettle(Span<float> observations)

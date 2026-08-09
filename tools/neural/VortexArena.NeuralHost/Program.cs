@@ -436,7 +436,8 @@ public static class Program
                 Console.Error.WriteLine(
                     $"[mem] step {steps,6}  managed {GC.GetTotalMemory(false) / (1024 * 1024),5} MB  " +
                     $"rss {proc.WorkingSet64 / (1024 * 1024),5} MB  " +
-                    $"gen0 {GC.CollectionCount(0)} gen1 {GC.CollectionCount(1)} gen2 {GC.CollectionCount(2)}");
+                    $"gen0 {GC.CollectionCount(0)} gen1 {GC.CollectionCount(1)} gen2 {GC.CollectionCount(2)}  " +
+                    $"retiredWorldsAlive {env.LiveRetiredWorlds()}");
             }
             if (opts.Debug && steps % 60 == 0)
                 Console.Error.WriteLine($"[dbg {steps,5}] {env.DebugAgent0()}");

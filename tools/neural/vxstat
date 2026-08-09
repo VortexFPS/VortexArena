@@ -128,6 +128,52 @@ def tail(path, n=4000):
         return []
 
 
+def run_config(run_dir):
+    """The run's config.json, flattened across its nested sections.
+
+    The file is {"args": {...}, "hyper": {...}, obs_size, action_logits}, so a top-level get finds nothing.
+    Flattening one level keeps the lookup simple and survives a section being renamed or added.
+    """
+    try:
+        import json
+        with open(os.path.join(run_dir, "config.json")) as fh:
+            raw = json.load(fh)
+    except Exception:
+        return {}
+    flat = {}
+    for k, v in raw.items():
+        if isinstance(v, dict):
+            flat.update(v)
+        else:
+            flat[k] = v
+    return flat
+
+
+def seconds_per_update(lines):
+    """Wall seconds per update, derived from the log without needing timestamps.
+
+    Each update line carries cumulative steps and a cumulative steps/s, so steps/sps is the elapsed time at
+    that line. Differencing two lines gives the wall time between them. Taken over a window rather than a
+    single pair, because one update straddling an eval is not representative of the rest.
+    """
+    seen = {}
+    for line in lines:
+        m = UPDATE.search(line)
+        if m:
+            try:
+                sps = float(m["sps"])
+                if sps > 0:
+                    seen[int(m["update"])] = int(m["steps"].replace(",", "")) / sps
+            except (ValueError, ZeroDivisionError):
+                continue
+    if len(seen) < 3:
+        return None
+    keys = sorted(seen)[-12:]
+    du = keys[-1] - keys[0]
+    dt = seen[keys[-1]] - seen[keys[0]]
+    return dt / du if du > 0 and dt > 0 else None
+
+
 def parse(lines):
     st = {"update": None, "evals": [], "stage": None, "budget": None, "gate": None,
           "skipped": 0, "diverge": 0, "starved": 0, "relaxed": 0}
@@ -280,6 +326,28 @@ def render(s):
           + (f"   ETA {dur(eta)}" if eta else ""))
         w(f"    throughput  {sps:,.0f} steps/s      sampled {float(u['sampled']):.1f}%"
           f"      update #{int(u['update']):,}")
+
+        # ---- next eval
+        #
+        # The number worth planning around: an eval is the only thing that produces a score, and between them
+        # nothing observable changes. Shards are detected by process rather than by log line, because the
+        # trainer prints nothing until the eval finishes.
+        cfg = run_config(run_dir)
+        try:
+            every = int(cfg.get("eval_every", 0))
+        except (TypeError, ValueError):
+            every = 0
+        shards = [p for p, c, _ in procs if "va-neural-host.dll" in c and "--bench" in c and "--policy" in c]
+        if shards:
+            elapsed = min(uptime_of(p) for p in shards)
+            w(f"    next eval   {s.cyan('RUNNING NOW')}  {len(shards)} shards, {dur(elapsed)} elapsed")
+        elif every > 0:
+            done = int(u["update"])
+            togo = every - (done % every)
+            spu = seconds_per_update(tail(os.path.join(run_dir, "train.log")))
+            eta = f"  ~{dur(togo * spu)}" if spu else ""
+            w(f"    next eval   in {togo} update{'s' if togo != 1 else ''}{eta}"
+              f"   {bar((every - togo) / every, 14, s)}")
         w("")
         w(s.bold("  MODEL"))
         ent, kl = float(u["ent"]), float(u["kl"])

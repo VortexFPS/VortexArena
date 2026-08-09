@@ -1,0 +1,368 @@
+#!/usr/bin/env python3
+"""Live status of the Vortex Arena neural-bot training run.
+
+    vxstat                one snapshot and exit
+    vxstat --watch        refresh every 5 s until Ctrl-C
+    vxstat --watch 15     refresh every 15 s
+    vxstat --plain        no colour, no box drawing (for piping or logging)
+
+Everything is derived fresh from /proc and the run's train.log on every call. There is deliberately no
+daemon and no cached state: a background collector is one more thing that can die quietly and leave a
+confident-looking stale number on the screen, and nothing here is expensive enough to be worth that risk.
+
+Stage timings come from checkpoint mtimes rather than the log, because the trainer does not timestamp its
+output -- stage N started when stage N-1's -done.pt was written.
+"""
+import os
+import re
+import sys
+import time
+from datetime import datetime
+
+try:
+    from zoneinfo import ZoneInfo
+    # The box runs UTC; the person reading this does not. Convert here rather than making them do it.
+    EASTERN = ZoneInfo("America/New_York")
+except Exception:
+    EASTERN = None
+
+# Overridable so this is not welded to one box; the default is the training VM's layout.
+RUNS = os.environ.get("VX_RUNS", "/home/vortex/train/runs")
+CORES = os.cpu_count() or 1
+
+
+# ---------------------------------------------------------------- process table
+
+def processes():
+    """(pid, cmdline, rss_kb) for everything readable in /proc, self excluded.
+
+    Read straight out of /proc rather than shelling to pgrep: a pgrep pattern matches the command line of
+    whatever is doing the asking, which has bitten this project repeatedly -- including once where it killed
+    the shell that issued it.
+    """
+    me = os.getpid()
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        pid = int(entry)
+        if pid == me:
+            continue
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                cmd = fh.read().decode("utf-8", "replace").replace("\0", " ").strip()
+            if not cmd:
+                continue
+            rss = 0
+            with open(f"/proc/{pid}/statm") as fh:
+                rss = int(fh.read().split()[1]) * (os.sysconf("SC_PAGE_SIZE") // 1024)
+        except (OSError, ValueError, IndexError):
+            continue
+        yield pid, cmd, rss
+
+
+def proc_age(pid):
+    try:
+        return time.time() - os.stat(f"/proc/{pid}").st_mtime
+    except OSError:
+        return 0.0
+
+
+def uptime_of(pid):
+    """Seconds since the process started, from its own start ticks against system uptime."""
+    try:
+        with open(f"/proc/{pid}/stat") as fh:
+            start_ticks = int(fh.read().rsplit(")", 1)[1].split()[19])
+        with open("/proc/uptime") as fh:
+            up = float(fh.read().split()[0])
+        return max(0.0, up - start_ticks / os.sysconf("SC_CLK_TCK"))
+    except (OSError, ValueError, IndexError):
+        return 0.0
+
+
+# ---------------------------------------------------------------- machine
+
+def meminfo():
+    vals = {}
+    try:
+        with open("/proc/meminfo") as fh:
+            for line in fh:
+                k, _, v = line.partition(":")
+                vals[k] = int(v.split()[0])
+    except (OSError, ValueError):
+        return 0.0, 0.0, 0.0
+    total = vals.get("MemTotal", 0) / 1048576.0
+    avail = vals.get("MemAvailable", 0) / 1048576.0
+    return total, total - avail, avail
+
+
+def loadavg():
+    try:
+        with open("/proc/loadavg") as fh:
+            return float(fh.read().split()[0])
+    except (OSError, ValueError):
+        return 0.0
+
+
+# ---------------------------------------------------------------- log parsing
+
+UPDATE = re.compile(
+    r"\[s(?P<stage>\d) u\s*(?P<update>\d+)\]\s+steps\s+(?P<steps>[\d,]+)\s+(?P<sps>[\d.]+)/s"
+    r".*?sampled\s+(?P<sampled>[\d.]+)%\s+shipped\s+(?P<shipped>[\d.]+)%"
+    r".*?ent\s+(?P<ent>[-\d.]+)\s+kl\s+(?P<kl>[-\d.]+)")
+EVAL = re.compile(r"\[s(?P<stage>\d)\].*?eval:\s+(?P<rate>[\d.]+)% arrivals \(gate (?P<gate>[\d.]+)%")
+STAGE = re.compile(r"=== stage (?P<stage>\d): (?P<budget>[\d,]+) agent-steps, advance at (?P<gate>[\d.]+)%")
+
+# Baselines re-measured on the FILTERED course pool, 3 seeds x 800 agent-episodes. Stages without a figure
+# here were never re-measured after the filters landed, and their gates should not be trusted until they are.
+BASELINE = {2: 28.9, 3: 38.5}
+
+
+def tail(path, n=4000):
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, 2)
+            size = fh.tell()
+            fh.seek(max(0, size - n * 200))
+            return fh.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return []
+
+
+def parse(lines):
+    st = {"update": None, "evals": [], "stage": None, "budget": None, "gate": None,
+          "skipped": 0, "diverge": 0, "starved": 0, "relaxed": 0}
+    for line in lines:
+        m = UPDATE.search(line)
+        if m:
+            st["update"] = m.groupdict()
+        m = EVAL.search(line)
+        if m:
+            st["evals"].append((int(m["stage"]), float(m["rate"]), float(m["gate"])))
+        m = STAGE.search(line)
+        if m:
+            st["stage"] = int(m["stage"])
+            st["budget"] = int(m["budget"].replace(",", ""))
+            st["gate"] = float(m["gate"])
+        if "SKIPPED" in line:
+            st["skipped"] += 1
+        if "[diverge]" in line:
+            st["diverge"] += 1
+        if "no map in the pool" in line:
+            st["starved"] += 1
+        if "course draws relaxed" in line:
+            st["relaxed"] += 1
+    return st
+
+
+# ---------------------------------------------------------------- formatting
+
+class Style:
+    def __init__(self, on):
+        self.on = on
+
+    def __call__(self, s, code):
+        return f"\033[{code}m{s}\033[0m" if self.on else s
+
+    def dim(self, s):    return self(s, "2")
+    def bold(self, s):   return self(s, "1")
+    def green(self, s):  return self(s, "32")
+    def yellow(self, s): return self(s, "33")
+    def red(self, s):    return self(s, "31")
+    def cyan(self, s):   return self(s, "36")
+
+
+def dur(sec):
+    sec = int(sec)
+    if sec < 60:
+        return f"{sec}s"
+    if sec < 3600:
+        return f"{sec // 60}m {sec % 60:02d}s"
+    return f"{sec // 3600}h {(sec % 3600) // 60:02d}m"
+
+
+def bar(frac, width, s):
+    frac = max(0.0, min(1.0, frac))
+    filled = int(round(frac * width))
+    body = "#" * filled + "." * (width - filled)
+    colour = s.green if frac >= 1.0 else (s.cyan if frac >= 0.75 else s.yellow)
+    return colour(body)
+
+
+def trend(vals):
+    """Direction of the last few evals, stated only when there are enough to mean anything."""
+    if len(vals) < 3:
+        return "", ""
+    recent, prior = vals[-3:], vals[-6:-3]
+    if not prior:
+        return "", ""
+    delta = sum(recent) / len(recent) - sum(prior) / len(prior)
+    if delta > 0.5:
+        return "rising", "green"
+    if delta < -0.5:
+        return "falling", "red"
+    return "flat", "yellow"
+
+
+# ---------------------------------------------------------------- report
+
+def render(s):
+    out = []
+    w = out.append
+
+    procs = list(processes())
+    trainer = next(((p, c) for p, c, _ in procs
+                    if "train.py" in c and "python" in c and " -c " not in c), None)
+    hosts = [(p, r) for p, c, r in procs if "va-neural-host.dll" in c]
+    benches = [1 for _, c, _ in procs if "va-neural-host.dll" in c and "--bench" in c]
+
+    now = datetime.now(EASTERN).strftime("%-I:%M:%S %p ET") if EASTERN else time.strftime("%H:%M:%S")
+    w(s.bold("VORTEX NEURAL TRAINING") + s.dim(f"   {now}"))
+    w("")
+
+    if trainer:
+        pid, cmd = trainer
+        name = (re.search(r"--name (\S+)", cmd) or [None, "?"])[1]
+        up = uptime_of(pid)
+        state = s.green("RUNNING")
+    else:
+        # Nothing training: fall back to the most recently touched run so the screen still says something.
+        logs = sorted(((os.path.getmtime(os.path.join(RUNS, d, "train.log")), d)
+                       for d in os.listdir(RUNS)
+                       if os.path.exists(os.path.join(RUNS, d, "train.log"))), reverse=True)
+        if not logs:
+            w(s.red("no runs found under " + RUNS))
+            return "\n".join(out)
+        name, pid, up = logs[0][1], None, 0
+        state = s.red("STOPPED") + s.dim(f"  (last touched {dur(time.time() - logs[0][0])} ago)")
+
+    run_dir = os.path.join(RUNS, name)
+    st = parse(tail(os.path.join(run_dir, "train.log")))
+    u = st["update"]
+    stage = int(u["stage"]) if u else (st["stage"] or 0)
+
+    # Stage clock from checkpoint mtimes: stage N began when stage N-1's -done.pt was written.
+    stage_up = up
+    done_prev = os.path.join(run_dir, f"stage{stage - 1}-done.pt")
+    if os.path.exists(done_prev):
+        stage_up = time.time() - os.path.getmtime(done_prev)
+
+    # Padded before colouring: escape codes count toward str width and would skew every column.
+    w(f"  {'RUN':<8} {s.cyan(f'{name:<12}')} up {dur(up):<10}  {state}")
+
+    gate = st["gate"] or (st["evals"][-1][2] if st["evals"] else 0.0)
+    base = BASELINE.get(stage)
+    ratio = f"baseline {base}% ({gate / base:.2f}x)" if base and gate else s.dim("baseline not re-measured")
+    w(f"  {'STAGE':<8} {f'{stage} of 6':<12} up {dur(stage_up):<10}  gate {gate:.1f}%   {ratio}")
+    w("")
+
+    # ---- progress
+    rates = [r for sg, r, _ in st["evals"] if sg == stage]
+    w(s.bold("  PROGRESS"))
+    if rates:
+        best = max(rates)
+        direction, colour = trend(rates)
+        tag = getattr(s, colour)(direction) if direction else ""
+        w(f"    best        {s.bold(f'{best:5.1f}%')}  {bar(best / gate if gate else 0, 22, s)}  "
+          f"{best / gate * 100 if gate else 0:3.0f}% of gate")
+        w(f"    last evals  " + "  ".join(f"{r:.1f}" for r in rates[-6:]) + f"   {tag}")
+        if base:
+            w(f"    vs scripted {best / base:.2f}x baseline")
+    else:
+        w(s.dim("    no eval on this stage yet"))
+
+    if u:
+        steps = int(u["steps"].replace(",", ""))
+        budget = st["budget"] or 0
+        sps = float(u["sps"])
+        eta = (budget - steps) / sps if sps > 0 and budget > steps else 0
+        pct = steps / budget if budget else 0
+        w(f"    steps       {steps / 1e6:5.1f}M / {budget / 1e6:.0f}M  {bar(pct, 22, s)}  {pct * 100:3.0f}%"
+          + (f"   ETA {dur(eta)}" if eta else ""))
+        w(f"    throughput  {sps:,.0f} steps/s      sampled {float(u['sampled']):.1f}%"
+          f"      update #{int(u['update']):,}")
+        w("")
+        w(s.bold("  MODEL"))
+        ent, kl = float(u["ent"]), float(u["kl"])
+        # Entropy near zero with everything else flat is what a diverged run looks like from the outside.
+        ent_s = s.red(f"{ent:.3f}") if ent < 0.05 else f"{ent:.3f}"
+        w(f"    entropy {ent_s}      kl {kl:.4f}      shipped {float(u['shipped']):.1f}%")
+    w("")
+
+    # ---- health
+    w(s.bold("  HEALTH"))
+    checks = [("skipped minibatches", st["skipped"]), ("divergence dumps", st["diverge"]),
+              ("course starvation", st["starved"]), ("relaxation warnings", st["relaxed"])]
+    for label, n in checks:
+        mark = s.green("ok") if n == 0 else s.red(f"{n}  <-- investigate")
+        w(f"    {label:<22} {mark}")
+    w("")
+
+    # ---- machine
+    total, used, free = meminfo()
+    load = loadavg()
+    worst = max((r for _, r in hosts), default=0) / 1024.0
+    ram_s = f"{used:.1f} / {total:.1f} GB used, {free:.1f} GB free"
+    if free < 2.0:
+        ram_s = s.red(ram_s)
+    elif free < 5.0:
+        ram_s = s.yellow(ram_s)
+    w(s.bold("  MACHINE"))
+    w(f"    hosts     {len(hosts)} running"
+      + (s.yellow(f"   ({sum(benches)} of them benches)") if benches else "")
+      + f"      worst RSS {worst:.0f} MB")
+    w(f"    ram       {ram_s}")
+    w(f"    load      {load:.1f} of {CORES} cores")
+
+    # ---- stage history, from the -done.pt mtimes. Each stage began when the previous one was written.
+    marks = []
+    for n in range(1, 7):
+        p = os.path.join(run_dir, f"stage{n}-done.pt")
+        if os.path.exists(p):
+            marks.append((n, os.path.getmtime(p)))
+    if marks or stage:
+        w("")
+        w(s.bold("  STAGES"))
+        # The run's own start anchors the first stage; a resumed run enters mid-curriculum, so anything
+        # before the first -done.pt happened in an earlier run and is not this run's time to claim.
+        prev = time.time() - up if pid else (marks[0][1] if marks else time.time())
+        for n, done in marks:
+            best_n = max((r for sg, r, _ in st["evals"] if sg == n), default=None)
+            rate = f"cleared at {best_n:.1f}%" if best_n is not None else "cleared"
+            w(f"    stage {n}   {dur(done - prev):<10} {s.green(rate)}")
+            prev = done
+        if stage and (not marks or marks[-1][0] < stage):
+            w(f"    stage {stage}   {dur(time.time() - prev):<10} {s.cyan('running')}")
+
+    return "\n".join(out)
+
+
+def main():
+    args = sys.argv[1:]
+    plain = "--plain" in args
+    watch = "--watch" in args
+    every = 5.0
+    if watch:
+        i = args.index("--watch")
+        if i + 1 < len(args):
+            try:
+                every = float(args[i + 1])
+            except ValueError:
+                pass
+    s = Style(not plain and sys.stdout.isatty())
+
+    if not watch:
+        print(render(s))
+        return
+    try:
+        while True:
+            # Home the cursor and clear forward rather than clearing the whole screen, so the panel does not
+            # flash on every refresh.
+            sys.stdout.write("\033[H\033[J" + render(s) + "\n" + s.dim(f"  refreshing every {every:.0f}s — Ctrl-C to exit") + "\n")
+            sys.stdout.flush()
+            time.sleep(every)
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()

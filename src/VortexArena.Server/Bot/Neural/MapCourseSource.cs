@@ -338,7 +338,9 @@ public sealed class MapCourseSource
         return $"course filters: accepted {AcceptedRoutes} ({Pct(AcceptedRoutes):F1}%), "
              + $"rejected untouchable-target {RejectedUntouchable} ({Pct(RejectedUntouchable):F1}%), "
              + $"step-up {RejectedStepUp} ({Pct(RejectedStepUp):F1}%), "
-             + $"exposed-route {RejectedExposed} ({Pct(RejectedExposed):F1}%)";
+             + $"exposed-route {RejectedExposed} ({Pct(RejectedExposed):F1}%); "
+             + $"draws by tier [strict {RelaxedDraws[0]}, no-step-bound {RelaxedDraws[1]}, "
+             + $"no-exposure {RelaxedDraws[2]}, unfiltered {RelaxedDraws[3]}]";
     }
 
     /// <summary>
@@ -446,9 +448,48 @@ public sealed class MapCourseSource
         return samples > 0 && exposed / (float)samples > MaxExposedShare;
     }
 
+    /// <summary>How many draws each relaxation tier had to serve. Tier 0 is the stage's real constraints.</summary>
+    public readonly long[] RelaxedDraws = new long[RelaxTiers];
+
+    /// <summary>Strict, then without the step-up bound, then without the exposure test, then unfiltered.</summary>
+    private const int RelaxTiers = 4;
+
+    /// <summary>
+    /// Draw an episode, relaxing the acceptance tests only as far as it takes to find one.
+    /// </summary>
+    /// <remarks>
+    /// A training run must not die because one draw was unlucky, and v15 did exactly that: it ran 19.4M
+    /// steps and then threw "no map in the pool produced a reachable A/B pair" out of a host reset. The
+    /// step-up bound rejects about 70% of candidates on stage 2, so twelve map draws by twenty-four spawn
+    /// picks eventually all miss. A forty-episode bench never sees it; thousands of resets across
+    /// thirty-two hosts do.
+    ///
+    /// <para>Relaxing beats failing, but silently relaxing would be worse than either -- a stage whose
+    /// constraints never actually bind is not the stage it claims to be. <see cref="RelaxedDraws"/> counts
+    /// what each tier served so the log can show it.</para>
+    /// </remarks>
     public (PreparedMap Map, Vector3 Spawn, Vector3 Target, NavDistanceField Distance)? NextEpisode(
         Random rng, float minRouteLength = 700f, float maxRouteLength = float.PositiveInfinity,
         float maxStepUp = float.PositiveInfinity)
+    {
+        for (int tier = 0; tier < RelaxTiers; tier++)
+        {
+            var draw = TryDraw(rng, minRouteLength, maxRouteLength,
+                               stepUp: tier >= 1 ? float.PositiveInfinity : maxStepUp,
+                               testExposure: tier < 2,
+                               testTouchable: tier < 3);
+            if (draw is not null)
+            {
+                RelaxedDraws[tier]++;
+                return draw;
+            }
+        }
+        return null;
+    }
+
+    private (PreparedMap Map, Vector3 Spawn, Vector3 Target, NavDistanceField Distance)? TryDraw(
+        Random rng, float minRouteLength, float maxRouteLength,
+        float stepUp, bool testExposure, bool testTouchable)
     {
         // A handful of attempts, then give up for this episode rather than spin: a map whose graph is all
         // short hops has no long routes to find however long we look for one.
@@ -462,7 +503,8 @@ public sealed class MapCourseSource
 
             Vector3 target = map.Anchors[rng.Next(map.Anchors.Count)];
             // F1: unwinnable however well it navigates.
-            if (FiltersEnabled && !TargetIsTouchable(map.Field, target)) { RejectedUntouchable++; continue; }
+            if (FiltersEnabled && testTouchable && !TargetIsTouchable(map.Field, target))
+            { RejectedUntouchable++; continue; }
             NavDistanceField dist = NavDistanceField.Build(map.Field, target);
             if (dist.ReachedSpans < 32) continue;   // the target sits somewhere the field cannot route to
 
@@ -473,8 +515,9 @@ public sealed class MapCourseSource
                 if (d >= NavDistanceField.Unreachable || d < minRouteLength || d > maxRouteLength) continue;
                 // Route shape last: both walk the descent, so they only run on a candidate that already
                 // passed the cheap length test.
-                if (FiltersEnabled && MaxStepUpAlongRoute(map.Field, dist, spawn) > maxStepUp) { RejectedStepUp++; continue; }
-                if (FiltersEnabled && RouteHugsUnrecoverableDrop(map.Field, dist, spawn)) { RejectedExposed++; continue; }
+                if (FiltersEnabled && MaxStepUpAlongRoute(map.Field, dist, spawn) > stepUp) { RejectedStepUp++; continue; }
+                if (FiltersEnabled && testExposure && RouteHugsUnrecoverableDrop(map.Field, dist, spawn))
+                { RejectedExposed++; continue; }
                 AcceptedRoutes++;
                 return (map, spawn, target, dist);
             }

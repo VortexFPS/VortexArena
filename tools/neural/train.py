@@ -248,6 +248,10 @@ def main() -> int:
                          "strong once arrivals get rare: on stage 6 it made the entropy bonus twice the "
                          "policy gradient, entropy rose 6.91 -> 7.63 of a 8.19 maximum, and the eval never "
                          "left 3-9%%. Watch the e/p column -- keep it below about 1.0.")
+    ap.add_argument("--host-arg", action="append", default=[],
+                    help="pass a flag through to every host process, repeatable. Router and observation "
+                         "switches (--no-warps, --no-feet-resolution, --no-course-filters) live on the host, "
+                         "so this is how a resumed run holds them at whatever the checkpoint was trained on.")
     ap.add_argument("--eval-shards", type=int, default=4,
                     help="split the eval episodes across this many parallel processes. Each keeps the same "
                          "agents-per-world (crowding is part of the task) and uses its own seed, so this "
@@ -436,7 +440,8 @@ def train_stage(policy, norm, optimizer, hyper: Hyper, args, stage: int, budget:
         data_root=str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data"),
         map_list=args.maps,
     )
-    env = VectorEnv(cfg, num_hosts=args.hosts, quiet=not args.verbose_hosts)
+    env = VectorEnv(cfg, num_hosts=args.hosts, quiet=not args.verbose_hosts,
+                    host_args=args.host_arg or None)
     try:
         return _run(policy, norm, optimizer, hyper, env, stage, budget, threshold, run_dir, device,
                     args.eval_every, args.eval_steps, args)

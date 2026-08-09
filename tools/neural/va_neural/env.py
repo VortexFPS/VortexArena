@@ -266,13 +266,21 @@ class VectorEnv:
     keeps every host contributing to every batch instead of the batch shrinking as episodes end.
     """
 
-    def __init__(self, cfg: EnvConfig, num_hosts: int = 4, host_dll: Path | None = None, quiet: bool = True):
+    def __init__(self, cfg: EnvConfig, num_hosts: int = 4, host_dll: Path | None = None, quiet: bool = True,
+                 host_args: list[str] | None = None):
+        """host_args goes verbatim to every host process.
+
+        Router and observation switches live on the host, not in the trainer, so without this a run cannot
+        hold them fixed. That matters when RESUMING: a policy is only meaningful against the observations it
+        was trained on, and turning a router change on under a resumed policy silently mixes a distribution
+        shift into whatever the run was supposed to be measuring.
+        """
         self.envs: list[HostEnv] = []
         for i in range(num_hosts):
             # A distinct seed per host, or every host generates the identical course sequence and the batch
             # is num_hosts copies of one experience.
             sub = EnvConfig(**{**cfg.__dict__, "seed": cfg.seed + i * 1_000_003})
-            self.envs.append(HostEnv(sub, host_dll=host_dll, quiet=quiet))
+            self.envs.append(HostEnv(sub, host_dll=host_dll, quiet=quiet, host_args=host_args))
         self.agents_per_host = self.envs[0].agents
         self.obs_size = self.envs[0].obs_size
         self.num_agents = self.agents_per_host * len(self.envs)

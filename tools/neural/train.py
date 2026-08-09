@@ -115,6 +115,21 @@ class Hyper:
     # coefficient because a regulariser that overpowers the gradient is wrong on its own terms, and look
     # elsewhere for the plateau. kl running at 0.001-0.005 against target_kl 0.03 is the live lead: the
     # updates are an order of magnitude smaller than the trust region allows.
+    #
+    # Re-tested on stage 3 against a specific hypothesis, and it did not move there either. 94.5% of agents
+    # that look stuck are dithering -- moving without net progress -- and too little entropy collapsing the
+    # policy onto a near-deterministic pair of alternating actions is the obvious candidate. Two arms from
+    # one stage-3 checkpoint, 4M steps each, benched afterwards for the dithering share as well as arrivals,
+    # because arrival rate alone cannot separate "dithers less" from "drew easier courses":
+    #
+    #     coef       end entropy   best eval   arrival   dithering share
+    #     0.0003        0.733        53.6%      53.6%         49.3%
+    #     0.0015        0.799        53.1%      51.5%         46.0%
+    #
+    # Five times the coefficient moved end entropy by 9%, arrivals by -2.1 points and the dithering share by
+    # -3.3. The arrival noise floor at 800 agent-episodes is about 2.5 points and these are single seeds, so
+    # nothing here is resolvable -- and dithering stays near half of all stuck agents in BOTH arms. It is a
+    # large, stable failure that this knob does not reach. Do not spend a third afternoon on it.
     entropy_coef: float = 0.002
     max_grad_norm: float = 0.5
     target_kl: float = 0.03     # stop the epoch loop early rather than let one update wreck the policy

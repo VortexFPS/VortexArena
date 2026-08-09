@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using VortexArena.Common.Gameplay;
 
 namespace VortexArena.Server.Bot.Neural;
 
@@ -389,18 +390,93 @@ public sealed class NavDistanceField
     /// generator uses it to reject A/B pairs with no path, which is the difference between a hard episode
     /// and an impossible one.
     /// </summary>
-    public bool IsReachable(Vector3 from) => DistanceAt(from) < Unreachable;
+    public bool IsReachable(Vector3 from)
+    {
+        if (DistanceAt(from) < Unreachable) return true;
+        if (!PocketTolerantReach) return false;
+
+        // Tolerate the lattice's own gaps before calling a position hopeless.
+        //
+        // A 32 qu discretisation does not reach every standable span: doorway thresholds, stair nosings,
+        // slope edges and cell centres whose only standable span the adjacency could not link all end up
+        // outside the flood. A bot crossing one reads "unreachable" correctly as a statement about that CELL,
+        // and then walks out of it a step later.
+        //
+        // Measured at the instant such a spell begins, over 426 agents: 75.6% had a NEIGHBOURING column that
+        // routed fine, and the single commonest case was a one-span column -- so there was no wrong surface
+        // to pick and no missing pad edge to add. Two fixes aimed at those theories (jump-pad/teleporter
+        // edges, and resolving onto the feet rather than the origin) each moved this metric by under a point.
+        // The pockets are the cause, and a query that means "is this position hopeless" has to look past one
+        // cell to answer it honestly.
+        if (!_field.TryCell(from, out int cx, out int cy)) return false;
+
+        // Any other span in the bot's own column: it may simply be standing on the one the flood missed.
+        foreach (FloorSpan s in _field.Column(cx, cy))
+            if (DistanceAt(new Vector3(from.X, from.Y, s.FloorZ + OriginAboveFloor)) < Unreachable)
+                return true;
+
+        for (int dy = -1; dy <= 1; dy++)
+        {
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                if (dx == 0 && dy == 0) continue;
+                float px = from.X + dx * NavField.CellSize, py = from.Y + dy * NavField.CellSize;
+                if (!_field.TryCell(new Vector3(px, py, from.Z), out int nx, out int ny)) continue;
+                foreach (FloorSpan s in _field.Column(nx, ny))
+                {
+                    // Only surfaces the bot could actually step onto from here; a routable span forty feet
+                    // below is not an escape, it is a fall.
+                    if (MathF.Abs(s.FloorZ + OriginAboveFloor - from.Z) > BotNavigation.JumpStepHeight) continue;
+                    if (DistanceAt(new Vector3(px, py, s.FloorZ + OriginAboveFloor)) < Unreachable) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Set false to restore the single-cell reachability test, for A/B.</summary>
+    public static bool PocketTolerantReach = true;
 
     /// <summary>
     /// The flat span index of the surface under (<paramref name="cx"/>,<paramref name="cy"/>) at height
     /// <paramref name="z"/>, or -1. Mirrors <see cref="NavField.TrySampleBelow"/>'s choice so the reward and
     /// the observation always agree about which surface the bot is on.
     /// </summary>
+    /// <summary>
+    /// How far a body's origin sits above the surface it rests on: 24 qu, from the player hull.
+    /// </summary>
+    /// <remarks>
+    /// Every Z handed to this class is an ORIGIN, not a pair of feet. Player positions are origins by
+    /// definition, entity anchors are entity origins, and <see cref="PointAlongRoute"/> deliberately emits
+    /// <c>FloorZ + 24</c> so its output can be fed straight back in. The convention is consistent; what was
+    /// missing was accounting for it in the one place that resolves a Z back onto a surface.
+    /// </remarks>
+    public static readonly float OriginAboveFloor = -SpawnSystem.PlayerMins.Z;
+
+    /// <summary>Set false to restore the pre-S6 resolution, for A/B.</summary>
+    public static bool FeetResolution = true;
+
+    /// <summary>
+    /// The span index a body whose ORIGIN is at <paramref name="z"/> is standing on, or -1.
+    /// </summary>
+    /// <remarks>
+    /// The tolerance is a step height above the FEET, not above the origin. It used to be measured from the
+    /// origin, which made it 42 qu rather than 18 -- so a crate top, a stair tread or a low ledge up to 42 qu
+    /// above the bot could win the resolution and the bot would be told it was standing on a surface it was
+    /// actually standing beside.
+    ///
+    /// <para>That is what made reachability jitter. Measured: of agents reading "goal unreachable" while on
+    /// the ground, 86.6% recovered within the same episode and 35.7% still arrived -- the field was not
+    /// describing the map, it was describing which of several stacked spans the query happened to land on.
+    /// Jump-pad edges were tried first on the theory that the graph was missing connections; they made no
+    /// difference, which is what pointed here.</para>
+    /// </remarks>
     private int SpanIndexUnder(int cx, int cy, float z)
     {
         int c = cy * _field.Width + cx;
         ReadOnlySpan<FloorSpan> col = _field.Column(cx, cy);
-        float probe = z + BotNavigation.StepHeight;
+        float feet = FeetResolution ? z - OriginAboveFloor : z;
+        float probe = feet + BotNavigation.StepHeight;
         for (int i = 0; i < col.Length; i++)
             if (col[i].FloorZ <= probe) return _start[c] + i;
         return -1;
@@ -481,7 +557,9 @@ public sealed class NavDistanceField
                         routable = true;
                         if (nd >= best) continue;
                         best = nd;
-                        bx = nx; by = ny; bz = col[t].FloorZ + 24f;
+                        // Emit an ORIGIN height, not a floor height, so the result can be fed straight back
+                        // into DistanceAt / SpanIndexUnder without a caller having to know the convention.
+                        bx = nx; by = ny; bz = col[t].FloorZ + OriginAboveFloor;
                     }
                     if (routable) break;   // the nearest routable column in this direction
                 }

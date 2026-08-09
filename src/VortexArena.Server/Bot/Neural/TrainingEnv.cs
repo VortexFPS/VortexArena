@@ -188,6 +188,21 @@ public sealed class TrainingEnv
         public int UnreachRecovered;
 
         /// <summary>
+        /// Sampled once, when an unreachable spell begins: how many spans the bot's own column holds, whether
+        /// ANY of them can route to the goal, and whether any of the eight neighbouring columns can.
+        /// </summary>
+        /// <remarks>
+        /// This decides between the two remaining explanations for a reading that reverses itself seconds
+        /// later. If another span in the same column can route, the query picked the wrong surface and the
+        /// resolution rule is at fault. If nothing in the column can route but a neighbour can, the bot is
+        /// standing in a genuinely unreached pocket of a 32 qu lattice and "recovers" by walking out of it --
+        /// in which case the reading was correct and the metric, not the field, is what needs rethinking.
+        /// </remarks>
+        public int UnreachColSpans = -1;
+        public bool UnreachColAny;
+        public bool UnreachNbrAny;
+
+        /// <summary>
         /// This agent's own goal-distance field, so every agent on a host can run a DIFFERENT route.
         ///
         /// <para>Geometry is per HOST -- one GameWorld, one map -- but a route is just a spawn/target pair
@@ -773,7 +788,9 @@ public sealed class TrainingEnv
                 // permanently stranded went on to ARRIVE, and those never reach the timeout path.
                 if (_cfg.StuckReport && (a.UnreachLongest > 0 || a.UnreachRecovered > 0))
                     Log?.Invoke($"[reach] longest={a.UnreachLongest} recovered={a.UnreachRecovered} "
-                              + $"outcome={a.Outcome} arrived={(a.Outcome == 1 ? 1 : 0)}");
+                              + $"outcome={a.Outcome} arrived={(a.Outcome == 1 ? 1 : 0)} "
+                              + $"colSpans={a.UnreachColSpans} colAny={(a.UnreachColAny ? 1 : 0)} "
+                              + $"nbrAny={(a.UnreachNbrAny ? 1 : 0)}");
             }
 
             // Build the observation HERE, after the step's physics, so what the trainer sees is the state
@@ -970,6 +987,43 @@ public sealed class TrainingEnv
     /// route. A large positive dz is a ledge, NOFLOOR is a gap, and a Lethal/Harmful/Water content bit is a
     /// hazard the route runs straight through.</para>
     /// </summary>
+    /// <summary>
+    /// Sample the neighbourhood at the instant an unreachable spell begins. See <see cref="Agent.UnreachColSpans"/>.
+    /// </summary>
+    private void ProbeUnreachable(Agent a, Vector3 at)
+    {
+        if (!_field.TryCell(at, out int cx, out int cy)) return;
+        a.UnreachColSpans = _field.Column(cx, cy).Length;
+
+        // Any span in this column, at any height, that can route to the goal.
+        foreach (FloorSpan s in _field.Column(cx, cy))
+        {
+            if (a.Distance.DistanceAt(new Vector3(at.X, at.Y, s.FloorZ + NavDistanceField.OriginAboveFloor))
+                < NavDistanceField.Unreachable)
+            {
+                a.UnreachColAny = true;
+                break;
+            }
+        }
+
+        // Any of the eight neighbouring columns, one cell out.
+        for (int dy = -1; dy <= 1 && !a.UnreachNbrAny; dy++)
+        {
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                if (dx == 0 && dy == 0) continue;
+                var probe = new Vector3(at.X + dx * NavField.CellSize, at.Y + dy * NavField.CellSize, at.Z);
+                if (!_field.TrySampleBelow(probe, out FloorSpan ns)) continue;
+                if (a.Distance.DistanceAt(new Vector3(probe.X, probe.Y,
+                        ns.FloorZ + NavDistanceField.OriginAboveFloor)) < NavDistanceField.Unreachable)
+                {
+                    a.UnreachNbrAny = true;
+                    break;
+                }
+            }
+        }
+    }
+
     private void ReportStuck(Agent a)
     {
         if (Log is null) return;
@@ -1027,7 +1081,9 @@ public sealed class TrainingEnv
 
         // Reachability streak, for the S1 question. Only counted on the ground, because an airborne bot has
         // no graph distance and would otherwise register a false spell every jump.
-        if (a.Distance.DistanceAt(p.Origin) < NavDistanceField.Unreachable)
+        // IsReachable, not a raw DistanceAt: the question is "is this position hopeless", which is exactly
+        // what the pocket-tolerant query answers and what an S1 termination would have to trust.
+        if (a.Distance.IsReachable(p.Origin))
         {
             // Recovered: whatever spell just ended was survivable, so ending an episode on it would have
             // been wrong.
@@ -1038,6 +1094,7 @@ public sealed class TrainingEnv
         {
             a.UnreachStreak++;
             if (a.UnreachStreak > a.UnreachLongest) a.UnreachLongest = a.UnreachStreak;
+            if (a.UnreachStreak == 1 && a.UnreachColSpans < 0) ProbeUnreachable(a, p.Origin);
         }
 
         // --- time ---

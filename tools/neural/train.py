@@ -887,6 +887,18 @@ def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv,
 
 
 def save(policy, norm, optimizer, stage: int, run_dir: Path, tag: str | None = None) -> None:
+
+    # Never write a checkpoint containing a non-finite tensor.
+    #
+    # A stage-2 run saved a "best" checkpoint whose critic output bias was NaN. The actor was still fine, so
+    # the shipped eval -- which only runs the actor -- scored it 46.8% and recorded it as the best policy of
+    # the stage. Resuming from it made every value_loss NaN and every minibatch was skipped, so the run
+    # trained nothing at all while looking alive.
+    bad = [k for k, v in policy.state_dict().items() if not torch.isfinite(v).all()]
+    if bad:
+        print(f"[save] REFUSING to write {tag or 'checkpoint'}: non-finite tensors {bad[:4]}"
+              f"{' and more' if len(bad) > 4 else ''}. The previous checkpoint is left intact.")
+        return
     """Write a checkpoint plus its game-loadable weights.
 
     ``tag`` names a keeper (``stage3-best``, ``stage3-done``); without it this is the rolling checkpoint,

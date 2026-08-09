@@ -128,7 +128,16 @@ class Policy(nn.Module):
         off = 0
         for _, size in layout.CATEGORICAL_HEADS:
             seg = logits[..., off : off + size]
-            logp_segments.append(seg - seg.logsumexp(-1, keepdim=True))
+            # Floor the log-probabilities. As entropy falls the logits spread, and log_softmax underflows
+            # to -inf for an action the policy has effectively ruled out. Three things then break at once:
+            #
+            #   entropy  -(p * logp) evaluates 0 * -inf = NaN, which is what actually killed a stage-2 run
+            #   ratio    logp - b_logp becomes (-inf) - (-inf) = NaN in the PPO update
+            #   log-prob -inf poisons any sum it takes part in
+            #
+            # -30 is a probability of about 1e-13: an action that far out is never sampled in practice, so
+            # this changes no real decision. It only stops the arithmetic degenerating.
+            logp_segments.append((seg - seg.logsumexp(-1, keepdim=True)).clamp(min=-30.0))
             off += size
         mean = torch.tanh(logits[..., off : off + layout.N_CONTINUOUS])
         return logp_segments, mean

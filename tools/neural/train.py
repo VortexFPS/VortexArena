@@ -549,6 +549,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         sampled = float(np.mean(arrival_history)) if arrival_history else 0.0
 
         sps = total_steps / max(1e-6, time.time() - t0)
+        skipped_note = f"SKIPPED {int(stats['nonfinite'])}  " if stats.get("nonfinite") else ""
         print(f"[s{stage} u{update:4d}] steps {total_steps:>10,}  {sps:6.0f}/s  "
               f"reward {rew_buf.mean():+.4f}  sampled {sampled:5.1%}  shipped {det_rate:5.1%}  "
               f"pi {stats['policy_loss']:+.4f}  v {stats['value_loss']:.4f}  rs {ret_scale.std():.2f}  "
@@ -559,7 +560,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
               f"e/p {hyper.entropy_coef * stats['entropy'] / max(1e-9, abs(stats['policy_loss'])):5.2f}  "
               # Non-zero means minibatches were skipped for a non-finite loss. Silence here is the healthy
               # case; a run that starts printing this is diverging and the weights are being protected.
-              + (f"SKIPPED {int(stats['nonfinite'])}  " if stats.get("nonfinite") else "")
+              f"{skipped_note}"
               f"[env {t_env:.2f}s pol {t_pol:.2f}s upd {t_upd:.2f}s]")
 
         if update % 20 == 0:

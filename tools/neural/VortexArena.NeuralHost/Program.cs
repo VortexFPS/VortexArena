@@ -186,6 +186,17 @@ public static class Program
                             SendError(frames, $"protocol version {version}, host speaks {ProtocolVersion}");
                             return 2;
                         }
+                        // A path from the trainer is a path on the TRAINER'S machine, which means nothing
+                        // here once the two are different computers -- a Windows data root arriving at a
+                        // Linux worker is not a misconfiguration to report, it is the normal case. So a
+                        // --data given on this host's own command line wins over the one on the wire.
+                        if (opts.DataRoot.Length > 0 && !string.Equals(opts.DataRoot, cfg.DataRoot, StringComparison.Ordinal))
+                        {
+                            Console.Error.WriteLine(
+                                $"[neural-host] using local --data {opts.DataRoot} instead of the trainer's {cfg.DataRoot}");
+                            cfg.DataRoot = opts.DataRoot;
+                        }
+
                         env = new TrainingEnv(cfg) { Log = m => Console.Error.WriteLine(m) };
                         agents = cfg.Agents;
                         obsSize = TrainingEnv.ObservationSize;

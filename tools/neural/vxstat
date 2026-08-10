@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
-"""Live status of the Vortex Arena neural-bot training run.
+"""Live status of Vortex Arena neural-bot training, across machines.
 
-    vxstat                one snapshot and exit
-    vxstat --watch        refresh every 5 s until Ctrl-C
-    vxstat --watch 15     refresh every 15 s
-    vxstat --plain        no colour, no box drawing (for piping or logging)
+    vxstat                          this machine, one snapshot
+    vxstat --peer user@host         also poll that machine, repeatable
+    vxstat --watch                  refresh every second until Ctrl-C
+    vxstat --watch 5                refresh every 5 seconds
+    vxstat --json                   machine state as JSON (what peers are asked for)
+    vxstat --plain                  no colour, for piping
 
-Everything is derived fresh from /proc and the run's train.log on every call. There is deliberately no
-daemon and no cached state: a background collector is one more thing that can die quietly and leave a
-confident-looking stale number on the screen, and nothing here is expensive enough to be worth that risk.
+Jobs are shown as a table: one row for the machine running the trainer, then a row for each machine feeding
+it hosts, so a run spread over several boxes reads as one thing.
 
-Stage timings come from checkpoint mtimes rather than the log, because the trainer does not timestamp its
-output -- stage N started when stage N-1's -done.pt was written.
+Local state is derived fresh from /proc (or a PowerShell snapshot on Windows) and the run's train.log on
+every frame. PEER state is polled on a background thread every few seconds and cached, because an ssh round
+trip is 1-2 seconds and fetching inline would cap the whole panel at the speed of the slowest machine. Each
+peer row carries its age when stale, so an out-of-date number is visibly out of date rather than quietly
+wrong.
+
+Stage timings come from checkpoint mtimes, since the trainer does not timestamp its output: stage N started
+when stage N-1's -done.pt was written.
 """
 import os
 import re
@@ -393,252 +400,385 @@ def trend(vals):
 
 # ---------------------------------------------------------------- report
 
-def render(s):
-    out = []
-    w = out.append
+def snapshot():
+    """This machine's state as plain data.
 
+    Structured rather than pre-rendered, because a peer's numbers have to be laid out in the SAME table as
+    the local ones. Shipping formatted text across the wire meant every machine drew its own panel and the
+    reader had to correlate them by eye.
+    """
     procs = list(processes())
-    trainers = [(p, c) for p, c, _ in procs
-                if "train.py" in c and "python" in c and " -c " not in c]
     hosts = [(p, r) for p, c, r in procs if "va-neural-host.dll" in c]
     benches = [1 for _, c, _ in procs if "va-neural-host.dll" in c and "--bench" in c]
+    total, used, free = meminfo()
 
-    # %-I is a glibc extension that silently misbehaves on Windows, so strip the zero by hand. And Windows
-    # Python ships no IANA database, so ZoneInfo("America/New_York") is unavailable there -- in which case
-    # say "local" rather than stamping ET on a time that has not been converted to it.
-    if EASTERN:
-        now = datetime.now(EASTERN).strftime("%I:%M:%S %p ET").lstrip("0")
-    else:
-        now = datetime.now().strftime("%I:%M:%S %p local").lstrip("0")
-    w(s.bold(f"VORTEX NEURAL TRAINING") + s.dim(f"   {MACHINE}   {now}"))
-    w("")
+    snap = {
+        "machine": MACHINE,
+        "cores": CORES,
+        "hosts": len(hosts),
+        "benches": sum(benches),
+        "worst_host_mb": max((r for _, r in hosts), default=0) / 1024.0,
+        "ram_used": used, "ram_total": total, "ram_free": free,
+        "load": loadavg(),
+        "runs": [],
+    }
 
-    # Every trainer on this box, not just the first. Two runs at once is now normal -- one machine can be
-    # working a curriculum while another runs an A/B -- and a panel that silently showed one of them would
-    # be worse than one that showed neither.
-    for idx, (pid, cmd) in enumerate(trainers):
-        if idx:
-            w("")
-        name = (re.search(r"--name (\S+)", cmd) or [None, "?"])[1]
-        render_run(s, w, name, pid, uptime_of(pid), s.green("RUNNING"), procs, hosts)
+    # The EXECUTABLE must be python, not merely mentioned. A wrapper such as `nohup python train.py ...`
+    # carries both words in its command line and would otherwise be counted as a second copy of the same run.
+    trainers = []
+    seen_names = set()
+    for p, c, _ in procs:
+        if "train.py" not in c or " -c " in c:
+            continue
+        head = c.split()[0].strip('"').lower() if c.split() else ""
+        if "python" not in os.path.basename(head):
+            continue
+        name = (re.search(r"--name (\S+)", c) or [None, "?"])[1]
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+        trainers.append((p, c))
+        snap["runs"].append(run_snapshot(name, p, uptime_of(p), c, procs, True))
 
-    if not trainers:
-        # Nothing training: fall back to the most recently touched run so the screen still says something.
-        logs = sorted(((os.path.getmtime(os.path.join(RUNS, d, "train.log")), d)
-                       for d in os.listdir(RUNS)
-                       if os.path.exists(os.path.join(RUNS, d, "train.log"))), reverse=True)
-        if not logs:
-            # Not an error. A machine that contributes hosts to someone else's trainer, or one that simply
-            # has not started yet, legitimately has no runs of its own -- and red text saying so above a
-            # perfectly healthy peer reads like a fault.
-            w(s.dim(f"  no runs on this machine ({RUNS})"))
-        else:
-            render_run(s, w, logs[0][1], None, 0,
-                       s.red("STOPPED") + s.dim(f"  (last touched {dur(time.time() - logs[0][0])} ago)"),
-                       procs, hosts)
+    if not trainers and snap["hosts"] == 0:
+        # Nothing training AND nothing serving. A machine with hosts but no trainer is a worker for someone
+        # else's job, and its last finished run is not what it is doing now -- showing it there implies work
+        # that is not happening and counts its hosts twice, once here and once under the job they serve.
+        try:
+            logs = sorted(((os.path.getmtime(os.path.join(RUNS, d, "train.log")), d)
+                           for d in os.listdir(RUNS)
+                           if os.path.exists(os.path.join(RUNS, d, "train.log"))), reverse=True)
+        except OSError:
+            logs = []
+        if logs:
+            snap["runs"].append(run_snapshot(logs[0][1], None, 0, "", procs, False))
+    return snap
 
-    render_machine(s, w, hosts, benches)
+
+def run_snapshot(name, pid, up, cmd, procs, running):
+    run_dir = os.path.join(RUNS, name)
+    lines = tail(os.path.join(run_dir, "train.log"))
+    st = parse(lines)
+    u = st["update"]
+    stage = int(u["stage"]) if u else (st["stage"] or 0)
+    rates = [r for sg, r, _ in st["evals"] if sg == stage]
+    gate = st["gate"] or (st["evals"][-1][2] if st["evals"] else 0.0)
+    cfg = run_config(run_dir)
+
+    try:
+        every = int(cfg.get("eval_every", 0))
+    except (TypeError, ValueError):
+        every = 0
+    shards = [p for p, c, _ in procs if "va-neural-host.dll" in c and "--bench" in c and "--policy" in c]
+    try:
+        total_shards = int(cfg.get("eval_shards", 0)) or len(shards)
+    except (TypeError, ValueError):
+        total_shards = len(shards)
+
+    steps = int(u["steps"].replace(",", "")) if u else 0
+    spu = seconds_per_update(lines)
+    eval_secs = past_eval_seconds(lines)
+
+    # Which other machines are feeding this run. The trainer's own command line is the only place this is
+    # recorded, and it is what lets a job be shown as one row per participating machine.
+    remotes = []
+    for spec in re.findall(r"--remote (\S+)", cmd or ""):
+        parts = spec.split(":")
+        if len(parts) >= 2:
+            remotes.append({"addr": parts[0], "count": int(parts[2]) if len(parts) > 2 else 1})
+
+    return {
+        "name": name, "running": running, "up": up, "stage": stage,
+        "best": max(rates) if rates else None,
+        "last": rates[-6:],
+        "gate": gate,
+        "baseline": BASELINE.get(stage),
+        "steps": steps, "budget": st["budget"] or 0,
+        "sps": float(u["sps"]) if u else 0.0,
+        "update": int(u["update"]) if u else 0,
+        "entropy": float(u["ent"]) if u else 0.0,
+        "kl": float(u["kl"]) if u else 0.0,
+        "sampled": float(u["sampled"]) if u else 0.0,
+        "skipped": st["skipped"], "diverge": st["diverge"],
+        "starved": st["starved"], "relaxed": st["relaxed"],
+        "eval_every": every, "eval_secs": eval_secs, "spu": spu,
+        "eval_running": len(shards) > 0,
+        "eval_done": max(0, total_shards - len(shards)) if shards else 0,
+        "eval_total": total_shards,
+        "eval_elapsed": max((uptime_of(p) for p in shards), default=0.0),
+        "remotes": remotes,
+        "local_hosts_flag": _int_arg(cmd, "--hosts"),
+    }
+
+
+def _int_arg(cmd, flag):
+    m = re.search(re.escape(flag) + r" (\d+)", cmd or "")
+    return int(m.group(1)) if m else None
+
+
+# ---------------------------------------------------------------- peers
+
+class Peers:
+    """Background poller for other machines.
+
+    Refreshed on its own slow cadence while the panel redraws fast. An ssh round trip is 1-2 seconds, so
+    fetching inline would cap the refresh rate at the speed of the slowest machine -- the panel would stutter
+    for a number that only changes every few seconds anyway. Each entry carries its age so a stale peer is
+    visibly stale rather than quietly wrong.
+    """
+
+    def __init__(self, targets, period=5.0):
+        self.targets = targets
+        self.period = period
+        self.data = {t: {"snap": None, "at": 0.0, "err": "connecting"} for t in targets}
+        self._stop = False
+        if targets:
+            import threading
+            self._thread = threading.Thread(target=self._loop, daemon=True)
+            self._thread.start()
+
+    def _fetch(self, target):
+        import json
+        import subprocess
+        try:
+            r = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", target,
+                                "vxstat --json"],
+                               capture_output=True, text=True, timeout=20)
+            if not r.stdout.strip():
+                return None, (r.stderr.strip().splitlines() or ["no output"])[-1][:40]
+            return json.loads(r.stdout), None
+        except subprocess.TimeoutExpired:
+            return None, "timeout"
+        except Exception as exc:
+            return None, type(exc).__name__
+
+    def _loop(self):
+        while not self._stop:
+            for t in self.targets:
+                snap, err = self._fetch(t)
+                if snap is not None:
+                    self.data[t] = {"snap": snap, "at": time.time(), "err": None}
+                else:
+                    self.data[t]["err"] = err
+            time.sleep(self.period)
+
+    def snapshots(self):
+        out = []
+        for t in self.targets:
+            d = self.data[t]
+            if d["snap"] is not None:
+                s = dict(d["snap"])
+                s["age"] = time.time() - d["at"]
+                s["target"] = t
+                out.append(s)
+            else:
+                out.append({"machine": t, "unreachable": d["err"], "runs": [], "hosts": 0,
+                            "ram_used": 0, "ram_total": 0, "ram_free": 0, "load": 0, "cores": 0,
+                            "target": t, "age": 0})
+        return out
+
+
+# ---------------------------------------------------------------- table
+
+def health_cell(r, s):
+    """One cell, not four lines. Silence is the healthy case."""
+    bad = []
+    if r["skipped"]:
+        bad.append(f"skip{r['skipped']}")
+    if r["diverge"]:
+        bad.append("DIVERGE")
+    if r["starved"]:
+        bad.append("STARVE")
+    if r["relaxed"]:
+        bad.append("relax")
+    return s.red(" ".join(bad)) if bad else s.green("ok")
+
+
+def eval_cell(r, s):
+    if r["eval_running"]:
+        left = ""
+        if r["eval_secs"] and r["eval_secs"] > r["eval_elapsed"]:
+            left = f"-{dur(r['eval_secs'] - r['eval_elapsed'])}"
+        return s.cyan(f"{r['eval_done']}/{r['eval_total']} {left}")
+    if r["eval_every"] and r["update"]:
+        togo = r["eval_every"] - (r["update"] % r["eval_every"])
+        if not r["spu"]:
+            return f"in {togo}u"
+        secs = togo * r["spu"]
+        eta = f"{secs / 60:.0f}m" if secs >= 60 else f"{secs:.0f}s"
+        return f"in {togo}u {eta}"
+    return "-"
+
+
+def pad(text, width, s):
+    """Pad to a visible width, ignoring escape codes, which str.ljust would count."""
+    visible = re.sub(r"\033\[[0-9;]*m", "", text)
+    return text + " " * max(0, width - len(visible))
+
+
+COLS = [("JOB", 8), ("MACHINE", 14), ("ST", 3), ("BEST", 7), ("GATE", 6), ("PROGRESS", 20),
+        ("STEP/S", 8), ("HOSTS", 6), ("RAM", 12), ("CPU", 5), ("EVAL", 15), ("HEALTH", 8)]
+
+
+def render_table(local, peers, s):
+    out = []
+    now = (datetime.now(EASTERN).strftime("%I:%M:%S %p ET").lstrip("0")
+           if EASTERN else datetime.now().strftime("%I:%M:%S %p local").lstrip("0"))
+    header = "".join(pad(s.dim(h), w, s) for h, w in COLS)
+    out.append(s.bold("VORTEX NEURAL TRAINING") + s.dim(f"    {now}"))
+    out.append("")
+    out.append("  " + header)
+
+    by_machine = {p["machine"]: p for p in peers}
+    all_snaps = [local] + peers
+
+    # One block per job: the trainer's machine, then every machine feeding it hosts.
+    shown_machines = set()
+    for snap in all_snaps:
+        for r in snap.get("runs", []):
+            out.append("  " + job_row(r, snap, s, trainer=True))
+            shown_machines.add(snap["machine"])
+            for rem in r.get("remotes", []):
+                peer = _match_peer(rem["addr"], peers)
+                if peer is not None:
+                    out.append("  " + worker_row(peer, rem, s))
+                    shown_machines.add(peer["machine"])
+                else:
+                    out.append("  " + pad("", 8, s) + pad(s.dim(rem["addr"]), 14, s)
+                               + s.dim(f"{rem['count']} hosts, machine not polled (add --peer)"))
+
+    # Machines with no job of their own and not claimed by one above.
+    for snap in all_snaps:
+        if snap["machine"] in shown_machines:
+            continue
+        out.append("  " + idle_row(snap, s))
+
     return "\n".join(out)
 
 
-def render_run(s, w, name, pid, up, state, procs, hosts):
-    run_dir = os.path.join(RUNS, name)
-    st = parse(tail(os.path.join(run_dir, "train.log")))
-    u = st["update"]
-    stage = int(u["stage"]) if u else (st["stage"] or 0)
+def _match_peer(addr, peers):
+    for p in peers:
+        if p.get("unreachable"):
+            continue
+        if addr in (p.get("target", ""), p.get("machine", "")) or p.get("target", "").endswith("@" + addr):
+            return p
+    return None
 
-    # Stage clock from checkpoint mtimes: stage N began when stage N-1's -done.pt was written.
-    stage_up = up
-    done_prev = os.path.join(run_dir, f"stage{stage - 1}-done.pt")
-    if os.path.exists(done_prev):
-        stage_up = time.time() - os.path.getmtime(done_prev)
 
-    # Padded before colouring: escape codes count toward str width and would skew every column.
-    w(f"  {'RUN':<8} {s.cyan(f'{name:<12}')} up {dur(up):<10}  {state}")
+def job_row(r, snap, s, trainer):
+    pct = r["steps"] / r["budget"] if r["budget"] else 0
+    best = f"{r['best']:.1f}%" if r["best"] is not None else "-"
+    gate = f"{r['gate']:.0f}%" if r["gate"] else "-"
+    name = r["name"] + ("" if r["running"] else "*")
+    cells = [
+        s.cyan(name) if r["running"] else s.red(name),
+        s.bold(snap["machine"]),
+        str(r["stage"]),
+        s.bold(best),
+        gate,
+        f"{pct * 100:3.0f}% {bar(pct, 12, s)}",
+        f"{r['sps']:,.0f}",
+        str(snap["hosts"]),
+        ram_cell(snap, s),
+        cpu_cell(snap, s),
+        eval_cell(r, s),
+        health_cell(r, s),
+    ]
+    return "".join(pad(c, w, s) for c, (_, w) in zip(cells, COLS))
 
-    gate = st["gate"] or (st["evals"][-1][2] if st["evals"] else 0.0)
-    base = BASELINE.get(stage)
-    ratio = f"baseline {base}% ({gate / base:.2f}x)" if base and gate else s.dim("baseline not re-measured")
-    w(f"  {'STAGE':<8} {f'{stage} of 6':<12} up {dur(stage_up):<10}  gate {gate:.1f}%   {ratio}")
-    w("")
 
-    # ---- progress
-    rates = [r for sg, r, _ in st["evals"] if sg == stage]
-    w(s.bold("  PROGRESS"))
-    if rates:
-        best = max(rates)
-        direction, colour = trend(rates)
-        tag = getattr(s, colour)(direction) if direction else ""
-        w(f"    best        {s.bold(f'{best:5.1f}%')}  {bar(best / gate if gate else 0, 22, s)}  "
-          f"{best / gate * 100 if gate else 0:3.0f}% of gate")
-        w(f"    last evals  " + "  ".join(f"{r:.1f}" for r in rates[-6:]) + f"   {tag}")
-        if base:
-            w(f"    vs scripted {best / base:.2f}x baseline")
+def worker_row(peer, rem, s):
+    age = f" {peer['age']:.0f}s ago" if peer.get("age", 0) > 12 else ""
+    cells = ["", s.dim("+ " + peer["machine"]) + s.dim(age), "", "", "", s.dim("  worker"),
+             "", str(rem["count"]), ram_cell(peer, s), cpu_cell(peer, s), "", ""]
+    return "".join(pad(c, w, s) for c, (_, w) in zip(cells, COLS))
+
+
+def idle_row(snap, s):
+    if snap.get("unreachable"):
+        cells = [s.red("-"), s.red(snap["machine"]), "", "", "",
+                 s.red(f"unreachable: {snap['unreachable']}"), "", "", "", "", "", ""]
     else:
-        w(s.dim("    no eval on this stage yet"))
-
-    if u:
-        steps = int(u["steps"].replace(",", ""))
-        budget = st["budget"] or 0
-        sps = float(u["sps"])
-        eta = (budget - steps) / sps if sps > 0 and budget > steps else 0
-        pct = steps / budget if budget else 0
-        w(f"    steps       {steps / 1e6:5.1f}M / {budget / 1e6:.0f}M  {bar(pct, 22, s)}  {pct * 100:3.0f}%"
-          + (f"   ETA {dur(eta)}" if eta else ""))
-        w(f"    throughput  {sps:,.0f} steps/s      sampled {float(u['sampled']):.1f}%"
-          f"      update #{int(u['update']):,}")
-
-        # ---- next eval
-        #
-        # The number worth planning around: an eval is the only thing that produces a score, and between them
-        # nothing observable changes. Shards are detected by process rather than by log line, because the
-        # trainer prints nothing until the eval finishes.
-        cfg = run_config(run_dir)
-        try:
-            every = int(cfg.get("eval_every", 0))
-        except (TypeError, ValueError):
-            every = 0
-        shards = [p for p, c, _ in procs if "va-neural-host.dll" in c and "--bench" in c and "--policy" in c]
-        try:
-            total_shards = int(cfg.get("eval_shards", 0)) or len(shards)
-        except (TypeError, ValueError):
-            total_shards = len(shards)
-        typical = past_eval_seconds(tail(os.path.join(run_dir, "train.log")))
-
-        if shards:
-            # The shards run CONCURRENTLY, so this is how many have finished, not which one is being worked
-            # on. The eval ends when the last one does, which is why the estimate tracks the slowest.
-            elapsed = max(uptime_of(p) for p in shards)
-            done = max(0, total_shards - len(shards))
-            left = f"  ~{dur(max(0.0, typical - elapsed))} left" if typical and typical > elapsed else ""
-            of = f" of ~{dur(typical)}" if typical else ""
-            w(f"    next eval   {s.cyan('RUNNING NOW')}  {done}/{total_shards} shards done, "
-              f"{dur(elapsed)}{of} elapsed{left}")
-        elif every > 0:
-            done = int(u["update"])
-            togo = every - (done % every)
-            spu = seconds_per_update(tail(os.path.join(run_dir, "train.log")))
-            eta = f"  ~{dur(togo * spu)}" if spu else ""
-            w(f"    next eval   in {togo} update{'s' if togo != 1 else ''}{eta}"
-              f"   {bar((every - togo) / every, 14, s)}")
-            if typical:
-                # What each score costs, since it is training time that is not being spent training.
-                share = typical / (typical + every * spu) * 100.0 if spu else 0.0
-                w(f"    eval cost   ~{dur(typical)} each"
-                  + (f", {share:.0f}% of the cycle" if share else "")
-                  + f"   ({total_shards} shards in parallel)")
-        w("")
-        w(s.bold("  MODEL"))
-        ent, kl = float(u["ent"]), float(u["kl"])
-        # Entropy near zero with everything else flat is what a diverged run looks like from the outside.
-        ent_s = s.red(f"{ent:.3f}") if ent < 0.05 else f"{ent:.3f}"
-        w(f"    entropy {ent_s}      kl {kl:.4f}      shipped {float(u['shipped']):.1f}%")
-    w("")
-
-    # ---- health
-    w(s.bold("  HEALTH"))
-    checks = [("skipped minibatches", st["skipped"]), ("divergence dumps", st["diverge"]),
-              ("course starvation", st["starved"]), ("relaxation warnings", st["relaxed"])]
-    for label, n in checks:
-        mark = s.green("ok") if n == 0 else s.red(f"{n}  <-- investigate")
-        w(f"    {label:<22} {mark}")
-    w("")
-
-    render_stages(s, w, run_dir, st, stage, up, pid)
+        cells = [s.dim("idle"), snap["machine"], "", "", "", s.dim("  no run"), "",
+                 str(snap["hosts"]), ram_cell(snap, s), cpu_cell(snap, s), "", ""]
+    return "".join(pad(c, w, s) for c, (_, w) in zip(cells, COLS))
 
 
-def render_machine(s, w, hosts, benches):
-    total, used, free = meminfo()
-    load = loadavg()
-    worst = max((r for _, r in hosts), default=0) / 1024.0
-    ram_s = f"{used:.1f} / {total:.1f} GB used, {free:.1f} GB free"
-    if free < 2.0:
-        ram_s = s.red(ram_s)
-    elif free < 5.0:
-        ram_s = s.yellow(ram_s)
-    w(s.bold("  MACHINE"))
-    w(f"    hosts     {len(hosts)} running"
-      + (s.yellow(f"   ({sum(benches)} of them benches)") if benches else "")
-      + f"      worst RSS {worst:.0f} MB")
-    w(f"    ram       {ram_s}")
-    w(f"    load      {load:.1f} of {CORES} cores")
-
-def render_stages(s, w, run_dir, st, stage, up, pid):
-    """Stage history from the -done.pt mtimes: stage N began when stage N-1's checkpoint was written."""
-    marks = []
-    for n in range(1, 7):
-        p = os.path.join(run_dir, f"stage{n}-done.pt")
-        if os.path.exists(p):
-            marks.append((n, os.path.getmtime(p)))
-    if marks or stage:
-        w("")
-        w(s.bold("  STAGES"))
-        # The run's own start anchors the first stage; a resumed run enters mid-curriculum, so anything
-        # before the first -done.pt happened in an earlier run and is not this run's time to claim.
-        prev = time.time() - up if pid else (marks[0][1] if marks else time.time())
-        for n, done in marks:
-            best_n = max((r for sg, r, _ in st["evals"] if sg == n), default=None)
-            rate = f"cleared at {best_n:.1f}%" if best_n is not None else "cleared"
-            w(f"    stage {n}   {dur(done - prev):<10} {s.green(rate)}")
-            prev = done
-        if stage and (not marks or marks[-1][0] < stage):
-            w(f"    stage {stage}   {dur(time.time() - prev):<10} {s.cyan('running')}")
+def ram_cell(snap, s):
+    if not snap.get("ram_total"):
+        return "-"
+    txt = f"{snap['ram_used']:.0f}/{snap['ram_total']:.0f} GB"
+    if snap["ram_free"] < 2.0:
+        return s.red(txt)
+    if snap["ram_free"] < 4.0:
+        return s.yellow(txt)
+    return txt
 
 
-def peer_panel(target, plain, color):
-    """Another machine's panel, fetched over ssh.
+def cpu_cell(snap, s):
+    if not snap.get("cores"):
+        return "-"
+    frac = snap["load"] / snap["cores"]
+    txt = f"{frac * 100:.0f}%"
+    return s.green(txt) if frac > 0.85 else (txt if frac > 0.4 else s.yellow(txt))
 
-    A shell-out rather than a daemon, deliberately: ssh already handles auth and transport, vxstat is
-    already on the far box, and a status tool needing its own service per machine is one nobody keeps
-    running. A peer that is down or prompting shows as a line, never as a hang.
-    """
-    import subprocess
-    # The far side's stdout is this pipe, not a terminal, so it would correctly decide colour is unwanted --
-    # but the decision belongs to where the panel is finally DISPLAYED, which only this end knows. So the
-    # peer is told to match whatever the local half is doing.
-    remote = "vxstat --plain" if plain else ("vxstat --color" if color else "vxstat")
-    cmd = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", target, remote]
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
-        return (r.stdout or r.stderr or "").rstrip() or f"  {target}: no output"
-    except subprocess.TimeoutExpired:
-        return f"  {target}: TIMED OUT (box down, or ssh is prompting)"
-    except OSError as exc:
-        return f"  {target}: {exc}"
+
+def detail_lines(local, peers, s):
+    """The few things a table cannot carry, for the run that is actually training here."""
+    out = []
+    for snap in [local] + peers:
+        for r in snap.get("runs", []):
+            if not r["running"]:
+                continue
+            base = f"  vs baseline {r['best'] / r['baseline']:.2f}x" if (r["baseline"] and r["best"]) else ""
+            last = "  ".join(f"{x:.1f}" for x in r["last"])
+            out.append("")
+            out.append(s.dim(f"  {r['name']} on {snap['machine']}: last evals  {last}{base}"))
+            out.append(s.dim(f"  entropy {r['entropy']:.3f}   kl {r['kl']:.4f}   "
+                             f"sampled {r['sampled']:.1f}%   up {dur(r['up'])}   update #{r['update']:,}"))
+    return out
 
 
 def main():
     args = sys.argv[1:]
     plain = "--plain" in args
     watch = "--watch" in args
-    peers = [args[i + 1] for i, a in enumerate(args) if a == "--peer" and i + 1 < len(args)]
-    every = 5.0
+    as_json = "--json" in args
+    peers_t = [args[i + 1] for i, a in enumerate(args) if a == "--peer" and i + 1 < len(args)]
+
+    every = 1.0
     if watch:
         i = args.index("--watch")
         if i + 1 < len(args):
             try:
-                every = float(args[i + 1])
+                every = max(0.25, float(args[i + 1]))
             except ValueError:
                 pass
-    # isatty is the right default and the wrong answer when something else is reading the output on purpose,
-    # which is exactly the peer case: --color says "emit it anyway, I know where this is going".
+
+    if as_json:
+        import json
+        print(json.dumps(snapshot()))
+        return
+
     s = Style(not plain and (sys.stdout.isatty() or "--color" in args))
+    poller = Peers(peers_t)
 
     def panel():
-        parts = [render(s)]
-        for t in peers:
-            parts.append("")
-            parts.append(peer_panel(t, plain, s.on))
-        return "\n".join(parts)
+        local = snapshot()
+        remote = poller.snapshots()
+        body = render_table(local, remote, s)
+        return body + "\n" + "\n".join(detail_lines(local, remote, s))
 
     if not watch:
+        # A one-shot call has to wait for the first peer fetch; there is nothing cached yet.
+        if peers_t:
+            time.sleep(2.5)
         print(panel())
         return
     try:
         while True:
-            # Home the cursor and clear forward rather than clearing the whole screen, so the panel does not
-            # flash on every refresh.
-            sys.stdout.write("\033[H\033[J" + panel() + "\n" + s.dim(f"  refreshing every {every:.0f}s - Ctrl-C to exit") + "\n")
+            sys.stdout.write("\033[H\033[J" + panel() + "\n"
+                             + s.dim(f"  refreshing every {every:.0f}s - Ctrl-C to exit") + "\n")
             sys.stdout.flush()
             time.sleep(every)
     except KeyboardInterrupt:

@@ -782,7 +782,25 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                 for k, sigma in enumerate([0.02, 0.02, 0.05, 0.05, 0.1, 0.1]):
                     with torch.no_grad():
                         for _, prm in policy.named_parameters():
-                            prm.add_(torch.randn_like(prm) * sigma * (prm.std() + 1e-8))
+                            # NOT prm.std(). torch.std() uses the unbiased estimator, dividing by n-1, so a
+                            # ONE-element parameter returns NaN -- and critic.4.bias, the value head's output
+                            # bias, is exactly that. Perturbing by NaN set it to NaN, evaluate() scores the
+                            # ACTOR only so the candidate still looked good, selection adopted it, and PPO
+                            # then produced NaN values, returns and advantages until the run aborted. It
+                            # cost v24 and v25, both presenting as an unexplained divergence.
+                            #
+                            # Mean absolute deviation is defined for every size, needs no correction term,
+                            # and is within a constant factor of std for the roughly-normal weights here.
+                            scale = prm.abs().mean() if prm.numel() < 2 else prm.std()
+                            prm.add_(torch.randn_like(prm) * sigma * (scale + 1e-8))
+                    # A candidate that is not finite is not a candidate. Scoring it would waste an eval and,
+                    # worse, could return a plausible number from an actor that still works.
+                    if not all(torch.isfinite(prm).all() for prm in policy.parameters()):
+                        bad = [nm for nm, prm in policy.named_parameters() if not torch.isfinite(prm).all()]
+                        print(f"[evolve s{stage}]   candidate {k} sigma {sigma:g}: SKIPPED, "
+                              f"perturbation produced non-finite {bad}")
+                        policy.load_state_dict(parent)
+                        continue
                     r = evaluate(policy, norm, run_dir, stage, eval_steps, eval_args)
                     print(f"[evolve s{stage}]   candidate {k} sigma {sigma:g}: "
                           f"{r if r == r else float('nan'):.1%}")
@@ -790,6 +808,18 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                         best_c_rate = r
                         best_c_state = copy.deepcopy(policy.state_dict())
                     policy.load_state_dict(parent)
+                # Last line of defence: never install a winner that is not finite. The two checks above
+                # should make this unreachable, and it is here because the failure it prevents costs a whole
+                # run and is invisible in the eval numbers.
+                if best_c_state is not None and not all(torch.isfinite(t).all()
+                                                        for t in best_c_state.values()
+                                                        if torch.is_floating_point(t)):
+                    bad = [nm for nm, t in best_c_state.items()
+                           if torch.is_floating_point(t) and not torch.isfinite(t).all()]
+                    print(f"[evolve s{stage}] REFUSING to adopt: winner has non-finite {bad}; "
+                          f"keeping the parent")
+                    best_c_state = None
+
                 if best_c_state is not None:
                     # Adam's moments now describe the parent, not the child; they are close enough that the
                     # next few updates re-estimate them, and resetting them entirely would forget more.

@@ -5,6 +5,8 @@
     vxstat --peer user@host         also poll that machine, repeatable
     vxstat --watch                  refresh every second until Ctrl-C
     vxstat --watch 5                refresh every 5 seconds
+    vxstat --watchdog               watch, and report WHY a run stopped when it does
+    vxstat --watchdog-restart       ...and relaunch it when the reason was not a verdict
     vxstat --json                   machine state as JSON (what peers are asked for)
     vxstat --plain                  no colour, for piping
 
@@ -524,6 +526,7 @@ def snapshot():
         "ram_used": used, "ram_total": total, "ram_free": free,
         "cpu": cpu_busy(),
         "agents_per_host": 16,
+        "eval_shards_running": sum(benches),
         "runs": [],
     }
 
@@ -612,7 +615,32 @@ def run_snapshot(name, pid, up, cmd, procs, running):
         "eval_elapsed": max((uptime_of(p) for p in shards), default=0.0),
         "remotes": remotes,
         "local_hosts_flag": _int_arg(cmd, "--hosts"),
+        "cmd": cmd,
+        "stopped_reason": None if running else stop_reason(lines),
     }
+
+
+# Ordered most-specific first: a run that diverged AND then printed the gate verdict stopped because it
+# diverged, and reporting the verdict would hide the failure behind a normal-looking sentence.
+STOP_PATTERNS = [
+    ("traceback",  r"^Traceback \(most recent call last\)",           False, "crashed with a traceback"),
+    ("diverged",   r"^\[s\d\] ABORTING: (\d+) consecutive updates",     False, "diverged: every minibatch non-finite"),
+    ("starved",    r"no map in the pool produced a reachable",       False, "course starvation"),
+    ("gate",       r"did not reach \d+%; stopping",                   True,  "finished the stage under its gate"),
+    ("passed",     r"=== stage \d+:",                                 True,  "advanced a stage"),
+    ("done",       r"##########.*DONE",                               True,  "curriculum finished"),
+]
+
+
+def stop_reason(lines):
+    """(key, human text, deliberate?) for why a finished run finished, or None if it just vanished."""
+    import re as _re
+    tail = lines[-400:]
+    for key, pat, deliberate, text in STOP_PATTERNS:
+        for line in reversed(tail):
+            if _re.search(pat, line):
+                return {"key": key, "text": text, "deliberate": deliberate}
+    return {"key": "vanished", "text": "process gone, no verdict in the log", "deliberate": False}
 
 
 def _int_arg(cmd, flag):
@@ -767,6 +795,10 @@ def job_block(r, snap, peers, s, claimed):
     state = s.green(G["run"] + " RUNNING") if r["running"] else s.red(G["run"] + " STOPPED")
     out.append(gut + "%s%sstage %d%s%s%sup %s" % (
         s.bold(s.cyan(r["name"])), G["dot"], r["stage"], G["dot"], state, G["dot"], dur(r["up"])))
+    why = r.get("stopped_reason")
+    if why:
+        mark = s.dim("(deliberate)") if why["deliberate"] else s.red("(failure)")
+        out.append(gut + " %-7s %s %s" % (s.dim("why"), why["text"], mark))
     out.append(gut)
 
     # evals: history first, verdict on the same line. The history is the thing being watched.
@@ -825,8 +857,16 @@ def fleet_line(snap, s, role, hosts, total_hosts, evaling):
         cpu_txt = s.green(cpu_txt)
     agents = hosts * snap.get("agents_per_host", 16)
     share = "  %2.0f%% fleet" % (100.0 * hosts / total_hosts) if total_hosts and hosts else ""
-    hosts_txt = "%3d hosts" % hosts if hosts else s.dim("  - hosts")
-    agents_txt = "  %4d agents" % agents if agents else ""
+    # A trainer box with --hosts 0 reported "0 hosts" while running four eval shards, so the machine
+    # actually burning CPU looked idle and the quiet worker looked broken. Shards are work; show them.
+    shards = snap.get("eval_shards_running", 0)
+    if hosts:
+        hosts_txt = "%3d hosts" % hosts
+    elif shards:
+        hosts_txt = s.cyan("%3d evals" % shards)
+    else:
+        hosts_txt = s.dim("  - hosts")
+    agents_txt = "  %4d agents" % agents if agents else ("  eval shards" if shards else "")
     age = s.dim("  (%.0fs old)" % snap["age"]) if snap.get("age", 0) > 12 else ""
     return "%-13s %-8s %s   %-9s %s%s%s%s" % (
         snap["machine"], s.dim(role), hosts_txt, ram_cell(snap, s), cpu_txt, agents_txt, share, age)
@@ -863,6 +903,92 @@ def render_jobs(local, peers, s):
     return out
 
 
+def relaunch(run, runs_dir):
+    """Relaunch a stopped run from its stage-best, under the next free version name.
+
+    Resumes stage-best rather than the rolling checkpoint on purpose: a diverged run's rolling checkpoint is
+    the last one the save guard allowed, but stage-best is the last one that actually SCORED well, and after
+    a divergence those are not the same policy.
+    """
+    import re as _re
+    import subprocess
+
+    cmd = run.get("cmd") or ""
+    if "train.py" not in cmd:
+        return None, "no launch command recorded"
+
+    m = _re.search(r"--name (v)(\d+)", cmd)
+    if not m:
+        return None, "run name is not vN, refusing to guess the next one"
+    nxt = f"v{int(m.group(2)) + 1}"
+
+    best = os.path.join(runs_dir, run["name"], f"stage{run['stage']}-best.pt")
+    if not os.path.exists(best):
+        return None, f"no {os.path.basename(best)} to resume from"
+
+    new_cmd = _re.sub(r"--name v\d+", f"--name {nxt}", cmd)
+    new_cmd = _re.sub(r'--resume (\S+|"[^"]*")', f'--resume "{best}"', new_cmd)
+    if "--resume" not in new_cmd:
+        new_cmd += f' --resume "{best}"'
+
+    log = os.path.join(runs_dir, f"{nxt}.log")
+    try:
+        with open(log, "wb") as fh:
+            subprocess.Popen(new_cmd, shell=True, stdout=fh, stderr=subprocess.STDOUT,
+                             cwd=os.environ.get("VX_REPO", os.getcwd()))
+    except Exception as exc:
+        return None, f"launch failed: {type(exc).__name__}: {exc}"
+    return nxt, f"resumed from {os.path.basename(best)}"
+
+
+def watchdog(peers_t, every, restart, s):
+    """Poll until a run stops, report why, and relaunch when the reason was not a verdict.
+
+    The distinction is the whole point. A stage that passed, or a stage that finished under its gate, stopped
+    because the curriculum said so -- relaunching re-runs a decided experiment and would loop forever. A
+    traceback, a vanished process, or a divergence stopped without reaching a verdict, and those are worth
+    resuming from the last policy that scored well.
+    """
+    poller = Peers(peers_t)
+    seen_running = set()
+    while True:
+        local = snapshot()
+        remote = poller.snapshots()
+        sys.stdout.write("\033[H\033[J" + "\n".join(render_jobs(local, remote, s)) + "\n")
+
+        for snap in [local] + remote:
+            for r in snap.get("runs", []):
+                if r["running"]:
+                    seen_running.add(r["name"])
+                    continue
+                why = r.get("stopped_reason") or {}
+                # Only act on a run this watchdog actually watched running. Otherwise every old log in the
+                # runs directory looks like something that just died.
+                if r["name"] not in seen_running:
+                    continue
+                seen_running.discard(r["name"])
+                stamp = datetime.now().strftime("%H:%M:%S")
+                print(s.red(f"\n  [{stamp}] {r['name']} STOPPED: {why.get('text', 'unknown')}"))
+                if why.get("deliberate"):
+                    print(s.dim("  deliberate stop - not restarting; that would re-run a decided experiment"))
+                elif not restart:
+                    print(s.yellow("  not a verdict - would restart, but --watchdog-restart was not given"))
+                elif snap["machine"] != MACHINE:
+                    print(s.yellow(f"  not a verdict, but it ran on {snap['machine']} - cannot relaunch remotely"))
+                else:
+                    nxt, note = relaunch(r, RUNS)
+                    if nxt:
+                        print(s.green(f"  restarted as {nxt}: {note}"))
+                        seen_running.add(nxt)
+                    else:
+                        print(s.red(f"  RESTART FAILED: {note}"))
+                sys.stdout.flush()
+                time.sleep(6)
+
+        sys.stdout.flush()
+        time.sleep(every)
+
+
 def main():
     args = sys.argv[1:]
     plain = "--plain" in args
@@ -891,6 +1017,10 @@ def main():
         local = snapshot()
         remote = poller.snapshots()
         return "\n".join(render_jobs(local, remote, s))
+
+    if "--watchdog" in args:
+        watchdog(peers_t, every, "--watchdog-restart" in args, s)
+        return
 
     if not watch:
         # A one-shot call has to wait for the first peer fetch; there is nothing cached yet.

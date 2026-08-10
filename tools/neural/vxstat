@@ -416,6 +416,22 @@ def parse(lines):
 
 # ---------------------------------------------------------------- formatting
 
+# Glyphs degrade to ASCII when stdout cannot carry them: a pipe, an old console, or --ascii. Mojibake in a
+# status panel is worse than plain characters, and this file has already been bitten by an em dash once.
+def _utf_ok():
+    if "--ascii" in sys.argv:
+        return False
+    enc = (getattr(sys.stdout, "encoding", "") or "").lower()
+    return "utf" in enc
+
+
+if _utf_ok():
+    G = {"bar": "\u2503", "band": "\u2501", "fill": "\u2593", "empty": "\u2591",
+         "dot": " \u00b7 ", "ok": "\u2713", "run": "\u25cf"}
+else:
+    G = {"bar": "|", "band": "=", "fill": "#", "empty": ".", "dot": " - ", "ok": "ok", "run": "*"}
+
+
 def _enable_windows_ansi():
     """Turn on VT processing so ANSI escapes render instead of printing as literal gibberish.
 
@@ -464,9 +480,8 @@ def dur(sec):
 def bar(frac, width, s):
     frac = max(0.0, min(1.0, frac))
     filled = int(round(frac * width))
-    body = "#" * filled + "." * (width - filled)
     colour = s.green if frac >= 1.0 else (s.cyan if frac >= 0.75 else s.yellow)
-    return colour(body)
+    return colour(G["fill"] * filled) + s.dim(G["empty"] * (width - filled))
 
 
 def trend(vals):
@@ -679,7 +694,7 @@ def health_word(r, s):
         bad.append("COURSE STARVATION")
     if r["relaxed"]:
         bad.append("bounds relaxed")
-    return s.red(", ".join(bad)) if bad else s.green("ok")
+    return s.red(", ".join(bad)) if bad else s.green(G["ok"] + " healthy")
 
 
 def eval_word(r, s):
@@ -747,13 +762,12 @@ def _match_peer(addr, peers):
 
 
 def job_block(r, snap, peers, s, claimed):
-    out = [""]
-    state = s.green("RUNNING") if r["running"] else s.red("STOPPED")
-    title = "%s  stage %d  %s  up %s " % (r["name"], r["stage"], "RUNNING" if r["running"] else "STOPPED",
-                                          dur(r["up"]))
-    rule = "-" * max(4, 78 - len(title))
-    out.append("%s  stage %d  %s  %s %s" % (s.bold(s.cyan(r["name"])), r["stage"], state,
-                                            s.dim("up " + dur(r["up"])), s.dim(rule)))
+    gut = (s.cyan if r["running"] else s.red)(G["bar"]) + " "
+    out = ["", gut.rstrip()]
+    state = s.green(G["run"] + " RUNNING") if r["running"] else s.red(G["run"] + " STOPPED")
+    out.append(gut + "%s%sstage %d%s%s%sup %s" % (
+        s.bold(s.cyan(r["name"])), G["dot"], r["stage"], G["dot"], state, G["dot"], dur(r["up"])))
+    out.append(gut)
 
     # evals: history first, verdict on the same line. The history is the thing being watched.
     best = "%.1f" % r["best"] if r["best"] is not None else "-"
@@ -769,32 +783,32 @@ def job_block(r, snap, peers, s, claimed):
     ratio = ""
     if r["baseline"] and r["best"]:
         ratio = s.dim("  %.2fx base" % (r["best"] / r["baseline"]))
-    out.append("  %-7s %s    %s%s" % (s.dim("evals"), spark(r["last"], s), verdict, ratio))
+    out.append(gut + " %-7s %s    %s%s" % (s.dim("evals"), spark(r["last"], s), verdict, ratio))
 
     pct = r["steps"] / r["budget"] if r["budget"] else 0
     eta = ""
     if r["sps"] and r["budget"] > r["steps"]:
         eta = "   ETA %s" % dur((r["budget"] - r["steps"]) / r["sps"])
-    out.append("  %-7s %s %3.0f%%   %.2fM/%.0fM   %s steps/s%s" % (
+    out.append(gut + " %-7s %s %3.0f%%   %.2fM/%.0fM   %s steps/s%s" % (
         s.dim("steps"), bar(pct, 20, s), pct * 100, r["steps"] / 1e6, r["budget"] / 1e6,
         "{:,.0f}".format(r["sps"]), eta))
 
-    out.append("  %-7s update %s   sampled %.1f%%   entropy %.3f   kl %.4f   %s   %s" % (
+    out.append(gut + " %-7s update %s   sampled %.1f%%   entropy %.3f   kl %.4f   %s   %s" % (
         s.dim("state"), "{:,}".format(r["update"]), r["sampled"], r["entropy"], r["kl"],
         health_word(r, s), eval_word(r, s)))
 
     total_hosts = snap["hosts"] + sum(x["count"] for x in r.get("remotes", []))
     role = "trainer" + ("+hosts" if snap["hosts"] else "")
-    out.append("  %-7s %s" % (s.dim("fleet"),
+    out.append(gut + " %-7s %s" % (s.dim("fleet"),
                               fleet_line(snap, s, role, snap["hosts"], total_hosts, r["eval_running"])))
     for rem in r.get("remotes", []):
         peer = _match_peer(rem["addr"], peers)
         if peer is not None:
             claimed.add(peer["machine"])
-            out.append("  %-7s %s" % ("", fleet_line(peer, s, "worker", rem["count"], total_hosts,
+            out.append(gut + " %-7s %s" % ("", fleet_line(peer, s, "worker", rem["count"], total_hosts,
                                                      r["eval_running"])))
         else:
-            out.append("  %-7s %-13s %-8s %3d hosts   %s" % (
+            out.append(gut + " %-7s %-13s %-8s %3d hosts   %s" % (
                 "", rem["addr"], s.dim("worker"), rem["count"],
                 s.yellow("not polled - add --peer")))
     return out
@@ -822,7 +836,9 @@ def render_jobs(local, peers, s):
     out = []
     now = (datetime.now(EASTERN).strftime("%I:%M:%S %p ET").lstrip("0")
            if EASTERN else datetime.now().strftime("%I:%M:%S %p local").lstrip("0"))
-    out.append(s.bold("VORTEX NEURAL TRAINING") + s.dim("    " + now))
+    title = " VORTEX NEURAL TRAINING "
+    pad_len = max(4, 74 - len(title) - len(now) - 2)
+    out.append(s.bold(G["band"] * 2 + title) + s.dim(G["band"] * pad_len + " " + now + " " + G["band"] * 2))
 
     claimed = set()
     any_job = False

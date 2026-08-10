@@ -48,19 +48,36 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOGS="$ROOT/_scratch/worker"; mkdir -p "$LOGS"
 PIDS=()
 cleanup() {
-  echo "[worker] stopping ${#PIDS[@]} hosts"
+  echo "[worker] stopping ${#PIDS[@]} host loops"
   for p in "${PIDS[@]:-}"; do kill "$p" 2>/dev/null || true; done
+  # The loops are dead but their current dotnet children are not; those PIDs were written per slot.
+  for f in "$LOGS"/host_*.pid; do
+    [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null || true
+  done
 }
 trap cleanup EXIT INT TERM
 
 echo "[worker] $COUNT hosts on $BIND:$PORT-$(( PORT + COUNT - 1 ))"
 for (( i = 0; i < COUNT; i++ )); do
   P=$(( PORT + i ))
+  # Each slot is a respawn loop, not a one-shot host. A host exits by design when its trainer connection
+  # closes -- one connection per process -- which used to mean every trainer restart needed someone to ssh
+  # in and relaunch the whole fleet. Now the slot notices, waits a beat, and listens again.
+  #
   # stdout to a file, not to a pipe nobody drains. The game writes a line per map load, and a full 64 KB
   # pipe buffer blocks the host forever mid-write -- a failure that reads as a hard crash at a suspiciously
-  # reproducible step number.
-  dotnet "$DLL" --port "$P" --bind "$BIND" --data "$ROOT/data" "${HOST_ARGS[@]:-}" \
-      > "$LOGS/host_$P.log" 2>&1 &
+  # reproducible step number. The log is truncated per respawn so it describes the CURRENT host, and the
+  # dotnet PID is written per slot so cleanup can reach the child the loop cannot.
+  (
+    while true; do
+      dotnet "$DLL" --port "$P" --bind "$BIND" --data "$ROOT/data" "${HOST_ARGS[@]:-}" \
+          > "$LOGS/host_$P.log" 2>&1 &
+      CHILD=$!
+      echo "$CHILD" > "$LOGS/host_$P.pid"
+      wait "$CHILD"
+      sleep 1
+    done
+  ) &
   PIDS+=("$!")
 done
 

@@ -173,6 +173,11 @@ public sealed class MapCourseSource
         string bspPath = $"maps/{name}.bsp";
         if (!_vfs.Exists(bspPath)) return null;
 
+        // Before the work, not after. Hosts on the Windows box wedge CPU-pinned at ~100 MB during map
+        // loading, and a completion-only log cannot name the map they wedged in -- the last line shows what
+        // finished, never what is stuck. This line is the difference between "it hangs somewhere in map
+        // prepare" and knowing which map.
+        Log?.Invoke($"[maps] preparing {name}...");
         var sw = System.Diagnostics.Stopwatch.StartNew();
         BspData bsp = BspReader.Read(_vfs.ReadBytes(bspPath));
         BspCollisionBuilder.Result built = BspCollisionBuilder.Build(bsp);

@@ -140,6 +140,14 @@ public static class Program
         }
 
         var listener = new TcpListener(bind, opts.Port);
+        // Rebind a port whose previous socket is still in TIME_WAIT.
+        //
+        // A host serves exactly one trainer and exits, so under a respawn loop the slot relaunches seconds
+        // after the old socket closed -- and the kernel still holds that address, so Bind throws and the
+        // replacement dies on startup. Without this the loop becomes a crash loop and the whole fleet
+        // reports "up" while nothing is listening. Harmless for a one-shot host, load-bearing for a
+        // respawning one.
+        listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
         listener.Start();
         // The port goes to stdout before anything else so a trainer launching with --port 0 can read the
         // assigned one. Every other message goes to stderr, keeping stdout a clean machine-readable channel.

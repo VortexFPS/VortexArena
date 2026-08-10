@@ -292,6 +292,11 @@ def main() -> int:
                     help="pass a flag through to every host process, repeatable. Router and observation "
                          "switches (--no-warps, --no-feet-resolution, --no-course-filters) live on the host, "
                          "so this is how a resumed run holds them at whatever the checkpoint was trained on.")
+    ap.add_argument("--async-env", action="store_true",
+                    help="free-running rollout collection: hosts walk their T steps at their own pace and "
+                         "the barrier is per UPDATE, not per step. Same policy version for every action in "
+                         "a window, so PPO is unchanged; a slow host costs its own time instead of gating "
+                         "the fleet at every step. Measured lockstep tax before this: 57%% of each step.")
     ap.add_argument("--eval-shards", type=int, default=4,
                     help="split the eval episodes across this many parallel processes. Each keeps the same "
                          "agents-per-world (crowding is part of the task) and uses its own seed, so this "
@@ -545,46 +550,95 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     while total_steps < budget:
         update += 1
         t_env = t_pol = 0.0
-        for t in range(rollout):
-            _p0 = time.perf_counter()
-            alive_buf[t] = alive
-            if alive.any():
-                norm.update(obs[alive])
-            nobs = norm.normalize(obs)
-            obs_buf[t] = nobs
 
-            with torch.inference_mode():
-                tobs = torch.as_tensor(nobs, device=device)
-                wire, logp, _, value = policy.act(tobs)
-            # Copied out to numpy immediately: inference-mode tensors cannot participate in the autograd
-            # graph the PPO update builds, and these values are only ever read as data.
-            act_buf[t] = wire.cpu().numpy()
-            logp_buf[t] = logp.cpu().numpy()
-            val_buf[t] = value.cpu().numpy()
-            _p1 = time.perf_counter(); t_pol += _p1 - _p0
+        if getattr(eval_args, "async_env", False):
+            # Free-running collection: the per-step barrier becomes a per-update barrier. Every action in
+            # the window still comes from the same policy version, so nothing about PPO changes -- only who
+            # waits for whom. The closures keep the alive-mask semantics of the loop below, and the alive
+            # snapshot travels inside aux because it must be taken at ACT time, not at store time.
+            A = env.agents_per_host
+            _steps_box = [0]
+            _tpol_box = [0.0]
 
-            obs, reward, done, trunc = env.step(act_buf[t])
-            t_env += time.perf_counter() - _p1
-            rew_buf[t] = reward
-            # Truncation is NOT termination: the value function must still bootstrap through a step that
-            # ended only because the clock ran out. Conflating them teaches the policy that time limits are
-            # a form of death and makes it hurry into walls near the cap.
-            done_buf[t] = done.astype(np.float32)
-            # This step counted only for agents that were still running when it began. An agent that was
-            # already finished contributes padding, not experience.
-            total_steps += int(alive.sum())
-            # Finished means done OR truncated, and the distinction matters here in a way it does not in
-            # done_buf. A timeout reports done=0, truncated=1, and TrainingEnv still marks that agent
-            # finished and pads it from then on -- so masking on done alone would leave the majority of
-            # stage 6 unmasked, where most agents reach the step cap rather than dying or arriving.
-            finished = done.astype(bool) | trunc.astype(bool)
-            alive &= ~finished
-            # VectorEnv resets a host the moment all of its agents are finished, inside this same step call,
-            # so that host's observations are already fresh and its agents are live again.
-            per_host = env.agents_per_host
-            for lo in range(0, n_agents, per_host):
-                if finished[lo:lo + per_host].all():
-                    alive[lo:lo + per_host] = True
+            def _act(rows, hosts):
+                _a0 = time.perf_counter()
+                for k, i in enumerate(hosts):
+                    blk = alive[i * A:(i + 1) * A]
+                    if blk.any():
+                        norm.update(rows[k * A:(k + 1) * A][blk])
+                nobs = norm.normalize(rows)
+                with torch.inference_mode():
+                    wire, logp, _, value = policy.act(torch.as_tensor(nobs, device=device))
+                aux = (nobs, logp.cpu().numpy(), value.cpu().numpy(),
+                       np.concatenate([alive[i * A:(i + 1) * A].copy() for i in hosts]))
+                _tpol_box[0] += time.perf_counter() - _a0
+                return wire.cpu().numpy(), aux
+
+            def _store(ti, lo, hi, _raw, act_rows, aux, rew, done_v, trunc_v):
+                nobs_r, logp_r, val_r, alive_r = aux
+                k0 = 0  # aux rows are exactly this host's block when stored by collect
+                obs_buf[ti, lo:hi] = nobs_r[k0:k0 + (hi - lo)]
+                act_buf[ti, lo:hi] = act_rows
+                logp_buf[ti, lo:hi] = logp_r[k0:k0 + (hi - lo)]
+                val_buf[ti, lo:hi] = val_r[k0:k0 + (hi - lo)]
+                alive_buf[ti, lo:hi] = alive_r[k0:k0 + (hi - lo)]
+                rew_buf[ti, lo:hi] = rew
+                done_buf[ti, lo:hi] = done_v.astype(np.float32)
+                _steps_box[0] += int(alive_r.sum())
+                fin = done_v.astype(bool) | trunc_v.astype(bool)
+                blk = alive[lo:hi]
+                blk &= ~fin
+                if fin.all():
+                    blk[:] = True   # the host resets before its next transition; agents are live again
+                alive[lo:hi] = blk
+
+            _c0 = time.perf_counter()
+            obs = env.collect(rollout, obs, _act, _store)
+            t_env = time.perf_counter() - _c0 - _tpol_box[0]
+            t_pol = _tpol_box[0]
+            total_steps += _steps_box[0]
+
+        else:
+          for t in range(rollout):
+              _p0 = time.perf_counter()
+              alive_buf[t] = alive
+              if alive.any():
+                  norm.update(obs[alive])
+              nobs = norm.normalize(obs)
+              obs_buf[t] = nobs
+
+              with torch.inference_mode():
+                  tobs = torch.as_tensor(nobs, device=device)
+                  wire, logp, _, value = policy.act(tobs)
+              # Copied out to numpy immediately: inference-mode tensors cannot participate in the autograd
+              # graph the PPO update builds, and these values are only ever read as data.
+              act_buf[t] = wire.cpu().numpy()
+              logp_buf[t] = logp.cpu().numpy()
+              val_buf[t] = value.cpu().numpy()
+              _p1 = time.perf_counter(); t_pol += _p1 - _p0
+
+              obs, reward, done, trunc = env.step(act_buf[t])
+              t_env += time.perf_counter() - _p1
+              rew_buf[t] = reward
+              # Truncation is NOT termination: the value function must still bootstrap through a step that
+              # ended only because the clock ran out. Conflating them teaches the policy that time limits are
+              # a form of death and makes it hurry into walls near the cap.
+              done_buf[t] = done.astype(np.float32)
+              # This step counted only for agents that were still running when it began. An agent that was
+              # already finished contributes padding, not experience.
+              total_steps += int(alive.sum())
+              # Finished means done OR truncated, and the distinction matters here in a way it does not in
+              # done_buf. A timeout reports done=0, truncated=1, and TrainingEnv still marks that agent
+              # finished and pads it from then on -- so masking on done alone would leave the majority of
+              # stage 6 unmasked, where most agents reach the step cap rather than dying or arriving.
+              finished = done.astype(bool) | trunc.astype(bool)
+              alive &= ~finished
+              # VectorEnv resets a host the moment all of its agents are finished, inside this same step call,
+              # so that host's observations are already fresh and its agents are live again.
+              per_host = env.agents_per_host
+              for lo in range(0, n_agents, per_host):
+                  if finished[lo:lo + per_host].all():
+                      alive[lo:lo + per_host] = True
 
         with torch.inference_mode():
             last_value = policy(torch.as_tensor(norm.normalize(obs), device=device))[1].cpu().numpy()

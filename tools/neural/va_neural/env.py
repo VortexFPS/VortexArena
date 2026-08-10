@@ -386,6 +386,80 @@ class VectorEnv:
         return (f"host timing over {n} steps: slowest {mx * 1000:.1f} ms, average {mn * 1000:.1f} ms, "
                 f"so {idle:.0f}% of each step is hosts idle waiting on the straggler")
 
+    def collect(self, T, obs, act_fn, store):
+        """Fill a T-step rollout with every host free-running; returns the final observation batch.
+
+        ``act_fn(rows)`` maps observation rows to (wire_actions, aux) where aux is whatever the trainer
+        wants stored alongside (log-probs, values). ``store(t, lo, hi, obs, act, aux, rew, done, trunc)``
+        writes one host's transition at its own step index t. Rows for host i live at [i*A, (i+1)*A).
+
+        The select loop batches act_fn across every host whose reply arrived in the same wakeup, so the
+        policy forward keeps most of its batching even though hosts no longer march in step.
+        """
+        import select as _select
+
+        A = self.agents_per_host
+        n = len(self.envs)
+        cur = [obs[i * A:(i + 1) * A].copy() for i in range(n)]
+        t_i = [0] * n
+        phase = ["step"] * n          # step: owes a step reply; reset: owes a reset reply; done: window over
+        fd_to_i = {e.sock.fileno(): i for i, e in enumerate(self.envs)}
+        last = [None] * n
+
+        # Prime: one action per host, batched in a single forward.
+        acts, aux = act_fn(np.concatenate(cur, axis=0), list(range(n)))
+        for i, e in enumerate(self.envs):
+            e.send_step(acts[i * A:(i + 1) * A])
+        pending_aux = [
+            (acts[i * A:(i + 1) * A].copy(),
+             tuple(x[i * A:(i + 1) * A].copy() for x in aux)) for i in range(n)
+        ]
+
+        while any(ph != "done" for ph in phase):
+            waiting = [fd for fd, i in fd_to_i.items() if phase[i] != "done"]
+            ready, _, _ = _select.select(waiting, [], [], 60.0)
+            if not ready:
+                slow = [self.envs[i].cfg.seed for i in range(n) if phase[i] != "done"]
+                raise RuntimeError(f"no host replied for 60s; {len(slow)} still owed a reply")
+
+            stepped = []      # hosts that just delivered a transition and need a NEXT action
+            for fd in ready:
+                i = fd_to_i[fd]
+                e = self.envs[i]
+                if phase[i] == "reset":
+                    cur[i] = e.recv_reset()
+                    phase[i] = "step"
+                    stepped.append(i)     # a reset reply is followed by an action on the fresh obs
+                    continue
+
+                o, r, d, tr = e.recv_step()
+                act_i, aux_i = pending_aux[i]
+                store(t_i[i], i * A, (i + 1) * A, cur[i], act_i, aux_i, r, d, tr)
+                t_i[i] += 1
+                cur[i] = o
+
+                if t_i[i] >= T:
+                    phase[i] = "done"
+                    last[i] = o
+                elif bool(np.all(d | tr)):
+                    # Whole host finished its episode: rebuild before the next transition, exactly as the
+                    # synchronous path did -- the reset observation replaces the terminal one.
+                    e.send_reset()
+                    phase[i] = "reset"
+                else:
+                    stepped.append(i)
+
+            if stepped:
+                rows = np.concatenate([cur[i] for i in stepped], axis=0)
+                acts, aux = act_fn(rows, stepped)
+                for k, i in enumerate(stepped):
+                    a_rows = acts[k * A:(k + 1) * A]
+                    pending_aux[i] = (a_rows.copy(),
+                                      tuple(x[k * A:(k + 1) * A].copy() for x in aux))
+                    self.envs[i].send_step(a_rows)
+
+        return np.concatenate(last, axis=0)
+
     def reset(self) -> np.ndarray:
         self._done_hosts = [False] * len(self.envs)
         # Every host rebuilds at once rather than in turn: N resets cost one reset's wall time, not N.

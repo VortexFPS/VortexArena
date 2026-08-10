@@ -9,11 +9,13 @@ from __future__ import annotations
 import atexit
 import os
 import shutil
+import select
 import socket
 import struct
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -341,6 +343,49 @@ class VectorEnv:
         self.num_agents = self.agents_per_host * len(self.envs)
         self._done_hosts = [False] * len(self.envs)
 
+        # Per-host reply timing, off unless VX_HOST_TIMING is set. See _record_host_times.
+        self._timing = os.environ.get("VX_HOST_TIMING", "") not in ("", "0")
+        self._t_max: list[float] = []
+        self._t_mean: list[float] = []
+
+    def _record_host_times(self) -> None:
+        """When each host's reply becomes readable, relative to the moment they were all sent.
+
+        This is the measurement that decides whether more machines would help. The env steps in LOCKSTEP:
+        every host must answer before the batch advances, so a step costs max(host times), not mean. Hosts
+        draw maps ranging from 13k to 55k spans, so the spread may be wide -- and if it is, utilisation is
+        capped by the slowest host and ADDING hosts makes the max worse, not better. A host-count sweep
+        already found CPU pinned at 58-62% from 32 to 80 hosts with throughput flattening; this says whether
+        stragglers are the reason.
+
+        Timing readiness rather than the receive call is the whole point: receives happen in host order, so
+        timing them measures queueing behind host 0 rather than how long each host actually took.
+        """
+        pending = {e.sock.fileno(): e for e in self.envs}
+        t0 = time.perf_counter()
+        seen: list[float] = []
+        while pending:
+            ready, _, _ = select.select(list(pending), [], [], 30.0)
+            if not ready:
+                break            # a host died or wedged; the receive below will fail with a clearer message
+            now = time.perf_counter() - t0
+            for fd in ready:
+                pending.pop(fd, None)
+                seen.append(now)
+        if seen:
+            self._t_max.append(max(seen))
+            self._t_mean.append(sum(seen) / len(seen))
+
+    def timing_report(self) -> str:
+        if not self._t_max:
+            return "host timing: no samples (set VX_HOST_TIMING=1)"
+        n = len(self._t_max)
+        mx = sum(self._t_max) / n
+        mn = sum(self._t_mean) / n
+        idle = (1.0 - mn / mx) * 100.0 if mx > 0 else 0.0
+        return (f"host timing over {n} steps: slowest {mx * 1000:.1f} ms, average {mn * 1000:.1f} ms, "
+                f"so {idle:.0f}% of each step is hosts idle waiting on the straggler")
+
     def reset(self) -> np.ndarray:
         self._done_hosts = [False] * len(self.envs)
         # Every host rebuilds at once rather than in turn: N resets cost one reset's wall time, not N.
@@ -354,6 +399,9 @@ class VectorEnv:
         for i, env in enumerate(self.envs):
             lo = i * self.agents_per_host
             env.send_step(actions[lo : lo + self.agents_per_host])
+
+        if self._timing:
+            self._record_host_times()
 
         obs_parts, rew_parts, done_parts, trunc_parts = [], [], [], []
         needs_reset = []

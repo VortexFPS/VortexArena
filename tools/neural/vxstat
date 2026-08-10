@@ -174,6 +174,40 @@ def seconds_per_update(lines):
     return dt / du if du > 0 and dt > 0 else None
 
 
+def past_eval_seconds(lines):
+    """Median wall time a completed eval took on this run, or None.
+
+    Derived, not stored. Every update line carries cumulative steps and a cumulative steps/s, so steps/sps is
+    the elapsed time at that line -- and the gap between consecutive updates is the wall time between them.
+    Most gaps are one update; the ones that also contain an eval are several times longer. Subtracting the
+    typical update from those long gaps leaves the eval.
+    """
+    elapsed = {}
+    for line in lines:
+        m = UPDATE.search(line)
+        if m:
+            try:
+                sps = float(m["sps"])
+                if sps > 0:
+                    elapsed[int(m["update"])] = int(m["steps"].replace(",", "")) / sps
+            except (ValueError, ZeroDivisionError):
+                continue
+    keys = sorted(elapsed)
+    if len(keys) < 6:
+        return None
+    gaps = [(elapsed[b] - elapsed[a]) for a, b in zip(keys, keys[1:]) if b - a == 1]
+    if len(gaps) < 5:
+        return None
+    ordered = sorted(gaps)
+    spu = ordered[len(ordered) // 2]
+    # Anything past three normal updates is an eval stall rather than a slow update.
+    stalls = [g - spu for g in gaps if g > spu * 3.0]
+    if not stalls:
+        return None
+    stalls.sort()
+    return stalls[len(stalls) // 2]
+
+
 def parse(lines):
     st = {"update": None, "evals": [], "stage": None, "budget": None, "gate": None,
           "skipped": 0, "diverge": 0, "starved": 0, "relaxed": 0}
@@ -338,9 +372,21 @@ def render(s):
         except (TypeError, ValueError):
             every = 0
         shards = [p for p, c, _ in procs if "va-neural-host.dll" in c and "--bench" in c and "--policy" in c]
+        try:
+            total_shards = int(cfg.get("eval_shards", 0)) or len(shards)
+        except (TypeError, ValueError):
+            total_shards = len(shards)
+        typical = past_eval_seconds(tail(os.path.join(run_dir, "train.log")))
+
         if shards:
-            elapsed = min(uptime_of(p) for p in shards)
-            w(f"    next eval   {s.cyan('RUNNING NOW')}  {len(shards)} shards, {dur(elapsed)} elapsed")
+            # The shards run CONCURRENTLY, so this is how many have finished, not which one is being worked
+            # on. The eval ends when the last one does, which is why the estimate tracks the slowest.
+            elapsed = max(uptime_of(p) for p in shards)
+            done = max(0, total_shards - len(shards))
+            left = f"  ~{dur(max(0.0, typical - elapsed))} left" if typical and typical > elapsed else ""
+            of = f" of ~{dur(typical)}" if typical else ""
+            w(f"    next eval   {s.cyan('RUNNING NOW')}  {done}/{total_shards} shards done, "
+              f"{dur(elapsed)}{of} elapsed{left}")
         elif every > 0:
             done = int(u["update"])
             togo = every - (done % every)
@@ -348,6 +394,12 @@ def render(s):
             eta = f"  ~{dur(togo * spu)}" if spu else ""
             w(f"    next eval   in {togo} update{'s' if togo != 1 else ''}{eta}"
               f"   {bar((every - togo) / every, 14, s)}")
+            if typical:
+                # What each score costs, since it is training time that is not being spent training.
+                share = typical / (typical + every * spu) * 100.0 if spu else 0.0
+                w(f"    eval cost   ~{dur(typical)} each"
+                  + (f", {share:.0f}% of the cycle" if share else "")
+                  + f"   ({total_shards} shards in parallel)")
         w("")
         w(s.bold("  MODEL"))
         ent, kl = float(u["ent"]), float(u["kl"])

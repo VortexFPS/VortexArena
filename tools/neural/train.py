@@ -650,6 +650,11 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         else:
             dead_updates = 0
 
+        # Straggler read-out, only when the timing is armed. Printed periodically rather than at exit so a
+        # run that is killed mid-flight still reports something.
+        if update % 2 == 0 and getattr(env, "_timing", False):
+            print(f"[s{stage}] {env.timing_report()}", flush=True)
+
         if update % 20 == 0:
             save(policy, norm, optimizer, stage, run_dir)
 

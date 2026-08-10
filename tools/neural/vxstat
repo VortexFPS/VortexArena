@@ -323,9 +323,30 @@ def parse(lines):
 
 # ---------------------------------------------------------------- formatting
 
+def _enable_windows_ansi():
+    """Turn on VT processing so ANSI escapes render instead of printing as literal gibberish.
+
+    Windows Terminal does this already; the older console host does not, and the difference is invisible
+    until the panel is full of escape codes. Harmless where it is already on.
+    """
+    if not WINDOWS:
+        return
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        handle = k.GetStdHandle(-11)           # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if k.GetConsoleMode(handle, ctypes.byref(mode)):
+            k.SetConsoleMode(handle, mode.value | 0x0004)   # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    except Exception:
+        pass
+
+
 class Style:
     def __init__(self, on):
         self.on = on
+        if on:
+            _enable_windows_ansi()
 
     def __call__(self, s, code):
         return f"\033[{code}m{s}\033[0m" if self.on else s
@@ -407,7 +428,10 @@ def render(s):
                        for d in os.listdir(RUNS)
                        if os.path.exists(os.path.join(RUNS, d, "train.log"))), reverse=True)
         if not logs:
-            w(s.red("no runs found under " + RUNS))
+            # Not an error. A machine that contributes hosts to someone else's trainer, or one that simply
+            # has not started yet, legitimately has no runs of its own -- and red text saying so above a
+            # perfectly healthy peer reads like a fault.
+            w(s.dim(f"  no runs on this machine ({RUNS})"))
         else:
             render_run(s, w, logs[0][1], None, 0,
                        s.red("STOPPED") + s.dim(f"  (last touched {dur(time.time() - logs[0][0])} ago)"),
@@ -561,7 +585,7 @@ def render_stages(s, w, run_dir, st, stage, up, pid):
             w(f"    stage {stage}   {dur(time.time() - prev):<10} {s.cyan('running')}")
 
 
-def peer_panel(target, plain):
+def peer_panel(target, plain, color):
     """Another machine's panel, fetched over ssh.
 
     A shell-out rather than a daemon, deliberately: ssh already handles auth and transport, vxstat is
@@ -569,8 +593,11 @@ def peer_panel(target, plain):
     running. A peer that is down or prompting shows as a line, never as a hang.
     """
     import subprocess
-    cmd = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", target,
-           "vxstat --plain" if plain else "vxstat"]
+    # The far side's stdout is this pipe, not a terminal, so it would correctly decide colour is unwanted --
+    # but the decision belongs to where the panel is finally DISPLAYED, which only this end knows. So the
+    # peer is told to match whatever the local half is doing.
+    remote = "vxstat --plain" if plain else ("vxstat --color" if color else "vxstat")
+    cmd = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", target, remote]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
         return (r.stdout or r.stderr or "").rstrip() or f"  {target}: no output"
@@ -593,13 +620,15 @@ def main():
                 every = float(args[i + 1])
             except ValueError:
                 pass
-    s = Style(not plain and sys.stdout.isatty())
+    # isatty is the right default and the wrong answer when something else is reading the output on purpose,
+    # which is exactly the peer case: --color says "emit it anyway, I know where this is going".
+    s = Style(not plain and (sys.stdout.isatty() or "--color" in args))
 
     def panel():
         parts = [render(s)]
         for t in peers:
             parts.append("")
-            parts.append(peer_panel(t, plain))
+            parts.append(peer_panel(t, plain, s.on))
         return "\n".join(parts)
 
     if not watch:

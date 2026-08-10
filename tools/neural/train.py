@@ -660,7 +660,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
 
         _u0 = time.perf_counter()
         stats = ppo_update(policy, optimizer, hyper, obs_buf, act_buf, logp_buf, adv, ret, device,
-                           alive_buf=alive_buf, update=update)
+                           alive_buf=alive_buf, update=update, val_buf=val_buf)
         t_upd = time.perf_counter() - _u0
 
         # Rollout arrivals, from SAMPLED actions. A progress signal, not a gate: see the eval below.
@@ -1046,7 +1046,7 @@ def _dump_divergence(policy, tensors: dict, update: int) -> None:
 
 
 def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv, ret, device,
-               alive_buf=None, update: int = -1) -> dict:
+               alive_buf=None, update: int = -1, val_buf=None) -> dict:
     T, N = adv.shape
     # Drop padding outright rather than weighting it to zero. An agent that has already finished keeps
     # being reported every step -- zero reward, done 1, all-zero observation -- until the whole host
@@ -1059,6 +1059,9 @@ def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv,
     b_logp = torch.as_tensor(logp_buf.reshape(T * N), device=device)[keep]
     b_adv = torch.as_tensor(adv.reshape(T * N), device=device)[keep]
     b_ret = torch.as_tensor(ret.reshape(T * N), device=device)[keep]
+    # The value each state was given when it was collected. Value clipping is measured against this.
+    b_val = (torch.as_tensor(val_buf.reshape(T * N), device=device)[keep]
+             if val_buf is not None else None)
     b_adv = (b_adv - b_adv.mean()) / (b_adv.std() + 1e-8)
 
     # The masked row count, NOT T*N: selecting padding out above shortened every buffer, and indexing the
@@ -1094,7 +1097,17 @@ def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv,
             surr1 = ratio * b_adv[mb]
             surr2 = torch.clamp(ratio, 1 - hyper.clip, 1 + hyper.clip) * b_adv[mb]
             policy_loss = -torch.min(surr1, surr2).mean()
-            value_loss = 0.5 * (value - b_ret[mb]).pow(2).mean()
+            # Clipped value loss: the prediction may move at most hyper.clip away from what it was when
+            # the batch was collected, and the WORSE of the two errors is optimised so clipping can never
+            # make the objective easier. Unclipped, a large target pulls the output layer hard, the next
+            # rollout's targets are computed from the larger output, and the loop runs away -- which is how
+            # critic.4.bias reached inf in v24 with every input still finite.
+            if b_val is not None:
+                v_clipped = b_val[mb] + (value - b_val[mb]).clamp(-hyper.clip, hyper.clip)
+                value_loss = 0.5 * torch.max((value - b_ret[mb]).pow(2),
+                                             (v_clipped - b_ret[mb]).pow(2)).mean()
+            else:
+                value_loss = 0.5 * (value - b_ret[mb]).pow(2).mean()
             ent = entropy.mean()
 
             loss = policy_loss + hyper.value_coef * value_loss - hyper.entropy_coef * ent
@@ -1135,7 +1148,25 @@ def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv,
                 out["nonfinite"] += 1
                 optimizer.zero_grad()
                 continue
+
+            # Snapshot, step, verify, roll back. Both checks above run BEFORE the step and therefore cannot
+            # see a step that itself lands on inf -- which is the case that killed v24, where the loss and
+            # the gradients were finite and critic.4.bias came out of the update non-finite. At ~45k
+            # parameters the copy is about 180 KB, so this is cheap insurance rather than a real cost.
+            snapshot = [pm.detach().clone() for pm in policy.parameters()]
             optimizer.step()
+            if not all(torch.isfinite(pm).all() for pm in policy.parameters()):
+                bad = [nm for nm, pm in policy.named_parameters() if not torch.isfinite(pm).all()]
+                with torch.no_grad():
+                    for pm, saved in zip(policy.parameters(), snapshot):
+                        pm.copy_(saved)
+                out["nonfinite"] += 1
+                out["rolled_back"] = out.get("rolled_back", 0) + 1
+                if out["rolled_back"] == 1:
+                    print(f"[guard] update {update}: step produced non-finite {bad}; weights rolled back",
+                          flush=True)
+                optimizer.zero_grad()
+                continue
 
             with torch.no_grad():
                 # Schulman's k3 estimator: (r - 1) - log r. Non-negative by construction and far lower

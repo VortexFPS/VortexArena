@@ -23,6 +23,7 @@ when stage N-1's -done.pt was written.
 import os
 import re
 import sys
+import threading
 import time
 from datetime import datetime
 
@@ -63,14 +64,31 @@ _WIN_SNAP = {"t": 0.0, "data": None}
 PROC_CACHE_SECONDS = 4.0
 
 
+_WIN_REFRESHING = {"on": False}
+
+
 def _windows_snapshot():
+    """Cached process snapshot; a stale copy is returned instantly while a thread refreshes it.
+
+    Blocking here was the panel freeze: cache expiry put a ~20 s WMI query in the render path every 4 s. Only
+    the very first call blocks, because there is nothing to show yet.
+    """
+    now = time.time()
+    data = _WIN_SNAP["data"]
+    if data is not None:
+        if now - _WIN_SNAP["t"] >= PROC_CACHE_SECONDS and not _WIN_REFRESHING["on"]:
+            _WIN_REFRESHING["on"] = True
+            threading.Thread(target=_windows_snapshot_fill, daemon=True).start()
+        return data
+    return _windows_snapshot_fill()
+
+
+def _windows_snapshot_fill():
     import json
     import subprocess
-    now = time.time()
-    if _WIN_SNAP["data"] is not None and now - _WIN_SNAP["t"] < PROC_CACHE_SECONDS:
-        return _WIN_SNAP["data"]
     ps = (
-        "$p = Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine,WorkingSetSize,CreationDate;"
+        "$p = Get-CimInstance Win32_Process -Filter \"Name='dotnet.exe' OR Name='python.exe'\""
+        " | Select-Object ProcessId,CommandLine,WorkingSetSize,CreationDate;"
         "$o = Get-CimInstance Win32_OperatingSystem;"
         "$c = (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average;"
         "[pscustomobject]@{procs=$p; freeKB=$o.FreePhysicalMemory; totalKB=$o.TotalVisibleMemorySize;"
@@ -84,7 +102,8 @@ def _windows_snapshot():
             data = json.loads(r.stdout)
     except Exception:
         pass
-    _WIN_SNAP.update(t=now, data=data)
+    _WIN_SNAP.update(t=time.time(), data=data)
+    _WIN_REFRESHING["on"] = False
     return data
 
 
@@ -729,56 +748,74 @@ def _match_peer(addr, peers):
 
 def job_block(r, snap, peers, s, claimed):
     out = [""]
-    state = s.green("running") if r["running"] else s.red("STOPPED")
-    out.append("  %s  stage %d  %s  %s" % (s.bold(s.cyan(r["name"])), r["stage"], state,
-                                           s.dim("up " + dur(r["up"]))))
+    state = s.green("RUNNING") if r["running"] else s.red("STOPPED")
+    title = "%s  stage %d  %s  up %s " % (r["name"], r["stage"], "RUNNING" if r["running"] else "STOPPED",
+                                          dur(r["up"]))
+    rule = "-" * max(4, 78 - len(title))
+    out.append("%s  stage %d  %s  %s %s" % (s.bold(s.cyan(r["name"])), r["stage"], state,
+                                            s.dim("up " + dur(r["up"])), s.dim(rule)))
+
+    # evals: history first, verdict on the same line. The history is the thing being watched.
+    best = "%.1f" % r["best"] if r["best"] is not None else "-"
+    verdict = ""
+    if r["best"] is not None and r["gate"]:
+        d = r["gate"] - r["best"]
+        # Under ~5 points is inside a single eval's own spread; naming that stops overreading a near-miss.
+        verdict = (s.green("CLEARS gate %.0f%%" % r["gate"]) if d <= 0 else
+                   s.yellow("%.1f under gate %.0f%% (noise is ~5)" % (d, r["gate"])) if d < 5 else
+                   "%.1f under gate %.0f%%" % (d, r["gate"]))
+    else:
+        verdict = s.dim("gate %.0f%%" % r["gate"]) if r["gate"] else ""
+    ratio = ""
+    if r["baseline"] and r["best"]:
+        ratio = s.dim("  %.2fx base" % (r["best"] / r["baseline"]))
+    out.append("  %-7s %s    %s%s" % (s.dim("evals"), spark(r["last"], s), verdict, ratio))
 
     pct = r["steps"] / r["budget"] if r["budget"] else 0
     eta = ""
     if r["sps"] and r["budget"] > r["steps"]:
         eta = "   ETA %s" % dur((r["budget"] - r["steps"]) / r["sps"])
-    out.append("    %-10s %5.2fM / %.0fM steps  %s %3.0f%%%s" % (
-        "progress", r["steps"] / 1e6, r["budget"] / 1e6, bar(pct, 20, s), pct * 100, eta))
+    out.append("  %-7s %s %3.0f%%   %.2fM/%.0fM   %s steps/s%s" % (
+        s.dim("steps"), bar(pct, 20, s), pct * 100, r["steps"] / 1e6, r["budget"] / 1e6,
+        "{:,.0f}".format(r["sps"]), eta))
 
-    out.append("    %-10s %s" % ("evals", spark(r["last"], s)))
-    best = "%.1f%%" % r["best"] if r["best"] is not None else "-"
-    ratio = ""
-    if r["baseline"] and r["best"]:
-        ratio = "  (%.2fx baseline %.1f%%)" % (r["best"] / r["baseline"], r["baseline"])
-    gap = ""
-    if r["best"] is not None and r["gate"]:
-        d = r["gate"] - r["best"]
-        # Under ~5 points is inside the eval's own spread, so it is not a pass and not a plateau either.
-        gap = (s.green("  CLEARS gate") if d <= 0 else
-               s.yellow("  %.1f under gate (within noise)" % d) if d < 5 else
-               s.dim("  %.1f under gate" % d))
-    out.append("    %-10s best %s  gate %.0f%%%s%s" % ("", s.bold(best), r["gate"], ratio, gap))
-
-    out.append("    %-10s %s steps/s   update #%s   sampled %.1f%%   %s" % (
-        "rate", "{:,.0f}".format(r["sps"]), "{:,}".format(r["update"]), r["sampled"], eval_word(r, s)))
-    out.append("    %-10s entropy %.3f   kl %.4f   health %s" % (
-        "model", r["entropy"], r["kl"], health_word(r, s)))
+    out.append("  %-7s update %s   sampled %.1f%%   entropy %.3f   kl %.4f   %s   %s" % (
+        s.dim("state"), "{:,}".format(r["update"]), r["sampled"], r["entropy"], r["kl"],
+        health_word(r, s), eval_word(r, s)))
 
     total_hosts = snap["hosts"] + sum(x["count"] for x in r.get("remotes", []))
-    out.append("    %-10s" % "machines")
-    role = "trainer" + (" + hosts" if snap["hosts"] else "")
-    out.append(machine_line(snap, s, role,
-                            agents=(snap["hosts"] * snap.get("agents_per_host", 16)) or None,
-                            share=(100.0 * snap["hosts"] / total_hosts) if total_hosts and snap["hosts"] else None,
-                            evaling=r["eval_running"]))
+    role = "trainer" + ("+hosts" if snap["hosts"] else "")
+    out.append("  %-7s %s" % (s.dim("fleet"),
+                              fleet_line(snap, s, role, snap["hosts"], total_hosts, r["eval_running"])))
     for rem in r.get("remotes", []):
         peer = _match_peer(rem["addr"], peers)
         if peer is not None:
             claimed.add(peer["machine"])
-            out.append(machine_line(peer, s, "worker", hosts=rem["count"],
-                                    agents=rem["count"] * peer.get("agents_per_host", 16),
-                                    share=(100.0 * rem["count"] / total_hosts) if total_hosts else None,
-                                    evaling=r["eval_running"]))
+            out.append("  %-7s %s" % ("", fleet_line(peer, s, "worker", rem["count"], total_hosts,
+                                                     r["eval_running"])))
         else:
-            out.append("    %-14s %-18s %3d hosts  %s" % (
-                rem["addr"], s.dim("worker"), rem["count"],
-                s.yellow("not polled - add --peer to see its stats")))
+            out.append("  %-7s %-13s %-8s %3d hosts   %s" % (
+                "", rem["addr"], s.dim("worker"), rem["count"],
+                s.yellow("not polled - add --peer")))
     return out
+
+
+def fleet_line(snap, s, role, hosts, total_hosts, evaling):
+    cpu = snap.get("cpu", 0.0)
+    cpu_txt = "cpu %3.0f%%" % (cpu * 100)
+    if cpu < 0.15 and evaling:
+        cpu_txt = s.dim(cpu_txt + " (eval)")
+    elif cpu < 0.15 and hosts:
+        cpu_txt = s.yellow(cpu_txt + " IDLE")
+    elif cpu > 0.85:
+        cpu_txt = s.green(cpu_txt)
+    agents = hosts * snap.get("agents_per_host", 16)
+    share = "  %2.0f%% fleet" % (100.0 * hosts / total_hosts) if total_hosts and hosts else ""
+    hosts_txt = "%3d hosts" % hosts if hosts else s.dim("  - hosts")
+    agents_txt = "  %4d agents" % agents if agents else ""
+    age = s.dim("  (%.0fs old)" % snap["age"]) if snap.get("age", 0) > 12 else ""
+    return "%-13s %-8s %s   %-9s %s%s%s%s" % (
+        snap["machine"], s.dim(role), hosts_txt, ram_cell(snap, s), cpu_txt, agents_txt, share, age)
 
 
 def render_jobs(local, peers, s):

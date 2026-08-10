@@ -54,14 +54,20 @@ WINDOWS = os.name == "nt"
 # The Linux path reads /proc, which does not exist on Windows -- and once a worker machine runs Windows, a
 # status tool that only works on Linux tells you nothing about half the fleet. Snapshotting once and sharing
 # it keeps this to a single subprocess per refresh instead of four.
+# The process list is the expensive part and the slowest-changing: host counts and which runs exist move on
+# a timescale of minutes. Memory and CPU are wanted every frame and are nearly free through ctypes, so they
+# no longer ride along with it. Measured before this split: a single snapshot took 21 SECONDS on Windows,
+# because Get-CimInstance Win32_Process has to materialise a command line for every process on the box --
+# which is why a panel asked to refresh once a second refreshed about once every eleven.
 _WIN_SNAP = {"t": 0.0, "data": None}
+PROC_CACHE_SECONDS = 4.0
 
 
 def _windows_snapshot():
     import json
     import subprocess
     now = time.time()
-    if _WIN_SNAP["data"] is not None and now - _WIN_SNAP["t"] < 1.0:
+    if _WIN_SNAP["data"] is not None and now - _WIN_SNAP["t"] < PROC_CACHE_SECONDS:
         return _WIN_SNAP["data"]
     ps = (
         "$p = Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine,WorkingSetSize,CreationDate;"
@@ -166,12 +172,73 @@ def uptime_of(pid):
 
 # ---------------------------------------------------------------- machine
 
+def _win_meminfo():
+    """Total/free physical memory via GlobalMemoryStatusEx. Microseconds, against ~21 s for the WMI path."""
+    import ctypes
+    class MEMORYSTATUSEX(ctypes.Structure):
+        _fields_ = [("dwLength", ctypes.c_uint32), ("dwMemoryLoad", ctypes.c_uint32),
+                    ("ullTotalPhys", ctypes.c_uint64), ("ullAvailPhys", ctypes.c_uint64),
+                    ("ullTotalPageFile", ctypes.c_uint64), ("ullAvailPageFile", ctypes.c_uint64),
+                    ("ullTotalVirtual", ctypes.c_uint64), ("ullAvailVirtual", ctypes.c_uint64),
+                    ("ullAvailExtendedVirtual", ctypes.c_uint64)]
+    m = MEMORYSTATUSEX()
+    m.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m)):
+        return 0.0, 0.0, 0.0
+    total = m.ullTotalPhys / (1024.0 ** 3)
+    avail = m.ullAvailPhys / (1024.0 ** 3)
+    return total, total - avail, avail
+
+
+# CPU as a rate between calls, not a load average.
+#
+# Load average is a one-minute mean, so on a panel refreshing every second it lags far behind what the
+# machine is doing -- during an eval the hosts go quiet and loadavg keeps reporting the previous minute's
+# work, or reports 0.01 a minute after they stopped. Busy fraction between two samples tracks the actual
+# state, and reads the same on both platforms.
+_CPU_PREV = {"idle": 0.0, "total": 0.0}
+
+
+def cpu_busy():
+    """Fraction of all cores busy since the previous call, 0..1."""
+    if WINDOWS:
+        import ctypes
+        idle = ctypes.c_uint64()
+        kern = ctypes.c_uint64()
+        user = ctypes.c_uint64()
+        if not ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kern),
+                                                     ctypes.byref(user)):
+            return 0.0
+        # Kernel time INCLUDES idle time on Windows, so total is kernel + user and busy is total - idle.
+        idle_t, total_t = float(idle.value), float(kern.value + user.value)
+    else:
+        try:
+            with open("/proc/stat") as fh:
+                parts = [float(x) for x in fh.readline().split()[1:]]
+        except (OSError, ValueError):
+            return 0.0
+        idle_t = sum(parts[3:5])
+        total_t = sum(parts)
+
+    # The first call has nothing to difference against, so the "delta" spans the whole of uptime -- the
+    # average since boot, which on a box that idled for hours reads far below what it is doing now. That is
+    # exactly the case that matters, because a peer answers with a single one-shot invocation.
+    if _CPU_PREV["total"] == 0.0:
+        _CPU_PREV.update(idle=idle_t, total=total_t)
+        time.sleep(0.2)
+        return cpu_busy()
+
+    d_idle = idle_t - _CPU_PREV["idle"]
+    d_total = total_t - _CPU_PREV["total"]
+    _CPU_PREV.update(idle=idle_t, total=total_t)
+    if d_total <= 0:
+        return 0.0
+    return max(0.0, min(1.0, 1.0 - d_idle / d_total))
+
+
 def meminfo():
     if WINDOWS:
-        snap = _windows_snapshot()
-        total = (snap.get("totalKB") or 0) / 1048576.0
-        avail = (snap.get("freeKB") or 0) / 1048576.0
-        return total, total - avail, avail
+        return _win_meminfo()
     vals = {}
     try:
         with open("/proc/meminfo") as fh:
@@ -408,7 +475,9 @@ def snapshot():
     reader had to correlate them by eye.
     """
     procs = list(processes())
-    hosts = [(p, r) for p, c, r in procs if "va-neural-host.dll" in c]
+    # Eval shards are the same binary with --bench, and counting them as training hosts overstates the
+    # fleet exactly when it is doing the least work -- a run with --hosts 0 appeared to have four.
+    hosts = [(p, r) for p, c, r in procs if "va-neural-host.dll" in c and "--bench" not in c]
     benches = [1 for _, c, _ in procs if "va-neural-host.dll" in c and "--bench" in c]
     total, used, free = meminfo()
 
@@ -419,7 +488,8 @@ def snapshot():
         "benches": sum(benches),
         "worst_host_mb": max((r for _, r in hosts), default=0) / 1024.0,
         "ram_used": used, "ram_total": total, "ram_free": free,
-        "load": loadavg(),
+        "cpu": cpu_busy(),
+        "agents_per_host": 16,
         "runs": [],
     }
 
@@ -580,80 +650,72 @@ class Peers:
 
 # ---------------------------------------------------------------- table
 
-def health_cell(r, s):
-    """One cell, not four lines. Silence is the healthy case."""
+def health_word(r, s):
     bad = []
     if r["skipped"]:
-        bad.append(f"skip{r['skipped']}")
+        bad.append("SKIPPED x%d" % r["skipped"])
     if r["diverge"]:
-        bad.append("DIVERGE")
+        bad.append("DIVERGING")
     if r["starved"]:
-        bad.append("STARVE")
+        bad.append("COURSE STARVATION")
     if r["relaxed"]:
-        bad.append("relax")
-    return s.red(" ".join(bad)) if bad else s.green("ok")
+        bad.append("bounds relaxed")
+    return s.red(", ".join(bad)) if bad else s.green("ok")
 
 
-def eval_cell(r, s):
+def eval_word(r, s):
     if r["eval_running"]:
         left = ""
         if r["eval_secs"] and r["eval_secs"] > r["eval_elapsed"]:
-            left = f"-{dur(r['eval_secs'] - r['eval_elapsed'])}"
-        return s.cyan(f"{r['eval_done']}/{r['eval_total']} {left}")
+            left = ", ~%s left" % dur(r["eval_secs"] - r["eval_elapsed"])
+        return s.cyan("EVAL RUNNING %d/%d shards%s" % (r["eval_done"], r["eval_total"], left))
     if r["eval_every"] and r["update"]:
         togo = r["eval_every"] - (r["update"] % r["eval_every"])
-        if not r["spu"]:
-            return f"in {togo}u"
-        secs = togo * r["spu"]
-        eta = f"{secs / 60:.0f}m" if secs >= 60 else f"{secs:.0f}s"
-        return f"in {togo}u {eta}"
-    return "-"
+        if r["spu"]:
+            return "next eval in %du (~%s)" % (togo, dur(togo * r["spu"]))
+        return "next eval in %du" % togo
+    return "next eval unknown"
 
 
-def pad(text, width, s):
-    """Pad to a visible width, ignoring escape codes, which str.ljust would count."""
-    visible = re.sub(r"\033\[[0-9;]*m", "", text)
-    return text + " " * max(0, width - len(visible))
+def spark(vals, s):
+    """Eval history as numbers, best in bold. Exact enough to trust, short enough to scan."""
+    if not vals:
+        return s.dim("none yet")
+    best = max(vals)
+    return "  ".join(s.bold("%.1f" % v) if v == best else "%.1f" % v for v in vals)
 
 
-COLS = [("JOB", 8), ("MACHINE", 14), ("ST", 3), ("BEST", 7), ("GATE", 6), ("PROGRESS", 20),
-        ("STEP/S", 8), ("HOSTS", 6), ("RAM", 12), ("CPU", 5), ("EVAL", 15), ("HEALTH", 8)]
+def ram_cell(snap, s):
+    if not snap.get("ram_total"):
+        return "-"
+    txt = "%.0f/%.0f GB" % (snap["ram_used"], snap["ram_total"])
+    if snap["ram_free"] < 2.0:
+        return s.red(txt)
+    if snap["ram_free"] < 4.0:
+        return s.yellow(txt)
+    return txt
 
 
-def render_table(local, peers, s):
-    out = []
-    now = (datetime.now(EASTERN).strftime("%I:%M:%S %p ET").lstrip("0")
-           if EASTERN else datetime.now().strftime("%I:%M:%S %p local").lstrip("0"))
-    header = "".join(pad(s.dim(h), w, s) for h, w in COLS)
-    out.append(s.bold("VORTEX NEURAL TRAINING") + s.dim(f"    {now}"))
-    out.append("")
-    out.append("  " + header)
-
-    by_machine = {p["machine"]: p for p in peers}
-    all_snaps = [local] + peers
-
-    # One block per job: the trainer's machine, then every machine feeding it hosts.
-    shown_machines = set()
-    for snap in all_snaps:
-        for r in snap.get("runs", []):
-            out.append("  " + job_row(r, snap, s, trainer=True))
-            shown_machines.add(snap["machine"])
-            for rem in r.get("remotes", []):
-                peer = _match_peer(rem["addr"], peers)
-                if peer is not None:
-                    out.append("  " + worker_row(peer, rem, s))
-                    shown_machines.add(peer["machine"])
-                else:
-                    out.append("  " + pad("", 8, s) + pad(s.dim(rem["addr"]), 14, s)
-                               + s.dim(f"{rem['count']} hosts, machine not polled (add --peer)"))
-
-    # Machines with no job of their own and not claimed by one above.
-    for snap in all_snaps:
-        if snap["machine"] in shown_machines:
-            continue
-        out.append("  " + idle_row(snap, s))
-
-    return "\n".join(out)
+def machine_line(snap, s, role, hosts=None, agents=None, share=None, evaling=False):
+    hosts = snap["hosts"] if hosts is None else hosts
+    cpu = snap.get("cpu", 0.0)
+    txt = "%3.0f%%" % (cpu * 100)
+    # A worker sitting idle during an eval is expected, not a stall. Saying which it is stops a reader
+    # concluding the fleet has died every time a score is being measured.
+    if cpu < 0.15 and evaling:
+        txt = s.dim(txt + " idle (eval)")
+    elif cpu < 0.15 and hosts:
+        txt = s.yellow(txt + " IDLE")
+    elif cpu > 0.85:
+        txt = s.green(txt)
+    extra = ""
+    if agents:
+        extra += "  %d agents" % agents
+    if share:
+        extra += ", %.0f%% of fleet" % share
+    age = s.dim("  %.0fs ago" % snap["age"]) if snap.get("age", 0) > 12 else ""
+    return "    %-14s %-18s %3d hosts  %-14s %s%s%s" % (
+        snap["machine"], s.dim(role), hosts, ram_cell(snap, s), txt, extra, age)
 
 
 def _match_peer(addr, peers):
@@ -665,77 +727,86 @@ def _match_peer(addr, peers):
     return None
 
 
-def job_row(r, snap, s, trainer):
+def job_block(r, snap, peers, s, claimed):
+    out = [""]
+    state = s.green("running") if r["running"] else s.red("STOPPED")
+    out.append("  %s  stage %d  %s  %s" % (s.bold(s.cyan(r["name"])), r["stage"], state,
+                                           s.dim("up " + dur(r["up"]))))
+
     pct = r["steps"] / r["budget"] if r["budget"] else 0
-    best = f"{r['best']:.1f}%" if r["best"] is not None else "-"
-    gate = f"{r['gate']:.0f}%" if r["gate"] else "-"
-    name = r["name"] + ("" if r["running"] else "*")
-    cells = [
-        s.cyan(name) if r["running"] else s.red(name),
-        s.bold(snap["machine"]),
-        str(r["stage"]),
-        s.bold(best),
-        gate,
-        f"{pct * 100:3.0f}% {bar(pct, 12, s)}",
-        f"{r['sps']:,.0f}",
-        str(snap["hosts"]),
-        ram_cell(snap, s),
-        cpu_cell(snap, s),
-        eval_cell(r, s),
-        health_cell(r, s),
-    ]
-    return "".join(pad(c, w, s) for c, (_, w) in zip(cells, COLS))
+    eta = ""
+    if r["sps"] and r["budget"] > r["steps"]:
+        eta = "   ETA %s" % dur((r["budget"] - r["steps"]) / r["sps"])
+    out.append("    %-10s %5.2fM / %.0fM steps  %s %3.0f%%%s" % (
+        "progress", r["steps"] / 1e6, r["budget"] / 1e6, bar(pct, 20, s), pct * 100, eta))
+
+    out.append("    %-10s %s" % ("evals", spark(r["last"], s)))
+    best = "%.1f%%" % r["best"] if r["best"] is not None else "-"
+    ratio = ""
+    if r["baseline"] and r["best"]:
+        ratio = "  (%.2fx baseline %.1f%%)" % (r["best"] / r["baseline"], r["baseline"])
+    gap = ""
+    if r["best"] is not None and r["gate"]:
+        d = r["gate"] - r["best"]
+        # Under ~5 points is inside the eval's own spread, so it is not a pass and not a plateau either.
+        gap = (s.green("  CLEARS gate") if d <= 0 else
+               s.yellow("  %.1f under gate (within noise)" % d) if d < 5 else
+               s.dim("  %.1f under gate" % d))
+    out.append("    %-10s best %s  gate %.0f%%%s%s" % ("", s.bold(best), r["gate"], ratio, gap))
+
+    out.append("    %-10s %s steps/s   update #%s   sampled %.1f%%   %s" % (
+        "rate", "{:,.0f}".format(r["sps"]), "{:,}".format(r["update"]), r["sampled"], eval_word(r, s)))
+    out.append("    %-10s entropy %.3f   kl %.4f   health %s" % (
+        "model", r["entropy"], r["kl"], health_word(r, s)))
+
+    total_hosts = snap["hosts"] + sum(x["count"] for x in r.get("remotes", []))
+    out.append("    %-10s" % "machines")
+    role = "trainer" + (" + hosts" if snap["hosts"] else "")
+    out.append(machine_line(snap, s, role,
+                            agents=(snap["hosts"] * snap.get("agents_per_host", 16)) or None,
+                            share=(100.0 * snap["hosts"] / total_hosts) if total_hosts and snap["hosts"] else None,
+                            evaling=r["eval_running"]))
+    for rem in r.get("remotes", []):
+        peer = _match_peer(rem["addr"], peers)
+        if peer is not None:
+            claimed.add(peer["machine"])
+            out.append(machine_line(peer, s, "worker", hosts=rem["count"],
+                                    agents=rem["count"] * peer.get("agents_per_host", 16),
+                                    share=(100.0 * rem["count"] / total_hosts) if total_hosts else None,
+                                    evaling=r["eval_running"]))
+        else:
+            out.append("    %-14s %-18s %3d hosts  %s" % (
+                rem["addr"], s.dim("worker"), rem["count"],
+                s.yellow("not polled - add --peer to see its stats")))
+    return out
 
 
-def worker_row(peer, rem, s):
-    age = f" {peer['age']:.0f}s ago" if peer.get("age", 0) > 12 else ""
-    cells = ["", s.dim("+ " + peer["machine"]) + s.dim(age), "", "", "", s.dim("  worker"),
-             "", str(rem["count"]), ram_cell(peer, s), cpu_cell(peer, s), "", ""]
-    return "".join(pad(c, w, s) for c, (_, w) in zip(cells, COLS))
-
-
-def idle_row(snap, s):
-    if snap.get("unreachable"):
-        cells = [s.red("-"), s.red(snap["machine"]), "", "", "",
-                 s.red(f"unreachable: {snap['unreachable']}"), "", "", "", "", "", ""]
-    else:
-        cells = [s.dim("idle"), snap["machine"], "", "", "", s.dim("  no run"), "",
-                 str(snap["hosts"]), ram_cell(snap, s), cpu_cell(snap, s), "", ""]
-    return "".join(pad(c, w, s) for c, (_, w) in zip(cells, COLS))
-
-
-def ram_cell(snap, s):
-    if not snap.get("ram_total"):
-        return "-"
-    txt = f"{snap['ram_used']:.0f}/{snap['ram_total']:.0f} GB"
-    if snap["ram_free"] < 2.0:
-        return s.red(txt)
-    if snap["ram_free"] < 4.0:
-        return s.yellow(txt)
-    return txt
-
-
-def cpu_cell(snap, s):
-    if not snap.get("cores"):
-        return "-"
-    frac = snap["load"] / snap["cores"]
-    txt = f"{frac * 100:.0f}%"
-    return s.green(txt) if frac > 0.85 else (txt if frac > 0.4 else s.yellow(txt))
-
-
-def detail_lines(local, peers, s):
-    """The few things a table cannot carry, for the run that is actually training here."""
+def render_jobs(local, peers, s):
     out = []
+    now = (datetime.now(EASTERN).strftime("%I:%M:%S %p ET").lstrip("0")
+           if EASTERN else datetime.now().strftime("%I:%M:%S %p local").lstrip("0"))
+    out.append(s.bold("VORTEX NEURAL TRAINING") + s.dim("    " + now))
+
+    claimed = set()
+    any_job = False
     for snap in [local] + peers:
         for r in snap.get("runs", []):
-            if not r["running"]:
-                continue
-            base = f"  vs baseline {r['best'] / r['baseline']:.2f}x" if (r["baseline"] and r["best"]) else ""
-            last = "  ".join(f"{x:.1f}" for x in r["last"])
-            out.append("")
-            out.append(s.dim(f"  {r['name']} on {snap['machine']}: last evals  {last}{base}"))
-            out.append(s.dim(f"  entropy {r['entropy']:.3f}   kl {r['kl']:.4f}   "
-                             f"sampled {r['sampled']:.1f}%   up {dur(r['up'])}   update #{r['update']:,}"))
+            any_job = True
+            claimed.add(snap["machine"])
+            out.extend(job_block(r, snap, peers, s, claimed))
+
+    for snap in [local] + peers:
+        if snap["machine"] in claimed:
+            continue
+        out.append("")
+        if snap.get("unreachable"):
+            out.append("  " + s.red("%s: unreachable (%s)" % (snap["machine"], snap["unreachable"])))
+        else:
+            out.append("  " + s.dim("%s: no run of its own" % snap["machine"]))
+            out.append(machine_line(snap, s, "idle"))
+    if not any_job:
+        out.append("")
+        out.append("  " + s.dim("nothing training"))
     return out
 
 
@@ -766,8 +837,7 @@ def main():
     def panel():
         local = snapshot()
         remote = poller.snapshots()
-        body = render_table(local, remote, s)
-        return body + "\n" + "\n".join(detail_lines(local, remote, s))
+        return "\n".join(render_jobs(local, remote, s))
 
     if not watch:
         # A one-shot call has to wait for the first peer fetch; there is nothing cached yet.

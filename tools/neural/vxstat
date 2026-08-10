@@ -28,19 +28,88 @@ except Exception:
 
 # Overridable so this is not welded to one box; the default is the training VM's layout.
 RUNS = os.environ.get("VX_RUNS", "/home/vortex/train/runs")
+
+# Which box this is. Shown in the header and prefixed to peer output, because once work is spread over
+# machines an unlabelled panel cannot be read -- "64 hosts" means nothing without knowing whose.
+try:
+    MACHINE = os.uname().nodename
+except AttributeError:
+    MACHINE = os.environ.get("COMPUTERNAME", "?")
 CORES = os.cpu_count() or 1
 
 
 # ---------------------------------------------------------------- process table
 
+WINDOWS = os.name == "nt"
+
+# One PowerShell round trip per render, reused by processes/meminfo/loadavg/uptime.
+#
+# The Linux path reads /proc, which does not exist on Windows -- and once a worker machine runs Windows, a
+# status tool that only works on Linux tells you nothing about half the fleet. Snapshotting once and sharing
+# it keeps this to a single subprocess per refresh instead of four.
+_WIN_SNAP = {"t": 0.0, "data": None}
+
+
+def _windows_snapshot():
+    import json
+    import subprocess
+    now = time.time()
+    if _WIN_SNAP["data"] is not None and now - _WIN_SNAP["t"] < 1.0:
+        return _WIN_SNAP["data"]
+    ps = (
+        "$p = Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine,WorkingSetSize,CreationDate;"
+        "$o = Get-CimInstance Win32_OperatingSystem;"
+        "$c = (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average;"
+        "[pscustomobject]@{procs=$p; freeKB=$o.FreePhysicalMemory; totalKB=$o.TotalVisibleMemorySize;"
+        " cpu=$c; now=(Get-Date)} | ConvertTo-Json -Depth 4 -Compress"
+    )
+    data = {"procs": [], "freeKB": 0, "totalKB": 0, "cpu": 0, "now": None}
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+                           capture_output=True, text=True, timeout=25)
+        if r.stdout.strip():
+            data = json.loads(r.stdout)
+    except Exception:
+        pass
+    _WIN_SNAP.update(t=now, data=data)
+    return data
+
+
+def _win_epoch(v):
+    """Win32 CIM dates arrive as /Date(ms)/ through ConvertTo-Json, or as an ISO string."""
+    if not v:
+        return None
+    if isinstance(v, str):
+        m = re.search(r"/Date\((\d+)", v)
+        if m:
+            return int(m.group(1)) / 1000.0
+        try:
+            return datetime.fromisoformat(v.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
 def processes():
-    """(pid, cmdline, rss_kb) for everything readable in /proc, self excluded.
+    """(pid, cmdline, rss_kb) for every readable process, self excluded.
 
     Read straight out of /proc rather than shelling to pgrep: a pgrep pattern matches the command line of
     whatever is doing the asking, which has bitten this project repeatedly -- including once where it killed
     the shell that issued it.
     """
     me = os.getpid()
+    if WINDOWS:
+        snap = _windows_snapshot()
+        rows = snap.get("procs") or []
+        if isinstance(rows, dict):
+            rows = [rows]
+        for row in rows:
+            pid = row.get("ProcessId") or 0
+            cmd = row.get("CommandLine") or ""
+            if not cmd or pid == me:
+                continue
+            yield pid, cmd, int((row.get("WorkingSetSize") or 0) / 1024)
+        return
     for entry in os.listdir("/proc"):
         if not entry.isdigit():
             continue
@@ -69,6 +138,15 @@ def proc_age(pid):
 
 def uptime_of(pid):
     """Seconds since the process started, from its own start ticks against system uptime."""
+    if WINDOWS:
+        rows = _windows_snapshot().get("procs") or []
+        if isinstance(rows, dict):
+            rows = [rows]
+        for row in rows:
+            if row.get("ProcessId") == pid:
+                started = _win_epoch(row.get("CreationDate"))
+                return max(0.0, time.time() - started) if started else 0.0
+        return 0.0
     try:
         with open(f"/proc/{pid}/stat") as fh:
             start_ticks = int(fh.read().rsplit(")", 1)[1].split()[19])
@@ -82,6 +160,11 @@ def uptime_of(pid):
 # ---------------------------------------------------------------- machine
 
 def meminfo():
+    if WINDOWS:
+        snap = _windows_snapshot()
+        total = (snap.get("totalKB") or 0) / 1048576.0
+        avail = (snap.get("freeKB") or 0) / 1048576.0
+        return total, total - avail, avail
     vals = {}
     try:
         with open("/proc/meminfo") as fh:
@@ -96,6 +179,10 @@ def meminfo():
 
 
 def loadavg():
+    if WINDOWS:
+        # Windows has no load average. CPU percent scaled to cores is the closest comparable number, and it
+        # is labelled the same way in the panel so the two machines read alike.
+        return (_windows_snapshot().get("cpu") or 0) / 100.0 * CORES
     try:
         with open("/proc/loadavg") as fh:
             return float(fh.read().split()[0])
@@ -290,31 +377,47 @@ def render(s):
     w = out.append
 
     procs = list(processes())
-    trainer = next(((p, c) for p, c, _ in procs
-                    if "train.py" in c and "python" in c and " -c " not in c), None)
+    trainers = [(p, c) for p, c, _ in procs
+                if "train.py" in c and "python" in c and " -c " not in c]
     hosts = [(p, r) for p, c, r in procs if "va-neural-host.dll" in c]
     benches = [1 for _, c, _ in procs if "va-neural-host.dll" in c and "--bench" in c]
 
-    now = datetime.now(EASTERN).strftime("%-I:%M:%S %p ET") if EASTERN else time.strftime("%H:%M:%S")
-    w(s.bold("VORTEX NEURAL TRAINING") + s.dim(f"   {now}"))
+    # %-I is a glibc extension that silently misbehaves on Windows, so strip the zero by hand. And Windows
+    # Python ships no IANA database, so ZoneInfo("America/New_York") is unavailable there -- in which case
+    # say "local" rather than stamping ET on a time that has not been converted to it.
+    if EASTERN:
+        now = datetime.now(EASTERN).strftime("%I:%M:%S %p ET").lstrip("0")
+    else:
+        now = datetime.now().strftime("%I:%M:%S %p local").lstrip("0")
+    w(s.bold(f"VORTEX NEURAL TRAINING") + s.dim(f"   {MACHINE}   {now}"))
     w("")
 
-    if trainer:
-        pid, cmd = trainer
+    # Every trainer on this box, not just the first. Two runs at once is now normal -- one machine can be
+    # working a curriculum while another runs an A/B -- and a panel that silently showed one of them would
+    # be worse than one that showed neither.
+    for idx, (pid, cmd) in enumerate(trainers):
+        if idx:
+            w("")
         name = (re.search(r"--name (\S+)", cmd) or [None, "?"])[1]
-        up = uptime_of(pid)
-        state = s.green("RUNNING")
-    else:
+        render_run(s, w, name, pid, uptime_of(pid), s.green("RUNNING"), procs, hosts)
+
+    if not trainers:
         # Nothing training: fall back to the most recently touched run so the screen still says something.
         logs = sorted(((os.path.getmtime(os.path.join(RUNS, d, "train.log")), d)
                        for d in os.listdir(RUNS)
                        if os.path.exists(os.path.join(RUNS, d, "train.log"))), reverse=True)
         if not logs:
             w(s.red("no runs found under " + RUNS))
-            return "\n".join(out)
-        name, pid, up = logs[0][1], None, 0
-        state = s.red("STOPPED") + s.dim(f"  (last touched {dur(time.time() - logs[0][0])} ago)")
+        else:
+            render_run(s, w, logs[0][1], None, 0,
+                       s.red("STOPPED") + s.dim(f"  (last touched {dur(time.time() - logs[0][0])} ago)"),
+                       procs, hosts)
 
+    render_machine(s, w, hosts, benches)
+    return "\n".join(out)
+
+
+def render_run(s, w, name, pid, up, state, procs, hosts):
     run_dir = os.path.join(RUNS, name)
     st = parse(tail(os.path.join(run_dir, "train.log")))
     u = st["update"]
@@ -417,7 +520,10 @@ def render(s):
         w(f"    {label:<22} {mark}")
     w("")
 
-    # ---- machine
+    render_stages(s, w, run_dir, st, stage, up, pid)
+
+
+def render_machine(s, w, hosts, benches):
     total, used, free = meminfo()
     load = loadavg()
     worst = max((r for _, r in hosts), default=0) / 1024.0
@@ -433,7 +539,8 @@ def render(s):
     w(f"    ram       {ram_s}")
     w(f"    load      {load:.1f} of {CORES} cores")
 
-    # ---- stage history, from the -done.pt mtimes. Each stage began when the previous one was written.
+def render_stages(s, w, run_dir, st, stage, up, pid):
+    """Stage history from the -done.pt mtimes: stage N began when stage N-1's checkpoint was written."""
     marks = []
     for n in range(1, 7):
         p = os.path.join(run_dir, f"stage{n}-done.pt")
@@ -453,13 +560,31 @@ def render(s):
         if stage and (not marks or marks[-1][0] < stage):
             w(f"    stage {stage}   {dur(time.time() - prev):<10} {s.cyan('running')}")
 
-    return "\n".join(out)
+
+def peer_panel(target, plain):
+    """Another machine's panel, fetched over ssh.
+
+    A shell-out rather than a daemon, deliberately: ssh already handles auth and transport, vxstat is
+    already on the far box, and a status tool needing its own service per machine is one nobody keeps
+    running. A peer that is down or prompting shows as a line, never as a hang.
+    """
+    import subprocess
+    cmd = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", target,
+           "vxstat --plain" if plain else "vxstat"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
+        return (r.stdout or r.stderr or "").rstrip() or f"  {target}: no output"
+    except subprocess.TimeoutExpired:
+        return f"  {target}: TIMED OUT (box down, or ssh is prompting)"
+    except OSError as exc:
+        return f"  {target}: {exc}"
 
 
 def main():
     args = sys.argv[1:]
     plain = "--plain" in args
     watch = "--watch" in args
+    peers = [args[i + 1] for i, a in enumerate(args) if a == "--peer" and i + 1 < len(args)]
     every = 5.0
     if watch:
         i = args.index("--watch")
@@ -470,14 +595,21 @@ def main():
                 pass
     s = Style(not plain and sys.stdout.isatty())
 
+    def panel():
+        parts = [render(s)]
+        for t in peers:
+            parts.append("")
+            parts.append(peer_panel(t, plain))
+        return "\n".join(parts)
+
     if not watch:
-        print(render(s))
+        print(panel())
         return
     try:
         while True:
             # Home the cursor and clear forward rather than clearing the whole screen, so the panel does not
             # flash on every refresh.
-            sys.stdout.write("\033[H\033[J" + render(s) + "\n" + s.dim(f"  refreshing every {every:.0f}s — Ctrl-C to exit") + "\n")
+            sys.stdout.write("\033[H\033[J" + panel() + "\n" + s.dim(f"  refreshing every {every:.0f}s - Ctrl-C to exit") + "\n")
             sys.stdout.flush()
             time.sleep(every)
     except KeyboardInterrupt:

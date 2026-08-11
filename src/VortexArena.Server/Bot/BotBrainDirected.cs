@@ -32,7 +32,11 @@ public sealed partial class BotBrain
         _directedGoalKnown = true;
         float remaining2 = Vector3.DistanceSquared(bot.Origin, goal);
         if (changed || (!Nav.HasGoal && remaining2 > 48f * 48f))
+        {
             Nav.SetGoal(bot.Origin, goal, Network, goalEntity: null, bot.OnGround);
+            if (changed)
+                NeuralHardRetarget(goal);
+        }
 
         if (remaining2 <= 48f * 48f)
         {

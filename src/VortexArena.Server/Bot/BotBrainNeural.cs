@@ -56,6 +56,17 @@ public sealed partial class BotBrain
     private Vector3 _routeGoal;
     private NavDistanceField? _routeField;
     private System.Threading.Tasks.Task? _routeBuild;
+    private int _routeEpoch;
+
+    /// <summary>Drop every neural routing artifact derived from a superseded directed destination.</summary>
+    private void NeuralHardRetarget(Vector3 goal)
+    {
+        System.Threading.Interlocked.Increment(ref _routeEpoch);
+        _routeGoal = goal;
+        _routeField = null;
+        _routeBuild = null;
+        Locomotor?.SnapGoal(goal);
+    }
 
     /// <summary>
     /// The distance field for <paramref name="goal"/>, rebuilt asynchronously when the goal moves.
@@ -77,9 +88,12 @@ public sealed partial class BotBrain
         if (_routeField is not null && (goal - _routeGoal).LengthSquared() < 96f * 96f) return _routeField;
         if (_routeBuild is { IsCompleted: false }) return _routeField;
         Vector3 target = goal;
+        int epoch = System.Threading.Volatile.Read(ref _routeEpoch);
         _routeBuild = System.Threading.Tasks.Task.Run(() =>
         {
             NavDistanceField built = NavDistanceField.Build(field, target);
+            if (epoch != System.Threading.Volatile.Read(ref _routeEpoch))
+                return; // a HERE retarget superseded this in-flight build
             // Goal first, field second: a reader that sees the new field sees its goal too. The reverse
             // order could pair the new field with the old goal for one think, and the 96 qu tolerance
             // above would then skip the rebuild that fixes it.
@@ -182,7 +196,10 @@ public sealed partial class BotBrain
             intent.WeaponMovementAllowed = false;
 
         // ---- 3. the destination ----
-        Vector3 goal = Nav.Current ?? bot.Origin;
+        // The policy was trained against the episode's final destination. Intermediate authored waypoints are
+        // corridor hints, not replacement goals; using Nav.Current here could leave the neural distance field
+        // attached to a shared first route node after the real destination changed.
+        Vector3 goal = Nav.FinalGoal ?? bot.Origin;
         intent.GoalPos = goal;
         intent.GoalEntity = Nav.GoalEntity;
         // Corridor and route come from the baked field's distance transform -- the same source the trainer

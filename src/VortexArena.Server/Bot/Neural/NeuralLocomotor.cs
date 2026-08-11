@@ -104,6 +104,13 @@ public sealed class NeuralLocomotor
         LastAction = NeuralAction.Neutral;
     }
 
+    /// <summary>Adopt an externally replaced destination immediately instead of slewing from the stale one.</summary>
+    public void SnapGoal(Vector3 goal)
+    {
+        _smoothedGoal = goal;
+        _goalPrimed = true;
+    }
+
     /// <summary>
     /// How fast the goal the policy sees may chase the goal the strategist picked, in qu/s. The strategist
     /// re-rates on a 5.5 to 7 second clock and a re-rate can swing the target across the map; without a

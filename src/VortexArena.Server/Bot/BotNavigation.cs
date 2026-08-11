@@ -126,6 +126,9 @@ public sealed class BotNavigation
     /// <summary>The current goal point, or null if the stack is empty (QC <c>.goalcurrent</c>).</summary>
     public Vector3? Current => _goals.Count > 0 ? _goals[0].Pos : null;
 
+    /// <summary>The route's actual destination, after all intermediate waypoint nodes.</summary>
+    public Vector3? FinalGoal => _goals.Count > 0 ? _goals[^1].Pos : null;
+
     public bool HasGoal => _goals.Count > 0;
 
     /// <summary>

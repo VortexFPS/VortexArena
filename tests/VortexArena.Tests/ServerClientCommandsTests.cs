@@ -50,6 +50,17 @@ public class ServerClientCommandsTests
         Assert.Equal("Here", marker.SpriteName);
         Assert.Same(p, marker.DeployedBy);
         Assert.Equal(marker.Origin, brain!.DirectedGoalProvider!.Invoke());
+
+        Vector3 first = marker.Origin;
+        p.Origin = new Vector3(-400f, 240f, 32f);
+        CommandContext retarget = world.Commands.Execute(
+            "waypoint_here_here", isServerConsole: false, caller: p);
+
+        Assert.Contains("HERE spawned", retarget.Output);
+        var replacement = Assert.Single(VortexArena.Common.Gameplay.Waypoints.WaypointSprites.Active);
+        Assert.NotEqual(first, replacement.Origin);
+        Assert.Equal(p.Origin, replacement.Origin);
+        Assert.Equal(replacement.Origin, brain.DirectedGoalProvider.Invoke());
     }
 
     [Fact]

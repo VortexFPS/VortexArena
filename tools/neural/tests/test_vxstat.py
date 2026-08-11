@@ -1,0 +1,61 @@
+"""Regression tests for vxstat's live terminal layout and automatic fleet discovery."""
+
+import importlib.machinery
+import importlib.util
+import os
+from pathlib import Path
+
+
+VXSTAT_PATH = Path(__file__).resolve().parents[1] / "vxstat"
+LOADER = importlib.machinery.SourceFileLoader("vxstat_module", str(VXSTAT_PATH))
+SPEC = importlib.util.spec_from_loader(LOADER.name, LOADER)
+vxstat = importlib.util.module_from_spec(SPEC)
+LOADER.exec_module(vxstat)
+
+
+def test_clip_visible_preserves_ansi_but_never_wraps():
+    line = "\033[31mabcdefghij\033[0m"
+    clipped = vxstat.clip_visible(line, 5)
+    assert vxstat.visible_len(clipped) == 5
+    assert clipped.startswith("\033[31mabcde")
+    assert clipped.endswith("\033[0m")
+
+
+def test_live_frame_fully_clears_only_when_terminal_size_changes(monkeypatch):
+    monkeypatch.setattr(vxstat.shutil, "get_terminal_size", lambda fallback: os.terminal_size((40, 8)))
+    first, size = vxstat.live_frame(["x" * 100])
+    same, size = vxstat.live_frame(["short"], size)
+
+    monkeypatch.setattr(vxstat.shutil, "get_terminal_size", lambda fallback: os.terminal_size((55, 9)))
+    resized, _ = vxstat.live_frame(["short"], size)
+
+    assert first.startswith("\033[2J\033[H")
+    assert vxstat.visible_len(first.split("\033[H", 1)[1].split("\033[J", 1)[0]) == 39
+    assert same.startswith("\033[H") and not same.startswith("\033[2J")
+    assert resized.startswith("\033[2J\033[H")
+
+
+def test_peer_targets_discovers_workers_and_explicit_account_wins():
+    local = {"runs": [{"remotes": [{"addr": "10.0.10.61", "count": 56}]}]}
+    assert vxstat.peer_targets(local) == ["vortex@10.0.10.61"]
+    assert vxstat.peer_targets(local, ["operator@10.0.10.61"]) == ["operator@10.0.10.61"]
+
+
+def test_job_block_reserves_five_event_rows_when_empty():
+    run = {
+        "name": "v27", "running": True, "up": 60, "stage": 3, "phase": "training",
+        "stopped_reason": None, "best": 61.0, "gate": 65.0, "baseline": None, "last": [],
+        "best_time": None, "steps": 1, "budget": 10, "sps": 1.0, "update": 1,
+        "sampled": 100.0, "entropy": 0.5, "kl": 0.01, "skipped": 0, "diverge": 0,
+        "starved": 0, "relaxed": 0, "eval_running": False, "eval_secs": 0,
+        "eval_elapsed": 0, "eval_done": 0, "eval_total": 4, "eval_every": 60,
+        "spu": 1.0, "remotes": [], "agents_per_host": 16, "events": [],
+    }
+    snap = {
+        "machine": "SKYTECH", "hosts": 0, "ram_used": 10, "ram_total": 32,
+        "ram_free": 22, "cpu": 0.25, "eval_shards_running": 0, "age": 0,
+    }
+    lines = vxstat.job_block(run, snap, [], vxstat.Style(False), set())
+    event_index = next(i for i, line in enumerate(lines) if "events" in line)
+    assert len(lines[event_index:event_index + vxstat.MIN_EVENT_ROWS]) == 5
+    assert all("events" not in line for line in lines[event_index + 1:event_index + 5])

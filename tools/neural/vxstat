@@ -40,6 +40,11 @@ except Exception:
 # Overridable so this is not welded to one box; the default is the training VM's layout.
 RUNS = os.environ.get("VX_RUNS", "/home/vortex/train/runs")
 
+# Training commands record remote simulation addresses, but not their SSH account. Vortex worker VMs use the
+# unprivileged `vortex` account; deployments with another account can override this without repeating --peer.
+PEER_USER = os.environ.get("VX_PEER_USER", "vortex")
+MIN_EVENT_ROWS = 5
+
 # Which box this is. Shown in the header and prefixed to peer output, because once work is spread over
 # machines an unlabelled panel cannot be read -- "64 hosts" means nothing without knowing whose.
 try:
@@ -500,6 +505,56 @@ def visible_len(text):
     return len(ANSI_RE.sub("", text))
 
 
+def clip_visible(text, width):
+    """Clip a coloured row without cutting an ANSI sequence or allowing terminal line wrapping.
+
+    A wrapped row changes the terminal's physical row count. When the window is resized, reflowed remnants of
+    those rows are what produce duplicated dashboard lines, so every live row stays one column shy of the edge.
+    """
+    if width <= 0:
+        return ""
+    if visible_len(text) <= width:
+        return text
+    out = []
+    used = 0
+    pos = 0
+    for match in ANSI_RE.finditer(text):
+        chunk = text[pos:match.start()]
+        take = min(len(chunk), width - used)
+        if take:
+            out.append(chunk[:take])
+            used += take
+        if used >= width:
+            break
+        out.append(match.group(0))
+        pos = match.end()
+    else:
+        chunk = text[pos:]
+        take = min(len(chunk), width - used)
+        if take:
+            out.append(chunk[:take])
+    # A clipped colour span may have lost its reset sequence; reset explicitly so the next row stays clean.
+    if ANSI_RE.search(text):
+        out.append("\033[0m")
+    return "".join(out)
+
+
+def terminal_size():
+    size = shutil.get_terminal_size((110, 30))
+    return max(20, size.columns), max(4, size.lines)
+
+
+def live_frame(lines, previous_size=None):
+    """Return a resize-safe ANSI frame and the terminal dimensions used to lay it out."""
+    size = terminal_size()
+    width = max(1, size[0] - 1)  # writing the final column can trigger an implicit wrap on Windows Terminal
+    fitted = [clip_visible(line, width) for line in lines]
+    # Never write more physical rows than exist: scrolling defeats cursor-home redraws just like wrapping does.
+    fitted = fitted[:size[1]]
+    clear = "\033[2J\033[H" if previous_size != size else "\033[H"
+    return clear + "\n".join(fitted) + "\033[J", size
+
+
 def clock_after(seconds):
     when = datetime.fromtimestamp(time.time() + max(0, seconds)).astimezone()
     return when.strftime("%I:%M %p").lstrip("0")
@@ -804,6 +859,33 @@ class Peers:
         return out
 
 
+def peer_targets(local, explicit=()):
+    """Combine requested peers with worker addresses already declared by the active training command."""
+    targets = []
+    hosts = set()
+
+    def add(target):
+        target = str(target).strip()
+        if not target:
+            return
+        host = target.rsplit("@", 1)[-1]
+        if host in hosts:
+            return
+        hosts.add(host)
+        targets.append(target)
+
+    # An explicit target wins when it names the same host with a different SSH account or alias.
+    for target in explicit:
+        add(target)
+    for run in local.get("runs", []):
+        for remote in run.get("remotes", []):
+            addr = str(remote.get("addr", "")).strip()
+            if not addr or addr.rsplit("@", 1)[-1] in hosts:
+                continue
+            add(addr if "@" in addr or not PEER_USER else f"{PEER_USER}@{addr}")
+    return targets
+
+
 # ---------------------------------------------------------------- table
 
 def health_word(r, s):
@@ -946,6 +1028,7 @@ def job_block(r, snap, peers, s, claimed):
     speed = (f"  best time {float(r['best_time']):.2f}s" if r.get("best_time") is not None else "")
     out.append(gut + " %s best %s%%  %s%s%s" % (label(s, "eval"), best, verdict, ratio, s.cyan(speed)))
 
+    out.append(gut)
     pct = r["steps"] / r["budget"] if r["budget"] else 0
     eta = ""
     if r["running"] and r["sps"] and r["budget"] > r["steps"]:
@@ -959,6 +1042,7 @@ def job_block(r, snap, peers, s, claimed):
         label(s, "state"), "{:,}".format(r["update"]), r["sampled"], r["entropy"], r["kl"],
         health_word(r, s), eval_word(r, s)))
 
+    out.append(gut)
     total_hosts = snap["hosts"] + sum(x["count"] for x in r.get("remotes", []))
     role = "trainer" + ("+hosts" if snap["hosts"] else "")
     out.append(gut + " %s %s" % (label(s, "fleet"),
@@ -977,13 +1061,17 @@ def job_block(r, snap, peers, s, claimed):
                 "", rem["addr"], s.dim("worker"), rem["count"],
                 rem["count"] * r.get("agents_per_host", 16),
                 s.yellow("not polled - add --peer")))
-    if r.get("events"):
-        out.append(gut)
-        for i, event in enumerate(r["events"][-5:]):
+    out.append(gut)
+    events = r.get("events", [])[-MIN_EVENT_ROWS:]
+    for i in range(MIN_EVENT_ROWS):
+        if i < len(events):
+            event = events[i]
             at = str(event.get("at", ""))
             stamp = at[11:19] if len(at) >= 19 else "--:--:--"
-            event_label = label(s, "events" if i == 0 else "")
-            out.append(gut + " %s %s  %s" % (event_label, s.magenta(stamp), event.get("message", "")))
+            content = "%s  %s" % (s.magenta(stamp), event.get("message", ""))
+        else:
+            content = ""
+        out.append(gut + " %s %s" % (label(s, "events" if i == 0 else ""), content))
     return out
 
 
@@ -1095,10 +1183,16 @@ def watchdog(peers_t, every, restart, s):
     """
     poller = Peers(peers_t)
     seen_running = set()
+    last_size = None
     while True:
         local = snapshot()
+        discovered = peer_targets(local, peers_t)
+        if discovered != poller.targets:
+            # Watchdogs normally start after a run; recreate only when a newly launched run declares a worker.
+            poller = Peers(discovered)
         remote = poller.snapshots()
-        sys.stdout.write("\033[H" + "\n".join(render_jobs(local, remote, s)) + "\n\033[J")
+        frame, last_size = live_frame(render_jobs(local, remote, s), last_size)
+        sys.stdout.write(frame)
 
         for snap in [local] + remote:
             for r in snap.get("runs", []):
@@ -1138,7 +1232,7 @@ def main():
     plain = "--plain" in args
     watch = "--watch" in args
     as_json = "--json" in args
-    peers_t = [args[i + 1] for i, a in enumerate(args) if a == "--peer" and i + 1 < len(args)]
+    explicit_peers = [args[i + 1] for i, a in enumerate(args) if a == "--peer" and i + 1 < len(args)]
 
     every = 1.0
     if watch:
@@ -1155,36 +1249,42 @@ def main():
         return
 
     s = Style(not plain and (sys.stdout.isatty() or "--color" in args))
+    initial_local = snapshot()
+    peers_t = peer_targets(initial_local, explicit_peers)
     poller = Peers(peers_t)
+    first_local = [initial_local]
 
     def panel():
-        local = snapshot()
+        local = first_local.pop() if first_local else snapshot()
         remote = poller.snapshots()
-        return "\n".join(render_jobs(local, remote, s))
+        return render_jobs(local, remote, s)
 
     if "--watchdog" in args or "--watchdog-restart" in args:
-        watchdog(peers_t, every, "--watchdog-restart" in args, s)
+        watchdog(explicit_peers, every, "--watchdog-restart" in args, s)
         return
 
     if not watch:
         # A one-shot call has to wait for the first peer fetch; there is nothing cached yet.
         if peers_t:
             time.sleep(2.5)
-        print(panel())
+        print("\n".join(panel()))
         return
+    last_size = None
     try:
         if s.on:
-            sys.stdout.write("\033[?1049h")
+            sys.stdout.write("\033[?1049h\033[?25l")
         while True:
-            sys.stdout.write("\033[H" + panel() + "\n"
-                             + s.dim(f"  refreshing every {every:.0f}s - Ctrl-C to exit") + "\n\033[J")
+            lines = panel()
+            lines.append(s.dim(f"  refreshing every {every:.0f}s - Ctrl-C to exit"))
+            frame, last_size = live_frame(lines, last_size)
+            sys.stdout.write(frame)
             sys.stdout.flush()
             time.sleep(every)
     except KeyboardInterrupt:
         pass
     finally:
         if s.on:
-            sys.stdout.write("\033[?1049l")
+            sys.stdout.write("\033[?25h\033[?1049l")
 
 
 if __name__ == "__main__":

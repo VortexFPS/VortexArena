@@ -457,6 +457,10 @@ public static class Program
             env.Step(actions, observations, rewards, dones, truncated);
             for (int i = 0; i < rewards.Length; i++) rewardSum += rewards[i];
             steps++;
+            // Machine-readable heartbeat for the trainer/vxstat.  Bench output used to be silent until the
+            // entire shard exited, so a legitimately slow course and a frozen evaluator looked identical.
+            if (steps == 1 || steps % 250 == 0)
+                Console.Error.WriteLine($"[progress] steps {steps}/{opts.BenchSteps} episodes {episodes}/{opts.BenchEpisodes}");
             if (steps % 17 == 0 && obsSamples.Count < 4000)
                 obsSamples.Add(observations[..obsSize].ToArray());
             // Managed heap against process RSS, every 2000 steps.
@@ -495,6 +499,7 @@ public static class Program
                 env.Reset(observations);
                 resetMsTotal += (Stopwatch.GetTimestamp() - _rs) * 1000.0 / Stopwatch.Frequency;
                 episodes++;
+                Console.Error.WriteLine($"[progress] steps {steps}/{opts.BenchSteps} episodes {episodes}/{opts.BenchEpisodes}");
             }
         }
         sw.Stop();

@@ -717,6 +717,14 @@ def run_snapshot(name, pid, up, cmd, procs, running):
         pass
 
     eval_in_flight = bool(structured.get("eval_in_flight"))
+    eval_progress = read_json(os.path.join(run_dir, "eval-progress.json")) or {}
+    progress_shards = eval_progress.get("shards") or []
+    # Ignore a leftover progress file once no evaluation is active. During an eval it is authoritative:
+    # process counting alone can say only running/done, not whether counters are moving or a shard retried.
+    if not eval_in_flight:
+        progress_shards = []
+    elif progress_shards:
+        total_shards = len(progress_shards)
     try:
         eval_started_epoch = float(structured.get("eval_started_epoch", 0))
     except (TypeError, ValueError):
@@ -773,8 +781,10 @@ def run_snapshot(name, pid, up, cmd, procs, running):
         "eval_timeout_secs": structured.get("eval_timeout_seconds"),
         "next_eval_update": structured.get("next_eval_update"),
         "eval_running": eval_in_flight or len(shards) > 0,
-        "eval_done": max(0, total_shards - len(shards)) if shards else 0,
+        "eval_done": (sum(1 for shard in progress_shards if shard.get("status") == "complete")
+                      if progress_shards else max(0, total_shards - len(shards)) if shards else 0),
         "eval_total": total_shards,
+        "eval_shards": progress_shards,
         "eval_elapsed": eval_elapsed,
         "phase": structured.get("phase", "evaluating" if shards else "training" if running else "stopped"),
         "events": events,
@@ -947,6 +957,33 @@ def eval_word(r, s):
     return "next eval unknown"
 
 
+def eval_shard_word(r, s):
+    """Compact per-shard liveness: episode counters prove motion; status/retries expose recovery."""
+    shards = r.get("eval_shards") or []
+    if not r.get("eval_running") or not shards:
+        return ""
+    cells = []
+    for shard in shards:
+        i = int(shard.get("index", len(cells)))
+        status = shard.get("status", "running")
+        episodes = int(shard.get("episodes", 0))
+        target = max(1, int(shard.get("episode_target", 1)))
+        restarts = int(shard.get("restarts", 0))
+        stale = float(shard.get("stale_seconds", 0) or 0)
+        if status == "complete":
+            value = s.green("%d:%s" % (i, G["ok"]))
+        elif status in ("frozen", "failed", "timed_out"):
+            value = s.red("%d:%s" % (i, status))
+        elif status == "restarting" or restarts:
+            value = s.yellow("%d:%d/%d↻%d" % (i, episodes, target, restarts))
+        elif stale >= 30:
+            value = s.yellow("%d:%d/%d idle%ds" % (i, episodes, target, stale))
+        else:
+            value = s.cyan("%d:%d/%d" % (i, episodes, target))
+        cells.append(value)
+    return "  ".join(cells)
+
+
 def spark(vals, s):
     """Eval history as numbers, best in bold. Exact enough to trust, short enough to scan."""
     if not vals:
@@ -1072,6 +1109,9 @@ def job_block(r, snap, peers, s, claimed):
     if r["running"]:
         state_detail += "   " + eval_word(r, s)
     out.append(gut + " %-7s %s" % ("", state_detail))
+    shard_detail = eval_shard_word(r, s)
+    if shard_detail:
+        out.append(gut + " %-7s %s" % (label(s, "shards"), shard_detail))
 
     out.append(gut)
     total_hosts = snap["hosts"] + sum(x["count"] for x in r.get("remotes", []))

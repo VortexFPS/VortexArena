@@ -1,5 +1,7 @@
 """Small regression tests for trainer math that must survive checkpoint resumes."""
 
+import json
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -10,7 +12,7 @@ import torch
 NEURAL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(NEURAL))
 
-from train import (ReturnScale, _collect_eval_processes, _eval_host_args,
+from train import (ReturnScale, _collect_eval_process_files, _collect_eval_processes, _eval_host_args,
                    _legacy_resume_state, _requested_budget, _shard_episode_counts,
                    gae, save)  # noqa: E402
 from va_neural.model import Policy, RunningNorm  # noqa: E402
@@ -102,6 +104,27 @@ def test_eval_shard_pipes_are_drained_concurrently():
     outputs, errors = _collect_eval_processes([FakeProcess(), FakeProcess()], timeout=1.0)
     assert len(outputs) == 2
     assert errors == []
+
+
+def test_file_backed_eval_publishes_live_shard_progress(tmp_path):
+    code = ("import sys; "
+            "print('[progress] steps 10/10 episodes 1/1', file=sys.stderr, flush=True); "
+            "print('arrival rate 100.0% (20/20)')")
+    command = [sys.executable, "-c", code, "--bench", "10"]
+    stdout_path = tmp_path / "shard.stdout.log"
+    stderr_path = tmp_path / "shard.stderr.log"
+    with stdout_path.open("w", encoding="utf-8") as out_fh, \
+         stderr_path.open("w", encoding="utf-8") as err_fh:
+        process = subprocess.Popen(command, stdout=out_fh, stderr=err_fh, text=True)
+    progress_path = tmp_path / "eval-progress.json"
+    outputs, errors = _collect_eval_process_files(
+        [process], [command], [stdout_path], [stderr_path], progress_path, [1], [9002],
+        timeout=5.0, stall_seconds=2.0)
+    progress = json.loads(progress_path.read_text(encoding="utf-8"))
+    assert errors == []
+    assert "arrival rate" in outputs[0]
+    assert progress["shards"][0]["episodes"] == 1
+    assert progress["shards"][0]["status"] == "complete"
 
 
 def test_eval_forwards_only_environment_semantics():

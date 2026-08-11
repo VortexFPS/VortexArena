@@ -84,6 +84,21 @@ def test_eval_word_shows_running_eta_and_structured_next_eval():
     assert "next eval in 60u" in vxstat.eval_word(waiting, style)
 
 
+def test_eval_shard_word_shows_progress_completion_and_retry():
+    run = {"eval_running": True, "eval_shards": [
+        {"index": 0, "episodes": 2, "episode_target": 5, "status": "running",
+         "restarts": 0, "stale_seconds": 3},
+        {"index": 1, "episodes": 5, "episode_target": 5, "status": "complete",
+         "restarts": 0, "stale_seconds": 0},
+        {"index": 2, "episodes": 1, "episode_target": 5, "status": "running",
+         "restarts": 1, "stale_seconds": 1},
+    ]}
+    text = vxstat.eval_shard_word(run, vxstat.Style(False))
+    assert "0:2/5" in text
+    assert "1:" in text
+    assert "2:1/5↻1" in text
+
+
 def test_background_eval_keeps_remote_worker_status_on_rollout():
     run = {
         "name": "v27", "running": True, "up": 60, "stage": 3,

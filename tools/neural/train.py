@@ -261,6 +261,8 @@ def _event(run_dir: Path, kind: str, message: str, **fields) -> None:
 
 
 EvalTimeoutSeconds = 900.0
+EvalShardStallSeconds = 120.0
+EvalShardRetries = 1
 
 
 def _expected_eval_seconds(run_dir: Path, fallback: float = 180.0) -> float:
@@ -496,10 +498,11 @@ def main() -> int:
                          "the barrier is per UPDATE, not per step. Same policy version for every action in "
                          "a window, so PPO is unchanged; a slow host costs its own time instead of gating "
                          "the fleet at every step. Measured lockstep tax before this: 57%% of each step.")
-    ap.add_argument("--eval-shards", type=int, default=4,
+    ap.add_argument("--eval-shards", type=int, default=8,
                     help="split the eval episodes across this many parallel processes. Each keeps the same "
                          "agents-per-world (crowding is part of the task) and uses its own seed, so this "
-                         "divides eval wall-clock AND averages down the eval's variance.")
+                         "divides eval wall-clock AND averages down the eval's variance. Eight keeps eight "
+                         "cores busy and reduces slow-tail imbalance; each host process is single-core.")
     ap.add_argument("--async-eval", action=argparse.BooleanOptionalAction, default=None,
                     help="evaluate an immutable checkpoint in the background while PPO keeps collecting "
                          "and updating. Only one evaluation runs at a time. Enabled by default for "
@@ -529,7 +532,7 @@ def main() -> int:
                          "uses 0.98 so early actions can receive credit for a fast terminal arrival.")
     ap.add_argument("--training-profile", choices=("compatible", "speed-v2"), default="compatible",
                     help="compatible reproduces the existing curriculum defaults. speed-v2 is checkpoint-"
-                         "compatible but opts into a long reward horizon, rotating eval routes, two gate "
+                         "compatible but opts into a long reward horizon, a stable eval route bank, two gate "
                          "confirmations, and speed-aware best-checkpoint selection.")
     ap.add_argument("--selection-objective", choices=("arrival", "speed"), default=None,
                     help="how stage-best checkpoints are selected. speed preserves completion rate within "
@@ -1459,6 +1462,128 @@ def _collect_eval_processes(procs: list[subprocess.Popen], timeout: float = Eval
     return outputs, [message for _, message in sorted(errors)]
 
 
+def _collect_eval_process_files(procs: list[subprocess.Popen], commands: list[list[str]],
+                                stdout_paths: list[Path], stderr_paths: list[Path],
+                                progress_path: Path, episode_counts: list[int], seeds: list[int],
+                                process_sink: Callable[[list[subprocess.Popen]], None] | None = None,
+                                timeout: float = EvalTimeoutSeconds,
+                                stall_seconds: float = EvalShardStallSeconds
+                                ) -> tuple[list[str], list[str]]:
+    """Collect file-backed shards, publish progress, and retry a counter-stalled shard once.
+
+    File-backed stderr is intentional: it lets vxstat observe progress without stealing the pipe from the
+    collector and removes pipe-capacity as a source of evaluator deadlocks.  A retry uses the identical
+    command/seed, so it repairs process failure without changing the measurement.
+    """
+    started = time.time()
+    deadline = time.monotonic() + timeout
+    steps = [0] * len(procs)
+    episodes = [0] * len(procs)
+    last_change = [time.monotonic()] * len(procs)
+    restarts = [0] * len(procs)
+    statuses = ["running"] * len(procs)
+    outputs = [""] * len(procs)
+    errors: list[tuple[int, str]] = []
+    pending = set(range(len(procs)))
+    progress_re = re.compile(r"\[progress\] steps (\d+)/(\d+) episodes (\d+)/(\d+)")
+
+    def launch(i: int) -> subprocess.Popen:
+        with open(stdout_paths[i], "w", encoding="utf-8") as out_fh, \
+             open(stderr_paths[i], "w", encoding="utf-8") as err_fh:
+            return subprocess.Popen(commands[i], stdout=out_fh, stderr=err_fh, text=True)
+
+    def read_progress(i: int) -> tuple[int, int]:
+        try:
+            text = stderr_paths[i].read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return steps[i], episodes[i]
+        matches = list(progress_re.finditer(text))
+        return ((int(matches[-1].group(1)), int(matches[-1].group(3))) if matches
+                else (steps[i], episodes[i]))
+
+    def publish() -> None:
+        now = time.time()
+        _atomic_json(progress_path, {
+            "schema": 1, "started_epoch": started, "updated_epoch": now,
+            "shards": [{"index": i, "pid": procs[i].pid, "seed": seeds[i],
+                        "steps": steps[i], "step_cap": int(commands[i][commands[i].index("--bench") + 1]),
+                        "episodes": episodes[i], "episode_target": episode_counts[i],
+                        "status": statuses[i], "restarts": restarts[i],
+                        "stale_seconds": max(0.0, time.monotonic() - last_change[i])}
+                       for i in range(len(procs))]
+        })
+
+    publish()
+    while pending:
+        now = time.monotonic()
+        for i in list(pending):
+            new_steps, new_episodes = read_progress(i)
+            if (new_steps, new_episodes) != (steps[i], episodes[i]):
+                steps[i], episodes[i] = new_steps, new_episodes
+                last_change[i] = now
+                statuses[i] = "running"
+
+            rc = procs[i].poll()
+            if rc is not None:
+                try:
+                    outputs[i] = stdout_paths[i].read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    outputs[i] = ""
+                if rc == 0:
+                    statuses[i] = "complete"
+                else:
+                    statuses[i] = "failed"
+                    try:
+                        tail = " | ".join(stderr_paths[i].read_text(
+                            encoding="utf-8", errors="replace").splitlines()[-4:])
+                    except OSError:
+                        tail = ""
+                    errors.append((i, f"shard {i} exited {rc}: {tail}"))
+                pending.remove(i)
+                continue
+
+            if now - last_change[i] >= stall_seconds:
+                if restarts[i] < EvalShardRetries:
+                    procs[i].kill()
+                    procs[i].wait(timeout=10)
+                    restarts[i] += 1
+                    steps[i] = episodes[i] = 0
+                    last_change[i] = now
+                    statuses[i] = "restarting"
+                    procs[i] = launch(i)
+                    _event(progress_path.parent, "eval_shard_restarted",
+                           f"evaluation shard {i} stopped making progress and was restarted",
+                           shard=i, seed=seeds[i], restart=restarts[i])
+                    if process_sink is not None:
+                        process_sink(procs)
+                else:
+                    procs[i].kill()
+                    procs[i].wait(timeout=10)
+                    statuses[i] = "frozen"
+                    errors.append((i, f"shard {i} made no progress for {stall_seconds:g}s after retry"))
+                    _event(progress_path.parent, "eval_shard_frozen",
+                           f"evaluation shard {i} remained frozen after retry",
+                           shard=i, seed=seeds[i])
+                    pending.remove(i)
+
+        if time.monotonic() >= deadline:
+            for i in list(pending):
+                procs[i].kill()
+                try:
+                    procs[i].wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    pass
+                statuses[i] = "timed_out"
+                errors.append((i, f"shard {i} timed out after {timeout:g}s"))
+                pending.remove(i)
+        publish()
+        if pending:
+            time.sleep(1.0)
+
+    publish()
+    return outputs, [message for _, message in sorted(errors)]
+
+
 def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args,
              seed_offset: int = 0, *, weights_path: Path | None = None,
              process_sink: Callable[[list[subprocess.Popen]], None] | None = None) -> EvalResult:
@@ -1517,11 +1642,19 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args,
             c += ["--maps", args.maps]
         return c
 
+    commands = [shard_cmd(i) for i in range(shards)]
+    seeds = [args.seed + 9001 + seed_offset + i * 7919 for i in range(shards)]
+    stdout_paths = [run_dir / f"eval-shard-{i}.stdout.log" for i in range(shards)]
+    stderr_paths = [run_dir / f"eval-shard-{i}.stderr.log" for i in range(shards)]
+    progress_path = run_dir / "eval-progress.json"
     procs = []
     try:
         for i in range(shards):
-            procs.append(subprocess.Popen(shard_cmd(i), stdout=subprocess.PIPE,
-                                          stderr=subprocess.PIPE, text=True))
+            # Files make live progress observable and cannot deadlock on an unread pipe. The child inherits
+            # its own handle, so the parent can close immediately and vxstat can read concurrently.
+            with open(stdout_paths[i], "w", encoding="utf-8") as out_fh, \
+                 open(stderr_paths[i], "w", encoding="utf-8") as err_fh:
+                procs.append(subprocess.Popen(commands[i], stdout=out_fh, stderr=err_fh, text=True))
         if process_sink is not None:
             process_sink(procs)
     except OSError as exc:
@@ -1529,7 +1662,9 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args,
             pr.kill()
         return EvalResult(float("nan"), error=f"could not launch evaluator: {exc}")
 
-    outs, shard_errors = _collect_eval_processes(procs)
+    outs, shard_errors = _collect_eval_process_files(
+        procs, commands, stdout_paths, stderr_paths, progress_path, episode_counts, seeds,
+        process_sink=process_sink)
     out = "\n".join(outs)
 
     # Surface how often the course draw had to relax its constraints.

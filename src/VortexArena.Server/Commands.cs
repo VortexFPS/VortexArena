@@ -518,6 +518,7 @@ public sealed class Commands
         // Drop any waypoints this player deployed (personal pings never time out on their own) so a disconnecting
         // player doesn't leak a forever-marker — QC WaypointSprite_ClearOwned runs on the player's removal.
         Waypoints.WaypointSprites.ClearOwned(p);
+        _world.Bots.ForgetDirectedController(p);
     }
 
     public Commands(GameWorld world)
@@ -1992,7 +1993,11 @@ public sealed class Commands
     {
         if (ctx.Caller is null) { ctx.Print("waypoint is a client command"); return true; }
         Player p = ctx.Caller;
-        if (p.FragsStatus == Player.FragsSpectator || p.IsObserver) return true; // not a live player
+        if (p.FragsStatus == Player.FragsSpectator || p.IsObserver)
+        {
+            ctx.Print("waypoint: join the match before placing a marker");
+            return true;
+        }
         int team = _world.Teamplay.IsTeamGame ? (int)p.Team : 0;
 
         // Resolve the deploy position from the location specifier. QC WarpZone_crosshair_trace traces from the
@@ -2012,6 +2017,7 @@ public sealed class Commands
             case WpDeploy.Here:
                 // QC WaypointSprite_DeployFixed(WP_Here, false, this, origin/trace_endpos/death_origin, RADARICON_HERE)
                 WaypointDeployFixed(p, "Here", team, pos.Value);
+                _world.Bots.SetDirectedGoal(p, pos.Value);
                 ctx.Print(loc == WpLocation.Crosshair ? "HERE spawned at crosshair"
                         : loc == WpLocation.Death     ? "HERE spawned at death location"
                                                       : "HERE spawned at location");

@@ -347,6 +347,21 @@ public partial class ConsoleOverlay : CanvasLayer
         interp.RegisterCommand("cmd", a => ForwardToGame(JoinTail(a), "cmd"),
             "send a client command to the server: cmd <command> [args]");
 
+        // These are both direct console commands and bind targets (P ships as waypoint_here_crosshair).
+        // Register them explicitly so they always use the C2S route instead of depending on unknown-command
+        // fallback behavior.
+        string[] waypointCommands =
+        {
+            "waypoint_personal_here", "waypoint_personal_crosshair", "waypoint_personal_death",
+            "waypoint_here_follow", "waypoint_here_here", "waypoint_here_crosshair", "waypoint_here_death",
+            "waypoint_danger_here", "waypoint_danger_crosshair", "waypoint_danger_death",
+            "waypoint_clear_personal", "waypoint_clear",
+        };
+        foreach (string waypointCommand in waypointCommands)
+            interp.RegisterCommand(waypointCommand,
+                a => ForwardToGame(string.Join(' ', a), waypointCommand),
+                "place or clear a player waypoint in the current match");
+
         // QC SERVER_COMMAND (the sv_cmd prefix): admin verbs — kick/ban/gotomap/endmatch/shuffleteams/…
         // Deliberately NOT forwarded to a remote server: the tail alone would be judged by the server's
         // client-privilege gate and rejected anyway, so a round trip would only turn an honest local message

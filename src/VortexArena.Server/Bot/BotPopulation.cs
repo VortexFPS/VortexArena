@@ -120,6 +120,7 @@ public sealed class BotPopulation
     // brains in connect order (QC bot_list; the order drives strategy-token rotation + remove-newest).
     private readonly List<BotBrain> _brains = new();
     private readonly Dictionary<Player, BotBrain> _byPlayer = new();
+    private readonly Dictionary<Player, Vector3> _directedGoals = new();
 
     /// <summary>QC <c>currentbots</c>; -1 is the "recount next frame" sentinel armed while time &lt; 2.5.</summary>
     private int _currentBots;
@@ -495,21 +496,18 @@ public sealed class BotPopulation
         BotBrain? brain = AddBot(string.IsNullOrWhiteSpace(name) ? "Waypoint Bot" : name, Cvars.Skill);
         if (brain is null) return null;
 
-        Vector3? last = null;
         brain.DirectedGoalProvider = () =>
         {
-            VortexArena.Common.Gameplay.Waypoints.WaypointSprite? newest = null;
-            foreach (var wp in VortexArena.Common.Gameplay.Waypoints.WaypointSprites.Active)
-                if (!wp.Dead && wp.Kind == VortexArena.Common.Gameplay.Waypoints.DeployKind.Fixed
-                    && ReferenceEquals(wp.DeployedBy, controller)
-                    && string.Equals(wp.SpriteName, "Here", StringComparison.OrdinalIgnoreCase)
-                    && (newest is null || wp.Id > newest.Id))
-                    newest = wp;
-            if (newest is not null) last = newest.Origin;
-            return last;
+            return _directedGoals.TryGetValue(controller, out Vector3 goal) ? goal : null;
         };
         return brain;
     }
+
+    /// <summary>Publish the controlling player's latest HERE position to every directed bot they own.</summary>
+    public void SetDirectedGoal(Player controller, Vector3 goal) => _directedGoals[controller] = goal;
+
+    /// <summary>Drop retained directed-control state when its human controller leaves the server.</summary>
+    public void ForgetDirectedController(Player controller) => _directedGoals.Remove(controller);
 
     /// <summary>Console <c>bot_remove</c>: drop the newest bot (optionally matching <paramref name="name"/>)
     /// and lower <c>bot_number</c> with it so fixcount doesn't immediately re-add one.</summary>

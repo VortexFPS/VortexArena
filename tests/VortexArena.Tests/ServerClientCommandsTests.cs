@@ -31,6 +31,41 @@ public class ServerClientCommandsTests
     private static Player NewCaller(string name = "p")
         => new() { NetName = name, Flags = EntFlags.Client, PlayerId = 1 };
 
+    [Fact]
+    public void HereCrosshair_PublishesVisibleMarkerAndDirectedBotGoal()
+    {
+        var world = NewWorld();
+        Player p = NewCaller("controller");
+        p.Origin = new Vector3(32f, 64f, 96f);
+        p.ViewAngles = new Vector3(0f, 90f, 0f);
+
+        var brain = world.Bots.AddDirectedBot(p, "directed-test");
+        Assert.NotNull(brain);
+
+        CommandContext result = world.Commands.Execute(
+            "waypoint_here_crosshair", isServerConsole: false, caller: p);
+
+        Assert.Contains("HERE spawned", result.Output);
+        var marker = Assert.Single(VortexArena.Common.Gameplay.Waypoints.WaypointSprites.Active);
+        Assert.Equal("Here", marker.SpriteName);
+        Assert.Same(p, marker.DeployedBy);
+        Assert.Equal(marker.Origin, brain!.DirectedGoalProvider!.Invoke());
+    }
+
+    [Fact]
+    public void HereCrosshair_ExplainsWhyObserverCannotPlaceIt()
+    {
+        var world = NewWorld();
+        Player p = NewCaller();
+        p.IsObserver = true;
+
+        CommandContext result = world.Commands.Execute(
+            "waypoint_here_crosshair", isServerConsole: false, caller: p);
+
+        Assert.Contains("join the match", result.Output);
+        Assert.Empty(VortexArena.Common.Gameplay.Waypoints.WaypointSprites.Active);
+    }
+
     // ============================================================================== engine defer
 
     [Fact]

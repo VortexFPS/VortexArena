@@ -243,6 +243,10 @@ public static class MenuState
         _interp.RegisterCommand("fs_rescan",
             _ => VortexArena.Common.Diagnostics.Log.Help(RescanContent()));
 
+        // The default F11 bind reaches the shared console interpreter directly. Register its menu route here
+        // (rather than relying on commands.cfg aliases, which are not executed as executable aliases at runtime).
+        _interp.RegisterCommand("menu_showbotpolicies", _ => MenuCommand.Run("menu_showbotpolicies"));
+
         // --- THE LINCHPIN: populate the canonical keybind table from binds-xonotic.cfg. ---
         // xonotic-client.cfg:603 already exec'd binds-xonotic.cfg above, but `bind` is on the interpreter's
         // NonCvarCommands denylist and no `bind` sink was registered yet, so those binds were dropped (counted

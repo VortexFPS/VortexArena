@@ -104,7 +104,9 @@ public static class NavFieldBaker
                 if (progress is not null)
                 {
                     int d = System.Threading.Interlocked.Increment(ref done);
-                    if ((d & 15) == 0) progress(d * width, width * height);
+                    // Call per row; diagnostic sinks throttle by time. Waiting for sixteen rows hid the
+                    // exact failure mode on erbium, where even one row can be pathologically expensive.
+                    progress(Math.Min(d * width, width * height), width * height);
                 }
             }
         }

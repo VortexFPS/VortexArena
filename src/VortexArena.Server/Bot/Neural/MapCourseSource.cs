@@ -639,7 +639,15 @@ public sealed class MapCourseSource
             }
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
+            Vector3 lo = world.WorldMins, hi = world.WorldMaxs;
+            int cell = NavField.CellSize;
+            float ox = MathF.Floor(lo.X / cell) * cell - cell;
+            float oy = MathF.Floor(lo.Y / cell) * cell - cell;
+            int gridWidth = (int)MathF.Ceiling((hi.X - ox) / cell) + 2;
+            int gridHeight = (int)MathF.Ceiling((hi.Y - oy) / cell) + 2;
             Log?.Invoke($"[maps] baking {name} nav field...");
+            Log?.Invoke($"[maps] {name} bake grid {gridWidth}x{gridHeight} " +
+                        $"({gridWidth * gridHeight:N0} columns), bounds {lo}..{hi}, {BakeThreads} threads");
             using var heartbeat = new Timer(
                 _ => Log?.Invoke($"[maps] baking {name} nav field... {sw.Elapsed.TotalSeconds:F0}s"),
                 null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
@@ -647,7 +655,7 @@ public sealed class MapCourseSource
             void BakeProgress(int done, int total)
             {
                 double seconds = sw.Elapsed.TotalSeconds;
-                if (seconds - lastProgressSecond < 5) return;
+                if (done > 0 && seconds - lastProgressSecond < 5) return;
                 lastProgressSecond = seconds;
                 Log?.Invoke($"[maps] baking {name} nav field: {done:N0}/{total:N0} columns " +
                             $"({100.0 * done / Math.Max(1, total):F1}%) in {seconds:F0}s");

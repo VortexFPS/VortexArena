@@ -236,6 +236,13 @@ public sealed class MapCourseSource
         }
 
         ulong hash = NavFieldIo.GeometryHash(built.World);
+        if (Excluded.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            int bspWorldBrushes = bsp.Models.Length > 0 ? bsp.Models[0].BrushCount : bsp.Brushes.Length;
+            Log?.Invoke($"[maps] {name} collision expansion: {bspWorldBrushes:N0} BSP world brushes -> " +
+                        $"{built.World.Brushes.Count:N0} runtime brushes " +
+                        $"({Math.Max(0, built.World.Brushes.Count - bspWorldBrushes):N0} patch/derived)");
+        }
         NavField? field = TryReadCachedField(name, hash);
         bool fromCache = field is not null;
         if (field is null)
@@ -645,9 +652,23 @@ public sealed class MapCourseSource
             float oy = MathF.Floor(lo.Y / cell) * cell - cell;
             int gridWidth = (int)MathF.Ceiling((hi.X - ox) / cell) + 2;
             int gridHeight = (int)MathF.Ceiling((hi.Y - oy) / cell) + 2;
+            int maxSides = 0, maxPoints = 0, maxEdges = 0;
+            long totalSides = 0, totalPoints = 0, totalEdges = 0;
+            foreach (Brush brush in world.Brushes)
+            {
+                totalSides += brush.Sides.Length;
+                totalPoints += brush.Points.Length;
+                totalEdges += brush.EdgeDirs.Length;
+                maxSides = Math.Max(maxSides, brush.Sides.Length);
+                maxPoints = Math.Max(maxPoints, brush.Points.Length);
+                maxEdges = Math.Max(maxEdges, brush.EdgeDirs.Length);
+            }
             Log?.Invoke($"[maps] baking {name} nav field...");
             Log?.Invoke($"[maps] {name} bake grid {gridWidth}x{gridHeight} " +
                         $"({gridWidth * gridHeight:N0} columns), bounds {lo}..{hi}, {BakeThreads} threads");
+            Log?.Invoke($"[maps] {name} collision {world.Brushes.Count:N0} brushes; " +
+                        $"sides {totalSides:N0} max {maxSides}, points {totalPoints:N0} max {maxPoints}, " +
+                        $"edges {totalEdges:N0} max {maxEdges}");
             using var heartbeat = new Timer(
                 _ => Log?.Invoke($"[maps] baking {name} nav field... {sw.Elapsed.TotalSeconds:F0}s"),
                 null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));

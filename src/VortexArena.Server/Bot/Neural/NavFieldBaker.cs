@@ -119,14 +119,37 @@ public static class NavFieldBaker
         {
             int workers = Math.Min(maxDegreeOfParallelism, height);
             int rowsPer = (height + workers - 1) / workers;
-            Parallel.For(0, workers, new ParallelOptions { MaxDegreeOfParallelism = workers }, w =>
+            // Parallel.For is allowed to use fewer workers than MaxDegreeOfParallelism. Under the live
+            // trainer load it used exactly one on erbium (135 CPU-seconds on one OS thread, ~0 on every
+            // other), turning a configured 8-way bake into a four-minute serial bake. Dedicated short-lived
+            // workers make the requested bake parallelism a guarantee; each already owns a private world.
+            var workerThreads = new Thread[workers];
+            var workerErrors = new Exception?[workers];
+            for (int w = 0; w < workers; w++)
             {
-                int y0 = w * rowsPer;
-                int y1 = Math.Min(height, y0 + rowsPer);
-                if (y0 >= y1) return;
-                // A private world AND a private service per worker: see the thread-safety note above.
-                BakeRange(y0, y1, new TraceService(PrivateView(world)));
-            });
+                int worker = w;
+                workerThreads[w] = new Thread(() =>
+                {
+                    try
+                    {
+                        int y0 = worker * rowsPer;
+                        int y1 = Math.Min(height, y0 + rowsPer);
+                        if (y0 >= y1) return;
+                        // A private world AND a private service per worker: see the thread-safety note above.
+                        BakeRange(y0, y1, new TraceService(PrivateView(world)));
+                    }
+                    catch (Exception ex)
+                    {
+                        workerErrors[worker] = ex;
+                    }
+                }) { IsBackground = true, Name = $"nav-bake-{mapName}-{w}" };
+                workerThreads[w].Start();
+            }
+            foreach (Thread worker in workerThreads) worker.Join();
+            var failures = new List<Exception>();
+            foreach (Exception? error in workerErrors)
+                if (error is not null) failures.Add(error);
+            if (failures.Count > 0) throw new AggregateException(failures);
         }
 
         // Flatten. Doing this after the fan-out keeps the workers writing to disjoint slots with no shared

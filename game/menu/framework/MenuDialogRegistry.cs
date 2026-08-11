@@ -44,7 +44,7 @@ public static class MenuDialogRegistry
         // separate lowercase "sandbox" key). Registering the QC name restores the Base in-match entry point — the
         // dialog opens regardless (exactly like Base; g_sandbox must be enabled for its buttons to do anything).
         ["SandboxTools"] = () => new DialogSandboxTools(),          // QC dialog_sandboxtools (menu_showsandboxtools)
-        ["BotPolicies"] = () => new DialogBotPolicies(),            // Vortex bot movement laboratory (F11)
+        ["BotPolicies"] = () => new DialogBotPolicies(),            // Vortex bot movement laboratory (F12)
         // QC `menu_cmd skinselect`/`languageselect` remap to the skinselector/languageselector dialogs. Those QC
         // dialogs are the skin list / language list; the port folds both into the Settings dialog's User tab
         // (dialog_settings_user.qc — the faithful home of both pickers), so the *select overlay verbs resolve there.

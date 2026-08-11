@@ -55,6 +55,9 @@ public sealed class MapCourseSource
     /// </summary>
     public static readonly string[] HeldOut = { "catharsis", "fuse", "afterslime" };
 
+    /// <summary>Maps deliberately excluded from both training and evaluation due to known geometry faults.</summary>
+    public static readonly string[] Excluded = { "erbium" };
+
     /// <summary>
     /// Where baked fields are cached between runs and between host processes.
     ///
@@ -65,11 +68,10 @@ public sealed class MapCourseSource
     public string CacheDir = Path.Combine("_scratch", "navfields");
 
     /// <summary>
-    /// Bake threads per map. Deliberately small, because several host processes share one machine: at the
-    /// default of "all but two cores" a six-host run spawns 132 threads onto 24 and they mostly wait for
-    /// each other.
+    /// Bake threads per map. The per-map cross-process lease below guarantees only one host can bake a
+    /// given field, so using up to eight cores no longer multiplies into hundreds of competing workers.
     /// </summary>
-    public int BakeThreads = 2;
+    public int BakeThreads = Math.Clamp(Environment.ProcessorCount / 2, 2, 8);
 
     /// <summary>Exposes the VFS so a caller can wire GameWorld.ConfigReader to the same mounted content.</summary>
     public VirtualFileSystem Vfs => _vfs;
@@ -126,6 +128,11 @@ public sealed class MapCourseSource
 
         foreach (string m in candidates)
         {
+            if (Excluded.Contains(m, StringComparer.OrdinalIgnoreCase))
+            {
+                Log?.Invoke($"[maps] {m} is excluded from neural rotation pending nav-bake repair");
+                continue;
+            }
             if (HeldOut.Contains(m, StringComparer.OrdinalIgnoreCase))
             {
                 Log?.Invoke($"[maps] {m} is held out for eval — not training on it");
@@ -600,7 +607,7 @@ public sealed class MapCourseSource
         Directory.CreateDirectory(CacheDir);
         string lockPath = Path.Combine(CacheDir, name + ".navfield.lock");
         FileStream? lease = null;
-        bool announced = false;
+        int waitSeconds = 0;
         while (lease is null)
         {
             try
@@ -609,12 +616,10 @@ public sealed class MapCourseSource
             }
             catch (IOException)
             {
-                if (!announced)
-                {
-                    Log?.Invoke($"[maps] waiting for another process to bake {name}...");
-                    announced = true;
-                }
+                if (waitSeconds % 5 == 0)
+                    Log?.Invoke($"[maps] waiting for another process to bake {name}... {waitSeconds}s");
                 Thread.Sleep(1000);
+                waitSeconds++;
             }
         }
 
@@ -624,7 +629,7 @@ public sealed class MapCourseSource
             NavField? cached = TryReadCachedField(name, hash);
             if (cached is not null)
             {
-                if (announced) Log?.Invoke($"[maps] loaded {name} after shared bake completed");
+                if (waitSeconds > 0) Log?.Invoke($"[maps] loaded {name} after shared bake completed");
                 return cached;
             }
 
@@ -633,7 +638,17 @@ public sealed class MapCourseSource
             using var heartbeat = new Timer(
                 _ => Log?.Invoke($"[maps] baking {name} nav field... {sw.Elapsed.TotalSeconds:F0}s"),
                 null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
-            NavField baked = NavFieldBaker.BakeParallel(world, name, hash, threads: BakeThreads);
+            double lastProgressSecond = 0;
+            void BakeProgress(int done, int total)
+            {
+                double seconds = sw.Elapsed.TotalSeconds;
+                if (seconds - lastProgressSecond < 5) return;
+                lastProgressSecond = seconds;
+                Log?.Invoke($"[maps] baking {name} nav field: {done:N0}/{total:N0} columns " +
+                            $"({100.0 * done / Math.Max(1, total):F1}%) in {seconds:F0}s");
+            }
+            NavField baked = NavFieldBaker.BakeParallel(
+                world, name, hash, progress: BakeProgress, threads: BakeThreads);
             sw.Stop();
             TryWriteCachedField(name, baked);
             Log?.Invoke($"[maps] baked {name} nav field in {sw.Elapsed.TotalSeconds:F1}s");

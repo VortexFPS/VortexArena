@@ -1038,9 +1038,12 @@ def job_block(r, snap, peers, s, claimed):
         label(s, "steps"), bar(pct, 20, s), pct * 100, r["steps"] / 1e6, r["budget"] / 1e6,
         "{:,.0f}".format(r["sps"]), eta))
 
-    out.append(gut + " %-7s update %s   sampled %.1f%%   entropy %.3f   kl %.4f   %s   %s" % (
-        label(s, "state"), "{:,}".format(r["update"]), r["sampled"], r["entropy"], r["kl"],
-        health_word(r, s), eval_word(r, s)))
+    out.append(gut + " %-7s update %s   sampled %.1f%%   entropy %.3f   kl %.4f" % (
+        label(s, "state"), "{:,}".format(r["update"]), r["sampled"], r["entropy"], r["kl"]))
+    state_detail = health_word(r, s)
+    if r["running"]:
+        state_detail += "   " + eval_word(r, s)
+    out.append(gut + " %-7s %s" % ("", state_detail))
 
     out.append(gut)
     total_hosts = snap["hosts"] + sum(x["count"] for x in r.get("remotes", []))
@@ -1048,6 +1051,8 @@ def job_block(r, snap, peers, s, claimed):
     out.append(gut + " %s %s" % (label(s, "fleet"),
                               fleet_line(snap, s, role, snap["hosts"], total_hosts, r["eval_running"],
                                          r.get("agents_per_host", 16), r.get("phase", "training"))))
+    if not r["running"]:
+        out.append(gut + " %-7s %s" % ("", eval_word(r, s)))
     for rem in r.get("remotes", []):
         peer = _match_peer(rem["addr"], peers)
         if peer is not None:

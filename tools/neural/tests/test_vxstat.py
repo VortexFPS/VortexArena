@@ -56,6 +56,15 @@ def test_job_block_reserves_five_event_rows_when_empty():
         "ram_free": 22, "cpu": 0.25, "eval_shards_running": 0, "age": 0,
     }
     lines = vxstat.job_block(run, snap, [], vxstat.Style(False), set())
+    state_index = next(i for i, line in enumerate(lines) if "state" in line)
     event_index = next(i for i, line in enumerate(lines) if "events" in line)
+    assert "healthy" not in lines[state_index]
+    assert "healthy" in lines[state_index + 1]
     assert len(lines[event_index:event_index + vxstat.MIN_EVENT_ROWS]) == 5
     assert all("events" not in line for line in lines[event_index + 1:event_index + 5])
+
+    stopped = dict(run, running=False, phase="stopped")
+    stopped_lines = vxstat.job_block(stopped, snap, [], vxstat.Style(False), set())
+    fleet_index = next(i for i, line in enumerate(stopped_lines) if "fleet" in line)
+    paused_index = next(i for i, line in enumerate(stopped_lines) if "paused - resumes" in line)
+    assert paused_index == fleet_index + 1

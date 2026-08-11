@@ -227,10 +227,7 @@ public sealed class MapCourseSource
         NavField? field = TryReadCachedField(name, hash);
         bool fromCache = field is not null;
         if (field is null)
-        {
-            field = NavFieldBaker.BakeParallel(built.World, name, hash, threads: BakeThreads);
-            TryWriteCachedField(name, field);
-        }
+            field = ReadOrBakeField(name, hash, built.World);
 
         var entities = new List<EntityDict>();
         foreach (Dictionary<string, string> e in bsp.Entities)
@@ -594,10 +591,59 @@ public sealed class MapCourseSource
         catch (UnauthorizedAccessException) { return null; }
     }
 
+    private NavField ReadOrBakeField(string name, ulong hash, CollisionWorld world)
+    {
+        // Host processes share this cache. The old "racy by design" path was tolerable for small fields,
+        // but a migrated/stale real-map field made eight evaluators bake the same geometry concurrently.
+        // They saturated the box for minutes and could overwrite one another's result. FileShare.None is a
+        // cross-process lease; a crashed baker releases it automatically even though the tiny lock file stays.
+        Directory.CreateDirectory(CacheDir);
+        string lockPath = Path.Combine(CacheDir, name + ".navfield.lock");
+        FileStream? lease = null;
+        bool announced = false;
+        while (lease is null)
+        {
+            try
+            {
+                lease = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException)
+            {
+                if (!announced)
+                {
+                    Log?.Invoke($"[maps] waiting for another process to bake {name}...");
+                    announced = true;
+                }
+                Thread.Sleep(1000);
+            }
+        }
+
+        using (lease)
+        {
+            // The process that held the lease may have completed while we waited.
+            NavField? cached = TryReadCachedField(name, hash);
+            if (cached is not null)
+            {
+                if (announced) Log?.Invoke($"[maps] loaded {name} after shared bake completed");
+                return cached;
+            }
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Log?.Invoke($"[maps] baking {name} nav field...");
+            using var heartbeat = new Timer(
+                _ => Log?.Invoke($"[maps] baking {name} nav field... {sw.Elapsed.TotalSeconds:F0}s"),
+                null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+            NavField baked = NavFieldBaker.BakeParallel(world, name, hash, threads: BakeThreads);
+            sw.Stop();
+            TryWriteCachedField(name, baked);
+            Log?.Invoke($"[maps] baked {name} nav field in {sw.Elapsed.TotalSeconds:F1}s");
+            return baked;
+        }
+    }
+
     private void TryWriteCachedField(string name, NavField field)
     {
-        // Best effort, and racy by design: several hosts may bake the same map at once and the last write
-        // wins. They are writing identical bytes, so the only cost is duplicated work on the first run.
+        // Best effort. Callers hold the per-map bake lease, so only one process writes this path at a time.
         try
         {
             Directory.CreateDirectory(CacheDir);

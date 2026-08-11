@@ -246,9 +246,25 @@ def _finite_or_none(value):
 
 
 def _atomic_json(path: Path, payload: dict) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    # A fixed .tmp name lets the training and evaluator threads collide, and Windows can briefly deny a
+    # replace while vxstat has the destination open. Unique writers plus a short sharing-violation retry
+    # keep status telemetry from ever becoming a reason to stop training.
+    tmp = path.with_suffix(path.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp")
     tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    os.replace(tmp, path)
+    try:
+        for attempt in range(20):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.05)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _append_jsonl(path: Path, payload: dict) -> None:
@@ -1479,6 +1495,7 @@ def _collect_eval_process_files(procs: list[subprocess.Popen], commands: list[li
     deadline = time.monotonic() + timeout
     steps = [0] * len(procs)
     episodes = [0] * len(procs)
+    stderr_sizes = [0] * len(procs)
     last_change = [time.monotonic()] * len(procs)
     restarts = [0] * len(procs)
     statuses = ["running"] * len(procs)
@@ -1492,14 +1509,15 @@ def _collect_eval_process_files(procs: list[subprocess.Popen], commands: list[li
              open(stderr_paths[i], "w", encoding="utf-8") as err_fh:
             return subprocess.Popen(commands[i], stdout=out_fh, stderr=err_fh, text=True)
 
-    def read_progress(i: int) -> tuple[int, int]:
+    def read_progress(i: int) -> tuple[int, int, int]:
         try:
             text = stderr_paths[i].read_text(encoding="utf-8", errors="replace")
         except OSError:
-            return steps[i], episodes[i]
+            return steps[i], episodes[i], stderr_sizes[i]
         matches = list(progress_re.finditer(text))
-        return ((int(matches[-1].group(1)), int(matches[-1].group(3))) if matches
-                else (steps[i], episodes[i]))
+        new_steps, new_episodes = ((int(matches[-1].group(1)), int(matches[-1].group(3))) if matches
+                                   else (steps[i], episodes[i]))
+        return new_steps, new_episodes, len(text)
 
     def publish() -> None:
         now = time.time()
@@ -1517,9 +1535,11 @@ def _collect_eval_process_files(procs: list[subprocess.Popen], commands: list[li
     while pending:
         now = time.monotonic()
         for i in list(pending):
-            new_steps, new_episodes = read_progress(i)
-            if (new_steps, new_episodes) != (steps[i], episodes[i]):
+            new_steps, new_episodes, new_size = read_progress(i)
+            if ((new_steps, new_episodes) != (steps[i], episodes[i])
+                    or new_size != stderr_sizes[i]):
                 steps[i], episodes[i] = new_steps, new_episodes
+                stderr_sizes[i] = new_size
                 last_change[i] = now
                 statuses[i] = "running"
 
@@ -1548,6 +1568,7 @@ def _collect_eval_process_files(procs: list[subprocess.Popen], commands: list[li
                     procs[i].wait(timeout=10)
                     restarts[i] += 1
                     steps[i] = episodes[i] = 0
+                    stderr_sizes[i] = 0
                     last_change[i] = now
                     statuses[i] = "restarting"
                     procs[i] = launch(i)

@@ -304,7 +304,7 @@ crossing zero as arrivals climb. Three ways it goes wrong and what each looks li
 `bot_neural_status` in the console reports what loaded, what baked, and why the bots are on the classic
 steer if they are.
 
-In a local match, press **F12** for the Bot Movement Lab. It discovers every `.vxpw` below the nearby
+In a local match, press **F10** for the Bot Movement Lab. It discovers every `.vxpw` below the nearby
 `runs/` folder (or `VORTEX_POLICY_ROOT`), reads `state.json` plus the latest `eval_completed` event, and lets
 you rank, bookmark, and live-switch policies or return to classic HavocBot movement. Policy switching keeps
 the deterministic tactician in charge of targets, weapons, combat aim, and firing; only the locomotion half

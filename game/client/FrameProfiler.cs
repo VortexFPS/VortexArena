@@ -45,7 +45,7 @@ namespace VortexArena.Game.Client;
 ///   <item><c>cl_frameprofiler_dump</c> — transient: writes the forensic ring to <c>frameprofile_ring.csv</c>.</item>
 /// </list></para>
 ///
-/// <para><b>Hotkey.</b> <c>F11</c> (the one unbound function key) toggles the expanded overlay — top live scopes
+/// <para><b>Hotkey.</b> <c>Ctrl+F11</c> toggles the expanded overlay — top live scopes
 /// with rolling baselines + the call tree. Handled at the <c>_Input</c> stage with <c>ProcessMode.Always</c>, so
 /// it works in the menu, a paused match, anywhere.</para>
 ///
@@ -276,14 +276,14 @@ public partial class FrameProfiler : CanvasLayer
     private PhaseWatchdog? _watchdog;
 
     private FrameProfilerGraph _view = null!;
-    private bool _expanded;   // F11 toggle: expanded overlay (top scopes + tree)
+    private bool _expanded;   // Ctrl+F11 toggle: expanded overlay (top scopes + tree)
 
     public override void _Ready()
     {
         Instance = this;
         Layer = 10;                    // a dev overlay above the HUD
         ProcessPriority = 1_000_000;   // run late so most scopes have closed before we snapshot the bucket
-        ProcessMode = ProcessModeEnum.Always; // the F11 hotkey + recording keep working while the tree is paused
+        ProcessMode = ProcessModeEnum.Always; // the Ctrl+F11 hotkey + recording keep working while the tree is paused
 
         Prof.SetMainThread();          // tag this (Godot main) thread for the watchdog's MainPhase
         TryRegisterDefaults();
@@ -339,9 +339,8 @@ public partial class FrameProfiler : CanvasLayer
 
     public override void _Input(InputEvent @event)
     {
-        // (4) F11 toggles the expanded overlay. Direct physical-key intercept (F11 is the one unbound function
-        // key) so it needs no cfg bind; consumed because nothing else uses it.
-        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
+        // (4) Ctrl+F11 toggles the expanded developer overlay without colliding with F11's bot-policy menu bind.
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11, CtrlPressed: true })
         {
             _expanded = !_expanded;
             GetViewport().SetInputAsHandled();
@@ -1426,7 +1425,7 @@ public partial class FrameProfiler : CanvasLayer
         if (RecordAt(1) is { } latest)
         {
             Color pipeCol = latest.PipeCompiles > 0 ? new Color(1f, 0.55f, 0.3f) : white;
-            c.DrawString(font, new Vector2(2f, ty + 48f), $"draws {latest.DrawCalls:0}  pipe +{latest.PipeCompiles}  pause {latest.GcPauseMs:0.0}ms  [F11 detail]",
+            c.DrawString(font, new Vector2(2f, ty + 48f), $"draws {latest.DrawCalls:0}  pipe +{latest.PipeCompiles}  pause {latest.GcPauseMs:0.0}ms  [Ctrl+F11 detail]",
                 HorizontalAlignment.Left, -1f, 12, pipeCol);
         }
 

@@ -216,6 +216,9 @@ public static class BindInput
             case InputEventKey k:
                 if (k.Echo)
                     return;
+                // Ctrl+F11 belongs to the developer frame profiler. Do not also run F11's normal menu bind.
+                if (k.Keycode == Key.F11 && k.CtrlPressed)
+                    return;
                 string? kk = KeyString(k);
                 if (kk != null)
                     BindTable.HandleBind(kk, k.Pressed, runCommand);

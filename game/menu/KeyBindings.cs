@@ -92,7 +92,7 @@ public static class KeyBindings
         ["use"]        = "F",
         ["scoreboard"] = "Tab",
         ["screenshot"] = "F12",
-        ["botpolicies"] = "F10",
+        ["botpolicies"] = "F11",
         ["here_waypoint"] = "P",
     };
 

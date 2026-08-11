@@ -21,17 +21,18 @@ def test_clip_visible_preserves_ansi_but_never_wraps():
     assert clipped.endswith("\033[0m")
 
 
-def test_live_frame_fully_clears_only_when_terminal_size_changes(monkeypatch):
+def test_live_frame_clears_each_row_and_fully_clears_on_resize(monkeypatch):
     monkeypatch.setattr(vxstat.shutil, "get_terminal_size", lambda fallback: os.terminal_size((40, 8)))
     first, size = vxstat.live_frame(["x" * 100])
-    same, size = vxstat.live_frame(["short"], size)
+    same, size = vxstat.live_frame(["short", "second"], size)
 
     monkeypatch.setattr(vxstat.shutil, "get_terminal_size", lambda fallback: os.terminal_size((55, 9)))
     resized, _ = vxstat.live_frame(["short"], size)
 
     assert first.startswith("\033[2J\033[H")
-    assert vxstat.visible_len(first.split("\033[H", 1)[1].split("\033[J", 1)[0]) == 39
     assert same.startswith("\033[H") and not same.startswith("\033[2J")
+    assert same.startswith("\033[H\033[2K\rshort")
+    assert "\n\033[2K\rsecond" in same
     assert resized.startswith("\033[2J\033[H")
 
 

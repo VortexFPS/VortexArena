@@ -552,7 +552,12 @@ def live_frame(lines, previous_size=None):
     # Never write more physical rows than exist: scrolling defeats cursor-home redraws just like wrapping does.
     fitted = fitted[:size[1]]
     clear = "\033[2J\033[H" if previous_size != size else "\033[H"
-    return clear + "\n".join(fitted) + "\033[J", size
+    # Cursor-home plus erase-to-end is not enough when a row gets shorter: by the time the final erase runs,
+    # the cursor has already moved below that row and its old suffix survives ("waiting on evalon evalt").
+    # Clear each physical row before drawing it, and emit CR explicitly because LF-only cursor behaviour
+    # differs between Windows console modes.
+    rendered = "\n".join("\033[2K\r" + line for line in fitted)
+    return clear + rendered + "\033[J", size
 
 
 def clock_after(seconds):

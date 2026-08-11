@@ -31,9 +31,12 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, asdict
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 
@@ -154,6 +157,64 @@ class EvalResult:
         return self.error is None and math.isfinite(self.rate) and self.total > 0
 
 
+class EvaluationJob:
+    """One immutable policy snapshot being evaluated without blocking PPO updates."""
+
+    def __init__(self, runner: Callable[[Callable[[list[subprocess.Popen]], None]], EvalResult],
+                 *, update: int, stage_steps: int, checkpoint: Path, weights: Path,
+                 training_state: dict, expected_seconds: float, seed_offset: int = 0):
+        self.update = update
+        self.stage_steps = stage_steps
+        self.checkpoint = checkpoint
+        self.weights = weights
+        self.training_state = copy.deepcopy(training_state)
+        self.expected_seconds = expected_seconds
+        self.seed_offset = seed_offset
+        self.started_at = time.time()
+        self.finished_at: float | None = None
+        self._runner = runner
+        self._result: EvalResult | None = None
+        self._processes: list[subprocess.Popen] = []
+        self._lock = threading.Lock()
+        self._thread = threading.Thread(target=self._run, name=f"eval-u{update}", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        try:
+            self._result = self._runner(self.bind_processes)
+        except Exception as exc:  # keep a background failure from silently killing the monitor thread
+            self._result = EvalResult(float("nan"), error=f"background evaluator crashed: {exc}")
+        finally:
+            self.finished_at = time.time()
+
+    def bind_processes(self, processes: list[subprocess.Popen]) -> None:
+        with self._lock:
+            self._processes = list(processes)
+
+    def done(self) -> bool:
+        return not self._thread.is_alive()
+
+    def result(self) -> EvalResult:
+        self._thread.join()
+        assert self._result is not None
+        return self._result
+
+    def cancel(self) -> None:
+        with self._lock:
+            processes = list(self._processes)
+        for process in processes:
+            if process.poll() is None:
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+        self._thread.join(timeout=10)
+
+    @property
+    def elapsed(self) -> float:
+        return max(0.0, (self.finished_at or time.time()) - self.started_at)
+
+
 def _eval_is_better(candidate: EvalResult, best_rate: float, best_time: float, objective: str) -> bool:
     if not candidate.ok:
         return False
@@ -197,6 +258,35 @@ def _append_jsonl(path: Path, payload: dict) -> None:
 
 def _event(run_dir: Path, kind: str, message: str, **fields) -> None:
     _append_jsonl(run_dir / "events.jsonl", {"at": _stamp(), "kind": kind, "message": message, **fields})
+
+
+def _expected_eval_seconds(run_dir: Path, fallback: float = 1500.0) -> float:
+    """Median of recent completed evaluations, or a conservative first-run estimate."""
+    durations: list[float] = []
+    try:
+        with open(run_dir / "metrics.jsonl", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                    value = float(row.get("eval_seconds", 0))
+                    if row.get("type") == "evaluation" and value > 0:
+                        durations.append(value)
+                except (ValueError, TypeError, json.JSONDecodeError):
+                    pass
+    except OSError:
+        pass
+    recent = sorted(durations[-9:])
+    return recent[len(recent) // 2] if recent else fallback
+
+
+def _promote_checkpoint(source: Path, target: Path, training_state: dict) -> None:
+    """Promote the policy that was actually evaluated, while refreshing its status metadata."""
+    payload = torch.load(source, map_location="cpu", weights_only=False)
+    payload["training_state"] = copy.deepcopy(training_state)
+    payload["saved_at"] = _stamp()
+    temp = target.with_name(f".{target.name}.tmp")
+    torch.save(payload, temp)
+    os.replace(temp, target)
 
 
 def _legacy_resume_state(run_dir: Path, stage: int) -> dict:
@@ -389,6 +479,10 @@ def main() -> int:
                     help="split the eval episodes across this many parallel processes. Each keeps the same "
                          "agents-per-world (crowding is part of the task) and uses its own seed, so this "
                          "divides eval wall-clock AND averages down the eval's variance.")
+    ap.add_argument("--async-eval", action=argparse.BooleanOptionalAction, default=None,
+                    help="evaluate an immutable checkpoint in the background while PPO keeps collecting "
+                         "and updating. Only one evaluation runs at a time. Enabled by default for "
+                         "speed-v2; use --no-async-eval to reproduce the blocking legacy schedule.")
     ap.add_argument("--rollout", type=int, default=None,
                     help="override Hyper.rollout, the steps per host per update. This sets the BATCH SIZE "
                          "jointly with --hosts and --agents (batch = rollout x hosts x agents) while the "
@@ -466,10 +560,16 @@ def main() -> int:
         # memorising it. Re-enable only for a named experiment after the rotating/held-out harness lands.
         args.no_evolve = True
         args.no_tournament = True
+        if args.async_eval is None:
+            args.async_eval = True
     else:
         args.selection_objective = args.selection_objective or "arrival"
         args.gate_confirmations = args.gate_confirmations or 1
         args.eval_seed_mode = args.eval_seed_mode or "fixed"
+        if args.async_eval is None:
+            args.async_eval = False
+    if args.async_eval and not args.no_evolve:
+        ap.error("--async-eval currently requires --no-evolve because perturb-and-select mutates the live policy")
     args.gate_confirmations = max(1, args.gate_confirmations)
 
     run_name = args.name or time.strftime("%Y%m%d-%H%M%S")
@@ -698,9 +798,14 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         ret_scale.load(eval_args._resume_return_scale)
     eval_failures = int(resume.get("eval_failures", 0))
     passing_evals = int(resume.get("passing_evals", 0))
+    eval_job: EvaluationJob | None = None
+    next_eval_update = ((update // eval_every) + 1) * eval_every
+    eval_expected_seconds = _expected_eval_seconds(run_dir)
 
-    def state(phase: str = "training") -> dict:
-        return {
+    def state(phase: str | None = None) -> dict:
+        if phase is None:
+            phase = "training_with_eval" if eval_job is not None and not eval_job.done() else "training"
+        result = {
             "schema": 2, "run": run_dir.name, "phase": phase, "stage": stage,
             "stage_steps": total_steps, "budget": budget, "minimum_steps": minimum,
             "update": update, "best_rate": best_rate,
@@ -708,8 +813,113 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
             "last_rate": det_rate if math.isfinite(det_rate) else None,
             "eval_failures": eval_failures, "passing_evals": passing_evals,
             "gate": threshold, "eval_every": eval_every, "profile": eval_args.training_profile,
-            "selection_objective": eval_args.selection_objective, "updated_at": _stamp(),
+            "selection_objective": eval_args.selection_objective,
+            "next_eval_update": next_eval_update, "updated_at": _stamp(),
         }
+        if eval_job is not None and not eval_job.done():
+            result.update({"eval_in_flight": True, "eval_update": eval_job.update,
+                           "eval_started_epoch": eval_job.started_at,
+                           "eval_expected_seconds": eval_job.expected_seconds})
+        else:
+            result["eval_in_flight"] = False
+        return result
+
+    def finish_async_evaluation(job: EvaluationJob) -> str:
+        """Apply an eval result to the snapshot it measured, never to newer live weights."""
+        nonlocal det_rate, best_rate, best_time, evals_since_best, eval_failures, passing_evals
+        nonlocal total_steps, update
+        evaluation = job.result()
+        if not evaluation.ok:
+            eval_failures += 1
+            print(f"[s{stage}] EVAL FAILED ({eval_failures}/2): {evaluation.error}", flush=True)
+            _event(run_dir, "eval_failed", evaluation.error or "evaluation failed",
+                   update=job.update, completed_update=update)
+            if eval_failures >= 2:
+                failed = state("stopped_eval_failure")
+                save(policy, norm, optimizer, stage, run_dir, training_state=failed,
+                     return_scale=ret_scale)
+                _atomic_json(run_dir / "state.json", failed)
+                _event(run_dir, "paused", "two consecutive evaluations failed; checkpoint saved",
+                       update=update, stage_steps=total_steps)
+                return "stop"
+            return "continue"
+
+        eval_failures = 0
+        det_rate = evaluation.rate
+        gate = f"gate {threshold:.0%}" if threshold > 0 else "no gate"
+        evaluated_state = {**job.training_state, "phase": "evaluated", "last_rate": det_rate,
+                           "eval_failures": eval_failures, "updated_at": _stamp()}
+        new_best = _eval_is_better(evaluation, best_rate, best_time, eval_args.selection_objective)
+        if new_best:
+            best_rate = max(best_rate, det_rate)
+            best_time = evaluation.mean_time
+            evals_since_best = 0
+            evaluated_state.update({"best_rate": best_rate,
+                                    "best_time": _finite_or_none(best_time)})
+        else:
+            evals_since_best += 1
+            recent_det.append(det_rate)
+            recent_det[:] = recent_det[-4:]
+            if len(recent_det) == 4 and best_rate - max(recent_det) > 0.12:
+                print(f"[s{stage}] WARNING: the last 4 evals peaked at {max(recent_det):.1%} against "
+                      f"this stage's best of {best_rate:.1%}.")
+                recent_det.clear()
+
+        eligible = job.stage_steps >= minimum
+        if threshold > 0 and det_rate >= threshold and eligible:
+            passing_evals += 1
+        else:
+            passing_evals = 0
+        evaluated_state.update({"best_rate": best_rate, "best_time": _finite_or_none(best_time),
+                                "passing_evals": passing_evals})
+        if new_best:
+            _promote_checkpoint(job.checkpoint, run_dir / f"stage{stage}-best.pt", evaluated_state)
+            shutil.copy2(job.weights, run_dir / f"stage{stage}-best.vxpw")
+            _event(run_dir, "new_best", f"new stage {stage} best",
+                   arrival_rate=det_rate, mean_arrival_seconds=_finite_or_none(best_time),
+                   update=job.update, completed_update=update)
+
+        speed_text = (f", mean arrival {evaluation.mean_time:.2f}s"
+                      if math.isfinite(evaluation.mean_time) else "")
+        print(f"[s{stage}] background shipped-path eval of u{job.update}: {det_rate:.1%} "
+              f"arrivals{speed_text} ({gate}, best {best_rate:.1%}); PPO reached u{update}")
+        _append_jsonl(run_dir / "metrics.jsonl", {**evaluated_state, "type": "evaluation",
+                      "arrival_rate": det_rate,
+                      "mean_arrival_seconds": _finite_or_none(evaluation.mean_time),
+                      "hits": evaluation.hits, "episodes": evaluation.total,
+                      "seed_offset": job.seed_offset, "eval_seconds": job.elapsed,
+                      "completed_update": update})
+        _event(run_dir, "eval_completed", f"eval completed at {det_rate:.1%}",
+               arrival_rate=det_rate, mean_arrival_seconds=_finite_or_none(evaluation.mean_time),
+               update=job.update, completed_update=update)
+
+        if threshold > 0 and det_rate >= threshold and not eligible:
+            print(f"[s{stage}] gate is locked until {minimum:,} stage steps "
+                  f"({job.stage_steps:,} evaluated)")
+        elif passing_evals and passing_evals < eval_args.gate_confirmations:
+            print(f"[s{stage}] gate confirmation {passing_evals}/{eval_args.gate_confirmations}")
+        if threshold > 0 and passing_evals >= eval_args.gate_confirmations:
+            # Preserve all work learned after this snapshot before advancing with the policy that actually
+            # passed. The speculative checkpoint is optional to resume, but it makes the work recoverable.
+            save(policy, norm, optimizer, stage, run_dir, tag=f"stage{stage}-speculative-latest",
+                 training_state=state(), return_scale=ret_scale)
+            payload = torch.load(job.checkpoint, map_location=device, weights_only=False)
+            policy.load_state_dict(payload["policy"])
+            optimizer.load_state_dict(payload["optimizer"])
+            norm.load(payload["norm"])
+            if payload.get("return_scale"):
+                ret_scale.load(payload["return_scale"])
+            total_steps, update = job.stage_steps, job.update
+            completed = {**evaluated_state, "passing_evals": passing_evals}
+            save(policy, norm, optimizer, stage, run_dir, training_state=completed,
+                 return_scale=ret_scale)
+            save(policy, norm, optimizer, stage + 1, run_dir, tag=f"stage{stage}-done",
+                 training_state={**completed, "stage": stage + 1, "stage_steps": 0, "update": 0},
+                 return_scale=None)
+            _event(run_dir, "stage_advanced", f"stage {stage} passed", arrival_rate=det_rate,
+                   confirmations=passing_evals)
+            return "advance"
+        return "continue"
 
     _atomic_json(run_dir / "state.json", state())
 
@@ -892,6 +1102,9 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         _atomic_json(run_dir / "state.json", state())
 
         if _STOP_REQUESTED:
+            if eval_job is not None:
+                eval_job.cancel()
+                eval_job = None
             paused = state("stopped")
             save(policy, norm, optimizer, stage, run_dir, training_state=paused, return_scale=ret_scale)
             _atomic_json(run_dir / "state.json", paused)
@@ -934,7 +1147,42 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         # the entropy bonus keeps the sampled policy noisy on purpose.
         # Runs whether or not there is a gate: a single-stage run still wants to see the number that
         # matters, and printing `det 0.0%` because the eval was skipped is worse than not printing it.
-        if update % eval_every == 0:
+        if eval_args.async_eval:
+            if eval_job is not None and eval_job.done():
+                completed_job = eval_job
+                eval_job = None
+                eval_expected_seconds = completed_job.elapsed
+                outcome = finish_async_evaluation(completed_job)
+                next_eval_update = update + eval_every
+                _atomic_json(run_dir / "state.json", state())
+                if outcome == "advance":
+                    return True
+                if outcome == "stop":
+                    return False
+
+            if eval_job is None and update >= next_eval_update:
+                candidate_state = state()
+                save(policy, norm, optimizer, stage, run_dir, tag="eval-candidate",
+                     training_state=candidate_state, return_scale=ret_scale)
+                candidate_checkpoint = run_dir / "eval-candidate.pt"
+                candidate_weights = run_dir / "eval-candidate.vxpw"
+                seed_offset = update * 104729 if eval_args.eval_seed_mode == "rotating" else 0
+
+                def run_evaluation(sink, weights=candidate_weights, offset=seed_offset):
+                    return evaluate(None, None, run_dir, stage, eval_steps, eval_args,
+                                    seed_offset=offset, weights_path=weights, process_sink=sink)
+
+                eval_job = EvaluationJob(run_evaluation, update=update, stage_steps=total_steps,
+                                         checkpoint=candidate_checkpoint, weights=candidate_weights,
+                                         training_state=candidate_state,
+                                         expected_seconds=eval_expected_seconds,
+                                         seed_offset=seed_offset)
+                next_eval_update = 0  # there is no queued eval while one is already in flight
+                _event(run_dir, "eval_started", f"stage {stage} background evaluation started",
+                       update=update, stage_steps=total_steps)
+                _atomic_json(run_dir / "state.json", state())
+
+        elif update % eval_every == 0:
             _atomic_json(run_dir / "state.json", state("evaluating"))
             _event(run_dir, "eval_started", f"stage {stage} evaluation started", update=update)
             eval_started_wall = time.time()
@@ -1110,6 +1358,9 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                 else:
                     print(f"[evolve s{stage}] no candidate beat the parent; PPO continues unchanged")
 
+    if eval_job is not None:
+        eval_job.cancel()
+        eval_job = None
     save(policy, norm, optimizer, stage, run_dir, training_state=state(), return_scale=ret_scale)
     if threshold <= 0:
         return True
@@ -1123,8 +1374,55 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     return final >= threshold
 
 
+def _shard_episode_counts(episodes: int, shards: int) -> list[int]:
+    """Split every requested episode across shards instead of silently dropping the remainder."""
+    episodes = max(1, int(episodes))
+    shards = min(episodes, max(1, int(shards)))
+    base, extra = divmod(episodes, shards)
+    return [base + (i < extra) for i in range(shards)]
+
+
+def _collect_eval_processes(procs: list[subprocess.Popen], timeout: float = 900.0
+                            ) -> tuple[list[str], list[str]]:
+    """Drain every shard concurrently under one wall-clock deadline.
+
+    Waiting on ``communicate`` one shard at a time leaves every later stderr pipe unread. A verbose host
+    eventually fills that pipe and blocks in WriteFile, which is the zero-CPU evaluator hang seen in v27.
+    """
+    deadline = time.monotonic() + timeout
+
+    def collect(i: int, process: subprocess.Popen):
+        try:
+            remaining = max(0.01, deadline - time.monotonic())
+            stdout, stderr = process.communicate(timeout=remaining)
+            error = None
+            if process.returncode != 0:
+                tail = " | ".join((stderr or "").splitlines()[-4:])
+                error = f"shard {i} exited {process.returncode}: {tail}"
+            return i, stdout or "", error
+        except subprocess.TimeoutExpired:
+            process.kill()
+            try:
+                stdout, _ = process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                stdout = ""
+            return i, stdout or "", f"shard {i} timed out after {timeout:g}s"
+
+    outputs = [""] * len(procs)
+    errors: list[tuple[int, str]] = []
+    with ThreadPoolExecutor(max_workers=max(1, len(procs)), thread_name_prefix="eval-drain") as pool:
+        futures = [pool.submit(collect, i, process) for i, process in enumerate(procs)]
+        for future in as_completed(futures):
+            i, stdout, error = future.result()
+            outputs[i] = stdout
+            if error:
+                errors.append((i, error))
+    return outputs, [message for _, message in sorted(errors)]
+
+
 def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args,
-             seed_offset: int = 0) -> EvalResult:
+             seed_offset: int = 0, *, weights_path: Path | None = None,
+             process_sink: Callable[[list[subprocess.Popen]], None] | None = None) -> EvalResult:
     """Arrival rate of the exported policy, measured through the path that actually SHIPS.
 
     Exports the weights and hands them to ``va-neural-host --bench --policy``, which runs the network
@@ -1140,8 +1438,9 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args,
 
     Whatever the residual is, gating on it would be gating on a number the shipped bot never experiences.
     """
-    weights = run_dir / "eval.vxpw"
-    export_weights(policy, norm, weights, label=f"{run_dir.name}-s{stage}-eval")
+    weights = weights_path or (run_dir / "eval.vxpw")
+    if weights_path is None:
+        export_weights(policy, norm, weights, label=f"{run_dir.name}-s{stage}-eval")
 
     dll = Path(__file__).resolve().parent / "VortexArena.NeuralHost" / "bin" / "Release" / "net8.0" / "va-neural-host.dll"
     if not dll.exists():
@@ -1161,13 +1460,13 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args,
     # Sharding keeps each world's crowding identical and divides the wall-clock by the shard count. The
     # shards also use different seeds, so averaging them reduces the eval's own variance instead of just
     # preserving it -- sigma ~2.5 on one run, and about half that across four.
-    shards = max(1, int(getattr(args, "eval_shards", 4)))
-    per = max(1, args.eval_episodes // shards)
+    episode_counts = _shard_episode_counts(args.eval_episodes, getattr(args, "eval_shards", 4))
+    shards = len(episode_counts)
     data_root = str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data")
 
     def shard_cmd(i: int) -> list[str]:
         c = [shutil.which("dotnet") or "dotnet", str(dll),
-             "--bench", str(steps * 4), "--bench-episodes", str(per),
+             "--bench", str(steps * 4), "--bench-episodes", str(episode_counts[i]),
              # Pinned, NOT args.agents. Every curriculum baseline was measured at EvalAgents while this
              # passed the training value, so gates and evals were scored on different difficulties.
              "--agents", str(EvalAgents), "--ticks", str(args.ticks),
@@ -1183,24 +1482,14 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args,
         for i in range(shards):
             procs.append(subprocess.Popen(shard_cmd(i), stdout=subprocess.PIPE,
                                           stderr=subprocess.PIPE, text=True))
+        if process_sink is not None:
+            process_sink(procs)
     except OSError as exc:
         for pr in procs:
             pr.kill()
         return EvalResult(float("nan"), error=f"could not launch evaluator: {exc}")
 
-    outs: list[str] = []
-    shard_errors: list[str] = []
-    for i, pr in enumerate(procs):
-        try:
-            stdout, stderr = pr.communicate(timeout=900)
-            outs.append(stdout or "")
-            if pr.returncode != 0:
-                tail = " | ".join((stderr or "").splitlines()[-4:])
-                shard_errors.append(f"shard {i} exited {pr.returncode}: {tail}")
-        except subprocess.TimeoutExpired:
-            pr.kill()
-            outs.append("")
-            shard_errors.append(f"shard {i} timed out after 900s")
+    outs, shard_errors = _collect_eval_processes(procs)
     out = "\n".join(outs)
 
     # Surface how often the course draw had to relax its constraints.

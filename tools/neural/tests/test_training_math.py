@@ -1,6 +1,7 @@
 """Small regression tests for trainer math that must survive checkpoint resumes."""
 
 import sys
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -9,7 +10,8 @@ import torch
 NEURAL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(NEURAL))
 
-from train import ReturnScale, _legacy_resume_state, gae, save  # noqa: E402
+from train import (ReturnScale, _collect_eval_processes, _legacy_resume_state,
+                   _shard_episode_counts, gae, save)  # noqa: E402
 from va_neural.model import Policy, RunningNorm  # noqa: E402
 
 
@@ -78,3 +80,24 @@ def test_atomic_checkpoint_keeps_the_previous_complete_copy(tmp_path):
     assert loaded["checkpoint_version"] == 2
     assert loaded["training_state"]["stage_steps"] == 456
     assert loaded["return_scale"] is not None
+
+
+def test_eval_episode_split_preserves_every_episode():
+    assert _shard_episode_counts(10, 3) == [4, 3, 3]
+    assert sum(_shard_episode_counts(120, 4)) == 120
+    assert _shard_episode_counts(2, 8) == [1, 1]
+
+
+def test_eval_shard_pipes_are_drained_concurrently():
+    barrier = threading.Barrier(2)
+
+    class FakeProcess:
+        returncode = 0
+
+        def communicate(self, timeout):
+            barrier.wait(timeout=0.5)
+            return "arrival rate 1 (1/1)\n", ""
+
+    outputs, errors = _collect_eval_processes([FakeProcess(), FakeProcess()], timeout=1.0)
+    assert len(outputs) == 2
+    assert errors == []

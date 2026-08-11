@@ -68,3 +68,15 @@ def test_job_block_reserves_five_event_rows_when_empty():
     fleet_index = next(i for i, line in enumerate(stopped_lines) if "fleet" in line)
     paused_index = next(i for i, line in enumerate(stopped_lines) if "paused - resumes" in line)
     assert paused_index == fleet_index + 1
+
+
+def test_eval_word_shows_running_eta_and_structured_next_eval():
+    style = vxstat.Style(False)
+    running = {"running": True, "eval_running": True, "eval_secs": 1800,
+               "eval_elapsed": 600, "eval_done": 1, "eval_total": 4,
+               "eval_every": 60, "update": 100, "spu": 2.0,
+               "next_eval_update": 160}
+    assert "~20m 00s left" in vxstat.eval_word(running, style)
+
+    waiting = dict(running, eval_running=False, eval_elapsed=0)
+    assert "next eval in 60u" in vxstat.eval_word(waiting, style)

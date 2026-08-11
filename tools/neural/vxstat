@@ -704,6 +704,20 @@ def run_snapshot(name, pid, up, cmd, procs, running):
     if durations:
         ordered_durations = sorted(durations[-9:])
         eval_secs = ordered_durations[len(ordered_durations) // 2]
+    try:
+        expected = float(structured.get("eval_expected_seconds", 0))
+        if expected > 0:
+            eval_secs = expected
+    except (TypeError, ValueError):
+        pass
+
+    eval_in_flight = bool(structured.get("eval_in_flight"))
+    try:
+        eval_started_epoch = float(structured.get("eval_started_epoch", 0))
+    except (TypeError, ValueError):
+        eval_started_epoch = 0.0
+    eval_elapsed = (max(0.0, time.time() - eval_started_epoch) if eval_in_flight and eval_started_epoch
+                    else max((uptime_of(p) for p in shards), default=0.0))
 
     # Which other machines are feeding this run. The trainer's own command line is the only place this is
     # recorded, and it is what lets a job be shown as one row per participating machine.
@@ -751,10 +765,11 @@ def run_snapshot(name, pid, up, cmd, procs, running):
         "skipped": st["skipped"], "diverge": st["diverge"],
         "starved": st["starved"], "relaxed": st["relaxed"],
         "eval_every": every, "eval_secs": eval_secs, "spu": spu,
-        "eval_running": len(shards) > 0,
+        "next_eval_update": structured.get("next_eval_update"),
+        "eval_running": eval_in_flight or len(shards) > 0,
         "eval_done": max(0, total_shards - len(shards)) if shards else 0,
         "eval_total": total_shards,
-        "eval_elapsed": max((uptime_of(p) for p in shards), default=0.0),
+        "eval_elapsed": eval_elapsed,
         "phase": structured.get("phase", "evaluating" if shards else "training" if running else "stopped"),
         "events": events,
         "agents_per_host": agents_per_host,
@@ -911,7 +926,11 @@ def eval_word(r, s):
             left = ", ~%s left, done %s" % (dur(remain), clock_after(remain))
         return s.cyan("EVAL RUNNING %d/%d shards%s" % (r["eval_done"], r["eval_total"], left))
     if r["eval_every"] and r["update"]:
-        togo = r["eval_every"] - (r["update"] % r["eval_every"])
+        try:
+            target = int(r.get("next_eval_update") or 0)
+        except (TypeError, ValueError):
+            target = 0
+        togo = max(0, target - r["update"]) if target else r["eval_every"] - (r["update"] % r["eval_every"])
         if r["spu"]:
             remain = togo * r["spu"]
             return "next eval in %du (~%s, %s)" % (togo, dur(remain), clock_after(remain))

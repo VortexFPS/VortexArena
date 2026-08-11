@@ -122,7 +122,8 @@ public sealed class MapCourseSource
         if (!_vfs.MountContentRoot(dataRoot))
             throw new InvalidOperationException($"no content at {dataRoot}");
 
-        IEnumerable<string> candidates = string.IsNullOrWhiteSpace(mapList)
+        bool explicitMapList = !string.IsNullOrWhiteSpace(mapList);
+        IEnumerable<string> candidates = !explicitMapList
             ? DiscoverInstalledMaps()
             : mapList.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -130,8 +131,12 @@ public sealed class MapCourseSource
         {
             if (Excluded.Contains(m, StringComparer.OrdinalIgnoreCase))
             {
-                Log?.Invoke($"[maps] {m} is excluded from neural rotation pending nav-bake repair");
-                continue;
+                if (!explicitMapList)
+                {
+                    Log?.Invoke($"[maps] {m} is excluded from neural rotation pending nav-bake repair");
+                    continue;
+                }
+                Log?.Invoke($"[maps] WARNING: explicitly testing excluded map {m}");
             }
             if (HeldOut.Contains(m, StringComparer.OrdinalIgnoreCase))
             {

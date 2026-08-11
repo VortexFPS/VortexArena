@@ -538,7 +538,8 @@ def main() -> int:
                     help="consecutive passing evals required to advance (speed-v2 default: 2).")
     ap.add_argument("--eval-seed-mode", choices=("fixed", "rotating"), default=None,
                     help="fixed reproduces legacy evals; rotating prevents checkpoint selection and the "
-                         "perturbation loop from memorising one validation route bank.")
+                         "perturbation loop from memorising one validation route bank. Arbitrary rotating "
+                         "seeds are experimental: some map/course banks are pathologically slow.")
     ap.add_argument("--no-evolve", action="store_true",
                     help="disable the plateau perturb-and-select loop (G2): when the shipped eval makes no "
                          "new best for 4 evals, 6 noise-perturbed copies of the weights are scored through "
@@ -576,7 +577,10 @@ def main() -> int:
         if args.gate_confirmations is None:
             args.gate_confirmations = 2
         if args.eval_seed_mode is None:
-            args.eval_seed_mode = "rotating"
+            # Keep the validated four-shard bank until rotating banks are preflighted. v27 demonstrated why:
+            # arbitrary offsets repeatedly found course banks that consumed a full 900 s while v26's fixed
+            # bank completed in minutes. Training still randomises locations; this only stabilises validation.
+            args.eval_seed_mode = "fixed"
         # Perturb-and-select repeatedly queries the validation bank and was the most direct path to
         # memorising it. Re-enable only for a named experiment after the rotating/held-out harness lands.
         args.no_evolve = True

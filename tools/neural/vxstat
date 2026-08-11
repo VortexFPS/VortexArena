@@ -1076,7 +1076,10 @@ def job_block(r, snap, peers, s, claimed):
         peer = _match_peer(rem["addr"], peers)
         if peer is not None:
             claimed.add(peer["machine"])
-            worker_status = "waiting on eval" if r["eval_running"] else "simulation rollout"
+            # Background evaluation uses the trainer box; remote environments keep producing PPO rollout.
+            # Only the legacy blocking phase leaves them waiting on an evaluation.
+            worker_status = ("waiting on eval" if r.get("phase") == "evaluating"
+                             else "simulation rollout")
             out.append(gut + " %-7s %s" % ("", fleet_line(peer, s, "worker", rem["count"], total_hosts,
                                                      r["eval_running"], r.get("agents_per_host", 16),
                                                      worker_status)))

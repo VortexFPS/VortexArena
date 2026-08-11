@@ -80,3 +80,25 @@ def test_eval_word_shows_running_eta_and_structured_next_eval():
 
     waiting = dict(running, eval_running=False, eval_elapsed=0)
     assert "next eval in 60u" in vxstat.eval_word(waiting, style)
+
+
+def test_background_eval_keeps_remote_worker_status_on_rollout():
+    run = {
+        "name": "v27", "running": True, "up": 60, "stage": 3,
+        "phase": "training_with_eval", "stopped_reason": None, "best": 61.0,
+        "gate": 65.0, "baseline": None, "last": [], "best_time": None,
+        "steps": 1, "budget": 10, "sps": 1.0, "update": 1, "sampled": 1.0,
+        "entropy": 0.5, "kl": 0.01, "skipped": 0, "diverge": 0, "starved": 0,
+        "relaxed": 0, "eval_running": True, "eval_secs": 100, "eval_elapsed": 10,
+        "eval_done": 0, "eval_total": 4, "eval_every": 60, "spu": 1.0,
+        "next_eval_update": 0, "remotes": [{"addr": "10.0.10.61", "count": 56}],
+        "agents_per_host": 16, "events": [],
+    }
+    local = {"machine": "SKYTECH", "hosts": 0, "ram_used": 10, "ram_total": 32,
+             "ram_free": 22, "cpu": 0.5, "eval_shards_running": 4, "age": 0}
+    peer = {"machine": "vortex-train", "target": "vortex@10.0.10.61", "hosts": 56,
+            "ram_used": 5, "ram_total": 20, "ram_free": 15, "cpu": 0.5, "age": 0}
+    lines = vxstat.job_block(run, local, [peer], vxstat.Style(False), set())
+    worker_line = next(line for line in lines if "vortex-train" in line)
+    assert "simulation rollout" in worker_line
+    assert "waiting on eval" not in worker_line

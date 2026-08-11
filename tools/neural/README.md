@@ -116,6 +116,10 @@ python tools/neural/train.py --curriculum --steps 8000000 --hosts 12
 
 # resume
 python tools/neural/train.py --resume runs/20260807-1200/checkpoint.pt --stage 4
+
+# resume an existing policy into the speed-oriented, long-horizon curriculum
+python tools/neural/train.py --training-profile speed-v2 \
+  --resume runs/v26/checkpoint.pt --curriculum --steps 60000000 --name v27
 ```
 
 `--hosts` is roughly "cores to spend"; each host is one process running one world. Every checkpoint writes
@@ -125,6 +129,30 @@ Every run mirrors its output to `<run_dir>/train.log`, line-buffered. Read that 
 progress: piping the trainer's stdout through `grep` or `tee` buffers it until the process exits, so a
 healthy long run looks identical to a hung one.
 
+### Checkpoint compatibility and the speed-v2 profile
+
+Version-1 checkpoints (including v26) remain loadable and are never edited in place. Resume into a new run
+directory. For a legacy rolling checkpoint, the trainer recovers its stage steps, update, and best arrival
+rate from that run's log; v26 therefore resumes at 44,151,422 stage steps rather than repeating its first
+44 million. New checkpoints are atomic, keep `checkpoint.prev.pt`, and include optimiser/reward-scaler/RNG
+state plus a schema-versioned progress record. SIGINT/SIGTERM asks the trainer to finish the current update,
+write a checkpoint, and mark the run paused.
+
+`--training-profile compatible` retains the historic learning horizon, fixed eval bank, single gate reading,
+and arrival-only checkpoint selection. `--training-profile speed-v2` is weight-compatible and opts into:
+
+- `gamma=0.999`, `gae_lambda=0.98`, so a fast terminal arrival can credit actions near the start of a long route;
+- speed-aware checkpoint selection: first protect completion rate, then prefer a policy at least 3% faster
+  within the conservative two-point arrival noise band;
+- rotating evaluation route seeds and two consecutive passing evals before stage advancement;
+- minimum curriculum stage budgets that are now enforced rather than merely documented;
+- the learning-rate tournament and perturb-and-select disabled until they have a sealed validation bank
+  that they cannot repeatedly optimise.
+
+Every evaluation reports both completion rate and mean time among completed routes. Arrival remains the
+first constraint—a bot cannot look fast by finishing only easy routes—but time now decides between policies
+whose completion rates are statistically indistinguishable.
+
 ### The curriculum
 
 Ordered because each stage's reward is only learnable once the previous one is. A stage that will not
@@ -132,17 +160,18 @@ converge usually means the stage before it did not really finish; reordering to 
 
 | Stage | Course | What it teaches |
 |---|---|---|
-| 1 | Flat room | Run and turn |
-| 2 | Long bending corridor | Build and hold speed: bunnyhop, strafe-jump |
-| 3 | Platforms, gaps, ramps | Jump timing and landing |
-| 4 | Stage 3 plus jump pads, teleporters, hurt volumes | Route through map furniture |
+| 1 | Shipped-map short routes | Run and turn on real geometry |
+| 2 | Shipped-map longer routes | Build and hold speed: bunnyhop, strafe-jump |
+| 3 | Shipped-map complex routes | Jump timing, stairwells, doorways and landings |
+| 4 | Shipped-map medium routes | Sustain movement through map furniture |
 | 5 | Gaps wider than a jump, ledges higher than one | Weapon jumps |
-| 6 | The game's real maps, minus a held-out split | Stairwells, doorways, railings, multi-level loops |
+| 6 | Full shipped-map distribution, minus a held-out split | Long-route retention and generalisation |
 
-Stages 1 to 5 run on **generated** geometry, different every episode, because a policy trained only on maps
-we own has no pressure to generalise and a training curve cannot tell you it failed.
+Stage 5 uses generated weapon-gap geometry because real maps cannot guarantee that lesson. The other stages
+currently draw many origin/target pairs from shipped maps; rotating seeds prevent the selection loop from
+turning one fixed route bank into training data. Stage 6 expands to the full non-held-out distribution.
 
-Stage 6 exists because generated geometry teaches locomotion and stops there. Measured on a policy that
+Measured on a policy that
 cleared stages 1 to 3: **97% arrivals on the corridor stage, 71% on terrain** against 22% and 3.5% for the
 scripted runner, and **12.5% on real maps** — 3 routes of 8 on stormkeep where the classic steer finishes 7.
 

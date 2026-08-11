@@ -133,6 +133,10 @@ public sealed class BotPopulation
     /// <summary>QC <c>bot_waypoint_queue_owner</c>: the one bot currently running an unstuck reachability scan.</summary>
     private BotBrain? _unstuckQueueOwner;
     private int _seedCounter = 1;
+
+    /// <summary>Set the deterministic seed used by subsequently spawned bot brains.</summary>
+    /// <remarks>Used by repeatable training/benchmark harnesses; live servers keep the default sequence.</remarks>
+    public void SetBotSeed(int seed) => _seedCounter = seed == 0 ? 1 : seed;
     private float _autoskillNextThink;   // QC autoskill_nextthink (5 s autoskill recheck clock)
     private float _nextDangerTime;        // QC botframe_nextdangertime (danger-detection recompute clock)
     // QC the per-client totalfrags_lastcheck baseline: frags-since-last-autoskill is ScoreFrags - this.

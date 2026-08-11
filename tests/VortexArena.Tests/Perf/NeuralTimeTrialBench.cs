@@ -170,7 +170,9 @@ public class NeuralTimeTrialBench
         world.MapBsp = bsp;
         world.Pvs = new BspPvs(bsp);
         world.ConfigReader = path => vfs.Exists(path) ? vfs.ReadText(path) : null;
+        SpawnSystem.Reseed(unchecked(seed * 7919 + 17));
         world.Boot("dm");
+        world.Bots.SetBotSeed(unchecked(seed + 1));
 
         Cvars.Set("sv_spectate", "0");
         Cvars.Set("bot_join_empty", "1");

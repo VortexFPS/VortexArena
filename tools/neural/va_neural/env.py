@@ -342,6 +342,7 @@ class VectorEnv:
         self.obs_size = self.envs[0].obs_size
         self.num_agents = self.agents_per_host * len(self.envs)
         self._done_hosts = [False] * len(self.envs)
+        self.last_transition_obs = np.zeros((self.num_agents, self.obs_size), dtype=np.float32)
 
         # Per-host reply timing, off unless VX_HOST_TIMING is set. See _record_host_times.
         self._timing = os.environ.get("VX_HOST_TIMING", "") not in ("", "0")
@@ -390,8 +391,9 @@ class VectorEnv:
         """Fill a T-step rollout with every host free-running; returns the final observation batch.
 
         ``act_fn(rows)`` maps observation rows to (wire_actions, aux) where aux is whatever the trainer
-        wants stored alongside (log-probs, values). ``store(t, lo, hi, obs, act, aux, rew, done, trunc)``
-        writes one host's transition at its own step index t. Rows for host i live at [i*A, (i+1)*A).
+        wants stored alongside (log-probs, values). ``store(t, lo, hi, obs, next_obs, act, aux, rew, done,
+        trunc)`` writes one host's transition at its own step index t. Rows for host i live at
+        [i*A, (i+1)*A).
 
         The select loop batches act_fn across every host whose reply arrived in the same wakeup, so the
         policy forward keeps most of its batching even though hosts no longer march in step.
@@ -434,7 +436,7 @@ class VectorEnv:
 
                 o, r, d, tr = e.recv_step()
                 act_i, aux_i = pending_aux[i]
-                store(t_i[i], i * A, (i + 1) * A, cur[i], act_i, aux_i, r, d, tr)
+                store(t_i[i], i * A, (i + 1) * A, cur[i], o, act_i, aux_i, r, d, tr)
                 t_i[i] += 1
                 cur[i] = o
 
@@ -494,6 +496,10 @@ class VectorEnv:
             rew_parts.append(r)
             done_parts.append(d)
             trunc_parts.append(t)
+
+        # Preserve the post-step observations before an all-done host is replaced by its reset. The PPO
+        # timeout bootstrap needs this exact state; using the reset observation crosses episode boundaries.
+        self.last_transition_obs = np.concatenate(obs_parts, axis=0).copy()
 
         # Same two-phase shape as the step itself: ask everyone, then collect.
         if needs_reset:

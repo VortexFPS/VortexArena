@@ -24,6 +24,7 @@ when stage N-1's -done.pt was written.
 """
 import os
 import re
+import shutil
 import sys
 import threading
 import time
@@ -289,14 +290,14 @@ def loadavg():
 
 UPDATE = re.compile(
     r"\[s(?P<stage>\d) u\s*(?P<update>\d+)\]\s+steps\s+(?P<steps>[\d,]+)\s+(?P<sps>[\d.]+)/s"
-    r".*?sampled\s+(?P<sampled>[\d.]+)%\s+shipped\s+(?P<shipped>[\d.]+)%"
+    r".*?sampled\s+(?P<sampled>[\d.]+)%\s+shipped\s+(?P<shipped>(?:[\d.]+|nan))%"
     r".*?ent\s+(?P<ent>[-\d.]+)\s+kl\s+(?P<kl>[-\d.]+)")
 EVAL = re.compile(r"\[s(?P<stage>\d)\].*?eval:\s+(?P<rate>[\d.]+)% arrivals \(gate (?P<gate>[\d.]+)%")
 STAGE = re.compile(r"=== stage (?P<stage>\d): (?P<budget>[\d,]+) agent-steps, advance at (?P<gate>[\d.]+)%")
 
-# Baselines re-measured on the FILTERED course pool, 3 seeds x 800 agent-episodes. Stages without a figure
-# here were never re-measured after the filters landed, and their gates should not be trusted until they are.
-BASELINE = {2: 28.9, 3: 38.5}
+# A baseline belongs to an experiment manifest, not this executable. Hardcoded values drifted away from the
+# live map pool and made a healthy policy appear 1.58x better than a reference it had never faced.
+BASELINE = {}
 
 
 def tail(path, n=4000):
@@ -329,6 +330,26 @@ def run_config(run_dir):
         else:
             flat[k] = v
     return flat
+
+
+def read_json(path):
+    try:
+        import json
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def jsonl_tail(path, limit=40):
+    rows = []
+    for line in tail(path, max(100, limit * 2))[-limit:]:
+        try:
+            import json
+            rows.append(json.loads(line))
+        except (ValueError, TypeError):
+            continue
+    return rows
 
 
 def seconds_per_update(lines):
@@ -468,6 +489,20 @@ class Style:
     def yellow(self, s): return self(s, "33")
     def red(self, s):    return self(s, "31")
     def cyan(self, s):   return self(s, "36")
+    def blue(self, s):   return self(s, "34")
+    def magenta(self, s): return self(s, "35")
+
+
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def visible_len(text):
+    return len(ANSI_RE.sub("", text))
+
+
+def clock_after(seconds):
+    when = datetime.fromtimestamp(time.time() + max(0, seconds)).astimezone()
+    return when.strftime("%I:%M %p").lstrip("0")
 
 
 def dur(sec):
@@ -477,6 +512,11 @@ def dur(sec):
     if sec < 3600:
         return f"{sec // 60}m {sec % 60:02d}s"
     return f"{sec // 3600}h {(sec % 3600) // 60:02d}m"
+
+
+def label(s, text, width=7):
+    """Pad before adding ANSI codes so coloured labels do not shift every following column."""
+    return s.dim(f"{text:<{width}}")
 
 
 def bar(frac, width, s):
@@ -515,6 +555,9 @@ def snapshot():
     # fleet exactly when it is doing the least work -- a run with --hosts 0 appeared to have four.
     hosts = [(p, r) for p, c, r in procs if "va-neural-host.dll" in c and "--bench" not in c]
     benches = [1 for _, c, _ in procs if "va-neural-host.dll" in c and "--bench" in c]
+    tests = sum(1 for _, c, _ in procs if "dotnet" in c.lower() and " test " in c.lower())
+    experiments = sum(1 for _, c, _ in procs
+                      if ("--bench" in c and "--policy" not in c) or "pytest" in c.lower())
     total, used, free = meminfo()
 
     snap = {
@@ -527,6 +570,10 @@ def snapshot():
         "cpu": cpu_busy(),
         "agents_per_host": 16,
         "eval_shards_running": sum(benches),
+        "tests_running": tests,
+        "experiments_running": experiments,
+        "work": ("evaluation" if benches else "training rollout" if hosts else
+                 "test suite" if tests else "experiment" if experiments else "idle"),
         "runs": [],
     }
 
@@ -571,6 +618,18 @@ def run_snapshot(name, pid, up, cmd, procs, running):
     rates = [r for sg, r, _ in st["evals"] if sg == stage]
     gate = st["gate"] or (st["evals"][-1][2] if st["evals"] else 0.0)
     cfg = run_config(run_dir)
+    structured = read_json(os.path.join(run_dir, "state.json")) or {}
+    metric_rows = jsonl_tail(os.path.join(run_dir, "metrics.jsonl"), 200)
+    structured_evals = [m for m in metric_rows if m.get("type") == "evaluation"
+                        and int(m.get("stage", -1)) == int(structured.get("stage", stage))]
+    if structured:
+        stage = int(structured.get("stage", stage))
+        steps_struct = structured.get("stage_steps")
+        if steps_struct is not None:
+            st["budget"] = int(structured.get("budget", st["budget"] or 0))
+            gate_value = float(structured.get("gate", 0))
+            st["gate"] = gate_value * 100.0 if gate_value <= 1.0 else gate_value
+    gate = st["gate"] or gate
 
     try:
         every = int(cfg.get("eval_every", 0))
@@ -582,9 +641,14 @@ def run_snapshot(name, pid, up, cmd, procs, running):
     except (TypeError, ValueError):
         total_shards = len(shards)
 
-    steps = int(u["steps"].replace(",", "")) if u else 0
+    steps = int(structured.get("stage_steps", int(u["steps"].replace(",", "")) if u else 0))
     spu = seconds_per_update(lines)
     eval_secs = past_eval_seconds(lines)
+    durations = [float(m["eval_seconds"]) for m in metric_rows
+                 if m.get("type") == "evaluation" and m.get("eval_seconds") is not None]
+    if durations:
+        ordered_durations = sorted(durations[-9:])
+        eval_secs = ordered_durations[len(ordered_durations) // 2]
 
     # Which other machines are feeding this run. The trainer's own command line is the only place this is
     # recorded, and it is what lets a job be shown as one row per participating machine.
@@ -594,15 +658,38 @@ def run_snapshot(name, pid, up, cmd, procs, running):
         if len(parts) >= 2:
             remotes.append({"addr": parts[0], "count": int(parts[2]) if len(parts) > 2 else 1})
 
+    if structured_evals:
+        rates = [float(m["arrival_rate"]) * 100.0 for m in structured_evals
+                 if m.get("arrival_rate") is not None]
+    events = jsonl_tail(os.path.join(run_dir, "events.jsonl"), 8)
+    try:
+        agents_per_host = int(cfg.get("agents", 16))
+    except (TypeError, ValueError):
+        agents_per_host = 16
+
+    stopped_reason = None
+    if not running:
+        phase = str(structured.get("phase", ""))
+        if phase == "stopped":
+            stopped_reason = {"key": "paused", "text": "paused with a completed checkpoint",
+                              "deliberate": True}
+        elif phase == "stopped_eval_failure":
+            stopped_reason = {"key": "eval", "text": "paused after repeated evaluation failures",
+                              "deliberate": False}
+        else:
+            stopped_reason = stop_reason(lines)
+
     return {
         "name": name, "running": running, "up": up, "stage": stage,
-        "best": max(rates) if rates else None,
-        "last": rates[-6:],
+        "best": (float(structured.get("best_rate")) * 100.0
+                 if structured.get("best_rate") is not None else max(rates) if rates else None),
+        "best_time": structured.get("best_time"),
+        "last": rates[-24:],
         "gate": gate,
         "baseline": BASELINE.get(stage),
         "steps": steps, "budget": st["budget"] or 0,
         "sps": float(u["sps"]) if u else 0.0,
-        "update": int(u["update"]) if u else 0,
+        "update": int(structured.get("update", int(u["update"]) if u else 0)),
         "entropy": float(u["ent"]) if u else 0.0,
         "kl": float(u["kl"]) if u else 0.0,
         "sampled": float(u["sampled"]) if u else 0.0,
@@ -613,10 +700,13 @@ def run_snapshot(name, pid, up, cmd, procs, running):
         "eval_done": max(0, total_shards - len(shards)) if shards else 0,
         "eval_total": total_shards,
         "eval_elapsed": max((uptime_of(p) for p in shards), default=0.0),
+        "phase": structured.get("phase", "evaluating" if shards else "training" if running else "stopped"),
+        "events": events,
+        "agents_per_host": agents_per_host,
         "remotes": remotes,
         "local_hosts_flag": _int_arg(cmd, "--hosts"),
         "cmd": cmd,
-        "stopped_reason": None if running else stop_reason(lines),
+        "stopped_reason": stopped_reason,
     }
 
 
@@ -686,8 +776,12 @@ class Peers:
 
     def _loop(self):
         while not self._stop:
-            for t in self.targets:
-                snap, err = self._fetch(t)
+            # Peers are independent. Polling them serially made a dead box delay every healthy one by its
+            # full SSH timeout and left the fleet panel several refreshes behind reality.
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(8, len(self.targets))) as pool:
+                results = list(zip(self.targets, pool.map(self._fetch, self.targets)))
+            for t, (snap, err) in results:
                 if snap is not None:
                     self.data[t] = {"snap": snap, "at": time.time(), "err": None}
                 else:
@@ -726,15 +820,19 @@ def health_word(r, s):
 
 
 def eval_word(r, s):
+    if not r["running"]:
+        return s.dim("paused - resumes from checkpoint")
     if r["eval_running"]:
         left = ""
         if r["eval_secs"] and r["eval_secs"] > r["eval_elapsed"]:
-            left = ", ~%s left" % dur(r["eval_secs"] - r["eval_elapsed"])
+            remain = r["eval_secs"] - r["eval_elapsed"]
+            left = ", ~%s left, done %s" % (dur(remain), clock_after(remain))
         return s.cyan("EVAL RUNNING %d/%d shards%s" % (r["eval_done"], r["eval_total"], left))
     if r["eval_every"] and r["update"]:
         togo = r["eval_every"] - (r["update"] % r["eval_every"])
         if r["spu"]:
-            return "next eval in %du (~%s)" % (togo, dur(togo * r["spu"]))
+            remain = togo * r["spu"]
+            return "next eval in %du (~%s, %s)" % (togo, dur(remain), clock_after(remain))
         return "next eval in %du" % togo
     return "next eval unknown"
 
@@ -745,6 +843,29 @@ def spark(vals, s):
         return s.dim("none yet")
     best = max(vals)
     return "  ".join(s.bold("%.1f" % v) if v == best else "%.1f" % v for v in vals)
+
+
+def eval_spark(vals, s, width=28):
+    """Locally zoomed so sub-point eval movement remains visible instead of hugging a 0-100% axis."""
+    if not vals:
+        return s.dim("no evaluations yet"), ""
+    vals = vals[-width:]
+    lo, hi = min(vals), max(vals)
+    span = max(1.0, hi - lo)
+    levels = "▁▂▃▄▅▆▇█" if _utf_ok() else ".:-=+*#@"
+    chars = []
+    for i, value in enumerate(vals):
+        glyph = levels[min(len(levels) - 1, int((value - lo) / span * (len(levels) - 1)))]
+        if value == hi:
+            glyph = s.green(s.bold(glyph))
+        elif i == len(vals) - 1:
+            glyph = s.cyan(s.bold(glyph))
+        elif i and value < vals[i - 1]:
+            glyph = s.magenta(glyph)
+        else:
+            glyph = s.blue(glyph)
+        chars.append(glyph)
+    return "".join(chars), f"zoom {lo:.1f}-{hi:.1f}% ({span:.1f}pt)"
 
 
 def ram_cell(snap, s):
@@ -760,6 +881,8 @@ def ram_cell(snap, s):
 
 def machine_line(snap, s, role, hosts=None, agents=None, share=None, evaling=False):
     hosts = snap["hosts"] if hosts is None else hosts
+    if agents is None and hosts:
+        agents = hosts * snap.get("agents_per_host", 16)
     cpu = snap.get("cpu", 0.0)
     txt = "%3.0f%%" % (cpu * 100)
     # A worker sitting idle during an eval is expected, not a stall. Saying which it is stops a reader
@@ -792,16 +915,18 @@ def _match_peer(addr, peers):
 def job_block(r, snap, peers, s, claimed):
     gut = (s.cyan if r["running"] else s.red)(G["bar"]) + " "
     out = ["", gut.rstrip()]
-    state = s.green(G["run"] + " RUNNING") if r["running"] else s.red(G["run"] + " STOPPED")
+    phase = str(r.get("phase", "training" if r["running"] else "stopped")).replace("_", " ").upper()
+    state = s.green(G["run"] + " " + phase) if r["running"] else s.yellow(G["run"] + " " + phase)
     out.append(gut + "%s%sstage %d%s%s%sup %s" % (
         s.bold(s.cyan(r["name"])), G["dot"], r["stage"], G["dot"], state, G["dot"], dur(r["up"])))
     why = r.get("stopped_reason")
     if why:
         mark = s.dim("(deliberate)") if why["deliberate"] else s.red("(failure)")
-        out.append(gut + " %-7s %s %s" % (s.dim("why"), why["text"], mark))
+        out.append(gut + " %s %s %s" % (label(s, "why"), why["text"], mark))
     out.append(gut)
 
-    # evals: history first, verdict on the same line. The history is the thing being watched.
+    # A locally-scaled trend shows small movement. Gate/baseline are labelled separately rather than
+    # forcing a 0-100% chart where every real eval would occupy the same row.
     best = "%.1f" % r["best"] if r["best"] is not None else "-"
     verdict = ""
     if r["best"] is not None and r["gate"]:
@@ -815,38 +940,54 @@ def job_block(r, snap, peers, s, claimed):
     ratio = ""
     if r["baseline"] and r["best"]:
         ratio = s.dim("  %.2fx base" % (r["best"] / r["baseline"]))
-    out.append(gut + " %-7s %s    %s%s" % (s.dim("evals"), spark(r["last"], s), verdict, ratio))
+    trend_line, zoom = eval_spark(r["last"], s)
+    legend = s.green("peak") + "/" + s.cyan("latest") + "/" + s.magenta("dip")
+    out.append(gut + " %s %s  %s  %s" % (label(s, "trend"), trend_line, s.dim(zoom), legend))
+    speed = (f"  best time {float(r['best_time']):.2f}s" if r.get("best_time") is not None else "")
+    out.append(gut + " %s best %s%%  %s%s%s" % (label(s, "eval"), best, verdict, ratio, s.cyan(speed)))
 
     pct = r["steps"] / r["budget"] if r["budget"] else 0
     eta = ""
-    if r["sps"] and r["budget"] > r["steps"]:
-        eta = "   ETA %s" % dur((r["budget"] - r["steps"]) / r["sps"])
+    if r["running"] and r["sps"] and r["budget"] > r["steps"]:
+        remain = (r["budget"] - r["steps"]) / r["sps"]
+        eta = "   ETA %s (%s)" % (dur(remain), clock_after(remain))
     out.append(gut + " %-7s %s %3.0f%%   %.2fM/%.0fM   %s steps/s%s" % (
-        s.dim("steps"), bar(pct, 20, s), pct * 100, r["steps"] / 1e6, r["budget"] / 1e6,
+        label(s, "steps"), bar(pct, 20, s), pct * 100, r["steps"] / 1e6, r["budget"] / 1e6,
         "{:,.0f}".format(r["sps"]), eta))
 
     out.append(gut + " %-7s update %s   sampled %.1f%%   entropy %.3f   kl %.4f   %s   %s" % (
-        s.dim("state"), "{:,}".format(r["update"]), r["sampled"], r["entropy"], r["kl"],
+        label(s, "state"), "{:,}".format(r["update"]), r["sampled"], r["entropy"], r["kl"],
         health_word(r, s), eval_word(r, s)))
 
     total_hosts = snap["hosts"] + sum(x["count"] for x in r.get("remotes", []))
     role = "trainer" + ("+hosts" if snap["hosts"] else "")
-    out.append(gut + " %-7s %s" % (s.dim("fleet"),
-                              fleet_line(snap, s, role, snap["hosts"], total_hosts, r["eval_running"])))
+    out.append(gut + " %s %s" % (label(s, "fleet"),
+                              fleet_line(snap, s, role, snap["hosts"], total_hosts, r["eval_running"],
+                                         r.get("agents_per_host", 16), r.get("phase", "training"))))
     for rem in r.get("remotes", []):
         peer = _match_peer(rem["addr"], peers)
         if peer is not None:
             claimed.add(peer["machine"])
+            worker_status = "waiting on eval" if r["eval_running"] else "simulation rollout"
             out.append(gut + " %-7s %s" % ("", fleet_line(peer, s, "worker", rem["count"], total_hosts,
-                                                     r["eval_running"])))
+                                                     r["eval_running"], r.get("agents_per_host", 16),
+                                                     worker_status)))
         else:
-            out.append(gut + " %-7s %-13s %-8s %3d hosts   %s" % (
+            out.append(gut + " %-7s %-13s %-8s %3d hosts / %4d agents   %s" % (
                 "", rem["addr"], s.dim("worker"), rem["count"],
+                rem["count"] * r.get("agents_per_host", 16),
                 s.yellow("not polled - add --peer")))
+    if r.get("events"):
+        out.append(gut)
+        for i, event in enumerate(r["events"][-5:]):
+            at = str(event.get("at", ""))
+            stamp = at[11:19] if len(at) >= 19 else "--:--:--"
+            event_label = label(s, "events" if i == 0 else "")
+            out.append(gut + " %s %s  %s" % (event_label, s.magenta(stamp), event.get("message", "")))
     return out
 
 
-def fleet_line(snap, s, role, hosts, total_hosts, evaling):
+def fleet_line(snap, s, role, hosts, total_hosts, evaling, agents_per_host=16, status=None):
     cpu = snap.get("cpu", 0.0)
     cpu_txt = "cpu %3.0f%%" % (cpu * 100)
     if cpu < 0.15 and evaling:
@@ -855,7 +996,7 @@ def fleet_line(snap, s, role, hosts, total_hosts, evaling):
         cpu_txt = s.yellow(cpu_txt + " IDLE")
     elif cpu > 0.85:
         cpu_txt = s.green(cpu_txt)
-    agents = hosts * snap.get("agents_per_host", 16)
+    agents = hosts * agents_per_host
     share = "  %2.0f%% fleet" % (100.0 * hosts / total_hosts) if total_hosts and hosts else ""
     # A trainer box with --hosts 0 reported "0 hosts" while running four eval shards, so the machine
     # actually burning CPU looked idle and the quiet worker looked broken. Shards are work; show them.
@@ -868,16 +1009,19 @@ def fleet_line(snap, s, role, hosts, total_hosts, evaling):
         hosts_txt = s.dim("  - hosts")
     agents_txt = "  %4d agents" % agents if agents else ("  eval shards" if shards else "")
     age = s.dim("  (%.0fs old)" % snap["age"]) if snap.get("age", 0) > 12 else ""
-    return "%-13s %-8s %s   %-9s %s%s%s%s" % (
-        snap["machine"], s.dim(role), hosts_txt, ram_cell(snap, s), cpu_txt, agents_txt, share, age)
+    status = status or snap.get("work", "idle")
+    return "%-13s %-8s %s   %-9s %s%s%s  %-20s%s" % (
+        snap["machine"], s.dim(role), hosts_txt, ram_cell(snap, s), cpu_txt, agents_txt, share,
+        s.cyan(status), age)
 
 
 def render_jobs(local, peers, s):
     out = []
-    now = (datetime.now(EASTERN).strftime("%I:%M:%S %p ET").lstrip("0")
-           if EASTERN else datetime.now().strftime("%I:%M:%S %p local").lstrip("0"))
-    title = " VORTEX NEURAL TRAINING "
-    pad_len = max(4, 74 - len(title) - len(now) - 2)
+    local_now = datetime.now().astimezone()
+    now = local_now.strftime("%I:%M:%S %p").lstrip("0") + " ET"
+    title = " NEURAL BOT LAB "
+    width = max(78, min(150, shutil.get_terminal_size((110, 30)).columns))
+    pad_len = max(4, width - len(title) - len(now) - 4)
     out.append(s.bold(G["band"] * 2 + title) + s.dim(G["band"] * pad_len + " " + now + " " + G["band"] * 2))
 
     claimed = set()
@@ -896,7 +1040,7 @@ def render_jobs(local, peers, s):
             out.append("  " + s.red("%s: unreachable (%s)" % (snap["machine"], snap["unreachable"])))
         else:
             out.append("  " + s.dim("%s: no run of its own" % snap["machine"]))
-            out.append(machine_line(snap, s, "idle"))
+            out.append(machine_line(snap, s, snap.get("work", "idle")))
     if not any_job:
         out.append("")
         out.append("  " + s.dim("nothing training"))
@@ -954,7 +1098,7 @@ def watchdog(peers_t, every, restart, s):
     while True:
         local = snapshot()
         remote = poller.snapshots()
-        sys.stdout.write("\033[H\033[J" + "\n".join(render_jobs(local, remote, s)) + "\n")
+        sys.stdout.write("\033[H" + "\n".join(render_jobs(local, remote, s)) + "\n\033[J")
 
         for snap in [local] + remote:
             for r in snap.get("runs", []):
@@ -1018,7 +1162,7 @@ def main():
         remote = poller.snapshots()
         return "\n".join(render_jobs(local, remote, s))
 
-    if "--watchdog" in args:
+    if "--watchdog" in args or "--watchdog-restart" in args:
         watchdog(peers_t, every, "--watchdog-restart" in args, s)
         return
 
@@ -1029,13 +1173,18 @@ def main():
         print(panel())
         return
     try:
+        if s.on:
+            sys.stdout.write("\033[?1049h")
         while True:
-            sys.stdout.write("\033[H\033[J" + panel() + "\n"
-                             + s.dim(f"  refreshing every {every:.0f}s - Ctrl-C to exit") + "\n")
+            sys.stdout.write("\033[H" + panel() + "\n"
+                             + s.dim(f"  refreshing every {every:.0f}s - Ctrl-C to exit") + "\n\033[J")
             sys.stdout.flush()
             time.sleep(every)
     except KeyboardInterrupt:
         pass
+    finally:
+        if s.on:
+            sys.stdout.write("\033[?1049l")
 
 
 if __name__ == "__main__":

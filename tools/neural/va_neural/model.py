@@ -119,8 +119,15 @@ class Policy(nn.Module):
     def view_log_std(self) -> torch.Tensor:
         """The log-std actually used, clamped. act(), evaluate() and distributions() must all read this:
         a log-prob computed against a different sigma than the one that drew the sample makes PPO's
-        importance ratio wrong on the first epoch, when it should be exactly 1."""
-        return self.log_std.clamp(max=self.LOG_STD_MAX)
+        importance ratio wrong on the first epoch, when it should be exactly 1.
+
+        The forward value is capped, but the cap uses a straight-through gradient.  A hard ``clamp`` gave
+        the parameter zero gradient whenever an older checkpoint held a value above the new cap (all v26
+        checkpoints do), permanently freezing exploration at the cap.  This keeps those checkpoints
+        numerically identical on load while allowing the optimiser to move the parameter back into range.
+        """
+        capped = self.log_std.clamp(max=self.LOG_STD_MAX)
+        return self.log_std + (capped - self.log_std).detach()
 
     def _heads(self, logits: torch.Tensor):
         """Per-head log-softmax and the Gaussian parameters. The one place the head layout is decoded."""

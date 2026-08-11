@@ -431,7 +431,7 @@ public static class Program
         var sw = Stopwatch.StartNew();
         int steps = 0, episodes = 0, arrivedTotal = 0, agentEpisodes = 0;
         double resetMsTotal = 0;
-        double rewardSum = 0, remainingSum = 0;
+        double rewardSum = 0, remainingSum = 0, arrivalSecondsTotal = 0;
         int[] bucketArrived = new int[TrainingEnv.RouteBuckets.Length];
         int[] bucketAttempts = new int[TrainingEnv.RouteBuckets.Length];
         // Agent 0's observation, sampled sparsely so the statistics span whole episodes rather than one
@@ -482,6 +482,7 @@ public static class Program
                 (int arrived, float meanTime, float meanRemaining) = env.EpisodeSummary();
                 arrivedTotal += arrived;
                 agentEpisodes += cfg.Agents;
+                arrivalSecondsTotal += meanTime * arrived;
                 remainingSum += meanRemaining;
                 (int[] bArr, int[] bAtt) = env.ArrivalByRouteLength();
                 for (int b = 0; b < bArr.Length; b++) { bucketArrived[b] += bArr[b]; bucketAttempts[b] += bAtt[b]; }
@@ -576,6 +577,7 @@ public static class Program
         Console.WriteLine($"mean return    {rewardSum / Math.Max(1, agentEpisodes):F3} per agent-episode");
         Console.WriteLine($"arrival rate   {arrivedTotal / (double)Math.Max(1, agentEpisodes):P1} " +
                           $"({arrivedTotal}/{agentEpisodes} agent-episodes)");
+        Console.WriteLine($"arrival time   {arrivalSecondsTotal / Math.Max(1, arrivedTotal):F3} s mean among arrivals");
         Console.WriteLine($"distance left  {remainingSum / Math.Max(1, episodes):F0} qu mean at episode end");
         // Which acceptance tests actually fired. A filter that never fires is indistinguishable from a
         // working one in the arrival rate alone, because the run-to-run spread is larger than the effect.

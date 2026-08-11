@@ -23,8 +23,12 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import math
+import os
+import random
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -135,6 +139,86 @@ class Hyper:
     target_kl: float = 0.03     # stop the epoch loop early rather than let one update wreck the policy
 
 
+@dataclass(frozen=True)
+class EvalResult:
+    """A shipping-path evaluation, including the speed that arrival-rate-only selection discarded."""
+
+    rate: float
+    mean_time: float = float("nan")
+    hits: int = 0
+    total: int = 0
+    error: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None and math.isfinite(self.rate) and self.total > 0
+
+
+def _eval_is_better(candidate: EvalResult, best_rate: float, best_time: float, objective: str) -> bool:
+    if not candidate.ok:
+        return False
+    if candidate.rate > best_rate + 0.005:
+        return True
+    # Eval spread is roughly five percentage points. Within a conservative two-point band, prefer a
+    # meaningfully faster policy instead of repeatedly saving the same completion rate at arbitrary speed.
+    return (objective == "speed" and candidate.rate >= best_rate - 0.02
+            and math.isfinite(candidate.mean_time)
+            and (not math.isfinite(best_time) or candidate.mean_time < best_time * 0.97))
+
+
+_STOP_REQUESTED = False
+
+
+def _request_stop(signum, _frame) -> None:
+    """Ask the update loop to checkpoint at its next consistent boundary."""
+    global _STOP_REQUESTED
+    _STOP_REQUESTED = True
+    print(f"[train] stop requested by signal {signum}; finishing this update and checkpointing", flush=True)
+
+
+def _stamp() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S%z")
+
+
+def _finite_or_none(value):
+    return float(value) if value is not None and math.isfinite(float(value)) else None
+
+
+def _atomic_json(path: Path, payload: dict) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _append_jsonl(path: Path, payload: dict) -> None:
+    with open(path, "a", encoding="utf-8", buffering=1) as fh:
+        fh.write(json.dumps(payload, separators=(",", ":")) + "\n")
+
+
+def _event(run_dir: Path, kind: str, message: str, **fields) -> None:
+    _append_jsonl(run_dir / "events.jsonl", {"at": _stamp(), "kind": kind, "message": message, **fields})
+
+
+def _legacy_resume_state(run_dir: Path, stage: int) -> dict:
+    """Recover the progress fields absent from v1 checkpoints, without altering the checkpoint itself."""
+    pattern = re.compile(r"\[s(?P<stage>\d+) u\s*(?P<update>\d+)\]\s+steps\s+(?P<steps>[\d,]+)")
+    eval_pat = re.compile(rf"\[s{stage}\].*?eval:\s+(?P<rate>[\d.]+)% arrivals")
+    state = {"stage": stage, "stage_steps": 0, "update": 0, "best_rate": 0.0}
+    try:
+        lines = (run_dir / "train.log").read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return state
+    for line in lines:
+        m = pattern.search(line)
+        if m and int(m["stage"]) == stage:
+            state["update"] = int(m["update"])
+            state["stage_steps"] = int(m["steps"].replace(",", ""))
+        e = eval_pat.search(line)
+        if e:
+            state["best_rate"] = max(state["best_rate"], float(e["rate"]) / 100.0)
+    return state
+
+
 # Stage, minimum steps, and the arrival rate that says it is done.
 #
 # Every gate is 2x that stage's measured scripted baseline -- a straight-line runner on the same maps and
@@ -235,6 +319,10 @@ def _tee(path: Path) -> None:
 
 
 def main() -> int:
+    signal.signal(signal.SIGINT, _request_stop)
+    signal.signal(signal.SIGTERM, _request_stop)
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, _request_stop)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--stage", type=int, default=1, help="curriculum stage 1-5")
     ap.add_argument("--curriculum", action="store_true", help="run every stage in order, advancing on arrival rate")
@@ -321,6 +409,21 @@ def main() -> int:
                     help="override Hyper.gamma. The default 0.995 is an 11 s horizon against 50 s episodes, "
                          "which discounts the arrival bonus to 0.011 at step 900. 0.999 makes the horizon "
                          "1000 steps, about the episode length.")
+    ap.add_argument("--gae-lambda", type=float, default=None,
+                    help="override GAE lambda. Long routes need gamma and lambda moved together; speed-v2 "
+                         "uses 0.98 so early actions can receive credit for a fast terminal arrival.")
+    ap.add_argument("--training-profile", choices=("compatible", "speed-v2"), default="compatible",
+                    help="compatible reproduces the existing curriculum defaults. speed-v2 is checkpoint-"
+                         "compatible but opts into a long reward horizon, rotating eval routes, two gate "
+                         "confirmations, and speed-aware best-checkpoint selection.")
+    ap.add_argument("--selection-objective", choices=("arrival", "speed"), default=None,
+                    help="how stage-best checkpoints are selected. speed preserves completion rate within "
+                         "the eval noise band, then prefers lower mean arrival time.")
+    ap.add_argument("--gate-confirmations", type=int, default=None,
+                    help="consecutive passing evals required to advance (speed-v2 default: 2).")
+    ap.add_argument("--eval-seed-mode", choices=("fixed", "rotating"), default=None,
+                    help="fixed reproduces legacy evals; rotating prevents checkpoint selection and the "
+                         "perturbation loop from memorising one validation route bank.")
     ap.add_argument("--no-evolve", action="store_true",
                     help="disable the plateau perturb-and-select loop (G2): when the shipped eval makes no "
                          "new best for 4 evals, 6 noise-perturbed copies of the weights are scored through "
@@ -345,6 +448,29 @@ def main() -> int:
                     help="stage 6 map list, comma separated; empty means every installed map. "
                          "The held-out eval split is excluded either way.")
     args = ap.parse_args()
+
+    # The new profile changes optimiser semantics, never tensor shapes, so every existing policy and
+    # checkpoint remains loadable.  Explicit flags always win, which makes experiments reproducible.
+    if args.training_profile == "speed-v2":
+        if args.gamma is None:
+            args.gamma = 0.999
+        if args.gae_lambda is None:
+            args.gae_lambda = 0.98
+        if args.selection_objective is None:
+            args.selection_objective = "speed"
+        if args.gate_confirmations is None:
+            args.gate_confirmations = 2
+        if args.eval_seed_mode is None:
+            args.eval_seed_mode = "rotating"
+        # Perturb-and-select repeatedly queries the validation bank and was the most direct path to
+        # memorising it. Re-enable only for a named experiment after the rotating/held-out harness lands.
+        args.no_evolve = True
+        args.no_tournament = True
+    else:
+        args.selection_objective = args.selection_objective or "arrival"
+        args.gate_confirmations = args.gate_confirmations or 1
+        args.eval_seed_mode = args.eval_seed_mode or "fixed"
+    args.gate_confirmations = max(1, args.gate_confirmations)
 
     run_name = args.name or time.strftime("%Y%m%d-%H%M%S")
     run_dir = args.out / run_name
@@ -391,6 +517,8 @@ def main() -> int:
         hyper.entropy_coef = args.entropy_coef
     if args.gamma is not None:
         hyper.gamma = args.gamma
+    if args.gae_lambda is not None:
+        hyper.gae_lambda = args.gae_lambda
     if args.log_std_max is not None:
         Policy.LOG_STD_MAX = args.log_std_max
     if args.lr is not None:
@@ -400,8 +528,10 @@ def main() -> int:
     optimizer = torch.optim.Adam(policy.parameters(), lr=hyper.lr, eps=1e-5)
 
     start_stage = args.stage
+    resume_state = {}
+    resume_return_scale = None
     if args.resume:
-        ckpt = torch.load(args.resume, map_location=device)
+        ckpt = torch.load(args.resume, map_location=device, weights_only=False)
         policy.load_state_dict(ckpt["policy"])
         optimizer.load_state_dict(ckpt["optimizer"])
         # load_state_dict restores the checkpoint's param_groups, INCLUDING its learning rate, which
@@ -411,19 +541,39 @@ def main() -> int:
             group["lr"] = hyper.lr
         norm.load(ckpt["norm"])
         start_stage = ckpt.get("stage", args.stage)
-        print(f"[train] resumed {args.resume} at stage {start_stage}, lr {hyper.lr:g}")
+        resume_state = ckpt.get("training_state", {})
+        resume_return_scale = ckpt.get("return_scale")
+        rng = ckpt.get("rng", {})
+        if "torch" in rng:
+            torch.set_rng_state(rng["torch"])
+        if "numpy" in rng:
+            np.random.set_state(rng["numpy"])
+        if "python" in rng:
+            random.setstate(rng["python"])
+        # Legacy rolling checkpoints did not store progress. Recover it from their own log so resuming v26
+        # continues toward 60M instead of silently training a second 60M-step stage. Keeper/best snapshots
+        # may be older than the log and therefore deliberately do not infer this.
+        if not resume_state and args.resume.name == "checkpoint.pt":
+            resume_state = _legacy_resume_state(args.resume.parent, start_stage)
+        args._resume_state = resume_state
+        args._resume_return_scale = resume_return_scale
+        print(f"[train] resumed {args.resume} at stage {start_stage}, lr {hyper.lr:g}, "
+              f"stage steps {int(resume_state.get('stage_steps', 0)):,}")
 
-    plan = [(s, args.steps, thresh) for s, _, thresh in CURRICULUM if s >= start_stage] \
-        if args.curriculum else [(args.stage, args.steps, 0.0)]
+    plan = [(s, args.steps, minimum, thresh) for s, minimum, thresh in CURRICULUM if s >= start_stage] \
+        if args.curriculum else [(start_stage, args.steps, 0, 0.0)]
 
     (run_dir / "config.json").write_text(json.dumps({
-        "args": {k: str(v) for k, v in vars(args).items()},
+        "args": {k: str(v) for k, v in vars(args).items() if not k.startswith("_")},
         "hyper": asdict(hyper),
         "obs_size": layout.OBS_SIZE,
         "action_logits": layout.ACTION_LOGITS,
     }, indent=2))
 
-    for stage, budget, threshold in plan:
+    _event(run_dir, "run_started", f"run started with {args.training_profile} profile",
+           profile=args.training_profile, resumed_from=str(args.resume) if args.resume else None)
+
+    for stage, budget, minimum, threshold in plan:
         print(f"\n[train] === stage {stage}: {budget:,} agent-steps, advance at {threshold:.0%} arrivals ===")
 
         # G4: a short lr tournament at stage entry. Each stage's reward scale differs (the return-scale
@@ -431,7 +581,9 @@ def main() -> int:
         # previous stage is a guess for this one. Three branches probe from the SAME snapshot; the winner
         # continues -- with its lr, which is the point. Bounded: ~500k steps per branch, and a branch is
         # scored by the same shipped-path bench the gate uses, not by its own rollout numbers.
-        if args.curriculum and threshold > 0 and not args.no_tournament:
+        resuming_stage = (int(resume_state.get("stage", -1)) == stage
+                          and int(resume_state.get("stage_steps", 0)) > 0)
+        if args.curriculum and threshold > 0 and not args.no_tournament and not resuming_stage:
             snap_p = copy.deepcopy(policy.state_dict())
             snap_o = copy.deepcopy(optimizer.state_dict())
             snap_n = norm.state()
@@ -445,8 +597,9 @@ def main() -> int:
                     g["lr"] = hyper.lr * mult
                 torch.manual_seed(args.seed + stage * 613 + b)
                 print(f"[tournament s{stage}] branch lr x{mult:g}: probing {probe_budget:,} steps")
-                train_stage(policy, norm, optimizer, hyper, args, stage, probe_budget, 0.0, run_dir, device)
-                r = evaluate(policy, norm, run_dir, stage, args.eval_steps, args)
+                train_stage(policy, norm, optimizer, hyper, args, stage, probe_budget, 0, 0.0, run_dir, device)
+                er = evaluate(policy, norm, run_dir, stage, args.eval_steps, args)
+                r = er.rate
                 print(f"[tournament s{stage}] branch lr x{mult:g}: shipped {r:.1%}")
                 results.append((r if r == r else -1.0, mult,
                                 copy.deepcopy(policy.state_dict()),
@@ -460,7 +613,10 @@ def main() -> int:
                 g["lr"] = hyper.lr * mult
             print(f"[tournament s{stage}] winner lr x{mult:g} at {r:.1%}; continuing the stage with it")
 
-        ok = train_stage(policy, norm, optimizer, hyper, args, stage, budget, threshold, run_dir, device)
+        ok = train_stage(policy, norm, optimizer, hyper, args, stage, budget, minimum, threshold, run_dir, device)
+        if _STOP_REQUESTED:
+            print(f"[train] paused safely; resume from {run_dir / 'checkpoint.pt'}")
+            return 0
         if not ok:
             print(f"[train] stage {stage} did not reach {threshold:.0%}; stopping rather than "
                   f"advancing onto a foundation that is not there")
@@ -471,7 +627,7 @@ def main() -> int:
 
 
 def train_stage(policy, norm, optimizer, hyper: Hyper, args, stage: int, budget: int,
-                threshold: float, run_dir: Path, device) -> bool:
+                minimum: int, threshold: float, run_dir: Path, device) -> bool:
     cfg = EnvConfig(
         agents=args.agents,
         ticks_per_step=args.ticks,
@@ -492,14 +648,15 @@ def train_stage(policy, norm, optimizer, hyper: Hyper, args, stage: int, budget:
         print(f"[train] {len(remotes)} remote host(s) + {args.hosts} local = {len(env.envs)} total, "
               f"{env.num_agents} agents", flush=True)
     try:
-        return _run(policy, norm, optimizer, hyper, env, stage, budget, threshold, run_dir, device,
+        return _run(policy, norm, optimizer, hyper, env, stage, budget, minimum, threshold, run_dir, device,
                     args.eval_every, args.eval_steps, args)
     finally:
         env.close()
 
 
 def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budget: int,
-         threshold: float, run_dir: Path, device, eval_every: int, eval_steps: int, eval_args) -> bool:
+         minimum: int, threshold: float, run_dir: Path, device, eval_every: int, eval_steps: int,
+         eval_args) -> bool:
     n_agents = env.num_agents
     obs_size = env.obs_size
     rollout = hyper.rollout
@@ -509,17 +666,25 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     logp_buf = np.zeros((rollout, n_agents), dtype=np.float32)
     rew_buf = np.zeros((rollout, n_agents), dtype=np.float32)
     done_buf = np.zeros((rollout, n_agents), dtype=np.float32)
+    trunc_buf = np.zeros((rollout, n_agents), dtype=np.float32)
+    next_obs_buf = np.zeros((rollout, n_agents, obs_size), dtype=np.float32)
     # True where the agent was still running when the step began; see the note by `alive` below.
     alive_buf = np.zeros((rollout, n_agents), dtype=bool)
     val_buf = np.zeros((rollout, n_agents), dtype=np.float32)
 
     obs = env.reset()
-    total_steps = 0
-    update = 0
+    resume = getattr(eval_args, "_resume_state", {}) or {}
+    if int(resume.get("stage", stage)) != stage:
+        resume = {}
+    total_steps = int(resume.get("stage_steps", 0))
+    update = int(resume.get("update", 0))
+    session_start_steps = total_steps
     t0 = time.time()
     arrival_history: list[float] = []
     det_rate = 0.0
-    best_rate = 0.0
+    best_rate = float(resume.get("best_rate", 0.0))
+    best_time_raw = resume.get("best_time")
+    best_time = float(best_time_raw) if best_time_raw is not None else float("inf")
     recent_det: list[float] = []
     # G2 state: how many evals since the shipped rate last improved, and how many perturbation rounds this
     # stage has spent. See the block after the gate check.
@@ -529,6 +694,24 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     dead_updates = 0
     baseline_logged = False
     ret_scale = ReturnScale()
+    if resume and getattr(eval_args, "_resume_return_scale", None):
+        ret_scale.load(eval_args._resume_return_scale)
+    eval_failures = int(resume.get("eval_failures", 0))
+    passing_evals = int(resume.get("passing_evals", 0))
+
+    def state(phase: str = "training") -> dict:
+        return {
+            "schema": 2, "run": run_dir.name, "phase": phase, "stage": stage,
+            "stage_steps": total_steps, "budget": budget, "minimum_steps": minimum,
+            "update": update, "best_rate": best_rate,
+            "best_time": best_time if math.isfinite(best_time) else None,
+            "last_rate": det_rate if math.isfinite(det_rate) else None,
+            "eval_failures": eval_failures, "passing_evals": passing_evals,
+            "gate": threshold, "eval_every": eval_every, "profile": eval_args.training_profile,
+            "selection_objective": eval_args.selection_objective, "updated_at": _stamp(),
+        }
+
+    _atomic_json(run_dir / "state.json", state())
 
     # Which agents are still running. TrainingEnv keeps reporting an agent that has finished -- reward 0,
     # done 1, and an observation slice Clear()ed to all zeros -- every step until EVERY agent finishes and
@@ -574,7 +757,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                 _tpol_box[0] += time.perf_counter() - _a0
                 return wire.cpu().numpy(), aux
 
-            def _store(ti, lo, hi, _raw, act_rows, aux, rew, done_v, trunc_v):
+            def _store(ti, lo, hi, _raw, next_rows, act_rows, aux, rew, done_v, trunc_v):
                 nobs_r, logp_r, val_r, alive_r = aux
                 k0 = 0  # aux rows are exactly this host's block when stored by collect
                 obs_buf[ti, lo:hi] = nobs_r[k0:k0 + (hi - lo)]
@@ -584,6 +767,8 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                 alive_buf[ti, lo:hi] = alive_r[k0:k0 + (hi - lo)]
                 rew_buf[ti, lo:hi] = rew
                 done_buf[ti, lo:hi] = done_v.astype(np.float32)
+                trunc_buf[ti, lo:hi] = trunc_v.astype(np.float32)
+                next_obs_buf[ti, lo:hi] = next_rows
                 _steps_box[0] += int(alive_r.sum())
                 fin = done_v.astype(bool) | trunc_v.astype(bool)
                 blk = alive[lo:hi]
@@ -620,10 +805,12 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
               obs, reward, done, trunc = env.step(act_buf[t])
               t_env += time.perf_counter() - _p1
               rew_buf[t] = reward
+              next_obs_buf[t] = env.last_transition_obs
               # Truncation is NOT termination: the value function must still bootstrap through a step that
               # ended only because the clock ran out. Conflating them teaches the policy that time limits are
               # a form of death and makes it hurry into walls near the cap.
               done_buf[t] = done.astype(np.float32)
+              trunc_buf[t] = trunc.astype(np.float32)
               # This step counted only for agents that were still running when it began. An agent that was
               # already finished contributes padding, not experience.
               total_steps += int(alive.sum())
@@ -640,8 +827,13 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                   if finished[lo:lo + per_host].all():
                       alive[lo:lo + per_host] = True
 
+        # Value every transition's actual next observation. This is essential at a time limit: the host may
+        # already have reset the world by the time the rollout continues, but the timeout delta must
+        # bootstrap from the final observation and its trace must stop at the episode boundary.
         with torch.inference_mode():
-            last_value = policy(torch.as_tensor(norm.normalize(obs), device=device))[1].cpu().numpy()
+            flat_next = norm.normalize(next_obs_buf.reshape(-1, obs_size))
+            next_values = policy(torch.as_tensor(flat_next, device=device))[1].cpu().numpy()
+            next_values = next_values.reshape(rollout, n_agents)
 
         # Scale the rewards by a running estimate of return magnitude before GAE.
         #
@@ -654,9 +846,11 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         #
         # Dividing by a running std leaves the reward's SHAPE untouched (no mean shift, so the relative
         # value of arriving versus progressing is unchanged) and gives the critic a unit-scale target.
-        ret_scale.update(rew_buf, hyper.gamma)
+        finished_buf = np.logical_or(done_buf != 0, trunc_buf != 0)
+        ret_scale.update(rew_buf, hyper.gamma, alive=alive_buf, finished=finished_buf)
         scaled_rew = rew_buf / ret_scale.std()
-        adv, ret = gae(scaled_rew, val_buf, done_buf, last_value, hyper.gamma, hyper.gae_lambda)
+        adv, ret = gae(scaled_rew, val_buf, done_buf, trunc_buf, next_values,
+                       hyper.gamma, hyper.gae_lambda)
 
         _u0 = time.perf_counter()
         stats = ppo_update(policy, optimizer, hyper, obs_buf, act_buf, logp_buf, adv, ret, device,
@@ -669,12 +863,14 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
             rate = float(np.mean([a / max(1, env.agents_per_host) for a, _, _ in ep]))
             arrival_history.append(rate)
             arrival_history[:] = arrival_history[-20:]
+        env.clear_episode_stats()
         sampled = float(np.mean(arrival_history)) if arrival_history else 0.0
 
-        sps = total_steps / max(1e-6, time.time() - t0)
+        sps = (total_steps - session_start_steps) / max(1e-6, time.time() - t0)
         skipped_note = f"SKIPPED {int(stats['nonfinite'])}  " if stats.get("nonfinite") else ""
         print(f"[s{stage} u{update:4d}] steps {total_steps:>10,}  {sps:6.0f}/s  "
-              f"reward {rew_buf.mean():+.4f}  sampled {sampled:5.1%}  shipped {det_rate:5.1%}  "
+              f"reward {rew_buf[alive_buf].mean() if alive_buf.any() else 0.0:+.4f}  "
+              f"sampled {sampled:5.1%}  shipped {det_rate:5.1%}  "
               f"pi {stats['policy_loss']:+.4f}  v {stats['value_loss']:.4f}  rs {ret_scale.std():.2f}  "
               f"ent {stats['entropy']:.3f}  kl {stats['kl']:.4f}  "
               # Entropy bonus over policy gradient. Above ~1.0 the regulariser is the larger term in the
@@ -685,6 +881,23 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
               # case; a run that starts printing this is diverging and the weights are being protected.
               f"{skipped_note}"
               f"[env {t_env:.2f}s pol {t_pol:.2f}s upd {t_upd:.2f}s]")
+
+        metric = {**state(), "type": "update", "sps": sps, "sampled_rate": sampled,
+                  "reward_mean": float(rew_buf[alive_buf].mean()) if alive_buf.any() else 0.0,
+                  "entropy": stats["entropy"], "kl": stats["kl"],
+                  "policy_loss": stats["policy_loss"], "value_loss": stats["value_loss"],
+                  "return_scale": ret_scale.std(), "env_seconds": t_env,
+                  "policy_seconds": t_pol, "update_seconds": t_upd}
+        _append_jsonl(run_dir / "metrics.jsonl", metric)
+        _atomic_json(run_dir / "state.json", state())
+
+        if _STOP_REQUESTED:
+            paused = state("stopped")
+            save(policy, norm, optimizer, stage, run_dir, training_state=paused, return_scale=ret_scale)
+            _atomic_json(run_dir / "state.json", paused)
+            _event(run_dir, "paused", "checkpoint saved after stop request", update=update,
+                   stage_steps=total_steps)
+            return False
 
         # Stop a run that has stopped learning, instead of letting it look busy.
         #
@@ -710,7 +923,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
             print(f"[s{stage}] {env.timing_report()}", flush=True)
 
         if update % 20 == 0:
-            save(policy, norm, optimizer, stage, run_dir)
+            save(policy, norm, optimizer, stage, run_dir, training_state=state(), return_scale=ret_scale)
 
         # ---- the advancement gate, measured DETERMINISTICALLY ----
         #
@@ -722,7 +935,34 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         # Runs whether or not there is a gate: a single-stage run still wants to see the number that
         # matters, and printing `det 0.0%` because the eval was skipped is worse than not printing it.
         if update % eval_every == 0:
-            det_rate = evaluate(policy, norm, run_dir, stage, eval_steps, eval_args)
+            _atomic_json(run_dir / "state.json", state("evaluating"))
+            _event(run_dir, "eval_started", f"stage {stage} evaluation started", update=update)
+            eval_started_wall = time.time()
+            seed_offset = update * 104729 if eval_args.eval_seed_mode == "rotating" else 0
+            evaluation = evaluate(policy, norm, run_dir, stage, eval_steps, eval_args,
+                                  seed_offset=seed_offset)
+            if not evaluation.ok:
+                eval_failures += 1
+                print(f"[s{stage}] EVAL FAILED ({eval_failures}/2): {evaluation.error}", flush=True)
+                _atomic_json(run_dir / "state.json", state("eval_failed"))
+                if eval_failures >= 2:
+                    failed = state("stopped_eval_failure")
+                    save(policy, norm, optimizer, stage, run_dir, training_state=failed,
+                         return_scale=ret_scale)
+                    _event(run_dir, "paused", "two consecutive evaluations failed; checkpoint saved",
+                           update=update, stage_steps=total_steps)
+                    print(f"[s{stage}] PAUSING after two failed evals; checkpoint is safe at "
+                          f"{run_dir / 'checkpoint.pt'}")
+                    return False
+                if _STOP_REQUESTED:
+                    paused = state("stopped")
+                    save(policy, norm, optimizer, stage, run_dir, training_state=paused,
+                         return_scale=ret_scale)
+                    _atomic_json(run_dir / "state.json", paused)
+                    return False
+                continue
+            eval_failures = 0
+            det_rate = evaluation.rate
             gate = f"gate {threshold:.0%}" if threshold > 0 else "no gate"
 
             # Keep the best policy this stage has produced, separately from the rolling checkpoint.
@@ -732,10 +972,14 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
             # from 10% down to 5%, and the 71.6% policy that had just cleared stage 3 was overwritten a
             # hundred times over. Recovering it meant retraining a stage. One extra file per stage is a
             # cheap insurance premium against that.
-            if det_rate > best_rate:
-                best_rate = det_rate
+            if _eval_is_better(evaluation, best_rate, best_time, eval_args.selection_objective):
+                best_rate = max(best_rate, det_rate)
+                best_time = evaluation.mean_time
                 evals_since_best = 0
-                save(policy, norm, optimizer, stage, run_dir, tag=f"stage{stage}-best")
+                save(policy, norm, optimizer, stage, run_dir, tag=f"stage{stage}-best",
+                     training_state=state(), return_scale=ret_scale)
+                _event(run_dir, "new_best", f"new stage {stage} best",
+                       arrival_rate=det_rate, mean_arrival_seconds=_finite_or_none(best_time), update=update)
             else:
                 evals_since_best += 1
                 recent_det.append(det_rate)
@@ -749,11 +993,44 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                           f"same stage before spending more compute.")
                     recent_det.clear()
 
-            print(f"[s{stage}] shipped-path eval: {det_rate:.1%} arrivals ({gate}, best {best_rate:.1%})")
-            if threshold > 0 and det_rate >= threshold:
-                save(policy, norm, optimizer, stage, run_dir)
-                save(policy, norm, optimizer, stage + 1, run_dir, tag=f"stage{stage}-done")
+            speed_text = (f", mean arrival {evaluation.mean_time:.2f}s"
+                          if math.isfinite(evaluation.mean_time) else "")
+            print(f"[s{stage}] shipped-path eval: {det_rate:.1%} arrivals{speed_text} "
+                  f"({gate}, best {best_rate:.1%})")
+            _append_jsonl(run_dir / "metrics.jsonl", {**state(), "type": "evaluation",
+                          "arrival_rate": det_rate,
+                          "mean_arrival_seconds": _finite_or_none(evaluation.mean_time),
+                          "hits": evaluation.hits, "episodes": evaluation.total,
+                          "seed_offset": seed_offset, "eval_seconds": time.time() - eval_started_wall})
+            _event(run_dir, "eval_completed", f"eval completed at {det_rate:.1%}",
+                   arrival_rate=det_rate,
+                   mean_arrival_seconds=_finite_or_none(evaluation.mean_time), update=update)
+            eligible = total_steps >= minimum
+            if threshold > 0 and det_rate >= threshold and eligible:
+                passing_evals += 1
+            else:
+                passing_evals = 0
+            if threshold > 0 and det_rate >= threshold and not eligible:
+                print(f"[s{stage}] gate is locked until {minimum:,} stage steps "
+                      f"({total_steps:,} completed)")
+            elif passing_evals and passing_evals < eval_args.gate_confirmations:
+                print(f"[s{stage}] gate confirmation {passing_evals}/{eval_args.gate_confirmations}")
+            if threshold > 0 and passing_evals >= eval_args.gate_confirmations:
+                save(policy, norm, optimizer, stage, run_dir, training_state=state(), return_scale=ret_scale)
+                save(policy, norm, optimizer, stage + 1, run_dir, tag=f"stage{stage}-done",
+                     training_state={**state(), "stage": stage + 1, "stage_steps": 0, "update": 0},
+                     return_scale=None)
+                _event(run_dir, "stage_advanced", f"stage {stage} passed", arrival_rate=det_rate,
+                       confirmations=passing_evals)
                 return True
+            if _STOP_REQUESTED:
+                paused = state("stopped")
+                save(policy, norm, optimizer, stage, run_dir, training_state=paused,
+                     return_scale=ret_scale)
+                _atomic_json(run_dir / "state.json", paused)
+                _event(run_dir, "paused", "checkpoint saved after evaluation", update=update,
+                       stage_steps=total_steps)
+                return False
             # The eval runs out-of-process now, so the rollout state is untouched and there is nothing
             # to reset.
 
@@ -801,7 +1078,9 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                               f"perturbation produced non-finite {bad}")
                         policy.load_state_dict(parent)
                         continue
-                    r = evaluate(policy, norm, run_dir, stage, eval_steps, eval_args)
+                    candidate = evaluate(policy, norm, run_dir, stage, eval_steps, eval_args,
+                                         seed_offset=seed_offset)
+                    r = candidate.rate
                     print(f"[evolve s{stage}]   candidate {k} sigma {sigma:g}: "
                           f"{r if r == r else float('nan'):.1%}")
                     if r == r and r > best_c_rate + 0.005:
@@ -825,15 +1104,17 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                     # next few updates re-estimate them, and resetting them entirely would forget more.
                     policy.load_state_dict(best_c_state)
                     best_rate = best_c_rate
-                    save(policy, norm, optimizer, stage, run_dir, tag=f"stage{stage}-best")
+                    save(policy, norm, optimizer, stage, run_dir, tag=f"stage{stage}-best",
+                         training_state=state(), return_scale=ret_scale)
                     print(f"[evolve s{stage}] adopted a candidate at {best_c_rate:.1%}")
                 else:
                     print(f"[evolve s{stage}] no candidate beat the parent; PPO continues unchanged")
 
-    save(policy, norm, optimizer, stage, run_dir)
+    save(policy, norm, optimizer, stage, run_dir, training_state=state(), return_scale=ret_scale)
     if threshold <= 0:
         return True
-    final = evaluate(policy, norm, run_dir, stage, eval_steps, eval_args)
+    final_eval = evaluate(policy, norm, run_dir, stage, eval_steps, eval_args)
+    final = final_eval.rate
     print(f"[s{stage}] final shipped-path eval: {final:.1%} arrivals "
           f"(gate {threshold:.0%}, best this stage {best_rate:.1%})")
     if final < best_rate:
@@ -842,7 +1123,8 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     return final >= threshold
 
 
-def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args) -> float:
+def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args,
+             seed_offset: int = 0) -> EvalResult:
     """Arrival rate of the exported policy, measured through the path that actually SHIPS.
 
     Exports the weights and hands them to ``va-neural-host --bench --policy``, which runs the network
@@ -863,7 +1145,7 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args) -> float
 
     dll = Path(__file__).resolve().parent / "VortexArena.NeuralHost" / "bin" / "Release" / "net8.0" / "va-neural-host.dll"
     if not dll.exists():
-        return float("nan")
+        return EvalResult(float("nan"), error=f"host binary missing: {dll}")
 
     # Episode-bounded, with the step count as the safety cap. Every eval then scores the same courses;
     # a step budget alone scores a fast policy on a different slice than a slow one, which turned the
@@ -889,7 +1171,7 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args) -> float
              # Pinned, NOT args.agents. Every curriculum baseline was measured at EvalAgents while this
              # passed the training value, so gates and evals were scored on different difficulties.
              "--agents", str(EvalAgents), "--ticks", str(args.ticks),
-             "--stage", str(stage), "--seed", str(args.seed + 9001 + i * 7919),
+             "--stage", str(stage), "--seed", str(args.seed + 9001 + seed_offset + i * 7919),
              "--policy", str(weights),
              "--data", data_root]
         if args.maps:
@@ -900,19 +1182,25 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args) -> float
     try:
         for i in range(shards):
             procs.append(subprocess.Popen(shard_cmd(i), stdout=subprocess.PIPE,
-                                          stderr=subprocess.DEVNULL, text=True))
-    except OSError:
+                                          stderr=subprocess.PIPE, text=True))
+    except OSError as exc:
         for pr in procs:
             pr.kill()
-        return float("nan")
+        return EvalResult(float("nan"), error=f"could not launch evaluator: {exc}")
 
-    outs = []
-    for pr in procs:
+    outs: list[str] = []
+    shard_errors: list[str] = []
+    for i, pr in enumerate(procs):
         try:
-            outs.append(pr.communicate(timeout=900)[0] or "")
+            stdout, stderr = pr.communicate(timeout=900)
+            outs.append(stdout or "")
+            if pr.returncode != 0:
+                tail = " | ".join((stderr or "").splitlines()[-4:])
+                shard_errors.append(f"shard {i} exited {pr.returncode}: {tail}")
         except subprocess.TimeoutExpired:
             pr.kill()
             outs.append("")
+            shard_errors.append(f"shard {i} timed out after 900s")
     out = "\n".join(outs)
 
     # Surface how often the course draw had to relax its constraints.
@@ -938,24 +1226,44 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args) -> float
 
     # Weighted by each shard's agent-episodes, so a shard cut short by the step budget does not count the
     # same as a complete one.
-    hits, total = 0.0, 0.0
-    for line in out.splitlines():
-        if not line.startswith("arrival rate"):
-            continue
-        # "arrival rate   34.7 % (161/464 agent-episodes)"
-        try:
-            frac = line.split("(")[1].split(")")[0].split()[0]
-            a, b = frac.split("/")
-            hits += float(a)
-            total += float(b)
-        except (IndexError, ValueError):
-            continue
+    hits, total, arrival_seconds = 0.0, 0.0, 0.0
+    for shard_out in outs:
+        shard_hits = 0.0
+        shard_time = float("nan")
+        for line in shard_out.splitlines():
+            if line.startswith("arrival rate"):
+                try:
+                    frac = line.split("(")[1].split(")")[0].split()[0]
+                    a, b = frac.split("/")
+                    shard_hits = float(a)
+                    hits += shard_hits
+                    total += float(b)
+                except (IndexError, ValueError):
+                    pass
+            elif line.startswith("arrival time"):
+                try:
+                    shard_time = float(line.split()[2])
+                except (IndexError, ValueError):
+                    pass
+        if shard_hits > 0 and math.isfinite(shard_time):
+            arrival_seconds += shard_time * shard_hits
     if total > 0:
-        return hits / total
+        mean_time = arrival_seconds / hits if hits > 0 and arrival_seconds > 0 else float("nan")
+        # A partial result is not a valid gate. Preserve the measurements in the error log, but fail closed.
+        if shard_errors:
+            err = "; ".join(shard_errors)
+            _event(run_dir, "eval_failed", err, stage=stage, hits=hits, total=total)
+            with open(run_dir / "eval-errors.log", "a", encoding="utf-8") as fh:
+                fh.write(f"[{_stamp()}] {err}\n")
+            return EvalResult(float("nan"), mean_time, int(hits), int(total), err)
+        return EvalResult(hits / total, mean_time, int(hits), int(total))
     # The bench ran but printed no arrival line -- a load failure or a crash. NaN, explicitly: it
     # loses every comparison, so a broken eval can never pass a gate or win a tournament.
-    return float("nan")
-    return float("nan")
+    err = "; ".join(shard_errors) or "evaluator produced no arrival-rate record"
+    _event(run_dir, "eval_failed", err, stage=stage)
+    with open(run_dir / "eval-errors.log", "a", encoding="utf-8") as fh:
+        fh.write(f"[{_stamp()}] {err}\n")
+    return EvalResult(float("nan"), error=err)
 
 
 class ReturnScale:
@@ -972,25 +1280,46 @@ class ReturnScale:
         self._var = 1.0
         self._count = 1e-4
 
-    def update(self, rewards: np.ndarray, gamma: float) -> None:
+    def update(self, rewards: np.ndarray, gamma: float, alive: np.ndarray | None = None,
+               finished: np.ndarray | None = None) -> None:
         n_agents = rewards.shape[1]
         if self._ret is None or self._ret.shape[0] != n_agents:
             self._ret = np.zeros(n_agents, dtype=np.float64)
         for t in range(rewards.shape[0]):
-            self._ret = self._ret * gamma + rewards[t]
-            batch_mean = float(self._ret.mean())
-            batch_var = float(self._ret.var())
+            mask = alive[t] if alive is not None else np.ones(n_agents, dtype=bool)
+            self._ret[mask] = self._ret[mask] * gamma + rewards[t, mask]
+            sample = self._ret[mask]
+            if sample.size == 0:
+                continue
+            batch_mean = float(sample.mean())
+            batch_var = float(sample.var())
             delta = batch_mean - self._mean
-            total = self._count + n_agents
-            self._mean += delta * n_agents / total
+            count = sample.size
+            total = self._count + count
+            self._mean += delta * count / total
             m_a = self._var * self._count
-            m_b = batch_var * n_agents
-            self._var = (m_a + m_b + delta**2 * self._count * n_agents / total) / total
+            m_b = batch_var * count
+            self._var = (m_a + m_b + delta**2 * self._count * count / total) / total
             self._count = total
+            if finished is not None:
+                self._ret[finished[t]] = 0.0
 
     def std(self) -> float:
         # Floored so an early, near-constant reward stream cannot divide by nothing and blow the gradients.
         return max(float(np.sqrt(self._var)), 1e-3)
+
+    def state(self) -> dict:
+        return {"ret": None if self._ret is None else self._ret.copy(), "mean": self._mean,
+                "var": self._var, "count": self._count}
+
+    def load(self, state: dict | None) -> None:
+        if not state:
+            return
+        ret = state.get("ret")
+        self._ret = None if ret is None else np.asarray(ret, dtype=np.float64).copy()
+        self._mean = float(state.get("mean", 0.0))
+        self._var = float(state.get("var", 1.0))
+        self._count = float(state.get("count", 1e-4))
 
 
 def evaluate_scripted(stage: int, steps: int, args) -> float:
@@ -1019,16 +1348,16 @@ def evaluate_scripted(stage: int, steps: int, args) -> float:
     return float("nan")
 
 
-def gae(rewards, values, dones, last_value, gamma: float, lam: float):
-    """Generalised advantage estimation over the rollout."""
+def gae(rewards, values, terminated, truncated, next_values, gamma: float, lam: float):
+    """GAE with separate bootstrap and trace masks for terminations and time limits."""
     T, N = rewards.shape
     adv = np.zeros((T, N), dtype=np.float32)
     gae_run = np.zeros(N, dtype=np.float32)
     for t in reversed(range(T)):
-        next_value = last_value if t == T - 1 else values[t + 1]
-        next_nonterminal = 1.0 - dones[t]
-        delta = rewards[t] + gamma * next_value * next_nonterminal - values[t]
-        gae_run = delta + gamma * lam * next_nonterminal * gae_run
+        bootstrap = 1.0 - terminated[t]
+        continuation = 1.0 - np.maximum(terminated[t], truncated[t])
+        delta = rewards[t] + gamma * next_values[t] * bootstrap - values[t]
+        gae_run = delta + gamma * lam * continuation * gae_run
         adv[t] = gae_run
     return adv, adv + values
 
@@ -1222,7 +1551,13 @@ def ppo_update(policy, optimizer, hyper: Hyper, obs_buf, act_buf, logp_buf, adv,
     return out
 
 
-def save(policy, norm, optimizer, stage: int, run_dir: Path, tag: str | None = None) -> None:
+def save(policy, norm, optimizer, stage: int, run_dir: Path, tag: str | None = None,
+         training_state: dict | None = None, return_scale: ReturnScale | None = None) -> None:
+    """Write a checkpoint plus its game-loadable weights.
+
+    ``tag`` names a keeper (``stage3-best``, ``stage3-done``); without it this is the rolling checkpoint,
+    which the next save overwrites.
+    """
 
     # Never write a checkpoint containing a non-finite tensor.
     #
@@ -1235,18 +1570,27 @@ def save(policy, norm, optimizer, stage: int, run_dir: Path, tag: str | None = N
         print(f"[save] REFUSING to write {tag or 'checkpoint'}: non-finite tensors {bad[:4]}"
               f"{' and more' if len(bad) > 4 else ''}. The previous checkpoint is left intact.")
         return
-    """Write a checkpoint plus its game-loadable weights.
-
-    ``tag`` names a keeper (``stage3-best``, ``stage3-done``); without it this is the rolling checkpoint,
-    which the next save overwrites.
-    """
     name = tag or "checkpoint"
-    torch.save({
+    target = run_dir / f"{name}.pt"
+    temp = run_dir / f".{name}.pt.tmp"
+    payload = {
+        "checkpoint_version": 2,
         "policy": policy.state_dict(),
         "optimizer": optimizer.state_dict(),
         "norm": norm.state(),
         "stage": stage,
-    }, run_dir / f"{name}.pt")
+        "training_state": training_state or {"stage": stage},
+        "return_scale": return_scale.state() if return_scale is not None else None,
+        "rng": {"torch": torch.get_rng_state(), "numpy": np.random.get_state(),
+                "python": random.getstate()},
+        "saved_at": _stamp(),
+    }
+    torch.save(payload, temp)
+    # A rolling checkpoint keeps one known-good predecessor. The existing checkpoint is copied only after
+    # the replacement has been fully written, and the final swap is atomic on the same filesystem.
+    if tag is None and target.exists():
+        shutil.copy2(target, run_dir / "checkpoint.prev.pt")
+    os.replace(temp, target)
     # Export the game-loadable weights alongside every checkpoint, so any run can be dropped straight into
     # a server without a separate step that someone will forget.
     export_weights(policy, norm, run_dir / f"{'policy' if tag is None else tag}.vxpw",

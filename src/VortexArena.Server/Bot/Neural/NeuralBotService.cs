@@ -86,7 +86,8 @@ public sealed class NeuralBotService
     /// Load or bake everything for a map. Returns immediately; a bake that has to run happens on the thread
     /// pool and <see cref="Ready"/> flips when it lands.
     /// </summary>
-    public void BeginMap(string mapName, CollisionWorld world, IReadOnlyList<Entity> entities, string weightsPath)
+    public void BeginMap(string mapName, CollisionWorld world, IReadOnlyList<Entity> entities, string weightsPath,
+        bool allowBake = true)
     {
         CancelBake();
         _mapName = mapName;
@@ -111,6 +112,13 @@ public sealed class NeuralBotService
         }
         if (cached is not null)
             Log?.Invoke($"neural: cached nav field for {mapName} was baked against different geometry; re-baking");
+
+        if (!allowBake)
+        {
+            UpdateStatus();
+            Log?.Invoke($"neural: no compatible cached nav field for {mapName}; bot_neural_bake is 0");
+            return;
+        }
 
         // Bake off-thread. Bots run the classic steer until this lands; see NavFieldBaker's cost note and
         // parity finding D1 for why this must not block the load.

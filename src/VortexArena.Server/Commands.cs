@@ -779,6 +779,8 @@ public sealed class Commands
         Register("bot_add", "bot_add [name] [skill] — add an AI player", CmdBotAdd);
         Register("bot_remove", "bot_remove [name] — remove a bot", CmdBotRemove);
         Register("bot_neural_status", "bot_neural_status — what the learned locomotion policy is doing (or why it is not)", CmdBotNeuralStatus);
+        Register("bot_policy_apply", "bot_policy_apply <classic|weights.vxpw> — switch bot locomotion live", CmdBotPolicyApply);
+        Register("bot_directed_add", "bot_directed_add [name] — spawn a bot that only follows your HERE markers", CmdBotDirectedAdd);
         Register("setbots", "setbots <n> — keep this many bots on the server", CmdSetBots);
         Register("removebots", "removebots — remove all bots", CmdRemoveBots);
 
@@ -1330,6 +1332,27 @@ public sealed class Commands
     {
         string? status = NeuralStatusHandler?.Invoke();
         ctx.Print(status ?? "neural bots: not initialised (bot_neural is 0, or no map is loaded)");
+        return true;
+    }
+
+    private bool CmdBotPolicyApply(CommandContext ctx)
+    {
+        if (ctx.ArgCount < 2)
+        {
+            ctx.Print("usage: bot_policy_apply <classic|weights.vxpw>");
+            return true;
+        }
+        ctx.Print(_world.ApplyBotPolicy(ctx.ArgTail(1)));
+        return true;
+    }
+
+    private bool CmdBotDirectedAdd(CommandContext ctx)
+    {
+        string? name = ctx.ArgCount >= 2 ? ctx.ArgTail(1) : null;
+        Bot.BotBrain? brain = _world.Bots.AddDirectedBot(ctx.Caller, name);
+        ctx.Print(brain is null
+            ? "directed bot: no controlling human/player slot is available"
+            : $"directed bot '{brain.Bot.NetName}' spawned; place a HERE marker to direct it");
         return true;
     }
 

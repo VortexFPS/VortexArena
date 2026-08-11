@@ -541,6 +541,11 @@ public sealed partial class BotBrain
         if (MovementHold?.Invoke() == true)
             return Emit(bot, Vector3.Zero, jumpHeld, crouch: false, attack: false, attack2: false, dt);
 
+        // Developer-directed follower: deliberately bypass the entire tactician below. Its sole decision is
+        // the host-owned HERE marker; movement still goes through the selected classic/neural locomotor.
+        if (DirectedGoalProvider is not null)
+            return DirectedThinkProduce(bot, dt, now, jumpHeld);
+
         // 0) deferred ROUTE BUILD from the last token frame's rating (see the _pendingSeeds field doc): runs
         // before steering so the fresh route applies this think. The IsFreed guard covers a goal item picked
         // up / entity removed during the one-think gap.

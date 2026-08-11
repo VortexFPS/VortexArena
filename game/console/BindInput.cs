@@ -61,6 +61,8 @@ public static class BindInput
         ["togglezoom"] = "togglezoom",
         ["scoreboard"] = "+showscores",
         ["screenshot"] = "screenshot",
+        ["botpolicies"] = "menu_showbotpolicies",
+        ["here_waypoint"] = "waypoint_here_crosshair",
         // communication / misc (one-shots)
         ["chat"] = "messagemode",
         ["chat_team"] = "messagemode2",

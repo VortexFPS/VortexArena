@@ -304,6 +304,18 @@ crossing zero as arrivals climb. Three ways it goes wrong and what each looks li
 `bot_neural_status` in the console reports what loaded, what baked, and why the bots are on the classic
 steer if they are.
 
+In a local match, press **F11** for the Bot Movement Lab. It discovers every `.vxpw` below the nearby
+`runs/` folder (or `VORTEX_POLICY_ROOT`), reads `state.json` plus the latest `eval_completed` event, and lets
+you rank, bookmark, and live-switch policies or return to classic HavocBot movement. Policy switching keeps
+the deterministic tactician in charge of targets, weapons, combat aim, and firing; only the locomotion half
+is replaced.
+
+The same dialog can spawn a **HERE-directed bot**. Press **P** to place or retarget the existing HERE
+waypoint at the crosshair. This bot skips roles, enemy/item searches, weapon choice, combat aim, and firing;
+its only high-level instruction is to reach the last HERE position, using whichever movement implementation
+is selected. `bot_directed_weapon_movement 1` optionally allows a learned policy to spend a weapon purely
+for locomotion.
+
 ## Things that will bite
 
 **Layout skew.** Change `NeuralObservation.cs` and `layout.py` must follow. `layout.verify()` catches it at

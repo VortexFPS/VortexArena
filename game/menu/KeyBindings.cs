@@ -56,6 +56,8 @@ public static class KeyBindings
         ("togglezoom","Toggle zoom"),
         ("scoreboard","Show scores"),
         ("screenshot","Screenshot"),
+        ("botpolicies","Bot movement lab"),
+        ("here_waypoint","Place HERE waypoint"),
         // Communication
         ("chat",      "Public chat"),
         ("chat_team", "Team chat"),
@@ -90,6 +92,8 @@ public static class KeyBindings
         ["use"]        = "F",
         ["scoreboard"] = "Tab",
         ["screenshot"] = "F12",
+        ["botpolicies"] = "F11",
+        ["here_waypoint"] = "P",
     };
 
     /// <summary>The <see cref="InputMap"/> action name for a bind id (namespaced to avoid clashes).</summary>

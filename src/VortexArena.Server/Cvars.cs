@@ -396,6 +396,8 @@ public static class Cvars
         // This MUST match the rate the policy was trained at (the trainer's ticks-per-step), so changing it
         // without retraining changes what the network is.
         new("bot_neural_hz", "18", "decision rate for the learned locomotor; must match the training rate"),
+        new("bot_directed_weapon_movement", "0",
+            "allow a HERE-directed bot's movement policy to spend weapons; combat logic always remains disabled"),
         // The shipped xonotic-server.cfg values, NOT empty strings. These are the fallbacks used when the cfg
         // tree is not mounted (headless tests, a bare host), and an empty list makes PickFromPriority return
         // null so the bot falls through to "highest-impulse owned weapon" — a different weapon choice than

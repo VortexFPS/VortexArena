@@ -163,8 +163,10 @@ public sealed partial class BotBrain
             // outright and the weapon with it.
             intent.AimRequired = false;
             intent.AimWeight = 0f;
-            intent.WeaponMovementAllowed = true;
-            IdleReload(bot, now);   // QC havocbot_ai:181-211, unchanged from the classic path
+            intent.WeaponMovementAllowed = DirectedGoalProvider is null
+                || Cvars.Bool("bot_directed_weapon_movement");
+            if (DirectedGoalProvider is null)
+                IdleReload(bot, now);   // directed followers have no weapon-management logic
         }
 
         // Hurt bots stop spending health on movement. Blaster and rocket jumps cost self-damage, which is a

@@ -952,15 +952,8 @@ public sealed class GameWorld
                 Log = NeuralLog,
                 VfsReader = ConfigReader is null ? null : p => ConfigReader(p) is { } t ? System.Text.Encoding.UTF8.GetBytes(t) : null,
             };
-            if (Cvars.Bool("bot_neural_bake"))
-            {
-                NeuralBots.BeginMap(MapName ?? "", Collision, Services.EntityTable.All,
-                    Cvars.String("bot_neural_weights"));
-            }
-            else
-            {
-                NeuralBots.LoadWeights(Cvars.String("bot_neural_weights"));
-            }
+            NeuralBots.BeginMap(MapName ?? "", Collision, Services.EntityTable.All,
+                Cvars.String("bot_neural_weights"), allowBake: Cvars.Bool("bot_neural_bake"));
             Bots.Neural = NeuralBots;
         }
 
@@ -987,6 +980,37 @@ public sealed class GameWorld
             Api.Services = priorAmbient!;
 
         Booted = true;
+    }
+
+    /// <summary>
+    /// Switch locomotion implementations in a running match. <paramref name="weightsPath"/> null/blank means
+    /// classic HavocBot; a path creates (or replaces) the map service and begins loading its policy/geometry.
+    /// Loading is fail-soft: an invalid policy leaves the bots on classic movement and reports through
+    /// <c>bot_neural_status</c>.
+    /// </summary>
+    public string ApplyBotPolicy(string? weightsPath)
+    {
+        if (string.IsNullOrWhiteSpace(weightsPath)
+            || string.Equals(weightsPath, "classic", StringComparison.OrdinalIgnoreCase))
+        {
+            Cvars.Set("bot_neural", "0");
+            Bots.Neural = NeuralBots;
+            return "bot movement: classic HavocBot";
+        }
+
+        Cvars.Set("bot_neural_weights", weightsPath);
+        Cvars.Set("bot_neural", "1");
+        NeuralBots?.CancelBake();
+        NeuralBots = new Bot.Neural.NeuralBotService
+        {
+            Log = NeuralLog,
+            VfsReader = ConfigReader is null ? null : p => ConfigReader(p) is { } t
+                ? System.Text.Encoding.UTF8.GetBytes(t) : null,
+        };
+        NeuralBots.BeginMap(MapName ?? "", Collision, Services.EntityTable.All, weightsPath,
+            allowBake: Cvars.Bool("bot_neural_bake"));
+        Bots.Neural = NeuralBots;
+        return $"bot movement: requested policy {weightsPath}; {NeuralBots.StatusLine}";
     }
 
     /// <summary>

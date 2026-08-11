@@ -258,6 +258,10 @@ public static class MenuCommand
                 OpenDialog?.Invoke("SandboxTools");
                 break;
 
+            case "menu_showbotpolicies":
+                OpenDialog?.Invoke("BotPolicies");
+                break;
+
             // QC commands.cfg `alias team_selection_show "menu_cmd directmenu TeamSelect"` (bound to F5 in
             // binds-xonotic.cfg). The dialog existed but nothing invoked it, leaving F5 a dead key.
             case "team_selection_show":

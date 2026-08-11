@@ -2,6 +2,7 @@
 // + bot_spawn (:45-60) + the name/model slice of bot_setnameandstuff (:163-349)
 // + the live per-tick input seam of ecs/systems/sv_physics.qc sys_phys_ai (:41-46).
 using System.Globalization;
+using System.Linq;
 using System.Numerics;
 using VortexArena.Common.Diagnostics;
 using VortexArena.Common.Framework;
@@ -78,23 +79,25 @@ public sealed class BotPopulation
     private void SyncNeuralLocomotors()
     {
         bool want = Neural is { Ready: true } && Cvars.Bool("bot_neural");
+        Neural.PolicyNetwork? desired = want ? Neural!.Network : null;
+        bool generationChanged = !ReferenceEquals(_neuralGeneration, desired);
 
         // Deliberately NOT short-circuited on "nothing changed globally". The first version was, and it
         // meant a bot that connected AFTER the first sync never got a locomotor at all — which is every
         // bot on a real server, because fixcount fills one per frame and the sync runs at the top of the
         // frame. The loop is over a handful of brains and does nothing when they are already correct.
         for (int i = 0; i < _brains.Count; i++)
-            AttachLocomotor(_brains[i], want);
+            AttachLocomotor(_brains[i], want, generationChanged);
 #if VA_BOTPLAYER
         // The bot-player harness brain (a synthetic "human" client driven by a brain) gets the same
         // treatment: it exists to exercise the real input path, so it has to exercise this one too.
         if (_botPlayerBrain is not null)
-            AttachLocomotor(_botPlayerBrain, want);
+            AttachLocomotor(_botPlayerBrain, want, generationChanged);
 #endif
-        if (!want) _neuralGeneration = null;
+        _neuralGeneration = desired;
     }
 
-    private void AttachLocomotor(BotBrain brain, bool want)
+    private void AttachLocomotor(BotBrain brain, bool want, bool generationChanged)
     {
         if (!want)
         {
@@ -108,9 +111,8 @@ public sealed class BotPopulation
         brain.Neural = Neural;
         if (brain.Locomotor is null)
             brain.Locomotor = new Neural.NeuralLocomotor(net);
-        else if (!ReferenceEquals(_neuralGeneration, net))
+        else if (generationChanged)
             brain.Locomotor.SetNetwork(net);   // a bot_neural_weights reload mid-match
-        _neuralGeneration = net;
     }
 
     private Neural.PolicyNetwork? _neuralGeneration;
@@ -478,6 +480,34 @@ public sealed class BotPopulation
         BotBrain? brain = SpawnBot(name, skill);
         if (brain is not null)
             Cvars.Set("bot_number", MathF.Max(Cvars.Float("bot_number") + 1f, _currentBots));
+        return brain;
+    }
+
+    /// <summary>
+    /// Spawn a bot whose only high-level instruction is to reach the controlling player's latest HERE marker.
+    /// The last pointed position is retained after the marker's normal visual lifetime expires; placing another
+    /// HERE marker retargets it immediately.
+    /// </summary>
+    public BotBrain? AddDirectedBot(Player? controller, string? name = null)
+    {
+        controller ??= _world.Clients.Players.FirstOrDefault(p => !p.IsBot);
+        if (controller is null) return null;
+        BotBrain? brain = AddBot(string.IsNullOrWhiteSpace(name) ? "Waypoint Bot" : name, Cvars.Skill);
+        if (brain is null) return null;
+
+        Vector3? last = null;
+        brain.DirectedGoalProvider = () =>
+        {
+            VortexArena.Common.Gameplay.Waypoints.WaypointSprite? newest = null;
+            foreach (var wp in VortexArena.Common.Gameplay.Waypoints.WaypointSprites.Active)
+                if (!wp.Dead && wp.Kind == VortexArena.Common.Gameplay.Waypoints.DeployKind.Fixed
+                    && ReferenceEquals(wp.DeployedBy, controller)
+                    && string.Equals(wp.SpriteName, "Here", StringComparison.OrdinalIgnoreCase)
+                    && (newest is null || wp.Id > newest.Id))
+                    newest = wp;
+            if (newest is not null) last = newest.Origin;
+            return last;
+        };
         return brain;
     }
 

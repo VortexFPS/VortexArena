@@ -10,8 +10,9 @@ import torch
 NEURAL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(NEURAL))
 
-from train import (ReturnScale, _collect_eval_processes, _legacy_resume_state,
-                   _shard_episode_counts, gae, save)  # noqa: E402
+from train import (ReturnScale, _collect_eval_processes, _eval_host_args,
+                   _legacy_resume_state, _requested_budget, _shard_episode_counts,
+                   gae, save)  # noqa: E402
 from va_neural.model import Policy, RunningNorm  # noqa: E402
 
 
@@ -101,3 +102,17 @@ def test_eval_shard_pipes_are_drained_concurrently():
     outputs, errors = _collect_eval_processes([FakeProcess(), FakeProcess()], timeout=1.0)
     assert len(outputs) == 2
     assert errors == []
+
+
+def test_eval_forwards_only_environment_semantics():
+    args = type("Args", (), {"host_arg": ["--no-warps", "--no-feet-resolution",
+                                                "--port", "--bind"]})()
+    assert _eval_host_args(args) == ["--no-warps", "--no-feet-resolution"]
+
+
+def test_budget_control_only_allows_increases(tmp_path):
+    (tmp_path / "control.json").write_text('{"budget": 65000000}', encoding="utf-8")
+    assert _requested_budget(tmp_path, 60_000_000) == 65_000_000
+    assert _requested_budget(tmp_path, 70_000_000) == 70_000_000
+    (tmp_path / "control.json").write_text("not json", encoding="utf-8")
+    assert _requested_budget(tmp_path, 70_000_000) == 70_000_000

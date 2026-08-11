@@ -2,6 +2,7 @@
 
 import importlib.machinery
 import importlib.util
+import json
 import os
 from pathlib import Path
 
@@ -103,3 +104,15 @@ def test_background_eval_keeps_remote_worker_status_on_rollout():
     worker_line = next(line for line in lines if "vortex-train" in line)
     assert "simulation rollout" in worker_line
     assert "waiting on eval" not in worker_line
+
+
+def test_budget_shortcut_writes_atomic_increase_request(tmp_path):
+    run_dir = tmp_path / "v27"
+    run_dir.mkdir()
+    local = {"runs": [{"name": "v27", "running": True,
+                       "budget": 60_000_000, "steps": 52_000_000}]}
+    message = vxstat.request_budget_extension(local, runs_dir=str(tmp_path))
+    request = json.loads((run_dir / "control.json").read_text(encoding="utf-8"))
+    assert request["budget"] == 65_000_000
+    assert request["requested_by"] == "vxstat"
+    assert "+5M" in message

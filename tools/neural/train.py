@@ -260,7 +260,10 @@ def _event(run_dir: Path, kind: str, message: str, **fields) -> None:
     _append_jsonl(run_dir / "events.jsonl", {"at": _stamp(), "kind": kind, "message": message, **fields})
 
 
-def _expected_eval_seconds(run_dir: Path, fallback: float = 1500.0) -> float:
+EvalTimeoutSeconds = 900.0
+
+
+def _expected_eval_seconds(run_dir: Path, fallback: float = 180.0) -> float:
     """Median of recent completed evaluations, or a conservative first-run estimate."""
     durations: list[float] = []
     try:
@@ -276,7 +279,25 @@ def _expected_eval_seconds(run_dir: Path, fallback: float = 1500.0) -> float:
     except OSError:
         pass
     recent = sorted(durations[-9:])
-    return recent[len(recent) // 2] if recent else fallback
+    estimate = recent[len(recent) // 2] if recent else fallback
+    return min(EvalTimeoutSeconds, max(1.0, estimate))
+
+
+def _requested_budget(run_dir: Path, current: int) -> int:
+    """Read a vxstat control request; malformed files and budget decreases fail closed."""
+    try:
+        request = json.loads((run_dir / "control.json").read_text(encoding="utf-8"))
+        requested = int(request.get("budget", current))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return current
+    return requested if requested > current else current
+
+
+def _eval_host_args(args) -> list[str]:
+    """Forward environment semantics to the shipping-path evaluator, never listener/process flags."""
+    safe_flags = {"--no-warps", "--no-feet-resolution", "--no-pocket-reach",
+                  "--no-course-filters", "--no-tracefan"}
+    return [value for value in (getattr(args, "host_arg", None) or []) if value in safe_flags]
 
 
 def _promote_checkpoint(source: Path, target: Path, training_state: dict) -> None:
@@ -776,6 +797,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     resume = getattr(eval_args, "_resume_state", {}) or {}
     if int(resume.get("stage", stage)) != stage:
         resume = {}
+    budget = max(budget, int(resume.get("budget", 0)), _requested_budget(run_dir, budget))
     total_steps = int(resume.get("stage_steps", 0))
     update = int(resume.get("update", 0))
     session_start_steps = total_steps
@@ -819,7 +841,8 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         if eval_job is not None and not eval_job.done():
             result.update({"eval_in_flight": True, "eval_update": eval_job.update,
                            "eval_started_epoch": eval_job.started_at,
-                           "eval_expected_seconds": eval_job.expected_seconds})
+                           "eval_expected_seconds": eval_job.expected_seconds,
+                           "eval_timeout_seconds": EvalTimeoutSeconds})
         else:
             result["eval_in_flight"] = False
         return result
@@ -940,7 +963,19 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     # correctness bug in its own right.
     alive = np.ones(n_agents, dtype=bool)
 
-    while total_steps < budget:
+    while True:
+        requested_budget = _requested_budget(run_dir, budget)
+        if requested_budget > budget:
+            previous_budget = budget
+            budget = requested_budget
+            _event(run_dir, "budget_extended", f"step budget increased to {budget:,}",
+                   previous_budget=previous_budget, budget=budget, update=update,
+                   stage_steps=total_steps)
+            print(f"[s{stage}] step budget extended {previous_budget:,} -> {budget:,} by control request",
+                  flush=True)
+            _atomic_json(run_dir / "state.json", state())
+        if total_steps >= budget:
+            break
         update += 1
         t_env = t_pol = 0.0
 
@@ -1382,7 +1417,7 @@ def _shard_episode_counts(episodes: int, shards: int) -> list[int]:
     return [base + (i < extra) for i in range(shards)]
 
 
-def _collect_eval_processes(procs: list[subprocess.Popen], timeout: float = 900.0
+def _collect_eval_processes(procs: list[subprocess.Popen], timeout: float = EvalTimeoutSeconds
                             ) -> tuple[list[str], list[str]]:
     """Drain every shard concurrently under one wall-clock deadline.
 
@@ -1473,6 +1508,7 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args,
              "--stage", str(stage), "--seed", str(args.seed + 9001 + seed_offset + i * 7919),
              "--policy", str(weights),
              "--data", data_root]
+        c += _eval_host_args(args)
         if args.maps:
             c += ["--maps", args.maps]
         return c

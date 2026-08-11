@@ -770,6 +770,7 @@ def run_snapshot(name, pid, up, cmd, procs, running):
         "skipped": st["skipped"], "diverge": st["diverge"],
         "starved": st["starved"], "relaxed": st["relaxed"],
         "eval_every": every, "eval_secs": eval_secs, "spu": spu,
+        "eval_timeout_secs": structured.get("eval_timeout_seconds"),
         "next_eval_update": structured.get("next_eval_update"),
         "eval_running": eval_in_flight or len(shards) > 0,
         "eval_done": max(0, total_shards - len(shards)) if shards else 0,
@@ -929,6 +930,9 @@ def eval_word(r, s):
         if r["eval_secs"] and r["eval_secs"] > r["eval_elapsed"]:
             remain = r["eval_secs"] - r["eval_elapsed"]
             left = ", ~%s left, done %s" % (dur(remain), clock_after(remain))
+        elif r.get("eval_timeout_secs") and r["eval_timeout_secs"] > r["eval_elapsed"]:
+            remain = r["eval_timeout_secs"] - r["eval_elapsed"]
+            left = ", estimate exceeded, timeout in %s" % dur(remain)
         return s.cyan("EVAL RUNNING %d/%d shards%s" % (r["eval_done"], r["eval_total"], left))
     if r["eval_every"] and r["update"]:
         try:
@@ -1259,6 +1263,63 @@ def watchdog(peers_t, every, restart, s):
         time.sleep(every)
 
 
+def request_budget_extension(local, increment=5_000_000, runs_dir=RUNS):
+    """Ask the one local live trainer to increase its budget; the trainer validates and applies it."""
+    active = [run for run in local.get("runs", []) if run.get("running")]
+    if len(active) != 1:
+        return "budget unchanged: expected exactly one local running job"
+    run = active[0]
+    current = max(int(run.get("budget") or 0), int(run.get("steps") or 0))
+    requested = current + int(increment)
+    path = os.path.join(runs_dir, run["name"], "control.json")
+    tmp = path + ".tmp"
+    try:
+        import json
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"schema": 1, "budget": requested,
+                       "requested_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                       "requested_by": "vxstat"}, fh, indent=2)
+        os.replace(tmp, path)
+    except OSError as exc:
+        return f"budget request failed: {exc}"
+    return f"requested {run['name']} budget +{increment / 1_000_000:g}M -> {requested / 1_000_000:g}M"
+
+
+class WatchKeys:
+    """Single-key input for the watch screen, restored cleanly on exit."""
+    def __init__(self):
+        self._saved = None
+
+    def __enter__(self):
+        if not WINDOWS and sys.stdin.isatty():
+            try:
+                import termios
+                import tty
+                self._saved = termios.tcgetattr(sys.stdin.fileno())
+                tty.setcbreak(sys.stdin.fileno())
+            except Exception:
+                self._saved = None
+        return self
+
+    def read(self):
+        try:
+            if WINDOWS:
+                import msvcrt
+                return msvcrt.getwch() if msvcrt.kbhit() else None
+            import select
+            return sys.stdin.read(1) if sys.stdin.isatty() and select.select([sys.stdin], [], [], 0)[0] else None
+        except Exception:
+            return None
+
+    def __exit__(self, *_args):
+        if self._saved is not None:
+            try:
+                import termios
+                termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, self._saved)
+            except Exception:
+                pass
+
+
 def main():
     args = sys.argv[1:]
     plain = "--plain" in args
@@ -1285,9 +1346,11 @@ def main():
     peers_t = peer_targets(initial_local, explicit_peers)
     poller = Peers(peers_t)
     first_local = [initial_local]
+    latest_local = [initial_local]
 
     def panel():
         local = first_local.pop() if first_local else snapshot()
+        latest_local[0] = local
         remote = poller.snapshots()
         return render_jobs(local, remote, s)
 
@@ -1302,16 +1365,24 @@ def main():
         print("\n".join(panel()))
         return
     last_size = None
+    notice = ""
     try:
-        if s.on:
-            sys.stdout.write("\033[?1049h\033[?25l")
-        while True:
-            lines = panel()
-            lines.append(s.dim(f"  refreshing every {every:.0f}s - Ctrl-C to exit"))
-            frame, last_size = live_frame(lines, last_size)
-            sys.stdout.write(frame)
-            sys.stdout.flush()
-            time.sleep(every)
+        with WatchKeys() as keys:
+            if s.on:
+                sys.stdout.write("\033[?1049h\033[?25l")
+            while True:
+                lines = panel()
+                footer = f"  refreshing every {every:.0f}s - + add 5M steps - Ctrl-C to exit"
+                if notice:
+                    footer += " - " + notice
+                lines.append(s.dim(footer))
+                frame, last_size = live_frame(lines, last_size)
+                sys.stdout.write(frame)
+                sys.stdout.flush()
+                key = keys.read()
+                if key in ("+", "="):
+                    notice = request_budget_extension(latest_local[0])
+                time.sleep(every)
     except KeyboardInterrupt:
         pass
     finally:

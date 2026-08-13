@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay;
 using VortexArena.Engine.Collision;
 
 namespace VortexArena.Server.Bot.Neural;
@@ -87,7 +88,7 @@ public sealed class NeuralBotService
     /// pool and <see cref="Ready"/> flips when it lands.
     /// </summary>
     public void BeginMap(string mapName, CollisionWorld world, IReadOnlyList<Entity> entities, string weightsPath,
-        bool allowBake = true)
+        bool allowBake = true, IReadOnlyList<Warpzone>? warpzones = null)
     {
         CancelBake();
         _mapName = mapName;
@@ -96,7 +97,7 @@ public sealed class NeuralBotService
         BakeMilliseconds = 0;
 
         _features = new MapFeatures();
-        _features.Build(entities);
+        _features.Build(entities, warpzones);
 
         LoadWeights(weightsPath);
 

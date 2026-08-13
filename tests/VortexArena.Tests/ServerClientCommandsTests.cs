@@ -8,6 +8,7 @@ using VortexArena.Engine.Collision;
 using VortexArena.Engine.Console;
 using VortexArena.Engine.Simulation;
 using VortexArena.Server;
+using VortexArena.Server.Bot.Neural;
 using Xunit;
 
 namespace VortexArena.Tests;
@@ -49,7 +50,10 @@ public class ServerClientCommandsTests
         var marker = Assert.Single(VortexArena.Common.Gameplay.Waypoints.WaypointSprites.Active);
         Assert.Equal("Here", marker.SpriteName);
         Assert.Same(p, marker.DeployedBy);
-        Assert.Equal(marker.Origin, brain!.DirectedGoalProvider!.Invoke());
+        Vector3 directed = brain!.DirectedGoalProvider!.Invoke()!.Value;
+        Assert.Equal(marker.Origin.X, directed.X);
+        Assert.Equal(marker.Origin.Y, directed.Y);
+        Assert.Equal(marker.Origin.Z + NavDistanceField.OriginAboveFloor, directed.Z);
 
         Vector3 first = marker.Origin;
         p.Origin = new Vector3(-400f, 240f, 32f);

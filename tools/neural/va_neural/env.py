@@ -285,6 +285,17 @@ class HostEnv:
             self._send(OP_CLOSE)
         except (OSError, AttributeError):
             pass
+        # makefile() owns a buffered wrapper around the socket.  Closing only the process (the old local-
+        # host behaviour) leaves a remote connection half-open until GC, which delays the worker's respawn
+        # loop and can make an immediate trainer recovery race the still-occupied port.
+        try:
+            self._file.close()
+        except (OSError, AttributeError):
+            pass
+        try:
+            self.sock.close()
+        except (OSError, AttributeError):
+            pass
         proc = getattr(self, "proc", None)
         if proc is None or proc.poll() is not None:
             return
@@ -325,6 +336,9 @@ class VectorEnv:
         shift into whatever the run was supposed to be measuring.
         """
         self.envs: list[HostEnv] = []
+        self._host_dll = host_dll
+        self._quiet = quiet
+        self._host_args = list(host_args or [])
         remotes = remotes or []
         # Remote hosts first, then local ones, and the seed stride runs across BOTH -- a remote host that
         # reused a local host's seed would generate the identical course sequence and the batch would hold
@@ -348,6 +362,54 @@ class VectorEnv:
         self._timing = os.environ.get("VX_HOST_TIMING", "") not in ("", "0")
         self._t_max: list[float] = []
         self._t_mean: list[float] = []
+
+    def recover(self, retry_seconds: float = 45.0) -> np.ndarray:
+        """Rebuild every connection and reset the fleet after a transport failure.
+
+        A STEP has already been sent to every host when one receive fails, so reconnecting only the failed
+        slot would leave the surviving streams at different protocol positions.  Close and rebuild the
+        whole fleet instead, then reset every world to one clean boundary.  The trainer discards the
+        incomplete rollout; no fabricated rewards or terminal flags enter PPO.
+
+        Remote workers run each port in a respawn loop and normally listen again after one second.  Retry
+        connection-refused errors within a bounded window so that normal respawn delay is recovery, while a
+        genuinely dead worker still fails closed and leaves the trainer's checkpoint safe.
+        """
+        specs = [(EnvConfig(**env.cfg.__dict__), env.remote) for env in self.envs]
+        for env in self.envs:
+            env.close()
+
+        rebuilt: list[HostEnv] = []
+        try:
+            for cfg, remote in specs:
+                deadline = time.monotonic() + retry_seconds
+                while True:
+                    try:
+                        rebuilt.append(HostEnv(
+                            cfg,
+                            host_dll=self._host_dll,
+                            quiet=self._quiet,
+                            host_args=self._host_args,
+                            remote=remote,
+                        ))
+                        break
+                    except (ConnectionError, OSError):
+                        if remote is None or time.monotonic() >= deadline:
+                            raise
+                        time.sleep(0.5)
+        except Exception:
+            for env in rebuilt:
+                env.close()
+            self.envs = rebuilt
+            raise
+
+        self.envs = rebuilt
+        self.agents_per_host = self.envs[0].agents
+        self.obs_size = self.envs[0].obs_size
+        self.num_agents = self.agents_per_host * len(self.envs)
+        self._done_hosts = [False] * len(self.envs)
+        self.last_transition_obs = np.zeros((self.num_agents, self.obs_size), dtype=np.float32)
+        return self.reset()
 
     def _record_host_times(self) -> None:
         """When each host's reply becomes readable, relative to the moment they were all sent.

@@ -118,7 +118,7 @@ public sealed class NavDistanceField
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<NavField, SpanIndex> _indexCache = new();
 
     /// <summary>
-    /// One-way connections the 32 qu lattice cannot express: jump pads and teleporters.
+    /// One-way connections the 32 qu lattice cannot express: jump pads, teleporters and warpzones.
     /// </summary>
     /// <remarks>
     /// The lattice links neighbours by walking and jumping, which covers everything a bot can do under its
@@ -159,7 +159,7 @@ public sealed class NavDistanceField
     private const float WarpVolumeSlack = 64f;
 
     /// <summary>
-    /// Teach every distance field over <paramref name="field"/> about the map's pads and teleporters.
+    /// Teach every distance field over <paramref name="field"/> about the map's pads, teleporters and warpzones.
     /// </summary>
     /// <remarks>
     /// Idempotent and cheap; call it once per prepared map, after <see cref="MapFeatures.Build"/>. A field
@@ -189,7 +189,7 @@ public sealed class NavDistanceField
 
         foreach (MapFeature f in features.All)
         {
-            if (f.Kind is not (MapFeatureKind.JumpPad or MapFeatureKind.Teleporter)) continue;
+            if (f.Kind is not (MapFeatureKind.JumpPad or MapFeatureKind.Teleporter or MapFeatureKind.Warpzone)) continue;
             // An unresolved exit means the map names a destination that is not in the entity table. Skipping
             // is right: inventing an edge to nowhere is worse than the missing edge it replaces.
             if (f.Exit == Vector3.Zero) continue;
@@ -232,7 +232,8 @@ public sealed class NavDistanceField
     private static int SpanUnderStatic(NavField field, SpanIndex index, int cx, int cy, float z)
     {
         ReadOnlySpan<FloorSpan> col = field.Column(cx, cy);
-        float probe = z + BotNavigation.StepHeight;
+        float feet = FeetResolution ? z - OriginAboveFloor : z;
+        float probe = feet + BotNavigation.StepHeight;
         for (int i = 0; i < col.Length; i++)
             if (col[i].FloorZ <= probe) return index.Start[cy * field.Width + cx] + i;
         return -1;
@@ -579,13 +580,11 @@ public sealed class NavDistanceField
     private int SpanIndexAt(int cx, int cy, float z, out int slot)
     {
         int c = cy * _field.Width + cx;
-        ReadOnlySpan<FloorSpan> col = _field.Column(cx, cy);
-        float probe = z + BotNavigation.StepHeight;
-        for (int i = 0; i < col.Length; i++)
+        int flat = SpanIndexUnder(cx, cy, z);
+        if (flat >= 0)
         {
-            if (col[i].FloorZ > probe) continue;
-            slot = i;
-            return _start[c] + i;
+            slot = flat - _start[c];
+            return flat;
         }
         slot = -1;
         return 0;

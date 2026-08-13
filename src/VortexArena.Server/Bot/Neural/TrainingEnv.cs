@@ -274,18 +274,19 @@ public sealed class TrainingEnv
     public void Reset(Span<float> observations)
     {
         _episodeIndex++;
-        // Stage 5 is the only generated stage left. Everything else runs on shipped maps.
+        // Stages 5, 7 and 8 are focused generated stages. Everything else runs on shipped maps.
         //
         // The generated curriculum taught locomotion and did not transfer: 71% on generated terrain against
         // 12.5% on real arenas for the same policy. The generator's own note says why -- stairwells, tight
         // doorways, railings and multi-level loops are not in it -- so the early stages were teaching a
         // world the bot would never see, and stage 6 was where it met the real one all at once.
         //
-        // Stage 5 stays generated because it is the only way to GUARANTEE the skill it teaches. It builds a
+        // They stay generated because it is the only way to GUARANTEE the skill each teaches. Stage 5 builds a
         // 560 qu gap against a ~320 qu running jump, and a 250 qu ledge against a ~105 qu jump apex, so a
         // rocket or blaster jump is the only way through. A real map's route almost always has a walkable
         // path, so a bot trained only on real maps is never forced to weapon-jump and would likely never
-        // find it.
+        // find it. Stage 7 disconnects transit entrances from their exits; stage 8 supplies repeatable
+        // momentum/air-control jumps without movement weapons.
         //
         // Without a data root there are no maps to draw from, so the stage falls back to generated
         // geometry. That path exists for tests and for anyone running the env without a content install;
@@ -323,12 +324,22 @@ public sealed class TrainingEnv
         _world.Boot("dm");
         ApplyTrainingCvars();
 
+        // Generated seamless portals carry plane orientation that EntityDict's generic key/value surface
+        // cannot express. Spawn and link them on the real WarpzoneManager after Boot, so training crosses
+        // the same trigger/transform code as a match rather than a reduced teleport approximation.
+        foreach (CourseGenerator.WarpzoneSpec wz in _course.Warpzones)
+            _world.Warpzones.Spawn(wz.Origin, wz.Angles, wz.TargetName, wz.Target, wz.Mins, wz.Maxs);
+        if (_course.Warpzones.Count > 0) _world.Warpzones.Link();
+
         // Bake the field for this course. Courses are a few thousand columns, so a single-threaded bake is
         // milliseconds; doing it inline keeps the env deterministic, with no background work racing a step.
         ulong hash = NavFieldIo.GeometryHash(_course.World);
         _field = NavFieldBaker.Bake(_course.World, _world.MapName!, hash, _world.Services.EntityTable.All);
         _features = new MapFeatures();
-        _features.Build(_world.Services.EntityTable.All);
+        _features.Build(_world.Services.EntityTable.All, _world.Warpzones.Zones);
+        // Register one-way furniture links before flooding from the goal. Otherwise the observation sees
+        // the pad/portal while both the reward and route incorrectly call its landing disconnected.
+        NavDistanceField.RegisterWarps(_field, _features);
         _distance = NavDistanceField.Build(_field, _course.Target);
 
         // The locomotor's constructor wants a network even though UseExternalAction means it never runs
@@ -397,9 +408,14 @@ public sealed class TrainingEnv
     /// around it. The map's collision, entity lump and navigation field are prepared once and reused; only
     /// the goal-relative distance field is rebuilt, which is a few milliseconds.
     /// </summary>
-    /// <summary>Every stage but <see cref="CourseGenerator.Stage.WeaponGaps"/> draws from shipped maps.</summary>
+    /// <summary>
+    /// Ordinary locomotion stages draw from shipped maps. Weapon gaps and the two focused advanced stages
+    /// stay generated because their defining movement must be mandatory rather than an accidental shortcut.
+    /// </summary>
     public static bool StageUsesRealMaps(CourseGenerator.Stage stage) =>
-        stage != CourseGenerator.Stage.WeaponGaps;
+        stage is not (CourseGenerator.Stage.WeaponGaps
+            or CourseGenerator.Stage.Transits
+            or CourseGenerator.Stage.TrickJumps);
 
     /// <summary>
     /// Difficulty ramp for the real-map stages: which maps, and how long a route.
@@ -485,7 +501,7 @@ public sealed class TrainingEnv
 
         _field = map.Field;
         _features = new MapFeatures();
-        _features.Build(_world.Services.EntityTable.All);
+        _features.Build(_world.Services.EntityTable.All, _world.Warpzones.Zones);
         // Pads and teleporters into the router, before any route is flooded over this field. Without it the
         // graph models only what the bot can do under its own power, and a pit whose exit is a launch reads
         // as unreachable when it is not.

@@ -115,7 +115,7 @@ public sealed class MapFeatures
     /// Scan an entity list and build the feature set. Safe to call again after the map's entities settle;
     /// the previous set is discarded.
     /// </summary>
-    public void Build(IEnumerable<Entity> entities)
+    public void Build(IEnumerable<Entity> entities, IReadOnlyList<Warpzone>? warpzones = null)
     {
         _features.Clear();
         foreach (Entity e in entities)
@@ -123,6 +123,10 @@ public sealed class MapFeatures
             if (e.IsFreed) continue;
             MapFeatureKind kind = Classify(e.ClassName);
             if (kind == MapFeatureKind.None) continue;
+            // Once the world's linked warpzone records are available they are authoritative: the trigger
+            // entity alone knows its box, but not the paired exit transform. Adding both would spend two of
+            // the four observation slots on one portal, with one of them falsely claiming it exits in place.
+            if (kind == MapFeatureKind.Warpzone && warpzones is not null) continue;
 
             Vector3 mins = e.AbsMin, maxs = e.AbsMax;
             if (mins == maxs) { mins = e.Origin + e.Mins; maxs = e.Origin + e.Maxs; }
@@ -150,6 +154,37 @@ public sealed class MapFeatures
 
             ResolveExit(ref f, e);
             _features.Add(f);
+        }
+
+        if (warpzones is null) return;
+        foreach (Warpzone wz in warpzones)
+        {
+            if (!wz.Linked || wz.Trigger is not { IsFreed: false } trigger) continue;
+            Vector3 mins = trigger.AbsMin, maxs = trigger.AbsMax;
+            if (mins == maxs)
+            {
+                mins = trigger.Origin + trigger.Mins;
+                maxs = trigger.Origin + trigger.Maxs;
+            }
+            if (mins == maxs)
+            {
+                mins = wz.Transform.InOrigin - new Vector3(24f, 64f, 64f);
+                maxs = wz.Transform.InOrigin + new Vector3(24f, 64f, 64f);
+            }
+
+            _features.Add(new MapFeature
+            {
+                Kind = MapFeatureKind.Warpzone,
+                Mins = mins,
+                Maxs = maxs,
+                Centre = wz.Transform.InOrigin,
+                // The plane itself often lies inside the wall that owns the portal. One nav cell along the
+                // exit normal lands in the room the player actually emerges into and therefore on a usable span.
+                Exit = wz.Transform.OutOrigin + wz.Transform.OutForward * NavField.CellSize,
+                TransitTime = 0f,
+                State = 1f,
+                Source = trigger,
+            });
         }
     }
 

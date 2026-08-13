@@ -2017,7 +2017,10 @@ public sealed class Commands
             case WpDeploy.Here:
                 // QC WaypointSprite_DeployFixed(WP_Here, false, this, origin/trace_endpos/death_origin, RADARICON_HERE)
                 WaypointDeployFixed(p, "Here", team, pos.Value);
-                _world.Bots.SetDirectedGoal(p, pos.Value);
+                // A crosshair trace returns a point ON the hit surface; HERE-at-feet and HERE-at-death
+                // return player origins. Keep the visible marker faithful, but tell the directed-bot
+                // controller which coordinate convention it must project onto the navigation field.
+                _world.Bots.SetDirectedGoal(p, pos.Value, isSurfacePoint: loc == WpLocation.Crosshair);
                 ctx.Print(loc == WpLocation.Crosshair ? "HERE spawned at crosshair"
                         : loc == WpLocation.Death     ? "HERE spawned at death location"
                                                       : "HERE spawned at location");

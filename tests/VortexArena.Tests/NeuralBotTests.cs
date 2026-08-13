@@ -96,6 +96,11 @@ public class NeuralBotTests
         // Descending order: the upper deck first.
         Assert.Equal(256, col[0].FloorZ);
         Assert.Equal(0, col[1].FloorZ);
+
+        // A crosshair HERE is the surface hit (Z=256), not a player origin. It must select the upper deck
+        // and return the origin of a body standing there, never silently route to the floor underneath.
+        Assert.True(field.TryProjectSurfaceGoal(new Vector3(0f, 0f, 256f), out Vector3 goal));
+        Assert.Equal(256f + NavDistanceField.OriginAboveFloor, goal.Z);
     }
 
     [Fact]
@@ -517,6 +522,25 @@ public class NeuralBotTests
         Assert.False(features.TryFind(new Vector3(500f, 0f, 32f), MapFeatureKind.Hurt, out _));
     }
 
+    [Fact]
+    public void MapFeatures_UsesLinkedWarpzoneExitInsteadOfTheTriggerCentre()
+    {
+        var es = (EngineServices)Api.Services!;
+        var manager = new WarpzoneManager();
+        manager.Spawn(Vector3.Zero, new Vector3(0f, 180f, 0f), "in", "out",
+            new Vector3(-16f, -64f, -64f), new Vector3(16f, 64f, 64f));
+        manager.Spawn(new Vector3(1000f, 0f, 0f), Vector3.Zero, "out", "in",
+            new Vector3(-16f, -64f, -64f), new Vector3(16f, 64f, 64f));
+        manager.Link();
+
+        var features = new MapFeatures();
+        features.Build(es.EntityTable.All, manager.Zones);
+
+        MapFeature entry = features.All.Single(f => f.Kind == MapFeatureKind.Warpzone && f.Centre.X < 500f);
+        Assert.Equal(new Vector3(1032f, 0f, 0f), entry.Exit);
+        Assert.Equal(2, features.All.Count(f => f.Kind == MapFeatureKind.Warpzone));
+    }
+
     // =============================================================================================
     // service wiring
     // =============================================================================================
@@ -840,6 +864,50 @@ public class NeuralBotTests
         Assert.True((atGoal - goal).Length() < 64f, $"walking from the goal moved {(atGoal - goal).Length():F0} qu");
     }
 
+    [Fact]
+    public void PointAlongRoute_ClimbsStairsToAnUpperPlatform()
+    {
+        var world = new CollisionWorld();
+        // Lower landing, four 16-qu treads, then an upper landing. Each tread is two lattice cells wide so
+        // the baked route has an unambiguous gradual ascent rather than a one-cell sampling accident.
+        world.AddBrush(Brush.FromBox(new Vector3(-512f, -192f, -64f),
+            new Vector3(-128f, 192f, 0f), SuperContents.Solid));
+        for (int i = 0; i < 4; i++)
+        {
+            float x0 = -128f + i * 64f;
+            float top = (i + 1) * 16f;
+            world.AddBrush(Brush.FromBox(new Vector3(x0, -192f, -64f),
+                new Vector3(x0 + 64f, 192f, top), SuperContents.Solid));
+        }
+        world.AddBrush(Brush.FromBox(new Vector3(128f, -192f, -64f),
+            new Vector3(512f, 192f, 64f), SuperContents.Solid));
+        world.BuildGrid();
+        Api.Services = new EngineServices(world);
+
+        NavField field = NavFieldBaker.Bake(world, "stairs", 1);
+        var from = new Vector3(-384f, 0f, NavDistanceField.OriginAboveFloor);
+        var goal = new Vector3(384f, 0f, 64f + NavDistanceField.OriginAboveFloor);
+        NavDistanceField dist = NavDistanceField.Build(field, goal);
+        Assert.True(dist.DistanceAt(from) < NavDistanceField.Unreachable,
+            "the baked stair route should connect the lower and upper floors");
+
+        Vector3 cursor = from;
+        float previous = dist.DistanceAt(cursor);
+        for (int i = 0; i < 16 && (cursor - goal).Length() >= 48f; i++)
+        {
+            Vector3 next = dist.PointAlongRoute(cursor, 64f);
+            float remaining = dist.DistanceAt(next);
+            Assert.True(remaining <= previous, $"route distance increased at sample {i}: {previous} -> {remaining}");
+            Assert.True((next - cursor).LengthSquared() > 1f, $"route stalled at sample {i}: {cursor}");
+            cursor = next;
+            previous = remaining;
+        }
+
+        Assert.True(cursor.Z >= 64f + NavDistanceField.OriginAboveFloor - 1f,
+            $"route never climbed onto the upper platform: {cursor}");
+        Assert.True((cursor - goal).Length() < 64f, $"route stopped short of the upper target: {cursor}");
+    }
+
     /// <summary>
     /// Adding furniture to a terrain course must not make it dramatically harder to traverse.
     ///
@@ -872,6 +940,37 @@ public class NeuralBotTests
             $"furniture blocked routes: terrain {terrainOk}/{trials} routable, furniture {furnitureOk}/{trials}");
     }
 
+    [Fact]
+    public void FocusedAdvancedStages_GenerateRoutableMandatoryCourses()
+    {
+        const int trials = 24; // covers all three transit/trick variants across several rotations
+        int transits = 0, tricks = 0;
+        var failedTransits = new List<string>();
+        var failedTricks = new List<int>();
+        for (int seed = 0; seed < trials; seed++)
+        {
+            bool transitOk = RouteExists(CourseGenerator.Stage.Transits, seed);
+            bool trickOk = RouteExists(CourseGenerator.Stage.TrickJumps, seed);
+            transits += transitOk ? 1 : 0;
+            tricks += trickOk ? 1 : 0;
+            if (!transitOk)
+            {
+                CourseGenerator.Course c = CourseGenerator.Generate(CourseGenerator.Stage.Transits, 7919 + seed);
+                string kind = c.Warpzones.Count > 0 ? "warpzone"
+                    : c.Entities.Any(e => e.ClassName == "trigger_push") ? "jump-pad" : "teleporter";
+                failedTransits.Add($"{seed}:{kind}");
+            }
+            if (!trickOk) failedTricks.Add(seed);
+        }
+
+        Assert.True(transits >= trials - 2,
+            $"generated transit routes: {transits}/{trials} routable; failed {string.Join(",", failedTransits)}");
+        Assert.True(tricks >= trials - 2,
+            $"generated trick-jump routes: {tricks}/{trials} routable; failed {string.Join(",", failedTricks)}");
+        Assert.False(TrainingEnv.StageUsesRealMaps(CourseGenerator.Stage.Transits));
+        Assert.False(TrainingEnv.StageUsesRealMaps(CourseGenerator.Stage.TrickJumps));
+    }
+
     /// <summary>Can the baked field route from this generated course's spawn to its target?</summary>
     private static bool RouteExists(CourseGenerator.Stage stage, int seed)
     {
@@ -890,9 +989,19 @@ public class NeuralBotTests
             e.AbsMin = origin + mins; e.AbsMax = origin + maxs;
             e.Target = tgt; e.TargetName = tname;
             if (cn == "trigger_hurt") e.Dmg = 1000f;
+            if (cn == "trigger_push") e.Height = 180f;
+            MapMover.IndexRegister(e);
         }
 
+        var warpzones = new WarpzoneManager();
+        foreach (CourseGenerator.WarpzoneSpec wz in course.Warpzones)
+            warpzones.Spawn(wz.Origin, wz.Angles, wz.TargetName, wz.Target, wz.Mins, wz.Maxs);
+        if (course.Warpzones.Count > 0) warpzones.Link();
+
         NavField field = NavFieldBaker.Bake(course.World, $"{stage}{seed}", 1, es.EntityTable.All);
+        var features = new MapFeatures();
+        features.Build(es.EntityTable.All, warpzones.Zones);
+        NavDistanceField.RegisterWarps(field, features);
         NavDistanceField dist = NavDistanceField.Build(field, course.Target);
         return dist.IsReachable(course.Spawn);
     }

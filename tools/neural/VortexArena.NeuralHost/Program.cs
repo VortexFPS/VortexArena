@@ -342,6 +342,7 @@ public static class Program
     /// </summary>
     private static int RunBenchmark(Options opts)
     {
+        bool focusedMovement = opts.Stage is 7 or 8;
         var cfg = new TrainingEnv.Config
         {
             Agents = opts.Agents,
@@ -358,9 +359,9 @@ public static class Program
             // being trained. Stages 1 and 2 are pure locomotion: handing them the movement weapons only
             // adds an action dimension with no reward attached, and under RANDOM actions it adds a death
             // — 5% attack chance with a devastator in hand is a rocket at your own feet.
-            WeaponChance = opts.Stage <= 2 ? 0f : 1f,
-            PermitFlipChance = opts.Stage <= 3 ? 0f : 0.35f,
-            AimConstraintChance = opts.Stage <= 2 ? 0f : 0.4f,
+            WeaponChance = opts.Stage <= 2 || focusedMovement ? 0f : 1f,
+            PermitFlipChance = opts.Stage <= 3 || focusedMovement ? 0f : 0.35f,
+            AimConstraintChance = opts.Stage <= 2 || focusedMovement ? 0f : 0.4f,
         };
         var env = new TrainingEnv(cfg) { Log = m => Console.Error.WriteLine(m) };
         PolicyNetwork? benchPolicy = null;
@@ -770,8 +771,8 @@ public static class Program
               --port N        listen on 127.0.0.1:N (0 = pick one; the chosen port is printed to stdout)
               --agents N      agents in the world (default 8)
               --ticks N       sim ticks per policy step (default 4 = an 18 Hz decision rate)
-              --stage N       curriculum stage 1-6 (flat, corridor, terrain, furniture, weapon-gaps,
-                              real-maps)
+              --stage N       curriculum stage 1-8 (flat, corridor, terrain, furniture, weapon-gaps,
+                              real-maps, mandatory transits, trick jumps)
               --data DIR      content root for stage 6 (the directory holding maps/)
               --maps A,B,C    stage 6 map list; empty means every installed map. The held-out
                               eval split is removed either way, whatever this says.
@@ -811,7 +812,7 @@ public static class Program
                     case "--bind": o.Bind = Next() ?? ""; break;
                     case "--agents": o.Agents = Math.Clamp(ParseInt(Next(), 8), 1, 64); break;
                     case "--ticks": o.TicksPerStep = Math.Clamp(ParseInt(Next(), 4), 1, 32); break;
-                    case "--stage": o.Stage = Math.Clamp(ParseInt(Next(), 1), 1, 6); break;
+                    case "--stage": o.Stage = Math.Clamp(ParseInt(Next(), 1), 1, 8); break;
                     case "--data": o.DataRoot = Next() ?? ""; break;
                     case "--maps": o.MapList = Next() ?? ""; break;
                     case "--seed": o.Seed = ParseInt(Next(), 1); break;

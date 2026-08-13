@@ -120,7 +120,8 @@ public sealed class BotPopulation
     // brains in connect order (QC bot_list; the order drives strategy-token rotation + remove-newest).
     private readonly List<BotBrain> _brains = new();
     private readonly Dictionary<Player, BotBrain> _byPlayer = new();
-    private readonly Dictionary<Player, Vector3> _directedGoals = new();
+    private readonly record struct DirectedGoal(Vector3 Position, bool IsSurfacePoint);
+    private readonly Dictionary<Player, DirectedGoal> _directedGoals = new();
 
     /// <summary>QC <c>currentbots</c>; -1 is the "recount next frame" sentinel armed while time &lt; 2.5.</summary>
     private int _currentBots;
@@ -498,13 +499,26 @@ public sealed class BotPopulation
 
         brain.DirectedGoalProvider = () =>
         {
-            return _directedGoals.TryGetValue(controller, out Vector3 goal) ? goal : null;
+            if (!_directedGoals.TryGetValue(controller, out DirectedGoal goal)) return null;
+            if (!goal.IsSurfacePoint) return goal.Position;
+
+            // Crosshair HERE is a trace endpoint ON geometry, not the origin of a body standing there.
+            // Resolve lazily so a marker placed while the asynchronous nav bake is running becomes exact
+            // as soon as the field lands, without requiring the player to place it again.
+            if (Neural?.Field is { } field
+                && field.TryProjectSurfaceGoal(goal.Position, out Vector3 projected))
+                return projected;
+
+            // Before the field is ready, the common floor-hit case still has the correct convention.
+            return goal.Position + new Vector3(0f, 0f,
+                global::VortexArena.Server.Bot.Neural.NavDistanceField.OriginAboveFloor);
         };
         return brain;
     }
 
     /// <summary>Publish the controlling player's latest HERE position to every directed bot they own.</summary>
-    public void SetDirectedGoal(Player controller, Vector3 goal) => _directedGoals[controller] = goal;
+    public void SetDirectedGoal(Player controller, Vector3 goal, bool isSurfacePoint = false)
+        => _directedGoals[controller] = new DirectedGoal(goal, isSurfacePoint);
 
     /// <summary>Drop retained directed-control state when its human controller leaves the server.</summary>
     public void ForgetDirectedController(Player controller) => _directedGoals.Remove(controller);

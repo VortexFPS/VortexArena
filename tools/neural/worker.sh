@@ -46,6 +46,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 [[ -f "$DLL" ]] || { echo "host not built: $DLL" >&2; exit 1; }
 
 LOGS="$ROOT/_scratch/worker"; mkdir -p "$LOGS"
+
+# Only one launcher may own a port range.  Without this guard, two copies can
+# bind the same Linux ports (the host enables address reuse for quick respawns),
+# leaving trainers connected to an arbitrary generation of the fleet.
+LOCK_NAME="fleet_${BIND//[^[:alnum:]]/_}_${PORT}_${COUNT}.lock"
+exec 9>"$LOGS/$LOCK_NAME"
+if ! flock -n 9; then
+  echo "[worker] another fleet already owns $BIND:$PORT-$(( PORT + COUNT - 1 ))" >&2
+  exit 1
+fi
+
 PIDS=()
 cleanup() {
   echo "[worker] stopping ${#PIDS[@]} host loops"

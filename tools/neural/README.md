@@ -114,6 +114,10 @@ python tools/neural/train.py --stage 1 --steps 6000000 --hosts 6
 # the whole curriculum, advancing on arrival rate
 python tools/neural/train.py --curriculum --steps 8000000 --hosts 12
 
+# advance through the curriculum, then keep its final stage training in rolling
+# --steps-sized chunks until Ctrl-C saves a checkpoint and stops it gracefully
+python tools/neural/train.py --curriculum --continuous --steps 8000000 --hosts 12
+
 # resume
 python tools/neural/train.py --resume runs/20260807-1200/checkpoint.pt --stage 4
 
@@ -166,10 +170,20 @@ converge usually means the stage before it did not really finish; reordering to 
 | 4 | Shipped-map medium routes | Sustain movement through map furniture |
 | 5 | Gaps wider than a jump, ledges higher than one | Weapon jumps |
 | 6 | Full shipped-map distribution, minus a held-out split | Long-route retention and generalisation |
+| 7 | Mandatory jump-pad, teleporter or linked-warpzone routes | Enter transits deliberately and recover at their exits |
+| 8 | Rising gaps, corner transfers and narrow landings | Fast non-weapon trick-jump timing and air control |
 
-Stage 5 uses generated weapon-gap geometry because real maps cannot guarantee that lesson. The other stages
-currently draw many origin/target pairs from shipped maps; rotating seeds prevent the selection loop from
-turning one fixed route bank into training data. Stage 6 expands to the full non-held-out distribution.
+Stages 5, 7 and 8 use focused generated geometry because real-map route sampling cannot guarantee that the
+episode requires their lesson. Stage 7 gives jump pads, teleporters and linked warpzones equal exposure and
+places the goal on otherwise disconnected geometry. Stage 8 disables movement weapons so success measures the
+body-movement trick rather than a rocket-jump bypass. Their initial 4M/6M budgets are bounded calibration pilots;
+set advancement gates only after repeated evaluations establish a noise floor.
+
+Stages 1--4 and 6 draw many origin/target pairs from shipped maps; rotating seeds prevent the selection loop
+from turning one fixed route bank into training data. Stage 6 expands to the full non-held-out distribution.
+Stages 7 and 8 preserve the existing 302-float observation and action schemas, so an existing checkpoint can
+continue into them without network conversion. Authored map trick-jump start/end pairs can be added as a second
+validation/training bank after the generated primitives are learned.
 
 Measured on a policy that
 cleared stages 1 to 3: **97% arrivals on the corridor stage, 71% on terrain** against 22% and 3.5% for the

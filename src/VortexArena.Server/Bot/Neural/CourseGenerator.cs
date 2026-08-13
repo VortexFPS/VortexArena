@@ -44,7 +44,23 @@ public static class CourseGenerator
         /// is where the policy meets them.</para>
         /// </summary>
         RealMaps = 6,
+
+        /// <summary>
+        /// Guaranteed jump-pad, teleporter and warpzone routes. Unlike the real-map furniture stage, every
+        /// episode requires the sampled transit to reach an otherwise disconnected landing platform.
+        /// </summary>
+        Transits = 7,
+
+        /// <summary>
+        /// Fast, non-weapon movement challenges: rising gap jumps, corner transfers and narrow landings.
+        /// These isolate the timing and air-control primitives used by authored map trick jumps.
+        /// </summary>
+        TrickJumps = 8,
     }
+
+    /// <summary>An explicit seamless-portal endpoint spawned after the generated world's normal entities.</summary>
+    public readonly record struct WarpzoneSpec(
+        Vector3 Origin, Vector3 Angles, string TargetName, string Target, Vector3 Mins, Vector3 Maxs);
 
     /// <summary>A generated course: geometry, spawn and target, plus the entities the furniture stage adds.</summary>
     public sealed class Course
@@ -54,6 +70,8 @@ public static class CourseGenerator
         public Vector3 Target;
         /// <summary>Entity dictionaries the caller spawns into the world (jump pads, teleporters, hurt volumes).</summary>
         public List<(string ClassName, Vector3 Origin, Vector3 Mins, Vector3 Maxs, string Target, string TargetName)> Entities = new();
+        /// <summary>Linked warpzone endpoints. Kept separate because their plane orientation is part of the route.</summary>
+        public List<WarpzoneSpec> Warpzones = new();
         /// <summary>
         /// Platform centres and half-extents, in route order, for the stages that decorate a terrain course.
         ///
@@ -82,6 +100,8 @@ public static class CourseGenerator
             Stage.Terrain => Terrain(rng),
             Stage.Furniture => Furniture(rng),
             Stage.WeaponGaps => WeaponGaps(rng),
+            Stage.Transits => Transits(rng),
+            Stage.TrickJumps => TrickJumps(rng),
             _ => Flat(rng),
         };
     }
@@ -292,6 +312,159 @@ public static class CourseGenerator
         world.BuildGrid();
         c.World = world;
         return c;
+    }
+
+    /// <summary>
+    /// Stage 7: one of the three map-assisted movement primitives, on two platforms with no ordinary route
+    /// between them. The course cannot be completed by accidentally walking around the feature, so an arrival
+    /// is direct evidence that the policy entered it and recovered at its exit.
+    /// </summary>
+    private static Course Transits(Random rng)
+    {
+        var c = new Course();
+        var world = new CollisionWorld();
+        int rotation = rng.Next(4);
+
+        Vector3 P(float along, float side = 0f, float z = 0f)
+        {
+            Vector3 forward = rotation switch
+            {
+                1 => Vector3.UnitY,
+                2 => -Vector3.UnitX,
+                3 => -Vector3.UnitY,
+                _ => Vector3.UnitX,
+            };
+            var right = new Vector3(-forward.Y, forward.X, 0f);
+            return forward * along + right * side + Vector3.UnitZ * z;
+        }
+
+        void Platform(float from, float to, float halfWidth, float top)
+        {
+            Vector3 a = P(from, -halfWidth), b = P(to, halfWidth);
+            AddSlab(world, a.X, a.Y, b.X, b.Y, top);
+        }
+
+        Platform(-1000f, 120f, 224f, 0f);
+        Platform(880f, 1720f, 256f, 0f);
+        c.Spawn = P(-760f, 0f, 26f);
+        c.Target = P(1480f, 0f, 26f);
+
+        int kind = rng.Next(3);
+        string linkTag = rng.Next().ToString("x8");
+        if (kind == 0)
+        {
+            // A launch aimed well inside the landing platform. The 760 qu void makes the pad mandatory.
+            Vector3 exit = P(1080f, 0f, 32f);
+            string targetName = $"nb_transit_pad_exit_{linkTag}";
+            c.Entities.Add(("info_notnull", exit, Vector3.Zero, Vector3.Zero, "", targetName));
+            c.Entities.Add(("trigger_push", P(-80f, 0f, 8f),
+                new Vector3(-64f, -64f, 0f), new Vector3(64f, 64f, 48f), targetName, ""));
+        }
+        else if (kind == 1)
+        {
+            // Two disconnected platforms, with the entrance at the end of the approach runway.
+            string targetName = $"nb_transit_tele_exit_{linkTag}";
+            c.Entities.Add(("info_teleport_destination", P(1080f, 0f, 26f),
+                Vector3.Zero, Vector3.Zero, "", targetName));
+            c.Entities.Add(("trigger_teleport", P(-64f, 0f, 8f),
+                new Vector3(-48f, -72f, 0f), new Vector3(48f, 72f, 80f), targetName, ""));
+        }
+        else
+        {
+            // Portal planes face their approaching rooms. Momentum through the first plane emerges along the
+            // destination room, so the policy must also recover from the rotated view/velocity frame.
+            Vector3 forward = Vector3.Normalize(P(1f));
+            var right = new Vector3(-forward.Y, forward.X, 0f);
+            float yaw = MathF.Atan2(forward.Y, forward.X) * 180f / MathF.PI;
+            var extent = new Vector3(
+                MathF.Abs(forward.X) * 28f + MathF.Abs(right.X) * 144f,
+                MathF.Abs(forward.Y) * 28f + MathF.Abs(right.Y) * 144f,
+                56f);
+            c.Warpzones.Add(new WarpzoneSpec(P(0f, 0f, 48f), new Vector3(0f, yaw + 180f, 0f),
+                $"nb_transit_warp_in_{linkTag}", $"nb_transit_warp_out_{linkTag}",
+                -extent, extent));
+            c.Warpzones.Add(new WarpzoneSpec(P(1000f, 0f, 48f), new Vector3(0f, yaw, 0f),
+                $"nb_transit_warp_out_{linkTag}", $"nb_transit_warp_in_{linkTag}",
+                -extent, extent));
+        }
+
+        AddPit(c, -1200f, 1900f, 1200f, P);
+        world.BuildGrid();
+        c.World = world;
+        return c;
+    }
+
+    /// <summary>
+    /// Stage 8: generated trick-jump primitives. Every route has a long approach, a lethal miss and no movement
+    /// weapons. Rotation and handedness vary so the actor learns timing and air control rather than one key chord.
+    /// Authored map start/end pairs can be layered after this stage without changing the policy schema.
+    /// </summary>
+    private static Course TrickJumps(Random rng)
+    {
+        var c = new Course();
+        var world = new CollisionWorld();
+        int rotation = rng.Next(4);
+        int handedness = rng.Next(2) == 0 ? -1 : 1;
+
+        Vector3 P(float along, float side = 0f, float z = 0f)
+        {
+            Vector3 forward = rotation switch
+            {
+                1 => Vector3.UnitY,
+                2 => -Vector3.UnitX,
+                3 => -Vector3.UnitY,
+                _ => Vector3.UnitX,
+            };
+            var right = new Vector3(-forward.Y, forward.X, 0f);
+            return forward * along + right * side + Vector3.UnitZ * z;
+        }
+
+        void Platform(float along0, float along1, float side0, float side1, float top)
+        {
+            Vector3 a = P(along0, side0), b = P(along1, side1);
+            AddSlab(world, a.X, a.Y, b.X, b.Y, top);
+        }
+
+        // Every variant starts with enough runway to build speed before the commitment point.
+        Platform(-1100f, 0f, -176f, 176f, 0f);
+        c.Spawn = P(-820f, 0f, 26f);
+
+        switch (rng.Next(3))
+        {
+            case 0:
+                // Rising gap: near the stock running-jump envelope, with a small step-up at the landing.
+                Platform(240f, 980f, -192f, 192f, 32f);
+                c.Target = P(760f, 0f, 58f);
+                break;
+            case 1:
+                // Ninety-degree transfer: carrying approach speed while turning in the air beats stopping at
+                // the corner, which is the circle-jump/air-strafe primitive common to authored shortcuts.
+                Platform(160f, 480f, handedness * 280f, handedness * 1040f, 16f);
+                c.Target = P(320f, handedness * 820f, 42f);
+                break;
+            default:
+                // Precision landing: full-speed gap with a narrow target pad punishes excess lateral drift.
+                Platform(256f, 900f, -76f, 76f, 16f);
+                c.Target = P(720f, 0f, 42f);
+                break;
+        }
+
+        AddPit(c, -1300f, 1200f, 1500f, P);
+        world.BuildGrid();
+        c.World = world;
+        return c;
+    }
+
+    /// <summary>Add a lethal floor beneath a generated route without blocking any valid surface.</summary>
+    private static void AddPit(Course c, float alongMin, float alongMax, float halfSide,
+        Func<float, float, float, Vector3> point)
+    {
+        Vector3 a = point(alongMin, -halfSide, -320f), b = point(alongMax, halfSide, -320f);
+        Vector3 lo = Vector3.Min(a, b), hi = Vector3.Max(a, b);
+        Vector3 mid = (lo + hi) * 0.5f;
+        Vector3 half = (hi - lo) * 0.5f;
+        c.Entities.Add(("trigger_hurt", mid,
+            new Vector3(-half.X, -half.Y, -128f), new Vector3(half.X, half.Y, 64f), "", ""));
     }
 
     // ---- geometry helpers ----

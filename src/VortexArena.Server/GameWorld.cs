@@ -953,7 +953,8 @@ public sealed class GameWorld
                 VfsReader = ConfigReader is null ? null : p => ConfigReader(p) is { } t ? System.Text.Encoding.UTF8.GetBytes(t) : null,
             };
             NeuralBots.BeginMap(MapName ?? "", Collision, Services.EntityTable.All,
-                Cvars.String("bot_neural_weights"), allowBake: Cvars.Bool("bot_neural_bake"));
+                Cvars.String("bot_neural_weights"), allowBake: Cvars.Bool("bot_neural_bake"),
+                warpzones: Warpzones.Zones);
             Bots.Neural = NeuralBots;
         }
 
@@ -1008,7 +1009,7 @@ public sealed class GameWorld
                 ? System.Text.Encoding.UTF8.GetBytes(t) : null,
         };
         NeuralBots.BeginMap(MapName ?? "", Collision, Services.EntityTable.All, weightsPath,
-            allowBake: Cvars.Bool("bot_neural_bake"));
+            allowBake: Cvars.Bool("bot_neural_bake"), warpzones: Warpzones.Zones);
         Bots.Neural = NeuralBots;
         return $"bot movement: requested policy {weightsPath}; {NeuralBots.StatusLine}";
     }

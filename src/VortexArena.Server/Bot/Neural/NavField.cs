@@ -162,6 +162,45 @@ public sealed class NavField
     }
 
     /// <summary>
+    /// Project a point on visible map geometry (for example a crosshair trace hit) onto the nearest
+    /// standable navigation span and return the player-origin position on that surface.
+    /// </summary>
+    /// <remarks>
+    /// A trace hit on a floor is a surface Z, while every query in <see cref="NavDistanceField"/> uses a
+    /// player origin, 24 qu above its floor. Feeding the raw hit to the router therefore selects the span
+    /// below a raised platform. Search a small neighbourhood as well as the hit cell because a marker on
+    /// the lip of a platform can quantise into the adjacent lattice column.
+    /// </remarks>
+    public bool TryProjectSurfaceGoal(Vector3 surfacePoint, out Vector3 playerOrigin)
+    {
+        playerOrigin = default;
+        if (!TryCell(surfacePoint, out int centreX, out int centreY)) return false;
+
+        const int searchCells = 2;
+        float bestScore = float.PositiveInfinity;
+        for (int y = centreY - searchCells; y <= centreY + searchCells; y++)
+        {
+            for (int x = centreX - searchCells; x <= centreX + searchCells; x++)
+            {
+                Vector3 centre = CellCentre(x, y);
+                float dx = centre.X - surfacePoint.X;
+                float dy = centre.Y - surfacePoint.Y;
+                foreach (FloorSpan span in Column(x, y))
+                {
+                    if (!span.Has(NavContent.Standable)) continue;
+                    float dz = span.FloorZ - surfacePoint.Z;
+                    float score = dx * dx + dy * dy + dz * dz;
+                    if (score >= bestScore) continue;
+                    bestScore = score;
+                    playerOrigin = new Vector3(centre.X, centre.Y,
+                        span.FloorZ + NavDistanceField.OriginAboveFloor);
+                }
+            }
+        }
+        return bestScore < float.PositiveInfinity;
+    }
+
+    /// <summary>
     /// The span a body at <paramref name="world"/> is standing on or would fall onto: the highest span whose
     /// floor is at or below <paramref name="world"/>.Z plus a step-height tolerance. Returns false for a
     /// column outside the field or with nothing under the point.

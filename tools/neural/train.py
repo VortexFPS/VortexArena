@@ -21,6 +21,7 @@ Design notes live in planning/neural-bots-2026-08-07.md. The two that matter whe
 from __future__ import annotations
 
 import argparse
+import atexit
 import copy
 import json
 import math
@@ -162,12 +163,17 @@ class EvaluationJob:
 
     def __init__(self, runner: Callable[[Callable[[list[subprocess.Popen]], None]], EvalResult],
                  *, update: int, stage_steps: int, checkpoint: Path, weights: Path,
-                 training_state: dict, expected_seconds: float, seed_offset: int = 0):
+                 training_state: dict, keeper_snapshot: dict, expected_seconds: float,
+                 seed_offset: int = 0):
         self.update = update
         self.stage_steps = stage_steps
         self.checkpoint = checkpoint
         self.weights = weights
         self.training_state = copy.deepcopy(training_state)
+        # The evaluated policy may become the new keeper after PPO has already advanced several updates.
+        # Retain its complete in-memory training snapshot so a later regression rollback never has to load
+        # a checkpoint concurrently with writers or trust a path that could have been replaced.
+        self.keeper_snapshot = keeper_snapshot
         self.expected_seconds = expected_seconds
         self.seed_offset = seed_offset
         self.started_at = time.time()
@@ -403,7 +409,16 @@ CURRICULUM = [
     (4, 4_000_000, 0.55),   # full pool, medium routes
     (5, 6_000_000, 0.45),   # generated weapon gaps: the one skill real maps cannot guarantee
     (6, 20_000_000, 0.55),  # full pool, uncapped: the real distribution
+    # New focused stages deliberately start as bounded pilots instead of inventing an advancement gate.
+    # Their first 3 x 800-episode scripted/policy benches establish the noise floor and a measured gate;
+    # until then threshold 0 means "spend the fixed budget and preserve the evaluated checkpoint".
+    (7, 0, 0.0),             # mandatory jump-pad / teleporter / warpzone traversal
+    (8, 0, 0.0),             # non-weapon rising gaps, corner transfers and precision landings
 ]
+
+# The normal --steps ceiling remains per stage. New stages are capped while their gates are calibrated so
+# adding them cannot silently turn a resumed curriculum into another pair of 60M-step experiments.
+FIXED_STAGE_BUDGETS = {7: 4_000_000, 8: 6_000_000}
 
 
 # Agents per world during evaluation. PINNED, and deliberately independent of --agents.
@@ -441,6 +456,44 @@ class _Tee:
         return False
 
 
+class _SystemWakeLock:
+    """Keep a Windows workstation awake only for the lifetime of a training process.
+
+    This is deliberately a process-scoped execution request, not a global power-plan edit: it prevents
+    idle sleep while samples are being collected, then releases automatically when training exits. It cannot
+    override a manual power action, a reboot, thermal protection or a laptop battery policy.
+    """
+
+    _ES_CONTINUOUS = 0x80000000
+    _ES_SYSTEM_REQUIRED = 0x00000001
+
+    def __init__(self) -> None:
+        self._active = False
+        self._set_state = None
+
+    def acquire(self) -> bool:
+        if os.name != "nt":
+            return False
+        try:
+            import ctypes
+            set_state = ctypes.windll.kernel32.SetThreadExecutionState
+            set_state.argtypes = [ctypes.c_uint]
+            set_state.restype = ctypes.c_uint
+            if not set_state(self._ES_CONTINUOUS | self._ES_SYSTEM_REQUIRED):
+                return False
+            self._set_state = set_state
+            self._active = True
+            atexit.register(self.release)
+            return True
+        except (AttributeError, OSError):
+            return False
+
+    def release(self) -> None:
+        if self._active and self._set_state is not None:
+            self._set_state(self._ES_CONTINUOUS)
+        self._active = False
+
+
 def _tee(path: Path) -> None:
     handle = open(path, "a", encoding="utf-8", buffering=1)
     sys.stdout = _Tee(sys.stdout, handle)
@@ -453,9 +506,20 @@ def main() -> int:
     if hasattr(signal, "SIGBREAK"):
         signal.signal(signal.SIGBREAK, _request_stop)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--stage", type=int, default=1, help="curriculum stage 1-5")
+    ap.add_argument("--stage", type=int, choices=range(1, 9), default=1,
+                    help="curriculum stage 1-8")
     ap.add_argument("--curriculum", action="store_true", help="run every stage in order, advancing on arrival rate")
     ap.add_argument("--steps", type=int, default=2_000_000, help="total agent-steps (per stage with --curriculum)")
+    ap.add_argument("--continuous", action="store_true",
+                    help="after reaching the final planned stage, keep extending that stage by --steps-sized "
+                         "chunks until explicitly stopped; checkpoints and evaluations continue normally")
+    ap.add_argument("--regression-rollback", action="store_true",
+                    help="restore the stage-best policy, optimizer and normalization after repeated material "
+                         "evaluation regressions; intended for long-running --continuous jobs")
+    ap.add_argument("--rollback-drop", type=float, default=0.15,
+                    help="arrival-rate drop below stage best that counts as a regression (default: 0.15)")
+    ap.add_argument("--rollback-confirmations", type=int, default=2,
+                    help="consecutive regressed evaluations required before rollback (default: 2)")
     # This help text was already correct and was ignored. Going 8 hosts -> 6 and 32 -> 64 agents for
     # throughput cut the distinct courses in a rollout from 8 to 6 while the agent count went up, and the
     # cost was measured only much later. Stage 1, constant 384 agents:
@@ -487,6 +551,12 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=Path("runs"))
     ap.add_argument("--name", type=str, default=None)
     ap.add_argument("--resume", type=Path, default=None)
+    ap.add_argument("--resume-stage", type=int, choices=range(1, 9), default=None,
+                    help="start this curriculum stage with the resumed policy, but reset that stage's progress. "
+                         "Useful when a keeper checkpoint becomes the foundation for a newly-added lesson.")
+    ap.add_argument("--reset-optimizer", action="store_true",
+                    help="when resuming, retain policy weights and observation normalization but use fresh Adam "
+                         "moments for the new lesson")
     ap.add_argument("--width", type=int, default=128)
     ap.add_argument("--torch-threads", type=int, default=8,
                     help="intra-op threads for torch. 8 is not a guess: torch defaults to one thread per "
@@ -583,6 +653,14 @@ def main() -> int:
                     help="stage 6 map list, comma separated; empty means every installed map. "
                          "The held-out eval split is excluded either way.")
     args = ap.parse_args()
+    if args.resume_stage is not None and args.resume is None:
+        ap.error("--resume-stage requires --resume")
+    if args.reset_optimizer and args.resume is None:
+        ap.error("--reset-optimizer requires --resume")
+    if not 0.0 < args.rollback_drop < 1.0:
+        ap.error("--rollback-drop must be between 0 and 1")
+    if args.rollback_confirmations < 1:
+        ap.error("--rollback-confirmations must be at least 1")
 
     # The new profile changes optimiser semantics, never tensor shapes, so every existing policy and
     # checkpoint remains loadable.  Explicit flags always win, which makes experiments reproducible.
@@ -628,6 +706,10 @@ def main() -> int:
     # the current state.
     _tee(run_dir / "train.log")
     print(f"[train] run {run_dir}")
+    if _SystemWakeLock().acquire():
+        print("[train] Windows idle sleep inhibited for this training process")
+    elif os.name == "nt":
+        print("[train] WARNING: could not inhibit Windows idle sleep", file=sys.stderr)
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -677,7 +759,8 @@ def main() -> int:
     if args.resume:
         ckpt = torch.load(args.resume, map_location=device, weights_only=False)
         policy.load_state_dict(ckpt["policy"])
-        optimizer.load_state_dict(ckpt["optimizer"])
+        if not args.reset_optimizer:
+            optimizer.load_state_dict(ckpt["optimizer"])
         # load_state_dict restores the checkpoint's param_groups, INCLUDING its learning rate, which
         # silently overrides anything set on the command line. An --lr A/B run across a --resume would
         # otherwise compare three identical configurations and read as a cleanly rejected hypothesis.
@@ -699,12 +782,20 @@ def main() -> int:
         # may be older than the log and therefore deliberately do not infer this.
         if not resume_state and args.resume.name == "checkpoint.pt":
             resume_state = _legacy_resume_state(args.resume.parent, start_stage)
+        if args.resume_stage is not None:
+            start_stage = args.resume_stage
+            resume_state = {}
+            resume_return_scale = None
+            print(f"[train] resumed weights from {args.resume}; starting fresh stage {start_stage} "
+                  f"({'fresh Adam' if args.reset_optimizer else 'resumed Adam'})")
+        else:
+            print(f"[train] resumed {args.resume} at stage {start_stage}, lr {hyper.lr:g}, "
+                  f"stage steps {int(resume_state.get('stage_steps', 0)):,}")
         args._resume_state = resume_state
         args._resume_return_scale = resume_return_scale
-        print(f"[train] resumed {args.resume} at stage {start_stage}, lr {hyper.lr:g}, "
-              f"stage steps {int(resume_state.get('stage_steps', 0)):,}")
 
-    plan = [(s, args.steps, minimum, thresh) for s, minimum, thresh in CURRICULUM if s >= start_stage] \
+    plan = [(s, min(args.steps, FIXED_STAGE_BUDGETS.get(s, args.steps)), minimum, thresh)
+            for s, minimum, thresh in CURRICULUM if s >= start_stage] \
         if args.curriculum else [(start_stage, args.steps, 0, 0.0)]
 
     (run_dir / "config.json").write_text(json.dumps({
@@ -714,11 +805,33 @@ def main() -> int:
         "action_logits": layout.ACTION_LOGITS,
     }, indent=2))
 
+    # A resumed keeper remains the best policy until an evaluation actually beats it. Previously the new
+    # run inherited best_rate but not the keeper file, so its final message pointed at a path that did not
+    # exist (v32 exposed this after resuming v31's 54.6% stage-6 best). Carry both deployment artifacts into
+    # the new run up front; later best saves atomically replace them as usual.
+    inherited_keeper = f"stage{start_stage}-best.pt"
+    if args.resume is not None and args.resume.name == inherited_keeper:
+        keeper_target = run_dir / inherited_keeper
+        if not keeper_target.exists():
+            shutil.copy2(args.resume, keeper_target)
+        source_weights = args.resume.with_suffix(".vxpw")
+        target_weights = run_dir / source_weights.name
+        if source_weights.exists() and not target_weights.exists():
+            shutil.copy2(source_weights, target_weights)
+
     _event(run_dir, "run_started", f"run started with {args.training_profile} profile",
            profile=args.training_profile, resumed_from=str(args.resume) if args.resume else None)
 
-    for stage, budget, minimum, threshold in plan:
-        print(f"\n[train] === stage {stage}: {budget:,} agent-steps, advance at {threshold:.0%} arrivals ===")
+    for stage_index, (stage, budget, minimum, threshold) in enumerate(plan):
+        has_next_stage = stage_index + 1 < len(plan)
+        # A continuous run still uses finite chunks so vxstat has a useful local ETA and every extension is
+        # recorded. The final stage owns its host connections until an explicit graceful stop arrives,
+        # removing the fragile gap where an external monitor had to notice completion and relaunch Python.
+        args._continuous_stage = bool(args.continuous and not has_next_stage)
+        args._continuous_chunk_steps = max(1, budget)
+        gate = (f"advance at {threshold:.0%} arrivals" if threshold > 0
+                else "fixed pilot budget; gate calibration pending")
+        print(f"\n[train] === stage {stage}: {budget:,} agent-steps, {gate} ===")
 
         # G4: a short lr tournament at stage entry. Each stage's reward scale differs (the return-scale
         # normaliser resets, the arrival rate changes by an order of magnitude), so the lr that served the
@@ -766,12 +879,39 @@ def main() -> int:
                   f"advancing onto a foundation that is not there")
             return 1
 
+        # Gated stages emit their own advancement event at the exact evaluated snapshot. Fixed pilot
+        # stages used to return True silently, leaving state.json saying "training" even though the
+        # process had exited; vxstat then surfaced a stale transition and there was no durable handoff
+        # record. Mark both fixed transitions and terminal completion explicitly.
+        try:
+            run_state = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            run_state = {"schema": 2, "run": run_dir.name}
+        if has_next_stage:
+            next_stage, next_budget, next_minimum, next_threshold = plan[stage_index + 1]
+            run_state.update({
+                "phase": "stage_transition", "stage": next_stage, "stage_steps": 0, "update": 0,
+                "budget": next_budget, "minimum_steps": next_minimum, "gate": next_threshold,
+                "eval_in_flight": False, "next_eval_update": args.eval_every,
+            })
+            _atomic_json(run_dir / "state.json", run_state)
+            if threshold <= 0:
+                _event(run_dir, "stage_advanced", f"stage {stage} completed; starting stage {next_stage}",
+                       from_stage=stage, to_stage=next_stage)
+            print(f"[train] stage {stage} complete; starting stage {next_stage}", flush=True)
+        else:
+            run_state.update({"phase": "completed", "eval_in_flight": False})
+            _atomic_json(run_dir / "state.json", run_state)
+            _event(run_dir, "run_completed", f"stage {stage} completed; curriculum run finished",
+                   stage=stage, stage_steps=run_state.get("stage_steps", 0))
+
     print("[train] done")
     return 0
 
 
 def train_stage(policy, norm, optimizer, hyper: Hyper, args, stage: int, budget: int,
                 minimum: int, threshold: float, run_dir: Path, device) -> bool:
+    focused_movement = stage in (7, 8)
     cfg = EnvConfig(
         agents=args.agents,
         ticks_per_step=args.ticks,
@@ -779,9 +919,11 @@ def train_stage(policy, norm, optimizer, hyper: Hyper, args, stage: int, budget:
         seed=args.seed + stage * 101,
         # Stage 1 and 2 are about locomotion; handing them weapons only adds an action dimension with no
         # reward attached to it. From stage 4 the permit starts flipping, which is what the live game does.
-        weapon_chance=0.0 if stage <= 2 else 1.0,
-        permit_flip_chance=0.0 if stage <= 3 else 0.35,
-        aim_constraint_chance=0.0 if stage <= 2 else 0.4,
+        # Stages 7/8 must use the sampled transit or body-movement trick. Movement weapons would let the
+        # actor bypass the lesson with a rocket jump and still receive a perfect arrival reward.
+        weapon_chance=0.0 if stage <= 2 or focused_movement else 1.0,
+        permit_flip_chance=0.0 if stage <= 3 or focused_movement else 0.35,
+        aim_constraint_chance=0.0 if stage <= 2 or focused_movement else 0.4,
         data_root=str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data"),
         map_list=args.maps,
     )
@@ -843,9 +985,53 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         ret_scale.load(eval_args._resume_return_scale)
     eval_failures = int(resume.get("eval_failures", 0))
     passing_evals = int(resume.get("passing_evals", 0))
+    regression_evals = 0
+    rollback_count = int(resume.get("rollback_count", 0))
     eval_job: EvaluationJob | None = None
     next_eval_update = ((update // eval_every) + 1) * eval_every
     eval_expected_seconds = _expected_eval_seconds(run_dir)
+
+    def capture_keeper() -> dict:
+        return {
+            "policy": copy.deepcopy(policy.state_dict()),
+            "optimizer": copy.deepcopy(optimizer.state_dict()),
+            "norm": copy.deepcopy(norm.state()),
+            "return_scale": copy.deepcopy(ret_scale.state()),
+        }
+
+    keeper = capture_keeper()
+
+    def maybe_rollback_regression(rate: float, evaluated_update: int) -> bool:
+        """Restore the in-memory keeper after confirmed material regression."""
+        nonlocal regression_evals, rollback_count, keeper, evals_since_best, passing_evals
+        if not eval_args.regression_rollback or best_rate <= 0.0:
+            regression_evals = 0
+            return False
+        if rate > best_rate - eval_args.rollback_drop:
+            regression_evals = 0
+            return False
+        regression_evals += 1
+        print(f"[s{stage}] regression warning {regression_evals}/{eval_args.rollback_confirmations}: "
+              f"eval {rate:.1%} vs keeper {best_rate:.1%}", flush=True)
+        if regression_evals < eval_args.rollback_confirmations:
+            return False
+
+        policy.load_state_dict(copy.deepcopy(keeper["policy"]))
+        optimizer.load_state_dict(copy.deepcopy(keeper["optimizer"]))
+        norm.load(copy.deepcopy(keeper["norm"]))
+        ret_scale.load(copy.deepcopy(keeper["return_scale"]))
+        regression_evals = 0
+        rollback_count += 1
+        evals_since_best = 0
+        passing_evals = 0
+        recent_det.clear()
+        _event(run_dir, "regression_rollback",
+               f"restored stage {stage} keeper after confirmed regression",
+               arrival_rate=rate, best_rate=best_rate, evaluated_update=evaluated_update,
+               completed_update=update, rollback_count=rollback_count)
+        print(f"[s{stage}] ROLLBACK {rollback_count}: restored {best_rate:.1%} keeper after "
+              f"{eval_args.rollback_confirmations} regressed evals", flush=True)
+        return True
 
     def state(phase: str | None = None) -> dict:
         if phase is None:
@@ -857,6 +1043,8 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
             "best_time": best_time if math.isfinite(best_time) else None,
             "last_rate": det_rate if math.isfinite(det_rate) else None,
             "eval_failures": eval_failures, "passing_evals": passing_evals,
+            "regression_evals": regression_evals, "rollback_count": rollback_count,
+            "regression_rollback": bool(eval_args.regression_rollback),
             "gate": threshold, "eval_every": eval_every, "profile": eval_args.training_profile,
             "selection_objective": eval_args.selection_objective,
             "next_eval_update": next_eval_update, "updated_at": _stamp(),
@@ -872,7 +1060,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
 
     def finish_async_evaluation(job: EvaluationJob) -> str:
         """Apply an eval result to the snapshot it measured, never to newer live weights."""
-        nonlocal det_rate, best_rate, best_time, evals_since_best, eval_failures, passing_evals
+        nonlocal det_rate, best_rate, best_time, evals_since_best, eval_failures, passing_evals, keeper
         nonlocal total_steps, update
         evaluation = job.result()
         if not evaluation.ok:
@@ -900,6 +1088,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
             best_rate = max(best_rate, det_rate)
             best_time = evaluation.mean_time
             evals_since_best = 0
+            keeper = job.keeper_snapshot
             evaluated_state.update({"best_rate": best_rate,
                                     "best_time": _finite_or_none(best_time)})
         else:
@@ -938,6 +1127,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
         _event(run_dir, "eval_completed", f"eval completed at {det_rate:.1%}",
                arrival_rate=det_rate, mean_arrival_seconds=_finite_or_none(evaluation.mean_time),
                update=job.update, completed_update=update)
+        maybe_rollback_regression(det_rate, job.update)
 
         if threshold > 0 and det_rate >= threshold and not eligible:
             print(f"[s{stage}] gate is locked until {minimum:,} stage steps "
@@ -986,6 +1176,45 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
     # correctness bug in its own right.
     alive = np.ones(n_agents, dtype=bool)
 
+    def recover_training_fleet(exc: BaseException, prior_steps: int, prior_norm: dict) -> bool:
+        """Checkpoint the last complete update, rebuild the fleet, and discard the partial rollout."""
+        nonlocal obs, total_steps, update
+        update -= 1                 # the failed rollout never reached PPO
+        total_steps = prior_steps   # do not claim samples that were deliberately discarded
+        norm.load(prior_norm)       # observations from the partial rollout must not bias shipped weights
+        alive[:] = True             # recover() resets every world, so every agent starts live
+
+        message = f"training fleet connection failed: {type(exc).__name__}: {exc}"
+        print(f"[s{stage}] {message}; checkpointing u{update} and reconnecting", flush=True)
+        recovering = state("recovering_worker")
+        save(policy, norm, optimizer, stage, run_dir, training_state=recovering,
+             return_scale=ret_scale)
+        _atomic_json(run_dir / "state.json", recovering)
+        _event(run_dir, "worker_recovery_started", message, update=update,
+               stage_steps=total_steps)
+        try:
+            obs = env.recover()
+        except Exception as recovery_exc:
+            failed_message = (f"worker recovery failed: {type(recovery_exc).__name__}: "
+                              f"{recovery_exc}")
+            failed = state("stopped_worker_failure")
+            save(policy, norm, optimizer, stage, run_dir, training_state=failed,
+                 return_scale=ret_scale)
+            _atomic_json(run_dir / "state.json", failed)
+            _event(run_dir, "worker_recovery_failed", failed_message, update=update,
+                   stage_steps=total_steps)
+            print(f"[s{stage}] {failed_message}; checkpoint is safe", flush=True)
+            return False
+
+        env.clear_episode_stats()
+        recovered = state()
+        _atomic_json(run_dir / "state.json", recovered)
+        _event(run_dir, "worker_recovered", "training fleet reconnected and reset",
+               update=update, stage_steps=total_steps, hosts=len(env.envs))
+        print(f"[s{stage}] reconnected and reset all {len(env.envs)} hosts; retrying u{update + 1}",
+              flush=True)
+        return True
+
     while True:
         requested_budget = _requested_budget(run_dir, budget)
         if requested_budget > budget:
@@ -998,7 +1227,19 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                   flush=True)
             _atomic_json(run_dir / "state.json", state())
         if total_steps >= budget:
-            break
+            if getattr(eval_args, "_continuous_stage", False):
+                previous_budget = budget
+                budget += max(1, int(getattr(eval_args, "_continuous_chunk_steps", budget)))
+                _event(run_dir, "budget_extended", f"continuous run extended to {budget:,} steps",
+                       previous_budget=previous_budget, budget=budget, update=update,
+                       stage_steps=total_steps, automatic=True)
+                print(f"[s{stage}] continuous run extended {previous_budget:,} -> {budget:,} steps",
+                      flush=True)
+                _atomic_json(run_dir / "state.json", state())
+            else:
+                break
+        rollout_start_steps = total_steps
+        rollout_start_norm = copy.deepcopy(norm.state())
         update += 1
         t_env = t_pol = 0.0
 
@@ -1046,12 +1287,18 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                 alive[lo:hi] = blk
 
             _c0 = time.perf_counter()
-            obs = env.collect(rollout, obs, _act, _store)
+            try:
+                obs = env.collect(rollout, obs, _act, _store)
+            except (ConnectionError, OSError) as exc:
+                if not recover_training_fleet(exc, rollout_start_steps, rollout_start_norm):
+                    return False
+                continue
             t_env = time.perf_counter() - _c0 - _tpol_box[0]
             t_pol = _tpol_box[0]
             total_steps += _steps_box[0]
 
         else:
+          transport_error: BaseException | None = None
           for t in range(rollout):
               _p0 = time.perf_counter()
               alive_buf[t] = alive
@@ -1070,7 +1317,11 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
               val_buf[t] = value.cpu().numpy()
               _p1 = time.perf_counter(); t_pol += _p1 - _p0
 
-              obs, reward, done, trunc = env.step(act_buf[t])
+              try:
+                  obs, reward, done, trunc = env.step(act_buf[t])
+              except (ConnectionError, OSError) as exc:
+                  transport_error = exc
+                  break
               t_env += time.perf_counter() - _p1
               rew_buf[t] = reward
               next_obs_buf[t] = env.last_transition_obs
@@ -1094,6 +1345,11 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
               for lo in range(0, n_agents, per_host):
                   if finished[lo:lo + per_host].all():
                       alive[lo:lo + per_host] = True
+
+          if transport_error is not None:
+              if not recover_training_fleet(transport_error, rollout_start_steps, rollout_start_norm):
+                  return False
+              continue
 
         # Value every transition's actual next observation. This is essential at a time limit: the host may
         # already have reset the world by the time the rollout continues, but the timeout delta must
@@ -1233,6 +1489,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                 eval_job = EvaluationJob(run_evaluation, update=update, stage_steps=total_steps,
                                          checkpoint=candidate_checkpoint, weights=candidate_weights,
                                          training_state=candidate_state,
+                                         keeper_snapshot=capture_keeper(),
                                          expected_seconds=eval_expected_seconds,
                                          seed_offset=seed_offset)
                 next_eval_update = 0  # there is no queued eval while one is already in flight
@@ -1282,6 +1539,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
                 best_rate = max(best_rate, det_rate)
                 best_time = evaluation.mean_time
                 evals_since_best = 0
+                keeper = capture_keeper()
                 save(policy, norm, optimizer, stage, run_dir, tag=f"stage{stage}-best",
                      training_state=state(), return_scale=ret_scale)
                 _event(run_dir, "new_best", f"new stage {stage} best",
@@ -1311,6 +1569,7 @@ def _run(policy, norm, optimizer, hyper: Hyper, env: VectorEnv, stage: int, budg
             _event(run_dir, "eval_completed", f"eval completed at {det_rate:.1%}",
                    arrival_rate=det_rate,
                    mean_arrival_seconds=_finite_or_none(evaluation.mean_time), update=update)
+            maybe_rollback_regression(det_rate, update)
             eligible = total_steps >= minimum
             if threshold > 0 and det_rate >= threshold and eligible:
                 passing_evals += 1

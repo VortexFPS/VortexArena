@@ -37,8 +37,12 @@ try:
 except Exception:
     EASTERN = None
 
-# Overridable so this is not welded to one box; the default is the training VM's layout.
-RUNS = os.environ.get("VX_RUNS", "/home/vortex/train/runs")
+# Overridable so this is not welded to one box. On Windows the repository layout places runs beside the
+# NeuralBotLab checkout; using the Linux VM default there let process discovery find v35 while every state
+# lookup silently went to /home/vortex/train/runs, producing the bogus "stage 0 / evaluating" panel.
+_DEFAULT_RUNS = (os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))))), "runs") if os.name == "nt" else "/home/vortex/train/runs")
+RUNS = os.environ.get("VX_RUNS", _DEFAULT_RUNS)
 
 # Training commands record remote simulation addresses, but not their SSH account. Vortex worker VMs use the
 # unprivileged `vortex` account; deployments with another account can override this without repeating --peer.
@@ -757,6 +761,12 @@ def run_snapshot(name, pid, up, cmd, procs, running):
                               "deliberate": True}
         elif phase == "stopped_eval_failure":
             stopped_reason = {"key": "eval", "text": "paused after repeated evaluation failures",
+                              "deliberate": False}
+        elif phase == "completed":
+            stopped_reason = {"key": "complete", "text": "completed the planned curriculum",
+                              "deliberate": True}
+        elif phase == "stage_transition":
+            stopped_reason = {"key": "handoff", "text": "stopped during a stage handoff",
                               "deliberate": False}
         else:
             stopped_reason = stop_reason(lines)

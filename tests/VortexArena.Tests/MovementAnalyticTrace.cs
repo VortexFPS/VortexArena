@@ -154,7 +154,11 @@ public sealed class MovementTestServices : IEngineServices
 {
     public ITraceService Trace { get; }
     public IGameClock Clock { get; }
-    public ICvarService Cvars { get; } = new EmptyCvars();
+    /// <summary>Defaults to <see cref="EmptyCvars"/> (every read 0 → the physics falls back to its compiled-in
+    /// stock values, which is what every movement test wants). Settable so a test can install a real store and
+    /// sweep a cvar — see <c>AirControlParityTests</c>, which drives sv_aircontrol_flags / _power / _penalty
+    /// through their whole range.</summary>
+    public ICvarService Cvars { get; set; } = new EmptyCvars();
     public IEntityService Entities { get; } = new MinimalEntities();
     public ISoundService Sound { get; } = new NullSound();
     public IModelService Models { get; } = new NullModels();

@@ -40,6 +40,11 @@ smoke: **docs/RUNNING.md**.
 - **Performance / hitching** → **docs/PERF-DEBUGGING.md** (profiler, hitch classes, `tools/perf-run.ps1`,
   `tools/perf-report.py`). Measure before theorizing; capture on the release export, not Debug.
 - **Movement / netcode** → **docs/TROUBLESHOOTING.md** + **docs/NET-DEBUGGING.md** (`net_input_trace`).
+- **Movement *physics*** (strafing, air accel, friction, "feels different from Xonotic") →
+  **docs/MOVEMENT-PHYSICS.md**: function-by-function map of Base's QuakeC against the port's C#, the
+  formulas, which cvar enters which term, and the engine-level facts (wish-move scaling, timestep source,
+  `sv_gameplayfix_q2airaccelerate`, QC math-library semantics) that change the result without appearing in
+  the movement code. Includes the 2026-08-07 air-strafe parity audit.
 - **Cvars** → **docs/reference/CVARS.md** (regen: `python tools/find-cvars.py`). Prefix = authority, not reader.
   Cvar/command **help strings** back `search`/`apropos` and Tab completion; the engine half is generated
   (`python tools/extract-engine-cvar-help.py` → `data/core.pk3dir/engine-cvar-help.txt`, needs `../Base`).

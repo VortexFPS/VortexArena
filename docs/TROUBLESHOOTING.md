@@ -5,9 +5,15 @@ how to diagnose a regression. For the live pipeline tracer (`net_input_trace`) a
 **NET-DEBUGGING.md**. For frame hitches / FPS problems (the frame profiler, hitch classes, capture + report
 tooling), see **PERF-DEBUGGING.md**. Deep design notes live in the `camera-drift-render-smoothing` project memory.
 
+For the *physics* itself (why a player accelerates the way they do: strafing, air accel, friction, the cvar
+formulas, and how the port's C# maps onto Base's QuakeC), see **MOVEMENT-PHYSICS.md**. Use that one when the
+complaint is about how movement *feels*; use this one when it is about prediction, jitter or rubber-banding.
+
 ## The model in one paragraph
 
-The server runs a fixed **1/72 s** authoritative tick. The local player is **predicted** client-side and
+The server runs a fixed **1/64 s** authoritative tick (`sys_ticrate 0.015625`, matching Xonotic's shipped
+`xonotic-common.cfg:101`; the DarkPlaces *engine* default is 1/72, which the port used to hardcode and which
+`SimulationLoop.TicRate` still carries as a compile-time fallback). The local player is **predicted** client-side and
 **reconciled** against the server's snapshots; remote players are **interpolated**. By default
 (`cl_movement_perframe 1`, "Path A") the local player is predicted **once per render frame at the real frame dt**
 (Xonotic Base's `Movetype_Physics_NoMatchTicrate`), so the camera is smooth at any fps. The physics is
@@ -15,7 +21,7 @@ frametime-independent (half-step gravity → dt-invariant jump apex; fps-indepen
 safe.
 
 **Send rate (DP model).** Prediction + local feedback run every render frame, but datagrams to the server are
-*rate-capped* to `cl_netfps` (72/s) so a high-fps client doesn't flood the link — **except** that
+*rate-capped* to `cl_netfps` (64/s) so a high-fps client doesn't flood the link — **except** that
 `cl_netimmediatebuttons` sends fire/jump/weapon-switch the instant they happen (bypassing the cap), so input that
 matters for feel is low-latency while steady movement stays bounded. This mirrors Darkplaces. (On the listen server
 the redundant tail + the immediate path mean the server effectively sees every command regardless.)
@@ -24,11 +30,11 @@ the redundant tail + the immediate path mean the server effectively sees every c
 
 | cvar | default | what it does |
 |---|---|---|
-| `cl_movement_perframe` | `1` | `1` = Path A (per-render-frame variable-dt prediction, smooth). `0` = legacy fixed-tick (drain in 1/72 quanta + snap-to-latest) — an A/B fallback. |
+| `cl_movement_perframe` | `1` | `1` = Path A (per-render-frame variable-dt prediction, smooth). `0` = legacy fixed-tick (drain in `sys_ticrate` quanta + snap-to-latest) — an A/B fallback. |
 | `cl_movement_hitch_hold` | `1` | Post-hitch stall-aware reconcile (Fix B — see below). `0` = always snap. |
 | `cl_netclock_smooth` | `1` | `1` = free-run the render clock and gently creep it toward server time (Base `cl_nettimesyncboundmode`). `0` = hard-rebase each snapshot (jolts the camera/decay timeline). |
 | `cl_movement_send_all` | `0` | `0` = Base-faithful gated send (datagrams at `cl_netfps` with bounded redundancy). `1` = send every predicted frame (server replays the identical sequence → reconcile ~0; more bandwidth). |
-| `cl_netfps` | `72` | Input datagram send **rate** cap (DP-faithful). The client still *predicts* every render frame; this only limits how often it *transmits*. |
+| `cl_netfps` | `64` | Input datagram send **rate** cap (DP-faithful). The client still *predicts* every render frame; this only limits how often it *transmits*. |
 | `cl_netimmediatebuttons` | `1` | Send a command **immediately** (bypassing the `cl_netfps` cap) when it has an impulse or a button change (fire/jump/crouch press/release), so those reach the server with minimal latency at high fps. `0` = rate-limit everything. |
 | `cl_movement_smoothing_faithful` | `1` | `1` = Base `CSQCPlayer_ApplySmoothing` (stair glide + view-height blend, error-comp OFF → corrections snap). `0` = the port's adaptive smoothing. |
 | `cl_movement_errorcompensation` | `0` | Prediction-error view smoothing strength (Base default 0 = snap). Only on the port smoothing path. |

@@ -156,12 +156,21 @@ public struct MovementParameters
         MovementParameters p = Defaults;
 
         // Floats: read the cvar, keep the Xonotic default if the cvar is unset (GetFloat -> 0).
-        // We treat 0 as "unset" only for variables whose Xonotic value is non-zero; the genuinely-zero
-        // Xonotic defaults (e.g. aircontrol_penalty) are simply overwritten by GetFloat's 0 anyway.
+        // We treat 0 as "unset" only for variables whose value can never MEANINGFULLY be 0 (a maxspeed or a
+        // gravity of 0 is nonsense, so 0 there really does mean "nobody set it").
+        //
+        // Everything the QC guards with `if (PHYS_<x>(this))` uses CvarRaw instead, because for those an
+        // explicit 0 is the documented way to turn the feature OFF and MUST NOT be swallowed by the default.
+        // Xonotic ships six alternate physics sets that do exactly that (physics.cfg + physics<Set>.cfg:
+        // nexuiz/quake/quake2/quake3/warsow/vecxis all set sv_aircontrol 0, most zero maxairstrafespeed /
+        // airstrafeaccelerate / airstopaccelerate / airspeedlimit_nonqw, and every set but xonotic+overkill
+        // zeroes airaccel_qw_stretchfactor). Reading those back as the Xonotic value silently gave, for
+        // example, CPM air control to a server running Nexuiz physics. Stock play is unaffected: physicsX.cfg
+        // sets all of them non-zero.
         p.MaxSpeed                  = Cvar(N(prefix, "maxspeed"),                 p.MaxSpeed);
         p.Accelerate                = Cvar(N(prefix, "accelerate"),              p.Accelerate);
         p.Friction                  = Cvar(N(prefix, "friction"),                p.Friction);
-        p.FrictionSlick             = Cvar(N(prefix, "friction_slick"),          p.FrictionSlick);
+        p.FrictionSlick             = CvarRaw(N(prefix, "friction_slick"),        p.FrictionSlick);
         p.StopSpeed                 = Cvar(N(prefix, "stopspeed"),               p.StopSpeed);
         p.SlickAccelerate           = Cvar(N(prefix, "slickaccelerate"),         p.SlickAccelerate);
         p.FrictionOnLand            = CvarRaw(N(prefix, "friction_on_land"),      p.FrictionOnLand);
@@ -170,15 +179,15 @@ public struct MovementParameters
         p.AirAccelerate             = Cvar(N(prefix, "airaccelerate"),           p.AirAccelerate);
         p.AirAccelQW                = CvarRaw(N(prefix, "airaccel_qw"),           p.AirAccelQW);
         p.AirStrafeAccelQW          = CvarRaw(N(prefix, "airstrafeaccel_qw"),     p.AirStrafeAccelQW);
-        p.AirAccelQWStretchFactor   = Cvar(N(prefix, "airaccel_qw_stretchfactor"), p.AirAccelQWStretchFactor);
-        p.AirSpeedLimitNonQW        = Cvar(N(prefix, "airspeedlimit_nonqw"),     p.AirSpeedLimitNonQW);
+        p.AirAccelQWStretchFactor   = CvarRaw(N(prefix, "airaccel_qw_stretchfactor"), p.AirAccelQWStretchFactor);
+        p.AirSpeedLimitNonQW        = CvarRaw(N(prefix, "airspeedlimit_nonqw"),   p.AirSpeedLimitNonQW);
         p.AirAccelSidewaysFriction  = CvarRaw(N(prefix, "airaccel_sideways_friction"), p.AirAccelSidewaysFriction);
-        p.MaxAirStrafeSpeed         = Cvar(N(prefix, "maxairstrafespeed"),       p.MaxAirStrafeSpeed);
-        p.AirStrafeAccelerate       = Cvar(N(prefix, "airstrafeaccelerate"),     p.AirStrafeAccelerate);
-        p.AirStopAccelerate         = Cvar(N(prefix, "airstopaccelerate"),       p.AirStopAccelerate);
+        p.MaxAirStrafeSpeed         = CvarRaw(N(prefix, "maxairstrafespeed"),     p.MaxAirStrafeSpeed);
+        p.AirStrafeAccelerate       = CvarRaw(N(prefix, "airstrafeaccelerate"),   p.AirStrafeAccelerate);
+        p.AirStopAccelerate         = CvarRaw(N(prefix, "airstopaccelerate"),     p.AirStopAccelerate);
         p.AirStopAccelerateFull     = CvarBool(N(prefix, "airstopaccelerate_full"), p.AirStopAccelerateFull);
 
-        p.AirControl                = Cvar(N(prefix, "aircontrol"),              p.AirControl);
+        p.AirControl                = CvarRaw(N(prefix, "aircontrol"),            p.AirControl);
         p.AirControlFlags           = (int)CvarRaw(N(prefix, "aircontrol_flags"), p.AirControlFlags);
         p.AirControlPower           = Cvar(N(prefix, "aircontrol_power"),        p.AirControlPower);
         p.AirControlPenalty         = CvarRaw(N(prefix, "aircontrol_penalty"),    p.AirControlPenalty);

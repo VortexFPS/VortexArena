@@ -23,6 +23,16 @@ public static class QMath
     // Quake angle component indices.
     public const int Pitch = 0, Yaw = 1, Roll = 2;
 
+    /// <summary>Wrap an angle difference (degrees) into [-180, 180] — the shortest signed rotation between
+    /// two headings. Pass a raw <c>a - b</c>; multiples of 360 are folded out.</summary>
+    public static float AngleDelta(float diff)
+    {
+        diff %= 360f;
+        if (diff > 180f) diff -= 360f;
+        else if (diff < -180f) diff += 360f;
+        return diff;
+    }
+
     public static float Dot(Vector3 a, Vector3 b) => Vector3.Dot(a, b);
     public static Vector3 Cross(Vector3 a, Vector3 b) => Vector3.Cross(a, b);
     public static float VLen(Vector3 v) => v.Length();

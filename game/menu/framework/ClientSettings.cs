@@ -282,6 +282,15 @@ public static class ClientSettings
         // checkbox and acceleration sliders bind m_filter / m_accelerate / minspeed / maxspeed. Stock values
         // make every branch a no-op (DP parity).
         c.Register("m_filter", "0", save);
+        // DP keyboard turn/pitch family (cl_input.c:369-375, CF_ARCHIVE), applied per render frame by
+        // NetGame.ApplyKeyboardTurn (CL_AdjustAngles): +left/+right turn at cl_yawspeed deg/s, +lookup/
+        // +lookdown pitch at cl_pitchspeed, and +speed multiplies both by cl_anglespeedkey. Beyond restoring
+        // the classic Quake turn binds, a scripted constant-rate turn is the only strafe input a stock
+        // Xonotic client can reproduce exactly, which is what the cross-engine capture in
+        // docs/MOVEMENT-PHYSICS.md §10 is built on.
+        c.Register("cl_yawspeed", "140", save);
+        c.Register("cl_pitchspeed", "150", save);
+        c.Register("cl_anglespeedkey", "1.5", save);
         // (2026-07-26 wobble hunt) m_smoothdt: rescale the frame's mouse deltas onto the conditioned
         // display-interval timeline (the one cl_smoothdt gives translation), carry-ledgered so swipe
         // totals stay exactly 1:1. Kills the yaw channel's raw frame-time variance — the felt

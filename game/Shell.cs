@@ -115,6 +115,19 @@ public partial class Shell : Node
     /// <summary>Apply any <c>--cvar NAME VALUE</c> command-line overrides into the shared store (repeatable; each
     /// <c>--cvar</c> token consumes the next two args). For test/automation/A-B runs that need to pin a cvar at
     /// boot — e.g. <c>vid_vsync</c> / <c>cl_frameprofiler</c> — without touching a config file.</summary>
+    /// <summary>
+    /// Names pinned by <c>--cvar</c> this launch, with the value each was pinned to. The listen server
+    /// consults this when it runs on a PRIVATE cvar store (<c>sv_threaded 1</c>, the default for a windowed
+    /// host): that store is built from the cfg tree and only receives shared-store overrides for cvars it
+    /// already knows (<c>CvarService.BackfillModified</c> requires <c>HasVar</c>), so a <c>--cvar</c> pin of
+    /// anything the server hasn't registered was silently dropped — the pin appeared to work (it IS in the
+    /// shared store, and the console prints it) while the simulation never saw it. Headless hosts run the
+    /// unified store and were unaffected, which is why this survived: every automated A/B ran headless.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> PinnedCvars => _pinnedCvars;
+    private static readonly Dictionary<string, string> _pinnedCvars =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private static void ApplyCvarOverrides()
     {
         string[] args = OS.GetCmdlineArgs();
@@ -123,6 +136,7 @@ public partial class Shell : Node
             if (args[i] != "--cvar")
                 continue;
             MenuState.Cvars.Set(args[i + 1], args[i + 2]);
+            _pinnedCvars[args[i + 1]] = args[i + 2];
             VortexArena.Common.Diagnostics.Log.Info($"[shell] --cvar {args[i + 1]} = \"{args[i + 2]}\"");
             i += 2;
         }

@@ -141,11 +141,55 @@ public sealed class PlayerPhysics : IPlayerPhysics
     /// </summary>
     public static System.Func<Entity, bool>? RoundMoveForbidden { get; set; }
 
+    /// <summary>
+    /// QC <c>sys_phys_land</c> (ecs/systems/sv_physics.qc:119-128) behind <c>autocvar_speedmeter</c>: on the tick
+    /// a player lands, print its velocity. Base emits this from the <c>phys_land</c> event and logs
+    /// <c>"landing velocity: %v (abs: %f)"</c> at LOG_TRACE (so it needs <c>developer 1</c>). The port has no
+    /// event bus in this headless driver, so the host wires the console sink here — same seam as
+    /// <see cref="SpecialCommandGiveAll"/>. Null on the client-prediction path and in unit tests.
+    ///
+    /// <para>This is the capture channel for the cross-engine strafe comparison
+    /// (docs/MOVEMENT-PHYSICS.md §10): both engines print one parseable landing-velocity line per run, which
+    /// tools/strafe-compare.py reads. NOTE the emit point matters — under held-jump autohop the ground branch
+    /// never runs (CheckPlayerJump re-jumps and clears onground before branch selection), so neither engine
+    /// prints during a continuous bunnyhop; the line appears on the first landing AFTER jump is released.</para>
+    /// </summary>
+    public static System.Action<string>? SpeedMeterPrint { get; set; }
+
+    /// <summary>
+    /// Per-tick movement recorder, gated on <c>sv_movelog</c> (0 = off, the default; nothing is emitted and
+    /// the branch is one cvar read). Prints ONE line per physics tick with the exact state and input that
+    /// tick consumed, in the same field order as the Xonotic-side QC instrumentation, so a human play
+    /// session in either engine produces directly comparable data:
+    /// <c>VXTICK t=.. dt=.. yaw=.. mv=x y z vel=x y z og=0|1</c>.
+    ///
+    /// <para>This exists because the strafe cycle is decided by the per-tick yaw stream (a smooth ramp and a
+    /// held/quantized staircase describing the SAME mouse motion settle at different speeds — measured
+    /// 801 vs 676 u/s, docs/MOVEMENT-PHYSICS.md §11.7), and only a real human capture can say which one
+    /// human input actually produces in each engine. The host wires the sink (server console).</para>
+    /// </summary>
+    public static System.Action<string>? MoveLogPrint { get; set; }
+
     public void Move(Entity player, IMovementInput input)
     {
         float dt = input.FrameTime;
         if (dt <= 0f)
             return;
+
+        // AUTHORITATIVE ticks only. Move() also runs for every client-prediction replay, which re-simulates
+        // the whole unacked window each render frame — a 81 s capture logged 45,728 lines for 5,142 real
+        // ticks (~9x), and the raw rate read as "567 Hz physics" until the duplicates were spotted. The
+        // predicted leg carries input.Predicted, so gating on it makes the log authoritative by construction
+        // instead of relying on de-duplicating timestamps afterwards.
+        if (MoveLogPrint is not null
+            && Api.Services is not null && Api.Cvars.GetFloat("sv_movelog") != 0f)
+        {
+            Vector3 mv = input.MoveValues, pv = player.Velocity, va = input.ViewAngles;
+            MoveLogPrint(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "VXTICK t={0:F6} dt={1:F6} yaw={2:F6} mv={3:F1} {4:F1} {5:F1} vel={6:F4} {7:F4} {8:F4} og={9} pred={10}",
+                Now(), dt, va.Y, mv.X, mv.Y, mv.Z, pv.X, pv.Y, pv.Z,
+                (player.Flags & EntFlags.OnGround) != 0 ? 1 : 0, input.Predicted ? 1 : 0));
+        }
 
         // ----- dead players don't move (QC PlayerThink bails on IS_DEAD before PM_Main) -----
         // The authoritative server already gates this (GameWorld.OnClientMove runs DeadPlayerThink and returns
@@ -275,6 +319,10 @@ public sealed class PlayerPhysics : IPlayerPhysics
         //       the PlayerPhysics hook runs; the headless sim has no usercmd edict, so bridge them here, just before
         //       the hook fires. Write the RAW input.MoveValues (not the frozen/typing-clamped `move` local) so a
         //       frozen-dodge (sv_dodging_frozen) — which Base detects off the raw PHYS_CS movement — can still fire. -----
+        // Previous tick's view yaw, captured before the input bridge overwrites it. Used by the
+        // sv_landing_yaw_advance prototype below to estimate the current view rotation rate (deg/tick).
+        float prevViewYaw = player.ViewAngles.Y;
+
         player.MovementForward = input.MoveValues.X;
         player.MovementRight = input.MoveValues.Y;
         player.ButtonCrouch = input.ButtonCrouch;
@@ -361,6 +409,10 @@ public sealed class PlayerPhysics : IPlayerPhysics
         // ----- build wishdir basis (2D yaw-only for ground/air; full angles for water/ladder/jetpack) ---
         Vector3 viewAngles = input.ViewAngles;
 
+        // Was the player grounded at tick entry? Read BEFORE CheckPlayerJump, whose PlayerJump clears the
+        // flag on an autohop rejump — the sv_landing_yaw_advance prototype needs the entry state.
+        bool entryOnGround = (player.Flags & EntFlags.OnGround) != 0;
+
         // ----- jump / jetpack activation (QC CheckPlayerJump -> PlayerJump) -----
         // Must run before friction/accel, as in PM_Main. Returns whether the jetpack thrust is active.
         // QC physics.qc:86-96 calls CheckPlayerJump ONLY inside `if (IS_PLAYER(this))`, so a spectator/observer
@@ -374,6 +426,26 @@ public sealed class PlayerPhysics : IPlayerPhysics
 
         // ----- determine onground -----
         bool onground = DetermineOnGround(player, mp);
+
+        // ----- PROTOTYPE (docs/MOVEMENT-PHYSICS.md §11.6): sv_landing_yaw_advance -----
+        // Measured on real Xonotic (scripted bot, eggandbacon): across a bunnyhop landing, its movement
+        // tick runs with a view yaw an INTEGER number of input frames AHEAD of the contiguous stream (+2
+        // frames at 80 deg/s sweep, +3 at 100/120; fit residual 0.0000 over 31 hops). The port's strict
+        // 1:1 input:tick model never does this, so its velocity heading lags into a wider strafe cycle
+        // (~86 deg lead vs Xonotic's ~80) with more speed and wider arcs — the reported understeer.
+        //
+        // The rule here: on the autohop REJUMP tick (entered grounded, PlayerJump fired this tick), advance
+        // the yaw used FOR THIS TICK'S MOVEMENT by N ticks of the current view rotation rate. The stored
+        // view/aim angles are untouched — this only mirrors "the physics consumed queued view rotation
+        // across the landing". Default 0 = OFF (shipped behavior unchanged; the Xonotic-side constant is
+        // scheduling-dependent, so this stays a prototype until the human-input capture confirms it).
+        if (entryOnGround && !onground
+            && Api.Services is not null
+            && Api.Cvars.GetFloat("sv_landing_yaw_advance") is float yawAdvTicks && yawAdvTicks != 0f)
+        {
+            float dyaw = QMath.AngleDelta(input.ViewAngles.Y - prevViewYaw);
+            viewAngles.Y += yawAdvTicks * dyaw;
+        }
 
         // ===== branch selection (QC sys_phys_update) =====
         if ((player.Flags & EntFlags.WaterJump) != 0)
@@ -428,6 +500,16 @@ public sealed class PlayerPhysics : IPlayerPhysics
         }
         else if (onground && (!player.OnSlick || !SlickApplyGravity))
         {
+            // QC physics.qc:150-152: the ground branch's landing edge is where Base emits phys_land, whose
+            // subscriber prints the landing velocity under `speedmeter`. Emit at the same point (before the
+            // branch runs friction) so both engines report the SAME instant's velocity.
+            if (!player.WasOnGround && SpeedMeterPrint is not null
+                && Api.Services is not null && Api.Cvars.GetFloat("speedmeter") != 0f)
+            {
+                Vector3 lv = player.Velocity;
+                SpeedMeterPrint(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "landing velocity: '{0:F6} {1:F6} {2:F6}' (abs: {3:F6})", lv.X, lv.Y, lv.Z, lv.Length()));
+            }
             GroundBranch(player, mp, dt, viewAngles, move);
             WalkMove(player, mp, dt, applyGravity: true, viewAngles);
         }

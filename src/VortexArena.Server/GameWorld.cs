@@ -376,6 +376,37 @@ public sealed class GameWorld
     /// <summary>Refresh the shared zero input's FrameTime to the live tick before a tick consumes it.</summary>
     public void RefreshZeroInput() => ZeroInput.FrameTime = Simulation.TickSeconds;
 
+    // sv_movelog sink: append one recorder line to the movelog file (see the MoveLogPrint wiring in the
+    // boot sequence). Opened lazily on the first logged tick, AutoFlush so a hard quit (alt-F4, crash)
+    // still leaves every tick that was recorded. Any IO failure disables the sink rather than throwing
+    // inside the physics tick — a broken log must never take the game down.
+    private static System.IO.StreamWriter? _moveLogWriter;
+    private static bool _moveLogFailed;
+
+    private static void MoveLogWrite(string line)
+    {
+        if (_moveLogFailed)
+            return;
+        try
+        {
+            if (_moveLogWriter is null)
+            {
+                string path = Api.Services is not null ? Api.Cvars.GetString("sv_movelog_file") : "";
+                if (string.IsNullOrWhiteSpace(path))
+                    path = "movelog.txt";
+                _moveLogWriter = new System.IO.StreamWriter(path, append: false) { AutoFlush = true };
+                VortexArena.Common.Diagnostics.Log.Info(
+                    $"[sv_movelog] recording to {System.IO.Path.GetFullPath(path)}");
+            }
+            _moveLogWriter.WriteLine(line);
+        }
+        catch (System.Exception ex)
+        {
+            _moveLogFailed = true;
+            VortexArena.Common.Diagnostics.Log.Warn($"[sv_movelog] disabled: {ex.Message}");
+        }
+    }
+
     /// <summary>
     /// Per-frame (variable-dt) mode: the per-command movement batch for this player THIS tick — one entry per
     /// client render frame, each carrying its own dt — or null for the legacy one-command-per-tick path. When
@@ -1310,6 +1341,31 @@ public sealed class GameWorld
         // gate itself (QC SpecialCommand's `if (autocvar_sv_cheats || this.maycheat)` + CheatImpulse), so the
         // seam can hand it the raw player.
         VortexArena.Common.Physics.PlayerPhysics.SpecialCommandGiveAll = p => Cheats.GiveAll(p);
+
+        // QC sys_phys_land behind `speedmeter` (sv_physics.qc:119-128): print the landing velocity of every
+        // real landing to the server console, matching Base's LOG_TRACEF text exactly so ONE parser reads both
+        // engines' logs (tools/strafe-compare.py, docs/MOVEMENT-PHYSICS.md §10). Base logs at LOG_TRACE, i.e.
+        // only with `developer 1`; mirror that gate so `speedmeter 1` alone stays silent, as it does upstream.
+        VortexArena.Common.Physics.PlayerPhysics.SpeedMeterPrint = line =>
+        {
+            if (Cvars.Float("developer") != 0f)
+                Commands.ChatConsole?.Invoke(line);
+        };
+
+        // sv_movelog: per-tick movement recorder for cross-engine input-stream comparison (see
+        // PlayerPhysics.MoveLogPrint). Unlike speedmeter this is NOT developer-gated — a capture session
+        // wants the log without the rest of the developer spam.
+        //
+        // Routed through Log.Info, NOT Commands.ChatConsole: ChatConsole is only wired where the console
+        // command surface is built, which a plain `--host` launch does not reach — a capture session
+        // produced a 39 KB log with zero recorder lines because of exactly that. Log.Info is installed
+        // for the whole process and is what every other subsystem line in that log came from.
+        //
+        // It writes to its OWN FILE rather than stdout: a capture session depends on the operator's shell
+        // redirecting correctly, and two sessions were lost to batch-file quoting before this. The path is
+        // sv_movelog_file (default "movelog.txt", relative to the process working directory); the file is
+        // opened on the first logged tick and flushed per line so a hard quit still leaves usable data.
+        VortexArena.Common.Physics.PlayerPhysics.MoveLogPrint = MoveLogWrite;
 
         // Anticheat: ping provider for the snap-aim suppression window. The default is 0 (LAN/bot/headless host);
         // a net host (ServerNet) overrides this with the real per-client smoothed ping.

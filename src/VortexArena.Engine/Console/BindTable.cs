@@ -32,6 +32,15 @@ public static class BindTable
     // held-button state (cl_input.c kbutton_t), set/cleared by +/- commands.
     private static bool _fwd, _back, _left, _right, _up, _down, _attack, _attack2, _zoom, _use, _hook;
 
+    // Keyboard TURN buttons + the two modifier buttons, all from cl_input.c's kbutton_t set.
+    // DP separates STRAFING from TURNING: +moveleft/+moveright always strafe, while +left/+right TURN the
+    // view at cl_yawspeed deg/s (CL_AdjustAngles, cl_input.c:441-445) — unless +strafe is held, which
+    // reroutes them to sidemove (cl_input.c:500-504). The port previously aliased +left/+right straight onto
+    // strafe, so the classic Quake turn binds silently strafed instead of turning and cl_yawspeed did not
+    // exist. Beyond bind parity this is what lets a scripted constant-rate turn run identically here and in
+    // Base, which is the cross-engine strafe capture in docs/MOVEMENT-PHYSICS.md §10.
+    private static bool _turnLeft, _turnRight, _lookUp, _lookDown, _strafeMod, _speedMod;
+
     /// <summary>True while the scoreboard key (<c>+showscores</c>) is held — read by the HUD, not the sampler.</summary>
     public static bool ShowScores { get; private set; }
 
@@ -140,6 +149,7 @@ public static class BindTable
     {
         _fwd = _back = _left = _right = _up = _down = false;
         _attack = _attack2 = _zoom = _use = _hook = false;
+        _turnLeft = _turnRight = _lookUp = _lookDown = _strafeMod = _speedMod = false;
         ShowScores = false;
     }
 
@@ -168,9 +178,32 @@ public static class BindTable
         {
             "forward" or "back" or "backward" or "moveleft" or "left" or "moveright" or "right"
                 or "jump" or "moveup" or "crouch" or "movedown" or "attack" or "fire" or "attack2"
-                or "altattack" or "fire2" or "zoom" or "use" or "hook" or "showscores" or "score" => true,
+                or "altattack" or "fire2" or "zoom" or "use" or "hook" or "showscores" or "score"
+                or "lookup" or "lookdown" or "strafe" or "speed" => true,
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// Run a <c>+command</c>/<c>-command</c> typed at the CONSOLE (or reached through an alias), as opposed to
+    /// pressed on a key. In DarkPlaces every kbutton is registered with <c>Cmd_AddCommand</c>, so
+    /// <c>+moveright</c> is a console command in its own right and alias-driven movement scripts work —
+    /// including ones the port already ships (<c>data/core.pk3dir/input-tuba.cfg</c> builds its binds out of
+    /// <c>alias +tuba_l "+moveleft; ..."</c>). Without this the port only reached these through
+    /// <see cref="HandleBind"/>, so any such alias silently did nothing.
+    ///
+    /// <para>It is also what lets the scripted constant-rate strafe capture run identically in both engines
+    /// (docs/MOVEMENT-PHYSICS.md §10.4).</para>
+    /// </summary>
+    /// <returns>true when <paramref name="command"/> was a recognised held button and was applied.</returns>
+    public static bool RunButtonCommand(string command)
+    {
+        if (string.IsNullOrEmpty(command) || (command[0] != '+' && command[0] != '-'))
+            return false;
+        if (!IsHeldButton(command))
+            return false;
+        SetButton(command, command[0] == '+');
+        return true;
     }
 
     private static void SetButton(string command, bool state)
@@ -181,8 +214,18 @@ public static class BindTable
         {
             case "forward": _fwd = state; break;
             case "back": case "backward": _back = state; break;
-            case "moveleft": case "left": _left = state; break;
-            case "moveright": case "right": _right = state; break;
+            // DP kbutton split (cl_input.c): +moveleft/+moveright are the STRAFE keys; +left/+right are the
+            // TURN keys, which only contribute to sidemove while +strafe is held (:500-504) and otherwise
+            // drive the view yaw at cl_yawspeed (CL_AdjustAngles :441-445). Keep them on distinct latches so
+            // Side (below) can apply the +strafe rule and the host can integrate the turn.
+            case "moveleft": _left = state; break;
+            case "moveright": _right = state; break;
+            case "left": _turnLeft = state; break;
+            case "right": _turnRight = state; break;
+            case "lookup": _lookUp = state; break;
+            case "lookdown": _lookDown = state; break;
+            case "strafe": _strafeMod = state; break;
+            case "speed": _speedMod = state; break;
             case "jump": case "moveup": _up = state; break;
             case "crouch": case "movedown": _down = state; break;
             case "attack": case "fire": _attack = state; break;
@@ -204,7 +247,35 @@ public static class BindTable
     public static float Forward => (_fwd ? 1f : 0f) - (_back ? 1f : 0f);
 
     /// <summary>Side axis: +moveright minus +moveleft.</summary>
-    public static float Side => (_right ? 1f : 0f) - (_left ? 1f : 0f);
+    /// DP cl_input.c:500-507 — the strafe keys always contribute; the TURN keys (+left/+right) fold in only
+    /// while <c>+strafe</c> is held. Clamped so holding e.g. +moveright and +right under +strafe still reads 1.
+    public static float Side
+    {
+        get
+        {
+            float s = (_right ? 1f : 0f) - (_left ? 1f : 0f);
+            if (_strafeMod)
+                s += (_turnRight ? 1f : 0f) - (_turnLeft ? 1f : 0f);
+            return s < -1f ? -1f : s > 1f ? 1f : s;
+        }
+    }
+
+    /// <summary>DP <c>+left</c>/<c>+right</c> as a signed keyboard-turn axis: +1 = turn LEFT (yaw increasing,
+    /// matching <c>viewangles[YAW] += ...in_left</c>), -1 = turn right, 0 while <c>+strafe</c> reroutes them to
+    /// <see cref="Side"/>. The host multiplies this by <c>cl_yawspeed</c> (× <c>cl_anglespeedkey</c> when
+    /// <see cref="SpeedMod"/>) and the real frame time — see <c>CL_AdjustAngles</c>.</summary>
+    public static float TurnLeftAxis => _strafeMod ? 0f : (_turnLeft ? 1f : 0f) - (_turnRight ? 1f : 0f);
+
+    /// <summary>DP <c>+lookup</c>/<c>+lookdown</c> as a signed keyboard-pitch axis: +1 = look UP (pitch
+    /// decreasing, matching <c>viewangles[PITCH] -= ...in_lookup</c>). Scaled by <c>cl_pitchspeed</c>.</summary>
+    public static float LookUpAxis => (_lookUp ? 1f : 0f) - (_lookDown ? 1f : 0f);
+
+    /// <summary>True while <c>+speed</c> is held: multiplies keyboard turn rate by <c>cl_anglespeedkey</c>
+    /// (and, in DP, keyboard move speed by <c>cl_movespeedkey</c>; the port's move axes are already ±1).</summary>
+    public static bool SpeedMod => _speedMod;
+
+    /// <summary>True while <c>+strafe</c> is held (reroutes <c>+left</c>/<c>+right</c> from turning to strafing).</summary>
+    public static bool StrafeMod => _strafeMod;
 
     /// <summary>Up axis: +jump minus +crouch (jump/swim-up vs crouch/down).</summary>
     public static float Up => (_up ? 1f : 0f) - (_down ? 1f : 0f);

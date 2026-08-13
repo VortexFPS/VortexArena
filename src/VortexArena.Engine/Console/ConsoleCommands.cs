@@ -106,6 +106,25 @@ public sealed class ConsoleCommands
         _interp.RegisterCommand("clear", _ => _clear?.Invoke(),
             "clear the console scrollback");
 
+        // DP registers every kbutton with Cmd_AddCommand, so `+moveright` / `-jump` are console commands and
+        // not just bind targets. That is what makes alias-driven movement scripts work — including the ones
+        // this repo already ships (input-tuba.cfg is built entirely out of `alias +tuba_l "+moveleft; ..."`),
+        // and the scripted strafe capture in docs/MOVEMENT-PHYSICS.md §10.4. Register the pair for each held
+        // button; BindTable.RunButtonCommand owns the name->latch mapping so the two stay in lockstep.
+        foreach (string b in new[]
+                 {
+                     "forward", "back", "moveleft", "moveright", "left", "right", "jump", "moveup",
+                     "crouch", "movedown", "attack", "attack2", "zoom", "use", "hook", "showscores",
+                     "lookup", "lookdown", "strafe", "speed",
+                 })
+        {
+            string plus = "+" + b, minus = "-" + b;
+            _interp.RegisterCommand(plus, _ => BindTable.RunButtonCommand(plus),
+                $"hold the {b} button (release with {minus})");
+            _interp.RegisterCommand(minus, _ => BindTable.RunButtonCommand(minus),
+                $"release the {b} button");
+        }
+
         _interp.RegisterCommand("toggle", CmdToggle,
             "flip a cvar between 0 and 1, or step it through the listed values: toggle <cvar> [value1 value2 ...]");
         _interp.RegisterCommand("cycle", CmdToggle, // cycle <cvar> v1 v2 … — same advance-through-values logic

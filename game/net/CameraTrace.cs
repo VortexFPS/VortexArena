@@ -87,8 +87,32 @@ public static class CameraTrace
                 foreach (JsonProperty p in cv.EnumerateObject())
                     _cvars[p.Name] = p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() ?? "" : p.Value.ToString();
 
+            // Optional fixed start state: "start": {"x":..,"y":..,"z":..}. Without it the capture begins
+            // wherever the map's spawn selection put the player, which makes a cross-engine comparison
+            // depend on spawn choice rather than on physics. With it, both engines can be pinned to the
+            // SAME point in the SAME map before the scripted input begins. Applied once, on the first
+            // scripted frame, by NetGame (see StartOrigin).
+            if (r.TryGetProperty("start", out var st) && st.ValueKind == JsonValueKind.Object)
+            {
+                float SF(string k) => st.TryGetProperty(k, out var v) ? (float)v.GetDouble() : 0f;
+                StartOrigin = new NVec3(SF("x"), SF("y"), SF("z"));
+                // "frame": which scripted frame to apply the pin on (default 0). Pinning at frame 0 is
+                // USELESS on a listen server: the scripted input starts before the real spawn placement,
+                // which then overwrites the pin — measured as the player quietly running the whole capture
+                // from its map spawn instead. Scenarios set this to shortly before the action begins, when
+                // the spawn dust has settled.
+                StartFrame = st.TryGetProperty("frame", out var sf) ? sf.GetInt32() : 0;
+                HasStartOrigin = true;
+            }
+            else
+            {
+                HasStartOrigin = false;
+                StartFrame = 0;
+            }
+
             _inputs = list.ToArray();
             _cursor = 0;
+            _startApplied = false;
             _cvarsApplied = false;
             _frames.Clear();
             _finished = false;
@@ -110,6 +134,29 @@ public static class CameraTrace
         int I(string k) => e.TryGetProperty(k, out var v) ? v.GetInt32() : 0;
         // ViewAngles: Quake (pitch=X, yaw=Y, roll=Z); scenario gives yaw/pitch/roll.
         return new InputSpec(F("f"), F("s"), F("u"), new NVec3(F("pitch"), F("yaw"), F("roll")), I("buttons"));
+    }
+
+    /// <summary>Scenario "start" origin (Quake space): pin the player here before the first scripted input, so a
+    /// capture does not depend on which spawn point the map picked. See <see cref="HasStartOrigin"/>.</summary>
+    public static NVec3 StartOrigin { get; private set; }
+
+    /// <summary>True when the scenario carried a "start" block.</summary>
+    public static bool HasStartOrigin { get; private set; }
+
+    /// <summary>Scripted frame index the pin fires on (scenario "start.frame", default 0).</summary>
+    public static int StartFrame { get; private set; }
+
+    private static bool _startApplied;
+
+    /// <summary>True exactly once, when the input cursor reaches <see cref="StartFrame"/> and the player still
+    /// needs teleporting to <see cref="StartOrigin"/>. The host does the actual move (it owns the entity +
+    /// collision world). Called after <see cref="TryNextInput"/>, so <c>_cursor - 1</c> is the frame just consumed.</summary>
+    public static bool ConsumeStartTeleport()
+    {
+        if (!HasStartOrigin || _startApplied || _cursor - 1 < StartFrame)
+            return false;
+        _startApplied = true;
+        return true;
     }
 
     /// <summary>Consume the next scripted input (called from <see cref="NetGame.SampleInput"/> when armed + spawned).

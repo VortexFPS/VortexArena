@@ -952,6 +952,23 @@ public sealed partial class NetGame : Node3D
         _serverWorld.Services.Cvars.Register("sv_dedicated_fps", "0");
         ApplyDedicatedLoopCap();
 
+        // --cvar pins -> the server's PRIVATE store. Cvars are read from the AMBIENT store inside the sim,
+        // and with sv_threaded 1 (the default for a windowed host) the sim runs on the worker with the
+        // server store installed. A --cvar pin lands in the SHARED store, and the normal bridge
+        // (BackfillModified, below) only carries cvars the server store already Has — so pinning anything
+        // the server hasn't registered silently did nothing while still printing as set. That cost a
+        // capture session (sv_movelog recorded fine headless, nothing windowed) and would equally void any
+        // `--cvar sv_*` A/B run on a windowed host. Force every pin across, registering it if needed, so a
+        // pin means the same thing on both drive models.
+        foreach (var pin in Shell.PinnedCvars)
+        {
+            // Register is a no-op for a name the store already knows, so this both creates the unknown ones
+            // and leaves existing registrations (with their flags/defaults) intact; the Set then applies the
+            // pinned value either way.
+            _serverWorld.Services.Cvars.Register(pin.Key, pin.Value);
+            _serverWorld.Services.Cvars.Set(pin.Key, pin.Value);
+        }
+
         // DS-6: rcon (DP srcon). rcon_password EMPTY (default) = rcon OFF — an operator opts in via server.cfg.
         // rcon_secure 1 = time+HMAC-MD4 (remote-safe default; 0 = plaintext localhost-only, 2 = challenge+HMAC).
         // These are operator secrets/policy, authored in server.cfg — no Save flag (never persisted to config.cfg).
@@ -4129,6 +4146,10 @@ public sealed partial class NetGame : Node3D
         // audited contract); dt = the conditioned display-interval estimate for m_smoothdt's yaw-channel
         // conditioning (see FlushMouseLook).
         FlushMouseLook(rawDt, dt);
+        // DP CL_AdjustAngles: the KEYBOARD half of view control (+left/+right/+lookup/+lookdown), integrated
+        // at the real frame time so the turn rate is a true deg/s independent of fps. Runs right after the
+        // mouse flush and before input sampling, matching cl_input.c where CL_AdjustAngles brackets IN_Move.
+        ApplyKeyboardTurn(rawDt);
 
         // slowmo / host_timescale: the CLIENT-side time accumulators (input cadence + render clock) scale by the
         // SAME factor the server applies to its sim (ServerNet.StepWorld → SimulationLoop.TimeScale), so the player's
@@ -7734,6 +7755,53 @@ public sealed partial class NetGame : Node3D
         _viewAngles.Y -= mx * sens * MYaw();
         _viewAngles.X += my * sens * MPitch();
         _viewAngles.X = Mathf.Clamp(_viewAngles.X, _pitchMinCv, _pitchMaxCv);
+    }
+
+    /// <summary>
+    /// DP <c>CL_AdjustAngles</c> (cl_input.c:431-472): the keyboard half of view control. <c>+left</c>/
+    /// <c>+right</c> turn the yaw at <c>cl_yawspeed</c> deg/s and <c>+lookup</c>/<c>+lookdown</c> pitch at
+    /// <c>cl_pitchspeed</c>, both scaled by <c>cl_anglespeedkey</c> while <c>+speed</c> is held and integrated
+    /// against the REAL frame time (<c>cl.realframetime</c>) so the resulting rate is a true deg/s at any fps.
+    /// <c>+strafe</c> reroutes <c>+left</c>/<c>+right</c> to sidemove instead, which <see cref="BindTable.Side"/>
+    /// handles; <see cref="BindTable.TurnLeftAxis"/> reads 0 then, so nothing turns here.
+    ///
+    /// <para>Gated by the same conditions as mouse-look (cursor captured, not at intermission) so a bound turn
+    /// key can't spin the view while the console or menu owns input. Pitch reuses the mouse path's
+    /// <c>in_pitch_min</c>/<c>in_pitch_max</c> clamp.</para>
+    /// </summary>
+    private void ApplyKeyboardTurn(float realFrameTime)
+    {
+        if (realFrameTime <= 0f || !GameplayInputActive || (_client?.MatchIntermission ?? false))
+            return;
+
+        float turn = BindTable.TurnLeftAxis;
+        float look = BindTable.LookUpAxis;
+        if (turn == 0f && look == 0f)
+            return;
+
+        // cl_input.c:436-439 — speed = realframetime, × cl_anglespeedkey while +speed is held.
+        float speed = realFrameTime;
+        if (BindTable.SpeedMod)
+            speed *= CvarOr("cl_anglespeedkey", 1.5f);
+
+        if (turn != 0f)
+            _viewAngles.Y += speed * CvarOr("cl_yawspeed", 140f) * turn;
+        if (look != 0f)
+        {
+            _viewAngles.X -= speed * CvarOr("cl_pitchspeed", 150f) * look;
+            _viewAngles.X = Mathf.Clamp(_viewAngles.X, _pitchMinCv, _pitchMaxCv);
+        }
+    }
+
+    /// <summary>Read a float cvar, falling back to <paramref name="fallback"/> when the cvar store is not up
+    /// yet or the value is unset (0 is never a meaningful turn speed, so it reads as "unset" like the rest of
+    /// the client's cvar accessors).</summary>
+    private static float CvarOr(string name, float fallback)
+    {
+        if (Api.Services is null)
+            return fallback;
+        float v = Api.Cvars.GetFloat(name);
+        return v != 0f ? v : fallback;
     }
 
     /// <summary>
@@ -12049,6 +12117,33 @@ public sealed partial class NetGame : Node3D
         // --camera-trace was passed; falls through to real input once the script is exhausted.
         if (CameraTrace.Active && _carrier is not null && CameraTrace.TryNextInput(out CameraTrace.InputSpec spec))
         {
+            // Fixed start state (scenario "start" block): pin the player at a chosen point before the first
+            // scripted input, so a capture measures PHYSICS rather than which spawn point the map happened to
+            // pick. Both the predicted carrier and the authoritative server entity are moved, and the
+            // prediction baseline is re-seeded, so the reconciler doesn't immediately drag the player back.
+            if (CameraTrace.ConsumeStartTeleport())
+            {
+                NVec3 s = CameraTrace.StartOrigin;
+                // Move BOTH legs: the authoritative server entity (so the snapshot agrees and the reconciler
+                // has nothing to correct) and the prediction carrier (so this frame already predicts from the
+                // new spot). Zero the velocity so the run starts from rest exactly like the Xonotic bot does.
+                if (LocalServerPlayer is { } sp)
+                {
+                    VortexArena.Common.Diagnostics.Log.Info(
+                        $"[camera-trace] pin: server player at "
+                        + $"{sp.Origin.X:F1} {sp.Origin.Y:F1} {sp.Origin.Z:F1} -> {s.X:F1} {s.Y:F1} {s.Z:F1}");
+                    sp.Origin = s;
+                    sp.Velocity = NVec3.Zero;
+                }
+                else
+                {
+                    VortexArena.Common.Diagnostics.Log.Info("[camera-trace] pin: LocalServerPlayer is NULL — pin has no authority target");
+                }
+                _carrier.Origin = s;
+                _carrier.Velocity = NVec3.Zero;
+                VortexArena.Common.Diagnostics.Log.Info($"[camera-trace] start pinned to {s.X:F1} {s.Y:F1} {s.Z:F1}");
+            }
+
             _viewAngles = spec.ViewAngles;
             return new InputCommand
             {

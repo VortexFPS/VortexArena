@@ -50,8 +50,31 @@ except ImportError:
     sys.exit("torch is not installed:  pip install torch numpy")
 
 from va_neural import layout
-from va_neural.env import EnvConfig, VectorEnv
+from va_neural.env import EnvConfig, VectorEnv, find_enclosing_checkout
 from va_neural.model import Policy, RunningNorm, export_weights
+
+# Content root for the real-map stages. Overridable so this file is not welded to one repository layout.
+DATA_ENV_VAR = "VX_DATA_ROOT"
+
+
+def _default_data_root() -> str:
+    """Where the shipped maps live, when --data does not say.
+
+    Resolved the same way as the env host (va_neural/env.py): an environment variable, then a checkout
+    identified by a marker file. This used to be ``Path(__file__).resolve().parents[2] / "data"`` in three
+    separate places — a fixed depth, which is an assumption about where this file lives rather than a
+    lookup, and which does not fail when the assumption stops holding: it returns a path two levels above
+    wherever the trainer ended up.
+
+    Returns "" when there is no content root, which is already a supported state: the generated stages do
+    not read maps and TrainingEnv falls back to generated geometry without one. The stages that do need
+    maps report the absence themselves, so this stays a quiet default rather than a hard failure.
+    """
+    value = os.environ.get(DATA_ENV_VAR, "").strip()
+    if value:
+        return str(Path(value).expanduser())
+    root = find_enclosing_checkout(Path(__file__))
+    return str(root / "data") if root is not None else ""
 
 
 @dataclass
@@ -648,7 +671,8 @@ def main() -> int:
                     help="episodes per eval pass. Every eval scores the same courses, so this is what "
                          "makes two evals comparable")
     ap.add_argument("--data", type=Path, default=None,
-                    help="content root for stage 6 (default: <repo>/data)")
+                    help=f"content root for the real-map stages (default: ${DATA_ENV_VAR}, else the data/ "
+                         f"directory of an enclosing VortexArena checkout, else none)")
     ap.add_argument("--maps", type=str, default="",
                     help="stage 6 map list, comma separated; empty means every installed map. "
                          "The held-out eval split is excluded either way.")
@@ -924,7 +948,7 @@ def train_stage(policy, norm, optimizer, hyper: Hyper, args, stage: int, budget:
         weapon_chance=0.0 if stage <= 2 or focused_movement else 1.0,
         permit_flip_chance=0.0 if stage <= 3 or focused_movement else 0.35,
         aim_constraint_chance=0.0 if stage <= 2 or focused_movement else 0.4,
-        data_root=str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data"),
+        data_root=str(args.data) if args.data else _default_data_root(),
         map_list=args.maps,
     )
     remotes = VectorEnv.parse_remotes(args.remote)
@@ -1906,7 +1930,7 @@ def evaluate(policy, norm, run_dir: Path, stage: int, steps: int, args,
     # preserving it -- sigma ~2.5 on one run, and about half that across four.
     episode_counts = _shard_episode_counts(args.eval_episodes, getattr(args, "eval_shards", 4))
     shards = len(episode_counts)
-    data_root = str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data")
+    data_root = str(args.data) if args.data else _default_data_root()
 
     def shard_cmd(i: int) -> list[str]:
         c = [shutil.which("dotnet") or "dotnet", str(dll),
@@ -2079,7 +2103,7 @@ def evaluate_scripted(stage: int, steps: int, args) -> float:
            # baseline for this gate.
            "--agents", str(EvalAgents), "--ticks", str(args.ticks),
            "--stage", str(stage), "--seed", str(args.seed + 9001), "--scripted"]
-    cmd += ["--data", str(args.data) if args.data else str(Path(__file__).resolve().parents[2] / "data")]
+    cmd += ["--data", str(args.data) if args.data else _default_data_root()]
     if args.maps:
         cmd += ["--maps", args.maps]
     try:

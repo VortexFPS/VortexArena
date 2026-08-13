@@ -17,6 +17,7 @@ torch = pytest.importorskip("torch", reason="torch is only needed for training")
 NEURAL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(NEURAL))
 
+import train as train_module  # noqa: E402
 from train import (ReturnScale, _collect_eval_process_files, _collect_eval_processes, _eval_host_args,
                    _legacy_resume_state, _requested_budget, _shard_episode_counts,
                    gae, save)  # noqa: E402
@@ -144,3 +145,38 @@ def test_budget_control_only_allows_increases(tmp_path):
     assert _requested_budget(tmp_path, 70_000_000) == 70_000_000
     (tmp_path / "control.json").write_text("not json", encoding="utf-8")
     assert _requested_budget(tmp_path, 70_000_000) == 70_000_000
+
+
+# --- the content root, which used to be a fixed number of parent directories ---------------------------
+#
+# ``Path(__file__).resolve().parents[2] / "data"`` appeared in three places and meant "the VortexArena root
+# is exactly two levels above train.py". Moving the trainer into its own repository turns that into a path
+# two levels ABOVE the new repo, silently, with no error to read.
+
+def test_data_root_prefers_the_environment_variable(monkeypatch, tmp_path):
+    monkeypatch.setenv(train_module.DATA_ENV_VAR, str(tmp_path / "content"))
+    assert train_module._default_data_root() == str(tmp_path / "content")
+
+
+def test_data_root_falls_back_to_an_enclosing_checkout(monkeypatch, tmp_path):
+    monkeypatch.delenv(train_module.DATA_ENV_VAR, raising=False)
+    root = tmp_path / "checkout"
+    root.mkdir()
+    monkeypatch.setattr(train_module, "find_enclosing_checkout", lambda start=None: root)
+    assert train_module._default_data_root() == str(root / "data")
+
+
+def test_data_root_is_empty_when_there_is_no_checkout(monkeypatch):
+    """The extracted-repository case. Empty is a supported state: generated stages need no maps, and the
+    stages that do need them report the absence themselves."""
+    monkeypatch.delenv(train_module.DATA_ENV_VAR, raising=False)
+    monkeypatch.setattr(train_module, "find_enclosing_checkout", lambda start=None: None)
+    assert train_module._default_data_root() == ""
+
+
+def test_no_fixed_depth_data_root_remains_in_train_py():
+    """A regression guard on the pattern itself, not just on one call site."""
+    source = (NEURAL / "train.py").read_text(encoding="utf-8")
+    code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
+    # The docstring explains the old pattern by quoting it, so match the executable form only.
+    assert 'parents[2] / "data")' not in code.replace('``Path(__file__).resolve().parents[2] / "data"``', "")

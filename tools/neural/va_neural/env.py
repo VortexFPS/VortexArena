@@ -143,21 +143,30 @@ def _host_from_config() -> Path | None:
     return None
 
 
-def _host_from_enclosing_checkout(start: Path | None = None) -> Path | None:
-    """The build output of a VortexArena checkout this file happens to sit inside, if it does.
+CHECKOUT_MARKERS = ("VortexArena.sln", "VortexArena.csproj")
+
+
+def find_enclosing_checkout(start: Path | None = None) -> Path | None:
+    """The root of a VortexArena checkout above ``start``, or None if there is not one.
 
     Identified by a marker file rather than by counting parents. That difference is the point: a wrong
-    guess returns None here and the caller prints every real option, instead of handing back a path that
-    does not exist and blaming the build. It stops firing on its own once the trainer lives in its own
+    guess returns None and lets the caller say what it actually needs, instead of handing back a path that
+    does not exist and blaming the build. It stops finding anything once the trainer lives in its own
     repository, which is what makes this safe to keep through the extraction.
 
     ``start`` exists so the search can be tested at several depths; it defaults to this file.
     """
     origin = (start or Path(__file__)).resolve()
     for parent in origin.parents:
-        if (parent / "VortexArena.sln").exists() or (parent / "VortexArena.csproj").exists():
-            return parent / _HOST_BUILD_OUTPUT
+        if any((parent / marker).exists() for marker in CHECKOUT_MARKERS):
+            return parent
     return None
+
+
+def _host_from_enclosing_checkout(start: Path | None = None) -> Path | None:
+    """The host build output inside an enclosing checkout, if this file still sits in one."""
+    root = find_enclosing_checkout(start)
+    return root / _HOST_BUILD_OUTPUT if root is not None else None
 
 
 def _default_host_binary() -> Path:

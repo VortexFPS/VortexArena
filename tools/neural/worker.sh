@@ -41,11 +41,43 @@ if [[ "$COUNT" -le 0 ]]; then
   echo "[worker] --count not given, using $COUNT (cores minus two)"
 fi
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-[[ -n "$DLL" ]] || DLL="$ROOT/tools/neural/VortexArena.NeuralHost/bin/Release/net8.0/va-neural-host.dll"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# The env host and the content root resolve the same way they do in va_neural/env.py and train.py: an
+# explicit flag, then an environment variable, then a VortexArena checkout identified by a MARKER FILE at
+# any depth.
+#
+# This used to be "$(dirname "$0")/../.." -- a fixed depth, which is an assumption about where this script
+# lives rather than a lookup. It does not fail when the assumption stops holding; it names a directory two
+# levels above wherever the script ended up, and the worker reports the host as "not built".
+CHECKOUT=""
+probe="$HERE"
+while :; do
+  if [[ -f "$probe/VortexArena.sln" || -f "$probe/VortexArena.csproj" ]]; then CHECKOUT="$probe"; break; fi
+  parent="$(dirname "$probe")"
+  [[ "$parent" == "$probe" ]] && break
+  probe="$parent"
+done
+
+[[ -n "$DLL" ]] || DLL="${VX_NEURAL_HOST:-}"
+if [[ -z "$DLL" && -n "$CHECKOUT" ]]; then
+  DLL="$CHECKOUT/tools/neural/VortexArena.NeuralHost/bin/Release/net8.0/va-neural-host.dll"
+fi
+[[ -n "$DLL" ]] || {
+  echo "[worker] cannot locate the env host. Pass --dll PATH, set VX_NEURAL_HOST, or run from inside a" >&2
+  echo "         VortexArena checkout built with: dotnet build tools/neural/VortexArena.NeuralHost -c Release" >&2
+  exit 1
+}
 [[ -f "$DLL" ]] || { echo "host not built: $DLL" >&2; exit 1; }
 
-LOGS="$ROOT/_scratch/worker"; mkdir -p "$LOGS"
+# Content root for the real-map stages. Empty is a supported state, not an error: the generated stages read
+# no maps, so a worker fleet serving only those needs no content at all.
+DATA="${VX_DATA_ROOT:-}"
+if [[ -z "$DATA" && -n "$CHECKOUT" ]]; then DATA="$CHECKOUT/data"; fi
+DATA_ARGS=()
+[[ -n "$DATA" ]] && DATA_ARGS=(--data "$DATA")
+
+LOGS="$HERE/_scratch/worker"; mkdir -p "$LOGS"
 
 # Only one launcher may own a port range.  Without this guard, two copies can
 # bind the same Linux ports (the host enables address reuse for quick respawns),
@@ -81,7 +113,7 @@ for (( i = 0; i < COUNT; i++ )); do
   # dotnet PID is written per slot so cleanup can reach the child the loop cannot.
   (
     while true; do
-      dotnet "$DLL" --port "$P" --bind "$BIND" --data "$ROOT/data" "${HOST_ARGS[@]:-}" \
+      dotnet "$DLL" --port "$P" --bind "$BIND" "${DATA_ARGS[@]}" "${HOST_ARGS[@]:-}" \
           > "$LOGS/host_$P.log" 2>&1 &
       CHILD=$!
       echo "$CHILD" > "$LOGS/host_$P.pid"

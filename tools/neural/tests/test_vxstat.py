@@ -131,3 +131,42 @@ def test_budget_shortcut_writes_atomic_increase_request(tmp_path):
     assert request["budget"] == 65_000_000
     assert request["requested_by"] == "vxstat"
     assert "+5M" in message
+
+
+# --- where runs are found -------------------------------------------------------------------------------
+#
+# This was four os.path.dirname calls from the script: correct only while vxstat sat at tools/neural/, and
+# two levels too high once it moved to a repository root. The failure is silent -- process discovery still
+# finds the running job while every state lookup goes somewhere empty, so a healthy run reports as
+# "stage 0 / evaluating" and the panel reads as broken rather than misconfigured.
+
+def test_runs_search_takes_the_nearest_existing_directory(tmp_path):
+    (tmp_path / "runs").mkdir()
+    deep = tmp_path / "a" / "b" / "c"
+    deep.mkdir(parents=True)
+    (deep / "runs").mkdir()
+    # Both exist; the nearer one wins.
+    assert vxstat._default_runs(str(deep)) == str(deep / "runs")
+
+
+def test_runs_search_climbs_to_an_outer_directory(tmp_path):
+    """The current layout: runs/ sits beside the checkout, several levels above the script."""
+    (tmp_path / "runs").mkdir()
+    deep = tmp_path / "checkout" / "tools" / "neural"
+    deep.mkdir(parents=True)
+    assert vxstat._default_runs(str(deep)) == str(tmp_path / "runs")
+
+
+def test_runs_search_finds_a_repository_root_after_extraction(tmp_path):
+    """The post-extraction layout: vxstat at the repo root, runs/ beside it."""
+    repo = tmp_path / "neuralbotlab"
+    repo.mkdir()
+    (repo / "runs").mkdir()
+    assert vxstat._default_runs(str(repo)) == str(repo / "runs")
+
+
+def test_runs_search_names_the_nearest_candidate_when_none_exist(tmp_path):
+    """A first run and any 'no runs found' message must agree on one place."""
+    deep = tmp_path / "x" / "y"
+    deep.mkdir(parents=True)
+    assert vxstat._default_runs(str(deep)) == str(deep / "runs")

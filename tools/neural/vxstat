@@ -37,12 +37,46 @@ try:
 except Exception:
     EASTERN = None
 
-# Overridable so this is not welded to one box. On Windows the repository layout places runs beside the
-# NeuralBotLab checkout; using the Linux VM default there let process discovery find v35 while every state
-# lookup silently went to /home/vortex/train/runs, producing the bogus "stage 0 / evaluating" panel.
-_DEFAULT_RUNS = (os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))))), "runs") if os.name == "nt" else "/home/vortex/train/runs")
-RUNS = os.environ.get("VX_RUNS", _DEFAULT_RUNS)
+_RUNS_SEARCH_LEVELS = 6
+
+
+def _default_runs(start=None):
+    """Where runs live when VX_RUNS does not say.
+
+    The training VM has one fixed layout; a developer box does not, and this file has now lived at two
+    different depths. On Windows the default used to be four ``os.path.dirname`` calls from here — correct
+    only while vxstat sat at ``tools/neural/``, and silently two levels too high once it moved.
+
+    The failure mode is why this is worth a function rather than an expression: it is not an error. Process
+    discovery still finds the running job while every state lookup goes somewhere empty, so a healthy run
+    reports as "stage 0 / evaluating" and the panel looks broken rather than misconfigured. That is exactly
+    what the Linux default did on Windows, and it cost a debugging session.
+
+    So: search outward and take the NEAREST ``runs/`` that exists, which is right whether this file sits in
+    its own repository or inside a VortexArena checkout, at whatever depth.
+
+    ``start`` exists so the search can be tested at several depths; it defaults to this file's directory.
+    """
+    if os.name != "nt" and start is None:
+        return "/home/vortex/train/runs"
+
+    probe = start or os.path.dirname(os.path.abspath(__file__))
+    candidates = []
+    for _ in range(_RUNS_SEARCH_LEVELS):
+        candidates.append(os.path.join(probe, "runs"))
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            break
+        probe = parent
+
+    for candidate in candidates:
+        if os.path.isdir(candidate):
+            return candidate
+    # None exist yet. Name the nearest, so a first run and any "no runs found" message agree on one place.
+    return candidates[0]
+
+
+RUNS = os.environ.get("VX_RUNS", _default_runs())
 
 # Training commands record remote simulation addresses, but not their SSH account. Vortex worker VMs use the
 # unprivileged `vortex` account; deployments with another account can override this without repeating --peer.

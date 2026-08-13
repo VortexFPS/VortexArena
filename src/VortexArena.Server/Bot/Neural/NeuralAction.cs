@@ -56,8 +56,11 @@ public struct NeuralAction
 /// <summary>
 /// The network's output layout, and the decode from raw logits to a <see cref="NeuralAction"/>.
 ///
-/// <para>Mirrored in <c>tools/neural/obs_layout.py</c>; <c>NeuralPolicyTests.ActionLayoutMatchesMirror</c>
-/// is the guard against the two drifting.</para>
+/// <para>Mirrored in <c>va_neural/layout.py</c> in
+/// <see href="https://github.com/VortexFPS/NeuralBotLab">VortexFPS/NeuralBotLab</see>;
+/// <c>NeuralBotTests.ActionLayoutMatchesPythonMirror</c> and
+/// <c>NeuralBotTests.LayoutDescriptorMatchesTheCrossLanguageContract</c> are the guards against the two
+/// drifting.</para>
 /// </summary>
 public static class ActionSpace
 {

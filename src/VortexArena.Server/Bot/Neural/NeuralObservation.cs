@@ -10,11 +10,13 @@ namespace VortexArena.Server.Bot.Neural;
 /// <summary>
 /// Builds the policy's input vector, and owns its layout.
 ///
-/// <para>This file is half of a contract with <c>tools/neural/obs_layout.py</c>. The layout constants below
-/// are generated into that file by <c>tools/neural/sync-layout.py</c>, and
-/// <c>NeuralObservationTests.LayoutMatchesPythonMirror</c> fails if the two drift. A silent layout skew
-/// would not crash anything: the network would keep producing plausible actions from misread inputs, and the
-/// only symptom would be a policy that got worse for no reason.</para>
+/// <para>This file is half of a contract with <c>va_neural/layout.py</c> in
+/// <see href="https://github.com/VortexFPS/NeuralBotLab">VortexFPS/NeuralBotLab</see>. The two are
+/// maintained by hand and reconciled by test, not generated: <see cref="NeuralLayoutDescriptor"/> turns the
+/// constants below into a canonical string, both repositories assert the same literal, and the host reports
+/// it at the trainer handshake. A silent layout skew would not crash anything — the network would keep
+/// producing plausible actions from misread inputs, and the only symptom would be a policy that got worse
+/// for no reason.</para>
 ///
 /// <para><b>Everything is egocentric and frame-anchored on the direction of travel, not the view.</b> The
 /// policy's view can be yanked anywhere by combat. If perception rotated with it, every observation during a

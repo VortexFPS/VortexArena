@@ -67,7 +67,7 @@ public static class Program
     /// <summary>
     /// Load a weight file the Python exporter wrote and report whether this build can use it.
     ///
-    /// <para>The weight format is written by <c>tools/neural/va_neural/model.py</c> and read by
+    /// <para>The weight format is written by <c>va_neural/model.py</c> in NeuralBotLab and read by
     /// <c>PolicyNetwork.cs</c>: two implementations of one layout, in two languages, that only ever meet at
     /// a binary file. A transposed weight matrix or a wrong activation byte produces a network that loads
     /// and runs and is simply wrong. Running this after every export is how that gets caught in a second
@@ -817,7 +817,7 @@ public static class Program
                               against the random and --scripted arms on the same --stage/--seed.
               --help
 
-            The trainer normally launches these; see tools/neural/train.py.
+            The trainer normally launches these; it lives in github.com/VortexFPS/NeuralBotLab.
             """;
 
         public static Options Parse(string[] args)

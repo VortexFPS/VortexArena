@@ -1270,7 +1270,7 @@ public sealed class TrainingEnv
 /// During training the Python side samples from the distribution and sends the chosen indices; at runtime
 /// the C# side takes the argmax itself. Keeping the two paths separate stops a sampling change on one side
 /// silently reinterpreting the other, and the shared <see cref="MoveTable"/> is the one thing that must
-/// match (guarded by <c>NeuralPolicyTests.MoveTablesAgree</c>).</para>
+/// match (guarded by <c>NeuralBotTests.MoveTablesAgree</c>).</para>
 /// </summary>
 public static class ActionEncoding
 {

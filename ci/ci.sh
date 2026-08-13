@@ -87,21 +87,11 @@ if [ ! -d "$ROOT/data/maps" ] || [ -z "$(ls -A "$ROOT/data/maps" 2>/dev/null)" ]
     echo "      $PYTHON tools/data/fetch-maps.py"
 fi
 
-# ── 2b. the Python half of the neural layout contract ─────────────────────────
-# The observation/action layout descriptor is asserted against the SAME literal from both languages
-# (NeuralBotTests.LayoutDescriptorMatchesTheCrossLanguageContract here, test_layout_descriptor.py there).
-# Neither side reads the other's source, so running only the C# half leaves the agreement half-checked —
-# which is the same as not checking it, since a skew updates one side and not the other by definition.
-#
-# Skipped, not failed, when the training dependencies are absent: torch is a multi-gigabyte install that
-# nobody needs to build or play the game, and the torch-only modules self-skip via pytest.importorskip.
-step "pytest tools/neural/tests (Python half of the layout contract)"
-if "$PYTHON" -c "import pytest, numpy" >/dev/null 2>&1; then
-    "$PYTHON" -m pytest "$ROOT/tools/neural/tests" -q
-else
-    echo "NOTE: pytest/numpy are not installed — the neural Python tests did not run. For full coverage:"
-    echo "      $PYTHON -m pip install pytest numpy torch"
-fi
+# (The Python half of the neural layout contract used to run here. It moved to VortexFPS/NeuralBotLab with
+# the trainer, and is gated by that repository's CI. This side's half is
+# NeuralBotTests.LayoutDescriptorMatchesTheCrossLanguageContract, which runs in the dotnet test step above:
+# both repositories assert the SAME descriptor literal from tests that never read the other's source, so a
+# layout change that updates only one of them fails the other's suite.)
 
 # ── 3. the Godot host project (restores Godot.NET.Sdk via nuget.config) ───────
 step "build the Godot host (VortexArena.csproj)"

@@ -767,5 +767,7 @@ ready: policy 'run7-s5' (45975 params); field 11464 cols / 30985 spans (baked 41
 The navigation field bake runs off the sim thread (377 ms on stormkeep across six workers), and bots use the
 classic steer until it lands, so a map change never stalls on it.
 
-Training lives in [`tools/neural/README.md`](../tools/neural/README.md); the design is
+Training lives in its own repository, [VortexFPS/NeuralBotLab](https://github.com/VortexFPS/NeuralBotLab).
+The environment host it drives is still here — [`tools/neural/README.md`](../tools/neural/README.md) covers
+building it and the layout contract across the two repositories. The design is
 [`planning/neural-bots-2026-08-07.md`](../planning/neural-bots-2026-08-07.md).

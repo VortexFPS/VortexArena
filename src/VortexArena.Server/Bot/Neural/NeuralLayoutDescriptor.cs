@@ -13,7 +13,8 @@ namespace VortexArena.Server.Bot.Neural;
 /// the floats inside one, and both ends still agree on 302 while disagreeing about what the 302 numbers
 /// mean. Nothing crashes. The network keeps producing plausible actions from misread inputs, and the only
 /// symptom is a training run that stops improving for no visible reason — which is the failure
-/// <c>tools/neural/va_neural/layout.py</c> was written to guard against and could not, on its own, catch.</para>
+/// <c>va_neural/layout.py</c> in NeuralBotLab was written to guard against and could not, on its own,
+/// catch.</para>
 ///
 /// <para><b>Why the whole string travels, not just a hash.</b> A hash reports only THAT two layouts differ,
 /// which leaves whoever is holding the failed run to diff eleven constants by hand. Roughly two hundred

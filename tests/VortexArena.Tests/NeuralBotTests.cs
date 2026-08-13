@@ -302,9 +302,10 @@ public class NeuralBotTests
     // =============================================================================================
 
     /// <summary>
-    /// The C#/Python layout guard. <c>tools/neural/va_neural/layout.py</c> restates every section size, and
-    /// its <c>verify()</c> compares the total against the host at handshake. This test pins the C# side of
-    /// that contract so a section change here fails a build rather than a training run.
+    /// The C#/Python layout guard. <c>va_neural/layout.py</c>, in the NeuralBotLab repository, restates
+    /// every section size, and its <c>verify()</c> compares the total against the host at handshake. This
+    /// test pins the C# side of that contract so a section change here fails a build rather than a training
+    /// run.
     ///
     /// <para>Skew is worth this much ceremony because nothing crashes when it happens: the network keeps
     /// producing plausible actions from misread columns, and the only symptom is a policy that stops
@@ -349,10 +350,11 @@ public class NeuralBotTests
     /// or repurpose the floats inside one, and 302 is still 302 on both sides while the columns mean
     /// different things. The descriptor carries names and order, so that change moves this literal.</para>
     ///
-    /// <para>The same literal is asserted from Python in
-    /// <c>tools/neural/tests/test_layout_descriptor.py</c>. That is the whole mechanism: neither language
-    /// reads the other's source, so the literal is the contract, and a layout change that updates only one
-    /// side fails the other side's suite.</para>
+    /// <para>The same literal is asserted from Python in <c>tests/test_layout_descriptor.py</c>, in the
+    /// separate <see href="https://github.com/VortexFPS/NeuralBotLab">VortexFPS/NeuralBotLab</see>
+    /// repository. That separation is the whole mechanism: neither language reads the other's source, and
+    /// neither repository builds the other, so the literal IS the contract and a layout change that updates
+    /// only one side fails the other side's suite. Changing the layout means changing both, deliberately.</para>
     /// </summary>
     [Fact]
     public void LayoutDescriptorMatchesTheCrossLanguageContract()

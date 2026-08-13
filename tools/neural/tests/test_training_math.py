@@ -7,7 +7,12 @@ import threading
 from pathlib import Path
 
 import numpy as np
-import torch
+import pytest
+
+# torch is a multi-gigabyte install that nothing outside training needs, and ci.sh runs on machines that
+# will never train. Skip this module cleanly there instead of failing collection, which would make the whole
+# suite unrunnable rather than partially covered.
+torch = pytest.importorskip("torch", reason="torch is only needed for training")
 
 NEURAL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(NEURAL))

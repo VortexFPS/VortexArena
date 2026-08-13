@@ -19,10 +19,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import torch
+import pytest
 
-from va_neural import layout
-from va_neural.model import Policy
+# torch is a multi-gigabyte install that nothing outside training needs, and ci.sh runs on machines that
+# will never train. Skip this module cleanly there instead of failing collection, which would make the whole
+# suite unrunnable rather than partially covered.
+torch = pytest.importorskip("torch", reason="torch is only needed for training")
+
+from va_neural import layout  # noqa: E402
+from va_neural.model import Policy  # noqa: E402
 
 
 def _fixture(seed: int = 7, batch: int = 64):

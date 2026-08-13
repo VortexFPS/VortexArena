@@ -74,7 +74,7 @@ step "build libraries + tests"
 dotnet build "$ROOT/tests/VortexArena.Tests/VortexArena.Tests.csproj" -c Debug --nologo
 
 # ── 2. the full test suite (assets present → real-data tests run too) ─────────
-step "dotnet test (baseline: 3931 passed / 0 failed; only MAP-dependent cases can skip)"
+step "dotnet test (baseline: 4233 passed / 0 failed; only MAP-dependent cases can skip)"
 dotnet test "$ROOT/tests/VortexArena.Tests/VortexArena.Tests.csproj" -c Debug --no-build --nologo
 # Core content is COMMITTED (item 21), so it cannot legitimately be absent — only compiled maps can,
 # and those are a fetch away. Fail loudly on a broken checkout instead of printing a note and carrying on
@@ -85,6 +85,22 @@ fi
 if [ ! -d "$ROOT/data/maps" ] || [ -z "$(ls -A "$ROOT/data/maps" 2>/dev/null)" ]; then
     echo "NOTE: no compiled maps — the map-dependent cases self-skipped. For full coverage:"
     echo "      $PYTHON tools/data/fetch-maps.py"
+fi
+
+# ── 2b. the Python half of the neural layout contract ─────────────────────────
+# The observation/action layout descriptor is asserted against the SAME literal from both languages
+# (NeuralBotTests.LayoutDescriptorMatchesTheCrossLanguageContract here, test_layout_descriptor.py there).
+# Neither side reads the other's source, so running only the C# half leaves the agreement half-checked —
+# which is the same as not checking it, since a skew updates one side and not the other by definition.
+#
+# Skipped, not failed, when the training dependencies are absent: torch is a multi-gigabyte install that
+# nobody needs to build or play the game, and the torch-only modules self-skip via pytest.importorskip.
+step "pytest tools/neural/tests (Python half of the layout contract)"
+if "$PYTHON" -c "import pytest, numpy" >/dev/null 2>&1; then
+    "$PYTHON" -m pytest "$ROOT/tools/neural/tests" -q
+else
+    echo "NOTE: pytest/numpy are not installed — the neural Python tests did not run. For full coverage:"
+    echo "      $PYTHON -m pip install pytest numpy torch"
 fi
 
 # ── 3. the Godot host project (restores Godot.NET.Sdk via nuget.config) ───────

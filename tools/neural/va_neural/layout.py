@@ -100,14 +100,105 @@ WEIGHTS_VERSION = 1
 ACT_NONE, ACT_TANH, ACT_RELU = 0, 1, 2
 
 # --- protocol (tools/neural/VortexArena.NeuralHost/Protocol.cs) ---
-PROTOCOL_VERSION = 1
+# 2 added the layout descriptor to HELLO_ACK. The host checks this value at HELLO, so a mismatched pair
+# fails at the handshake with a readable message rather than later, with misaligned floats.
+PROTOCOL_VERSION = 2
+
+# Observation sections in vector order, as (name, width). The names match :func:`section_slices` below and
+# ``NeuralLayoutDescriptor`` in C#, so a skew message reads the same on both sides of the socket.
+OBS_SECTIONS: list[tuple[str, int]] = [
+    ("proprio", OBS_PROPRIO),
+    ("weapon", OBS_WEAPON),
+    ("goal", OBS_GOAL),
+    ("aim", OBS_AIM),
+    ("history", OBS_HISTORY),
+    ("prev_action", OBS_PREV_ACTION),
+    ("navfield", OBS_NAVFIELD),
+    ("navfield_up", OBS_NAVFIELD_UP),
+    ("route", OBS_ROUTE),
+    ("features", OBS_FEATURES),
+    ("trace_fan", OBS_TRACE_FAN),
+]
 
 
-def verify(host_obs_size: int, host_action_size: int) -> None:
+def descriptor() -> str:
+    """The canonical layout description: every section's name and width, in vector order.
+
+    Byte-identical to ``NeuralLayoutDescriptor.Build()`` in C#. Both sides derive it from their own live
+    constants rather than restating a literal, so a section that changes width cannot change it in one
+    language and stay silent in the other.
+    """
+    obs = ",".join(f"{name}={width}" for name, width in OBS_SECTIONS)
+    act = ",".join(f"{name}={size}" for name, size in CATEGORICAL_HEADS)
+    act += "," + ",".join(f"{name}=1" for name in CONTINUOUS_HEADS)
+    return f"obs:{obs}|act:{act}|wire={WIRE_ACTION_SIZE}"
+
+
+def fingerprint(text: str | None = None) -> int:
+    """FNV-1a over the descriptor's UTF-8 bytes: the compact form for logs and run manifests.
+
+    Hand-rolled to match the C# side. Python's ``hash()`` is salted per interpreter and .NET's
+    ``GetHashCode`` is randomised per process, so neither can agree with the other or with itself across
+    runs; FNV-1a gives the same number everywhere, forever.
+    """
+    data = (descriptor() if text is None else text).encode("utf-8")
+    h = 0xCBF29CE484222325
+    for b in data:
+        h ^= b
+        h = (h * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+
+def _parse(text: str) -> list[tuple[str, str, int]]:
+    """(group, name, width) triples from a descriptor, in order."""
+    out: list[tuple[str, str, int]] = []
+    for group in text.split("|"):
+        label, _, body = group.partition(":")
+        if not body:
+            # The trailing wire=N field is its own group and carries no label.
+            name, _, value = group.partition("=")
+            out.append(("wire", name, int(value)))
+            continue
+        for item in body.split(","):
+            name, _, value = item.partition("=")
+            out.append((label, name, int(value)))
+    return out
+
+
+def _first_difference(ours: str, theirs: str) -> str:
+    """Name the first structural difference between two descriptors, in one sentence."""
+    try:
+        a, b = _parse(ours), _parse(theirs)
+    except ValueError:
+        return f"the host sent a descriptor this file cannot parse: {theirs!r}"
+
+    for i in range(max(len(a), len(b))):
+        if i >= len(a):
+            group, name, width = b[i]
+            return f"the host has an extra {group} section {name}={width} that this file does not know about"
+        if i >= len(b):
+            group, name, width = a[i]
+            return f"this file expects a {group} section {name}={width} that the host does not produce"
+        if a[i] == b[i]:
+            continue
+        (group, name, width), (_, their_name, their_width) = a[i], b[i]
+        if name != their_name:
+            return (f"{group} section {i} is {their_name}={their_width} on the host but {name}={width} "
+                    f"here — the sections were reordered or renamed")
+        return f"{group} section {name} is {their_width} floats on the host but {width} here"
+    return "the descriptors differ in text but not in structure"
+
+
+def verify(host_obs_size: int, host_action_size: int, host_descriptor: str) -> None:
     """Raise if the host's layout differs from this file's.
 
     Called at handshake, before a single sample is collected. Failing here costs a second; failing to fail
     here costs a training run.
+
+    The two sizes are checked first because they produce the bluntest message. ``host_descriptor`` then
+    catches what sizes structurally cannot: a section reordered, renamed, or repurposed at constant width.
+    That skew leaves both ends agreeing on 302 floats while disagreeing about what the 302 numbers mean,
+    and nothing crashes — the network goes on producing plausible actions from misread inputs.
     """
     if host_obs_size != OBS_SIZE:
         raise RuntimeError(
@@ -119,6 +210,14 @@ def verify(host_obs_size: int, host_action_size: int) -> None:
         raise RuntimeError(
             f"action layout skew: host says {host_action_size} floats per agent, "
             f"this file says {WIRE_ACTION_SIZE}. ActionEncoding.cs changed without this file following it."
+        )
+    ours = descriptor()
+    if host_descriptor != ours:
+        raise RuntimeError(
+            "observation/action layout skew: " + _first_difference(ours, host_descriptor) + "\n"
+            f"  host: {host_descriptor}\n"
+            f"  here: {ours}\n"
+            "  src/VortexArena.Server/Bot/Neural/ and this file have diverged."
         )
 
 

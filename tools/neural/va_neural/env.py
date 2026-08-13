@@ -7,6 +7,7 @@ cores therefore means launching several hosts, which :class:`VectorEnv` does, an
 from __future__ import annotations
 
 import atexit
+import json
 import os
 import shutil
 import select
@@ -43,6 +44,21 @@ def _pack_str(s: str) -> bytes:
     if len(data) > 0xFFFF:
         raise ValueError("string too long for the HELLO frame")
     return struct.pack("<H", len(data)) + data
+
+
+def _unpack_str(body: bytes, offset: int) -> str:
+    """The read half of :func:`_pack_str`: a u16 length then that many UTF-8 bytes."""
+    if offset + 2 > len(body):
+        raise RuntimeError(
+            f"truncated frame: expected a length-prefixed string at byte {offset}, got {len(body)} bytes total"
+        )
+    (length,) = struct.unpack_from("<H", body, offset)
+    start = offset + 2
+    if start + length > len(body):
+        raise RuntimeError(
+            f"truncated frame: a {length}-byte string at {start} runs past the {len(body)}-byte frame"
+        )
+    return body[start:start + length].decode("utf-8")
 
 
 @dataclass
@@ -82,10 +98,82 @@ class EnvConfig:
         return head + _pack_str(self.data_root) + _pack_str(self.map_list)
 
 
+# --- locating the environment host ---------------------------------------------------------------------
+#
+# The trainer and the host are separate deliverables. They do not have to share a directory, a repository or
+# a machine, and after the control plane moves to its own repo they normally will not
+# (planning/neural-bot-lab-migration.md, step 4).
+#
+# This used to be `Path(__file__).resolve().parents[3]` — "count three directories up and you are at the
+# VortexArena root". A fixed depth is not a lookup, it is an assumption about where this file lives, and it
+# does not fail when it stops holding: it returns a confidently wrong path.
+
+HOST_ENV_VAR = "VX_NEURAL_HOST"
+HOST_CONFIG_NAME = "neural-host.json"
+_HOST_BUILD_OUTPUT = Path("tools/neural/VortexArena.NeuralHost/bin/Release/net8.0/va-neural-host.dll")
+
+
+def _host_from_env() -> Path | None:
+    value = os.environ.get(HOST_ENV_VAR, "").strip()
+    return Path(value).expanduser() if value else None
+
+
+def _host_config_paths() -> list[Path]:
+    """Where a pinned-host config may live, nearest first."""
+    return [
+        Path.cwd() / HOST_CONFIG_NAME,                                # per-run override
+        Path(__file__).resolve().parent.parent / HOST_CONFIG_NAME,    # beside the trainer; moves with it
+    ]
+
+
+def _host_from_config() -> Path | None:
+    for path in _host_config_paths():
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        try:
+            value = str(json.loads(raw).get("host_dll", "")).strip()
+        except ValueError as exc:
+            raise RuntimeError(f"{path} is not valid JSON: {exc}") from exc
+        if value:
+            # Relative paths resolve against the config file, never the working directory, so a config that
+            # sits next to a pinned build keeps working whatever directory the trainer is launched from.
+            return (path.parent / Path(value).expanduser()).resolve()
+    return None
+
+
+def _host_from_enclosing_checkout(start: Path | None = None) -> Path | None:
+    """The build output of a VortexArena checkout this file happens to sit inside, if it does.
+
+    Identified by a marker file rather than by counting parents. That difference is the point: a wrong
+    guess returns None here and the caller prints every real option, instead of handing back a path that
+    does not exist and blaming the build. It stops firing on its own once the trainer lives in its own
+    repository, which is what makes this safe to keep through the extraction.
+
+    ``start`` exists so the search can be tested at several depths; it defaults to this file.
+    """
+    origin = (start or Path(__file__)).resolve()
+    for parent in origin.parents:
+        if (parent / "VortexArena.sln").exists() or (parent / "VortexArena.csproj").exists():
+            return parent / _HOST_BUILD_OUTPUT
+    return None
+
+
 def _default_host_binary() -> Path:
-    """Where ``dotnet build -c Release`` puts the host."""
-    root = Path(__file__).resolve().parents[3]
-    return root / "tools" / "neural" / "VortexArena.NeuralHost" / "bin" / "Release" / "net8.0" / "va-neural-host.dll"
+    """Resolve the env host: environment, then config, then an enclosing checkout."""
+    for candidate in (_host_from_env(), _host_from_config(), _host_from_enclosing_checkout()):
+        if candidate is not None:
+            return candidate
+    raise FileNotFoundError(
+        "cannot locate the neural env host. Provide it in one of these ways:\n"
+        "  - HostEnv(..., host_dll=PATH), or remote=(address, port) to use a host already running\n"
+        f"  - the {HOST_ENV_VAR} environment variable\n"
+        f'  - a {HOST_CONFIG_NAME} containing {{"host_dll": "..."}} in the working directory,\n'
+        "    or beside va_neural/\n"
+        "  - run from inside a VortexArena checkout built with:\n"
+        "      dotnet build tools/neural/VortexArena.NeuralHost -c Release"
+    )
 
 
 class HostEnv:
@@ -113,8 +201,9 @@ class HostEnv:
         dll = Path(host_dll) if host_dll else _default_host_binary()
         if not dll.exists():
             raise FileNotFoundError(
-                f"env host not built: {dll}\n"
-                f"  dotnet build tools/neural/VortexArena.NeuralHost -c Release"
+                f"env host not found at: {dll}\n"
+                f"  build it:    dotnet build tools/neural/VortexArena.NeuralHost -c Release\n"
+                f"  or point at an existing build with {HOST_ENV_VAR}, a {HOST_CONFIG_NAME}, or host_dll="
             )
         dotnet = shutil.which("dotnet")
         if dotnet is None:
@@ -175,7 +264,10 @@ class HostEnv:
             raise RuntimeError(f"expected HELLO_ACK, got opcode {op}")
 
         self.obs_size, self.action_size, self.agents, self.ticks_per_step = struct.unpack("<iiii", body[:16])
-        layout.verify(self.obs_size, self.action_size)
+        # Protocol 2: the descriptor rides after the four fixed i32s. It is what catches a size-preserving
+        # layout change, which the sizes alone cannot see.
+        self.layout_descriptor = _unpack_str(body, 16)
+        layout.verify(self.obs_size, self.action_size, self.layout_descriptor)
 
         self._obs = np.zeros((self.agents, self.obs_size), dtype=np.float32)
         self.last_episode_stats: tuple[int, float, float] | None = None
@@ -279,22 +371,34 @@ class HostEnv:
         self._send(OP_SET_STAGE, struct.pack("<i", stage))
 
     def close(self) -> None:
+        # Idempotent, and it has to be. recover() closes the whole fleet, then atexit closes it again on the
+        # way out; a partially-constructed env from a failed __init__ gets closed too. A second pass must be
+        # silent rather than raise out of a recovery path whose entire job is surviving a failure.
+        #
+        # getattr rather than an __init__ flag on purpose: __init__ can raise before any attribute is set,
+        # and those objects still reach this method.
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
         # A remote host has no process here to reap, but it still needs telling: without OP_CLOSE it sits on
         # a half-open socket and the worker cannot reuse the port until someone notices.
+        #
+        # ValueError joins the caught set because a write to an already-closed buffered file raises that, not
+        # OSError -- which is how the second close() used to escape as a traceback.
         try:
             self._send(OP_CLOSE)
-        except (OSError, AttributeError):
+        except (OSError, AttributeError, ValueError):
             pass
         # makefile() owns a buffered wrapper around the socket.  Closing only the process (the old local-
         # host behaviour) leaves a remote connection half-open until GC, which delays the worker's respawn
         # loop and can make an immediate trainer recovery race the still-occupied port.
         try:
             self._file.close()
-        except (OSError, AttributeError):
+        except (OSError, AttributeError, ValueError):
             pass
         try:
             self.sock.close()
-        except (OSError, AttributeError):
+        except (OSError, AttributeError, ValueError):
             pass
         proc = getattr(self, "proc", None)
         if proc is None or proc.poll() is not None:

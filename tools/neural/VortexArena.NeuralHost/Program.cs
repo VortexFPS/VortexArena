@@ -23,7 +23,13 @@ namespace VortexArena.NeuralHost;
 /// </summary>
 public static class Program
 {
-    private const int ProtocolVersion = 1;
+    /// <summary>
+    /// Wire protocol version. 2 added the layout descriptor to HELLO_ACK
+    /// (<see cref="NeuralLayoutDescriptor"/>); the trainer's version is checked at HELLO, so an old trainer
+    /// against a new host and a new trainer against an old host both fail at the handshake with a readable
+    /// message rather than at some later point with misaligned floats.
+    /// </summary>
+    private const int ProtocolVersion = 2;
 
     public static int Main(string[] args)
     {
@@ -219,10 +225,14 @@ public static class Program
                         AppendI32(payload, ActionEncoding.Size);
                         AppendI32(payload, agents);
                         AppendI32(payload, cfg.TicksPerStep);
+                        // The sizes above cannot see a size-preserving layout change; the descriptor can.
+                        // It goes last so the four fixed i32s stay at a constant offset.
+                        AppendPrefixedString(payload, NeuralLayoutDescriptor.Build());
                         frames.Write(OpCode.HelloAck, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(payload));
                         Console.Error.WriteLine(
                             $"[neural-host] {agents} agents, obs {obsSize}, action {ActionEncoding.Size}, " +
-                            $"stage {cfg.Stage}, {cfg.TicksPerStep} ticks/step");
+                            $"stage {cfg.Stage}, {cfg.TicksPerStep} ticks/step, " +
+                            $"layout {NeuralLayoutDescriptor.ShortForm}");
                         break;
                     }
 
@@ -736,6 +746,18 @@ public static class Program
         Span<byte> tmp = stackalloc byte[4];
         BinaryPrimitives.WriteSingleLittleEndian(tmp, v);
         AppendBytes(list, tmp);
+    }
+
+    /// <summary>The write half of <see cref="ReadPrefixedString"/>: a u16 length then that many UTF-8 bytes.</summary>
+    private static void AppendPrefixedString(List<byte> list, string value)
+    {
+        byte[] utf8 = Encoding.UTF8.GetBytes(value);
+        if (utf8.Length > ushort.MaxValue)
+            throw new ArgumentException($"string too long for a u16 length prefix: {utf8.Length} bytes", nameof(value));
+        Span<byte> tmp = stackalloc byte[2];
+        BinaryPrimitives.WriteUInt16LittleEndian(tmp, (ushort)utf8.Length);
+        AppendBytes(list, tmp);
+        AppendBytes(list, utf8);
     }
 
     // =============================================================================================

@@ -86,3 +86,21 @@ tools/engine-templates/
 # ./vx task runner build output (tools/vx/). The shim rebuilds it on demand; never committed.
 /tools/vx/bin/
 /tools/vx/obj/
+
+# Neural-bot training artifacts (planning/neural-bot-lab-migration.md, step 6). A checkpoint is the output
+# of a training run, not source: one stage-6 checkpoint is hundreds of MB and a run writes many of them.
+# Policies are published through releases/object storage with checksums, never committed.
+#
+# `runs/` is deliberately unanchored: train.py --out defaults to a RELATIVE "runs", so it lands wherever
+# the trainer was launched from, and the protective read is the one worth having. Nothing tracked today
+# matches any of these patterns — when the cross-contract schema fixture arrives it will be a small,
+# deliberately tracked .vxpw, and it gets a `!` negation for that exact path rather than loosening these.
+runs/
+*.pt
+*.ckpt
+*.vxpw
+
+# Points the trainer at a built env host (va_neural/env.py, VX_NEURAL_HOST's file equivalent). Untracked for
+# the same reason as /override.cfg above: it holds a path that is true on one machine, and a machine-specific
+# path riding along in someone else's commit is exactly what a separate file exists to prevent.
+neural-host.json

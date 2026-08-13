@@ -342,6 +342,47 @@ public class NeuralBotTests
         Assert.Equal(NeuralObservation.OffTraceFan + NeuralObservation.TraceFanFloats, NeuralObservation.Size);
     }
 
+    /// <summary>
+    /// The exact string the host sends at handshake, pinned as a literal.
+    ///
+    /// <para>The size assertions above cannot see a size-preserving change: swap two equal-width sections,
+    /// or repurpose the floats inside one, and 302 is still 302 on both sides while the columns mean
+    /// different things. The descriptor carries names and order, so that change moves this literal.</para>
+    ///
+    /// <para>The same literal is asserted from Python in
+    /// <c>tools/neural/tests/test_layout_descriptor.py</c>. That is the whole mechanism: neither language
+    /// reads the other's source, so the literal is the contract, and a layout change that updates only one
+    /// side fails the other side's suite.</para>
+    /// </summary>
+    [Fact]
+    public void LayoutDescriptorMatchesTheCrossLanguageContract()
+    {
+        const string expected =
+            "obs:proprio=15,weapon=12,goal=11,aim=4,history=8,prev_action=8,navfield=96,navfield_up=48," +
+            "route=24,features=64,trace_fan=12" +
+            "|act:move=9,jump=2,crouch=2,attack1=2,attack2=2,weapon=4,yaw=1,pitch=1" +
+            "|wire=8";
+
+        Assert.Equal(expected, NeuralLayoutDescriptor.Build());
+
+        // FNV-1a is hand-rolled in both languages precisely so this number is reproducible. If it drifts
+        // while the descriptor above still matches, the hash implementations have diverged, not the layout.
+        Assert.Equal(0xeaa83a60e3c8703fUL, NeuralLayoutDescriptor.Fingerprint(expected));
+        Assert.Equal("eaa83a60e3c8703f", NeuralLayoutDescriptor.ShortForm);
+    }
+
+    /// <summary>
+    /// The descriptor's observation widths account for every float in the vector. A section added to the
+    /// observation but forgotten in the descriptor would otherwise travel undetected.
+    /// </summary>
+    [Fact]
+    public void LayoutDescriptorCoversTheWholeObservation()
+    {
+        string obs = NeuralLayoutDescriptor.Build().Split('|')[0]["obs:".Length..];
+        int total = obs.Split(',').Sum(section => int.Parse(section.Split('=')[1]));
+        Assert.Equal(NeuralObservation.Size, total);
+    }
+
     [Fact]
     public void ActionLayoutMatchesPythonMirror()
     {

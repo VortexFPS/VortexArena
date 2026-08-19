@@ -256,7 +256,9 @@ internal static class Setup
         catch { return "4.6.3"; }
     }
 
-    private static bool MapsIncomplete()
+    /// <summary>Internal, not private: <see cref="Preflight"/> asks the same question before a launch,
+    /// and two implementations of "are the maps installed" would eventually disagree.</summary>
+    internal static bool MapsIncomplete()
     {
         string lockPath = Path.Combine(Env.RepoRoot, "data", "maps.lock.json");
         string dir = Path.Combine(Env.RepoRoot, "data", "maps");
@@ -270,9 +272,55 @@ internal static class Setup
         catch { return false; }
     }
 
-    private static bool TemplatesPresent()
+    /// <summary>Internal for the same reason as <see cref="MapsIncomplete"/> — see there.</summary>
+    internal static bool TemplatesPresent()
         => Directory.Exists(Path.Combine(Env.RepoRoot, "tools", "engine-templates"))
            && Directory.GetFiles(Path.Combine(Env.RepoRoot, "tools", "engine-templates")).Length > 0;
+
+    /// <summary>
+    /// There is no prebuilt engine for this machine — say so, say why, and say what to run instead.
+    ///
+    /// <para>This is not an error path in the usual sense. On ppc64le it is the EXPECTED path and the
+    /// only one: upstream Godot publishes x86_64 and arm64 and nothing else, so an architecture without
+    /// a pinned artifact is a fact about upstream rather than a hole in this lockfile. What would be a
+    /// failure is saying "setup failed" and leaving the reader to work out that compiling the engine is
+    /// both possible and supported here.</para>
+    /// </summary>
+    private static int NoPrebuiltEditor(string key, JsonNode plat, string[] arches)
+    {
+        string build = plat["build_from_source"]?.GetValue<string>()
+                       ?? "tools/build-engine.sh --target editor --install";
+        Console.Error.WriteLine();
+        Console.Error.WriteLine($"vx setup: no prebuilt Godot editor for this machine ({key}, {Env.HostArch}).");
+        Console.Error.WriteLine();
+        if (arches.Length > 0 && !arches.Contains(Env.HostArch))
+            Console.Error.WriteLine($"          The pinned '{key}' build is for {string.Join(", ", arches)}, "
+                                    + $"and this host is {Env.HostArch}.");
+        else
+            Console.Error.WriteLine("          Upstream publishes no build for this architecture, so there is "
+                                    + "nothing to pin.");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("          Build the engine instead — supported, and the whole point of the script:");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("              ./vx build-engine --target editor --install");
+        Console.Error.WriteLine($"              (that is: {build})");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("          It takes hours and needs a C++ toolchain, scons and the .NET SDK.");
+        Console.Error.WriteLine();
+        // Installing Godot is the FIRST step in the plan and a failed step stops the rest, so the maps
+        // and templates have not been fetched. Saying "everything else already ran" would be false and
+        // would leave a POWER machine quietly missing its content.
+        Console.Error.WriteLine("          This is setup's first step, so nothing after it ran either. Once the engine");
+        Console.Error.WriteLine("          is built, re-run `./vx setup` — it skips whatever is already done. Or fetch");
+        Console.Error.WriteLine("          the rest now, neither of which needs an engine:");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("              ./vx maps            # the map packs");
+        Console.Error.WriteLine("              ./vx engine          # the export templates");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("          `./vx build` and `./vx test` need no engine and work now.");
+        Console.Error.WriteLine();
+        return 1;
+    }
 
     /// <summary>
     /// Download, verify and unpack the pinned editor into <c>.godot-bin/</c>, normalising the layout so
@@ -281,13 +329,28 @@ internal static class Setup
     private static int InstallGodot()
     {
         JsonNode lockDoc = GodotLock();
-        string key = Env.IsMacOS ? "macos" : Env.IsWindows ? "windows" : "linux";
-        JsonNode? plat = lockDoc["platforms"]?[key];
+        string os = Env.IsMacOS ? "macos" : Env.IsWindows ? "windows" : "linux";
+
+        // An architecture-specific entry wins over the plain one, so a machine that needs a different
+        // download gets it without the common case growing a suffix. macOS deliberately has no suffixed
+        // entry: its asset is a universal binary that serves both arches.
+        JsonNode? platforms = lockDoc["platforms"];
+        string key = platforms?[$"{os}-{Env.HostArch}"] is not null ? $"{os}-{Env.HostArch}" : os;
+        JsonNode? plat = platforms?[key];
         if (plat is null)
         {
             Console.Error.WriteLine($"vx setup: tools/godot.lock.json pins no '{key}' build.");
             return 1;
         }
+
+        // The entry that matched must actually BE for this machine. Without this check a Linux host that
+        // is not x86_64 silently downloaded the x86_64 zip and discovered the mismatch by running it —
+        // an Exec format error, several steps away from the cause. The pinned arch list is the authority,
+        // not the platform name.
+        var arches = plat["arch"]?.AsArray().Select(a => a!.GetValue<string>()).ToArray() ?? [];
+        bool urlMissing = plat["url"] is null;
+        if (urlMissing || (arches.Length > 0 && !arches.Contains(Env.HostArch)))
+            return NoPrebuiltEditor(key, plat, arches);
 
         string url = plat["url"]!.GetValue<string>();
         string want = plat["sha256"]!.GetValue<string>();

@@ -18,7 +18,18 @@
     "confirms it, and a mismatch there is a real finding rather than a nuisance.",
     "",
     "The MONO builds are required. The plain build cannot run C# at all, and its failure mode is a wall of",
-    "script errors that never names the cause."
+    "script errors that never names the cause.",
+    "",
+    "ARCHITECTURE (added 2026-08-19). A platform entry is picked as platforms['<os>-<arch>'] first and",
+    "platforms['<os>'] second, and the winner's 'arch' list must CONTAIN the host architecture. That last",
+    "clause is the point: before it, a Linux machine that was not x86_64 downloaded the x86_64 zip and",
+    "found out by running it. Now it is told, with the alternative. macos carries both arches because the",
+    "asset really is universal; linux carries one because the pinned asset really is one.",
+    "",
+    "An entry with a null url is a DECLARED absence, not an oversight - see linux-ppc64le. Upstream Godot",
+    "publishes no PowerPC build at all, so on that architecture there is nothing to pin and the engine has",
+    "to be compiled (tools/build-engine.sh). Saying so here is what turns 'setup failed' into 'setup told",
+    "you which command to run next'."
   ],
   "schema": 1,
   "engine": {
@@ -53,6 +64,7 @@
       "sha256": "380bf3cd0c9a8a9a7c7fd907a70c0372857445f04fee3509dbfa79846c314573",
       "bytes": 190574861,
       "verified": true,
+      "arch": ["x86_64", "arm64"],
       "$comment": [
         "Universal (arm64 + x86_64). The archive contains Godot_mono_macos.universal.app/; setup renames it",
         "to Godot.app so find-godot.sh's probe path is stable across engine versions.",
@@ -67,7 +79,34 @@
       "sha256": "702a8a6785060203fd46373adf864586ecf0c377ac685d7107dde66b1eba0a9e",
       "bytes": 100887313,
       "verified": false,
+      "arch": ["x86_64"],
       "$comment": "Archive contains a same-named directory; setup normalises the binary to .godot-bin/godot."
+    },
+    "linux-ppc64le": {
+      "filename": null,
+      "url": null,
+      "sha256": null,
+      "bytes": null,
+      "verified": false,
+      "arch": ["ppc64le"],
+      "godot_arch": "ppc64",
+      "build_from_source": "tools/build-engine.sh --target editor --install",
+      "$comment": [
+        "DECLARED ABSENCE, not a gap to fill in later. godotengine/godot publishes builds for x86_64 and",
+        "arm64 and for no PowerPC target, so there is no artifact to pin here and there will not be one",
+        "unless upstream starts producing it. The entry exists so that `vx setup` on a POWER machine reads",
+        "the reason and the alternative out of this file instead of failing on a missing key.",
+        "",
+        "'godot_arch' is here because the two names disagree and both are load-bearing: the scons flag, the",
+        "engine binary's filename and a preset's binary_format/architecture all say ppc64 (Godot aliases",
+        "ppc64le to it and is little-endian only), while uname, .NET's RID and every distro say ppc64le.",
+        "The key uses the public name; anything invoking the engine build needs the other one.",
+        "",
+        "The EDITOR is what this file pins, and on this architecture it is also the only thing needed for a",
+        "development loop: build it, and `vx build` / `vx test` / `vx run debug` work. Shipping a release",
+        "additionally needs an export template plus the ppc64-dotnet-rid patch - engine.lock.json, and",
+        "planning/ppc64le-port-2026-08-19.md for the whole sequence."
+      ]
     },
     "windows": {
       "filename": "Godot_v4.6.3-stable_mono_win64.zip",
@@ -75,6 +114,7 @@
       "sha256": "0015a6f2fab16e255919380864e8b5320017b1258c01121d5521b133dbe705f6",
       "bytes": 109661890,
       "verified": false,
+      "arch": ["x86_64"],
       "$comment": [
         "Carries BOTH Godot_v4.6.3-stable_mono_win64.exe and its _console.exe sibling. setup normalises them",
         "to godot.exe and godot_console.exe, and find-godot.sh prefers the console one: the plain .exe",

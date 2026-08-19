@@ -167,6 +167,28 @@ public class GodotProjectSettingsTests
                 gaps.Add(gap.Name);
             }
 
+        // The THIRD category: presets whose template is built on the machine that exports, for platforms
+        // this project publishes no binaries for (ppc64le). They cannot be pinned — a locally built engine
+        // has no published artifact and no stable hash, because Godot does not build reproducibly — and
+        // they cannot be gaps, because a gap must have an EMPTY custom_template/release and there is no
+        // stock PowerPC template to fall back to. Hence a category of their own rather than a fudge.
+        var localBuilds = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (lockfile.RootElement.TryGetProperty("local_build_presets", out JsonElement locals))
+            foreach (JsonProperty local in locals.EnumerateObject().Where(p => !p.Name.StartsWith('$')))
+            {
+                Assert.True(local.Value.TryGetProperty("reason", out JsonElement why)
+                            && !string.IsNullOrWhiteSpace(why.GetString()),
+                    $"engine.lock.json declares '{local.Name}' under local_build_presets with no 'reason'. "
+                    + "Same rule as unpinned_presets: an undocumented exemption is indistinguishable from "
+                    + "the accident it exempts.");
+                Assert.True(local.Value.TryGetProperty("template", out JsonElement tmpl)
+                            && !string.IsNullOrWhiteSpace(tmpl.GetString()),
+                    $"engine.lock.json declares '{local.Name}' under local_build_presets with no "
+                    + "'template'. Without it nothing can check that the preset points where the build "
+                    + "script writes, which is the only thing this category CAN check.");
+                localBuilds[local.Name] = tmpl.GetString()!;
+            }
+
         Assert.True(pinned.Count > 0,
             "engine.lock.json pins a template for no preset at all. Every release export would fall back "
             + "to the stock engine — the exact G10 failure this file exists to catch.");
@@ -200,10 +222,41 @@ public class GodotProjectSettingsTests
             // A preset in neither list is the one nobody would notice: verify-engine-template.py is
             // invoked per preset BY NAME from ci.sh and release.yml, so an unlisted preset is gated by no
             // step at all and every job stays green.
-            Assert.True(pinned.ContainsKey(name) || gaps.Contains(name),
-                $"preset '{name}' is accounted for nowhere in engine.lock.json — neither pinned under "
-                + "template.platforms[…].presets nor declared under unpinned_presets. Pin it, or declare "
-                + "it a gap with a reason. Do not leave it out of both: nothing else checks it.");
+            Assert.True(pinned.ContainsKey(name) || gaps.Contains(name) || localBuilds.ContainsKey(name),
+                $"preset '{name}' is accounted for nowhere in engine.lock.json — not pinned under "
+                + "template.platforms[…].presets, not declared under unpinned_presets, not declared under "
+                + "local_build_presets. Pin it, or declare it with a reason. Do not leave it out of all "
+                + "three: nothing else checks it.");
+
+            // The three categories make CONTRADICTORY demands of the same field — pinned: must equal the
+            // pinned filename; gap: must be empty; local build: must be populated and unhashable — so a
+            // preset in two of them cannot be satisfied by any value at all.
+            int homes = (pinned.ContainsKey(name) ? 1 : 0) + (gaps.Contains(name) ? 1 : 0)
+                        + (localBuilds.ContainsKey(name) ? 1 : 0);
+            Assert.True(homes == 1,
+                $"preset '{name}' is declared in {homes} places in engine.lock.json at once. They say "
+                + "contradictory things about custom_template/release, so no value satisfies all of them "
+                + "— delete whichever is stale.");
+
+            if (localBuilds.TryGetValue(name, out string? localTemplate))
+            {
+                // Deliberately the OPPOSITE requirement to a gap. Empty is the dangerous value everywhere
+                // else because Godot falls back to the stock template; here there IS no stock template for
+                // the architecture, so an empty field fails loudly instead — but it still must not be
+                // empty, because the export then reports "no export template found" rather than naming the
+                // file that needs building.
+                Assert.False(template.Length == 0,
+                    $"preset '{name}' has an EMPTY custom_template/release while engine.lock.json declares "
+                    + "it a local build. Point it at " + localTemplate + " and build that file with the "
+                    + "command recorded in local_build_presets.");
+                Assert.Equal(localTemplate, template);
+                // NOT checked here: whether the file exists. It cannot exist on a machine of a different
+                // architecture, and a unit test that only passes on POWER would be worse than no test.
+                // tools/verify-engine-template.py --preset-config does that check, at export time, where
+                // the answer is actionable.
+                _out.WriteLine($"{name} -> {template} (local build: never published)");
+                continue;
+            }
 
             if (gaps.Contains(name))
             {
@@ -236,7 +289,7 @@ public class GodotProjectSettingsTests
 
         // The other direction: the lockfile must not describe a preset that no longer exists. A stale
         // entry is what makes the check above pass for a build nobody produces any more.
-        foreach (string described in pinned.Keys.Concat(gaps).Distinct())
+        foreach (string described in pinned.Keys.Concat(gaps).Concat(localBuilds.Keys).Distinct())
             Assert.True(seen.Contains(described),
                 $"engine.lock.json describes preset '{described}' but export_presets.cfg has no preset by "
                 + "that name. The two have drifted — one is describing a build that does not exist.");

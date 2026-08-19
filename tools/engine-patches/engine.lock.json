@@ -55,6 +55,28 @@
         "ProcessDxtc/ProcessRGB) were ALWAYS compiled into templates; only the entry points were",
         "stripped. cvtt/BPTC needs no patch (registers unconditionally)."
       ]
+    },
+    {
+      "file": "godot-4.6.3-ppc64-dotnet-rid.patch",
+      "sha256": "cfc07075bf108a687565497ac96342070819dec778dadb63f0c7495f36fdc934",
+      "bytes": 954,
+      "upstream": "none yet - a candidate to submit: Godot's C# export plugin maps the engine's arch name to a .NET RID through a hardcoded switch that has no PowerPC arm, while the C++ side of the same exporter already knows ppc64 (platform/linuxbsd/export/export_plugin.cpp maps ELF e_machine 0x0015 to 'ppc64' and offers it in the binary_format/architecture enum). The C# half is the only thing missing.",
+      "drop_at_engine": "whenever upstream adds a ppc64 arm to DetermineRuntimeIdentifierArch (check modules/mono/editor/GodotTools/GodotTools/Export/ExportPlugin.cs on every engine upgrade)",
+      "$comment": [
+        "Adds  \"ppc64\" => \"ppc64le\"  to DetermineRuntimeIdentifierArch. Without it an export targeting",
+        "PowerPC throws ArgumentOutOfRangeException(\"Unexpected architecture\") inside GodotTools before",
+        "writing anything, so the whole platform is unreachable from `--export-release` no matter how well",
+        "the engine itself builds.",
+        "",
+        "The mapping is not symmetric and that is deliberate. Godot's architecture is spelled ppc64 (its",
+        "SConstruct aliases ppc64le TO ppc64, and the engine is little-endian only); .NET's runtime",
+        "identifier is spelled ppc64le, and .NET publishes NO big-endian PowerPC RID at all. So the one",
+        "name maps to the other with nothing ambiguous in between.",
+        "",
+        "AFFECTS THE EDITOR/EXPORT TOOLING ONLY, never a shipped binary: DetermineRuntimeIdentifierArch",
+        "runs in GodotTools, which lives in the editor. It therefore has NO binary marker and could not",
+        "have one - see binary_markers below for why an unfindable required marker is worse than none."
+      ]
     }
   ],
   "unpinned_presets": {
@@ -72,6 +94,55 @@
       "blocked_on": "Republish the macOS template in macos.zip form: take the official Godot 4.6.3 mono macos.zip and swap macos_template.app/Contents/MacOS/godot_macos_release.universal for our lipo output, then re-pin filename/sha256/template_form here and set presets to ['macos-client'].",
       "exposure": "Provenance only. The patch set touches platform/windows/ exclusively, so the stock macOS template is exactly what a pinned one would have been in behaviour - no backport is lost. What is lost is the ability to say which template a macOS build used.",
       "since": "2026-07-31"
+    }
+  },
+  "local_build_presets": {
+    "$comment": [
+      "Presets whose export template is BUILT BY THE PERSON EXPORTING, on their own machine, and is never",
+      "published. The third category of preset, added 2026-08-19 for platforms this project deliberately",
+      "does not ship binaries for.",
+      "",
+      "WHY A THIRD CATEGORY RATHER THAN REUSING unpinned_presets. The two existing ones make opposite",
+      "assertions about custom_template/release and neither fits: a PINNED preset's field must name a",
+      "published artifact that hashes to the pin, and a DECLARED GAP's field must be EMPTY because the",
+      "point of that category is 'this one runs on the stock template'. A source-only platform has a",
+      "POPULATED field and no hash: populated because there is no stock template for it to fall back to",
+      "(upstream Godot publishes no PowerPC build at all, so an empty field fails loudly rather than",
+      "silently, inverting the usual danger), and no hash because Godot does not build reproducibly - the",
+      "template $comment already records two identically-configured builds producing different bytes.",
+      "Filing these under unpinned_presets would have failed the audit outright, since check_declared_gap",
+      "fails a non-empty field on purpose.",
+      "",
+      "WHAT IS CHECKED, AND WHAT IS NOT. check_local_build asserts the SHAPE - the field is populated, it",
+      "names the file `vx build-engine --install` writes, and that file exists before an export is",
+      "attempted. Nothing here proves WHICH engine produced it, and the tooling says LOCAL BUILD out loud",
+      "rather than letting it read as verified. The existence check is the part that earns its keep: it",
+      "turns Godot's 'Mismatching custom export template executable architecture: found \"invalid\"' - which",
+      "reads like an arch problem and tempts you to blank the field, the one genuinely dangerous value -",
+      "into 'the template is not built yet, here is the command'.",
+      "",
+      "POLICY, and the reason these are not in the release matrix: this project ships prebuilt binaries for",
+      "x86_64 and macOS-universal only. ppc64le is supported as a BUILD-FROM-SOURCE platform - the game is",
+      "meant to compile and run there, not to arrive as a download. .github/workflows/release.yml names its",
+      "presets explicitly and does not name these, so they cannot leak into a release by accident, and",
+      "tools/make-manifest.py declares the platform under source_build instead of listing an artifact.",
+      "See planning/ppc64le-port-2026-08-19.md."
+    ],
+    "linux-client-ppc64le": {
+      "reason": "64-bit little-endian PowerPC. No upstream Godot build exists for this architecture and no artifact is published for it here, so the export template is built on the machine that exports.",
+      "template": "tools/engine-templates/godot.linuxbsd.template_release.ppc64.mono",
+      "build_with": "./vx build-engine --arch ppc64 --install",
+      "published": false,
+      "requires_patch": "godot-4.6.3-ppc64-dotnet-rid.patch",
+      "since": "2026-08-19"
+    },
+    "linux-dedicated-ppc64le": {
+      "reason": "Same template as linux-client-ppc64le - one file, two presets, exactly as the x86_64 Linux pair works. A dedicated_server export changes which resources are packed, not which engine it was built from.",
+      "template": "tools/engine-templates/godot.linuxbsd.template_release.ppc64.mono",
+      "build_with": "./vx build-engine --arch ppc64 --install",
+      "published": false,
+      "requires_patch": "godot-4.6.3-ppc64-dotnet-rid.patch",
+      "since": "2026-08-19"
     }
   },
   "binary_markers": {

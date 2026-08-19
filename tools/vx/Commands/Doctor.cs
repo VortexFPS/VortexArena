@@ -45,6 +45,17 @@ internal static class Doctor
 
     private static IEnumerable<Check> Toolchain()
     {
+        // --- the host itself -------------------------------------------------------------------------
+        // Reported first because it changes what every line under it MEANS. On x86_64 and arm64 the
+        // engine is a download; on anything else it is a compile, and a reader who does not know which
+        // machine they are on will read "Godot: not found → run ./vx setup" as advice that works.
+        yield return Env.HostArchHasPrebuiltEngine
+            ? new Check("host", Status.Ok, $"{Env.HostArch} — upstream publishes an engine for this architecture")
+            : new Check("host", Status.Warn,
+                $"{Env.HostArch} — no upstream Godot build exists for this architecture",
+                Fix: "the engine has to be compiled here: './vx build-engine --target editor --install' "
+                     + "(hours). './vx build' and './vx test' need no engine and work now.");
+
         // --- .NET: the one genuinely unavoidable dependency ------------------------------------------
         string? dotnet = Env.Which("dotnet");
         if (dotnet is null)

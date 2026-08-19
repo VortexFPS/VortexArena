@@ -18,6 +18,11 @@ Usage:
 
 Platforms whose zips are absent (e.g. the best-effort macOS job failed) are simply omitted.
 
+Platforms this project supports but publishes NO binaries for (ppc64le) are a different thing entirely
+and are DECLARED, under `source_build`, rather than left absent - see SOURCE_BUILD below. A launcher
+cannot tell an omission meaning "we do not build this" from one meaning "today's build failed", so the
+distinction has to be in the file.
+
 Recovered onto main 2026-07-30 from `feature/launcher-updater`, which is being retired now that the
 launcher itself lives in VortexFPS/VortexLauncher. This file is the GAME side of that boundary — it emits
 the manifest the launcher CONSUMES — so it belongs here rather than there. `latest.json` is the only
@@ -44,11 +49,53 @@ SUFFIX_TO_PLATFORM = {
     "macos-universal": ("macos-universal", "macos-client"),
 }
 
+# Platforms the project supports but deliberately publishes NO binaries for — see SOURCE_BUILD below.
+# They are absent from SUFFIX_TO_PLATFORM on purpose: an entry there is a promise that a download exists,
+# and for these it never will.
+
 # The two `-dedicated-` keys are what a server operator's launcher resolves. Keeping them in the same
 # manifest as the client builds is the point: a host runs `vortex source build` only when it wants a
 # specific ref, and otherwise pins a published build through exactly the path a player's client uses,
 # so update and rollback behave identically on a server and on a desktop.
 DEDICATED_PLATFORMS = frozenset({"windows-dedicated-x86_64", "linux-dedicated-x86_64"})
+
+# ── source-build platforms (ADR-0015 §5, extended 2026-08-19) ────────────────────────────────────────
+# A platform the game RUNS on but ships no binary for. The launcher must not treat these as "no build
+# available" and stop: the supported answer there is to build from source at the same ref the release
+# names, so a POWER machine tracks releases exactly like a Windows one, just with a compile in the middle.
+#
+# Why this is a declaration and not an omission. Absence is ambiguous — a missing platform key looks
+# identical to a release whose Linux job failed, and a launcher cannot tell "we do not build this" from
+# "this build is broken today". Saying it out loud is what lets the launcher do the right thing without
+# hardcoding a list of architectures that would then drift from this repo.
+#
+# Additive and safe for existing clients: a launcher that has never heard of "source_build" ignores the
+# key and behaves exactly as it does today. A launcher that HAS heard of it gets `ref` — the tag this
+# manifest describes — which is the piece it cannot derive for itself.
+#
+# THE OTHER HALF OF THIS LIVES IN VortexFPS/VortexLauncher. latest.json is the only interface between
+# the two repos, so a change to its shape is a two-repo change; this side can ship first because the
+# addition is ignorable.
+SOURCE_BUILD = {
+    "linux-ppc64le": {
+        "reason": "64-bit little-endian PowerPC (IBM POWER8+). Upstream Godot publishes no engine build "
+                  "for this architecture, so there is nothing to prebuild against and no binaries are "
+                  "released. Building from source is supported and expected here.",
+        "clone": "https://github.com/VortexFPS/VortexArena.git",
+        "docs": "https://github.com/VortexFPS/VortexArena/blob/main/planning/ppc64le-port-2026-08-19.md",
+        # Ordered, and each one is a real command in this repo. The engine build is the long pole (hours)
+        # and is the step a launcher should warn about before starting rather than after.
+        "steps": [
+            "./vx setup --yes",
+            "./vx build-engine --install",
+            "./vx build",
+            "./vx export --preset linux-client-ppc64le",
+            "./vx run",
+        ],
+        "needs": ["a C++ toolchain", "scons", ".NET SDK 8+", "python3", "git"],
+        "expect": "hours: the engine is compiled twice (the editor generates the C# glue the template needs)",
+    },
+}
 
 ASSETS_NAME_RE = re.compile(r"^VortexArena-assets-([0-9a-f]{12})\.zip$")
 
@@ -190,6 +237,10 @@ def main():
         "notesUrl": f"https://github.com/{args.repo}/releases/tag/{args.tag}",
         "assets": assets,
         "platforms": platforms,
+        # `ref` is stamped per release rather than stored in the constant: the whole point is that a
+        # source build lands on the SAME version the manifest describes, not on whatever main happens
+        # to be that day.
+        "source_build": {k: {**v, "ref": args.tag} for k, v in SOURCE_BUILD.items()},
     }
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)

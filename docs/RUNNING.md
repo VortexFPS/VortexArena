@@ -41,6 +41,84 @@ When nothing is found, the scripts print every location they tried rather than f
 
 ---
 
+## Building the engine itself (`./vx build-engine`)
+
+Normally you never do this: `./vx setup` downloads the Godot editor that `tools/godot.lock.json` pins, and
+`./vx engine` downloads the export templates that `tools/engine-patches/engine.lock.json` pins. Both are
+prebuilt, hash-verified and take minutes.
+
+`./vx build-engine` compiles Godot from source instead — the editor, the release export template, or both
+— at the tag the lockfile pins, with this tree's patches applied. It is the executable copy of
+`.github/workflows/build-engine-template.yml`: same tag, same patch set, same scons flags, same order.
+
+```bash
+./vx build-engine --dry-run                    # the plan and every command, nothing run
+./vx build-engine                              # host platform + host arch, editor and template
+./vx build-engine --target editor --install    # editor only, installed into .godot-bin/
+./vx build-engine --arch ppc64 --install       # a different architecture
+./vx build-engine --src ../godot-4.6.3-vortex  # reuse a clone you already have
+```
+
+**Reach for it when:**
+
+- **there is no prebuilt engine for your machine.** Upstream Godot publishes x86_64 and arm64 and nothing
+  else, so on ppc64le this is the only path — `vx doctor` and `vx setup` both say so and name this command.
+  See `planning/ppc64le-port-2026-08-19.md`.
+- **you are changing an engine patch** and want to see the result before CI does.
+- **you are rehearsing an engine upgrade** — `tools/engine-patches/README.md` recommends exactly that when
+  the first 4.8 snapshot carrying the mouse-input backport lands.
+
+**What it costs.** Hours, not minutes, and **two** full engine compiles for `--target both`. That is not
+waste to optimise away: a .NET-enabled engine cannot be built in one pass, because the C# bindings compile
+from generated glue, and the glue is produced by *running* an editor binary. The editor gets built even
+when a template is all you want.
+
+**What it needs**, and checks for rather than assumes: `git`, Python 3, `scons`, a C++ toolchain and the
+.NET SDK. It does not install them — Godot's own
+[per-platform dependency list](https://docs.godotengine.org/en/stable/contributing/development/compiling/)
+is the authority.
+
+**What it will not do:** build on a big-endian host. It refuses by name, up front, rather than failing three
+hours in — Godot 4 is little-endian only and .NET publishes no big-endian PowerPC runtime.
+
+It verifies the patch hashes against `engine.lock.json` before anything expensive starts, skips patches that
+are already applied so a re-run is safe, and prints the `sha256` / `bytes` / lockfile snippet a pin needs at
+the end.
+
+### Platforms with no prebuilt release (ppc64le)
+
+Releases carry Windows x86_64, Linux x86_64 and macOS universal. **IBM POWER (ppc64le) is supported as a
+build-from-source platform** — the game compiles and runs there, client and dedicated server alike, but no
+binaries are published for it and none are planned. Upstream Godot ships no PowerPC engine build, so there
+is nothing to prebuild against.
+
+The whole path on such a machine, from a fresh clone:
+
+```bash
+./vx setup                                     # deps, maps; it will tell you the engine is a compile here
+./vx build-engine --install                    # editor + export template (hours)
+./vx build                                     # the game's C#
+./vx export --preset linux-client-ppc64le      # or linux-dedicated-ppc64le for a server
+./vx run                                       # picks the ppc64le preset automatically on this host
+```
+
+`./vx run` on POWER resolves the ppc64le preset by itself — `DefaultPreset()` follows the architecture as
+well as the OS — so nothing after `setup` needs a flag. `./vx run debug` works as soon as the *editor* is
+built and skips the template and export entirely, which is the faster loop while iterating.
+
+Both presets live in `export_presets.cfg` and are declared under `local_build_presets` in
+`tools/engine-patches/engine.lock.json`: a third category next to pinned templates and declared gaps, for a
+template that is built on the machine that exports and can therefore never carry a published hash.
+`python tools/verify-engine-template.py --preset-config linux-client-ppc64le` is the pre-export gate — it
+fails in seconds with the build command when the template is not there yet, instead of letting Godot abort
+with a misleading architecture error.
+
+The release manifest declares this too: `latest.json` carries a `source_build` block naming the clone URL,
+the release's tag and the steps, so VortexLauncher can build from source at the right ref on POWER rather
+than reporting "no build available". Full background: `planning/ppc64le-port-2026-08-19.md`.
+
+---
+
 ## Build
 
 The Godot-free libraries + tests build with the plain .NET SDK; the Godot host needs the Godot SDK (restores from

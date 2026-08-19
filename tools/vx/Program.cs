@@ -36,6 +36,7 @@ internal static class Program
                 "setup" => Setup.Run(commandArgs, json),
                 "update" => Update.Run(commandArgs, json),
                 "engine" => Engine.Run(commandArgs, json),
+                "build-engine" => Wrappers.BuildEngine(commandArgs),
                 "build" => Wrappers.Build(commandArgs),
                 "test" => Wrappers.Test(commandArgs),
                 "run" => Wrappers.RunClient(commandArgs),
@@ -107,6 +108,17 @@ internal static class Program
                             --verify-only   report drift, change nothing
                             --force         re-download everything
                             --only <plat>   just these (repeatable)
+              build-engine
+                          Build Godot itself from source — the editor, the export
+                          template, or both — at the tag engine.lock.json pins, with
+                          this tree's patches applied. Hours, not minutes. Required
+                          on any architecture upstream publishes no binary for
+                          (ppc64le); optional everywhere else.
+                            --target <t>    editor | template | both (default both)
+                            --arch <a>      x86_64 | arm64 | ppc64 | ... (default:
+                                            the host)
+                            --install       put the results where the tree looks
+                            --dry-run       print every command, run none
 
               build       Build the Godot host C# (Release by default; incremental).
                             debug           build the Debug config (what `vx run

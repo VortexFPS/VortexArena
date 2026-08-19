@@ -1132,8 +1132,9 @@ public sealed class ServerNet : IDisposable
             ["mapname"] = _world.Services.Cvars.GetString("mapname"),
             ["gametype"] = _world.GameType?.RegistryName ?? "dm",
             ["clients"] = _byPlayer.Count.ToString(),
-            // g_maxplayers 0/unset means "no gameplay cap" — report the transport's connection cap so the
-            // browser's players column shows real slots instead of "/0".
+            // DP reports svs.maxclients here. g_maxplayers, when an operator sets it, is the tighter GAMEPLAY cap
+            // and is what a browser should show; otherwise the server's slot count (`maxplayers`, adopted at
+            // start) is the real number of slots — not a transport detail any more.
             ["sv_maxclients"] = _world.Services.Cvars.GetFloat("g_maxplayers") > 0
                 ? _world.Services.Cvars.GetString("g_maxplayers")
                 : _maxClients.ToString(),
@@ -1189,8 +1190,11 @@ public sealed class ServerNet : IDisposable
             ? GameVersion
             : VortexArena.Common.BuildInfo.Sanitize(version);
 
-        int maxClients = cv.GetFloat("g_maxplayers") > 0 ? (int)cv.GetFloat("g_maxplayers") : _maxClients;
-        int freeSlots = System.Math.Max(0, maxClients - _byPlayer.Count);
+        // QC nJoinAllowed(NULL) (client.qc:2171-2210) — the gamecode owns this number, because it is the only
+        // side that can see the whole roster: bots occupy player slots, and the fill-only ones hand them back to
+        // an arriving human. Counting `_maxClients - _byPlayer.Count` here (peers only) used to advertise a
+        // bot-packed server as wide open.
+        int freeSlots = _world.FreeSlotsForStatus();
 
         // "purechanges": how far the server has been moved off stock settings. The port has no cvar-change
         // ledger of its own yet, so report the honest lower bound of 0 ("official settings") only when nothing
@@ -2065,6 +2069,18 @@ public sealed class ServerNet : IDisposable
         }
         st.IdentityFingerprint = PlayerIdentity.ComputeFingerprint(st.PendingPublicKey);
         st.AuthChallenge = null;
+
+        // DP SV_ConnectClient's full-server check. `maxplayers` counts humans AND bots in ONE budget (host_cmd.c
+        // :3070 "how many players (or bots) may be connected"), but bots are not ENet peers — so the transport's
+        // peer cap alone would let maxplayers humans in ON TOP OF a full bot roster, and a "16 slot" server would
+        // quietly hold 31. The roster is the authority, so the gate belongs here.
+        if (_world.Clients.PlayerCount >= _maxClients)
+        {
+            Reject(peerId, "server is full");
+            GD.Print($"[ServerNet] peer {peerId} REJECTED: server full " +
+                     $"({_world.Clients.PlayerCount}/{_maxClients}: {_world.Clients.HumanCount} human, {_world.Clients.BotCount} bot).");
+            return;
+        }
 
         // admit: create the player on the world's client roster (spawns it via PutClientInServer).
         ClientManager.ClientInfo info = _world.Clients.ClientConnect(isBot: false, netName: string.IsNullOrEmpty(st.PendingName) ? null : st.PendingName);

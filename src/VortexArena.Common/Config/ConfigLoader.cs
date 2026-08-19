@@ -98,6 +98,11 @@ public static class ConfigLoader
         // redefined to a no-op by the dedicated-server detection (which lives in the client/common tree we skip).
         interp.DefineAlias("if_client", "${* asis}");
         interp.DefineAlias("if_dedicated", "${* asis}");
+        // `maxplayers` (DP Cmd_AddCommand, host_cmd.c:3070) — BEFORE the exec loop, because xonotic-server.cfg:31
+        // is `maxplayers 16` and an unregistered two-token line would be swallowed by the interpreter's bare cvar
+        // assignment instead of setting the server's slot count. This is the engine-always-has-it property the
+        // shipped tree assumes; see ServerSlots.RegisterCommand.
+        ServerSlots.RegisterCommand(interp);
 
         foreach (string file in entryFiles)
             interp.ExecuteFile(file);

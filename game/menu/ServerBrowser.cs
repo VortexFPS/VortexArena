@@ -125,6 +125,12 @@ public sealed class MatchConfig
     public int TimeLimit;          // minutes, 0 = none
     public int FragLimit;          // 0 = none
 
+    // Server slot count for this match — how many clients (humans AND bots) the host may hold. 0 = unset, keep
+    // whatever the config tree / CLI already chose. QC computes it in commands.cfg:114's menu_loadmap_prepare and
+    // passes it to the engine's `maxplayers` command; the port's equivalent lands in ServerSlots before the host
+    // starts. Not a raw menu_maxplayers copy: see CreateGameScreen for the max() the alias applies.
+    public int Slots;
+
     // Campaign: a non-empty CampaignId boots this match in campaign mode (QC g_campaign 1 + _campaign_name +
     // _campaign_index). The server then resolves gametype/bots/skill/limits/mutators from the campaign file at
     // CampaignIndex; Map/Gametype/BotCount above are the menu's pre-resolved copy, used to load the BSP + fill

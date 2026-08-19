@@ -1060,9 +1060,15 @@ public sealed partial class NetGame : Node3D
         // any bot leaving (fixcount trim / removebots / intermission teardown) must clear ServerNet's
         // per-player id/antilag maps, exactly like the old explicit remove handler did.
         _serverWorld.Bots.BotRemoved += p => _server?.ForgetPlayer(p);
-        _serverWorld.Bots.MaxClients = 16; // QC maxclients (mirrors ServerNet.Start's maxClients below)
+        // DP Host_Map_f (host_cmd.c:375-380): the server adopts the pending `maxplayers` as it starts. ONE value
+        // feeds both consumers, exactly as upstream's single svs.maxclients does — the gamecode's ceiling (QC's
+        // read-only `maxclients` global, which bot_fixcount and GetPlayerLimit clamp against) and the transport's
+        // peer cap. They must never drift apart: the first decides how many bots fill the server, the second how
+        // many humans can even reach it.
+        int slots = VortexArena.Common.Config.ServerSlots.Adopt();
+        _serverWorld.Bots.MaxClients = slots;
 
-        ServerNet? server = ServerNet.Start(_serverWorld, _port, maxClients: 16, serverName: _serverName);
+        ServerNet? server = ServerNet.Start(_serverWorld, _port, maxClients: slots, serverName: _serverName);
         if (server is null)
         {
             GD.PrintErr($"[NetGame] could not start the listen server on UDP {_port} (port in use?).");
@@ -1074,6 +1080,9 @@ public sealed partial class NetGame : Node3D
             return;
         }
         _server = server;
+        // DP `sv.active` (host_cmd.c:2527): from here on, a `maxplayers` change is deferred to the next map
+        // rather than applied under the running server. Cleared in Shutdown so the menu/next host starts free.
+        VortexArena.Common.Config.ServerSlots.IsServerActive = () => _server is not null;
         // DS-4: register the client shutdown-notice broadcast for Main's signal handler (cleared in Shutdown).
         GracefulShutdownHook = () => _server?.BroadcastPrint("^1Server is shutting down.^7\n");
         // Answer server-browser getinfo probes so this host shows up in the LAN list (no master heartbeat —
@@ -3869,6 +3878,10 @@ public sealed partial class NetGame : Node3D
         // DS-4: this server is going away — drop the signal-handler's client-notice hook so it can't fire against
         // a torn-down transport (and a rehost re-registers a fresh one for the new _server).
         GracefulShutdownHook = null;
+
+        // No server is running any more, so `maxplayers` may take effect immediately again (DP: sv.active goes
+        // false on shutdown, and the next `map` adopts maxclients_next).
+        VortexArena.Common.Config.ServerSlots.IsServerActive = null;
 
         // Motion-trace close: the toggle-off path in MotionTrace never runs on a quit/map-change, and the
         // writer buffers 128 lines — without this a short capture (or any session tail) is silently lost.

@@ -73,7 +73,19 @@ public class BotLiveLoopTests
         int humans = 0, bool teamplay = false, int teams = 0, float botVsHuman = 0, int playerLimit = 0,
         int maxClients = 16, int currentBots = 0, float time = 10f, bool joinEmpty = false)
         => BotPopulation.TargetBotCount(botVsHuman, teams, activeHumans, humans, teamplay,
-            minPlayers, minPerTeam, botNumber, playerLimit, maxClients, currentBots, time, joinEmpty);
+            minPlayers, minPerTeam, botNumber, playerLimit, maxClients, currentBots, time, joinEmpty, out _);
+
+    /// <summary>QC <c>bots_would_leave</c> (bot.qc:639,659) for the same inputs — the deductible-bot count that
+    /// backs the advertised free slots.</summary>
+    private static int WouldLeave(float botNumber = 0, float minPlayers = 0, float minPerTeam = 0,
+        int activeHumans = 0, int humans = 0, bool teamplay = false, int teams = 0, float botVsHuman = 0,
+        int playerLimit = 0, int maxClients = 16, int currentBots = 0, float time = 10f, bool joinEmpty = false)
+    {
+        BotPopulation.TargetBotCount(botVsHuman, teams, activeHumans, humans, teamplay,
+            minPlayers, minPerTeam, botNumber, playerLimit, maxClients, currentBots, time, joinEmpty,
+            out int botsWouldLeave);
+        return botsWouldLeave;
+    }
 
     [Fact]
     public void FixCount_BotNumber_FillsWithHumansPresent()
@@ -114,6 +126,70 @@ public class BotLiveLoopTests
     [Fact]
     public void FixCount_BotVsHuman_RatioOfActiveHumans()
         => Assert.Equal(2, Target(botVsHuman: 1f, teams: 2, activeHumans: 2, humans: 2, teamplay: true));
+
+    // ---- bots_would_leave (QC bot.qc:639,659) — what nJoinAllowed adds back to the advertised free slots ----
+
+    [Fact]
+    public void BotsWouldLeave_MinplayersFill_IsAllDeductible()
+        // minplayers 8 with one human = 7 fill bots, none of them asked for by bot_number: every one of them
+        // steps aside for an arriving human, so the server still advertises as joinable.
+        => Assert.Equal(7, WouldLeave(minPlayers: 8, activeHumans: 1, humans: 1));
+
+    [Fact]
+    public void BotsWouldLeave_BotNumberBots_AreNotDeductible()
+        // The operator asked for 7 bots; they are the point of the server, not placeholders.
+        => Assert.Equal(0, WouldLeave(botNumber: 7, activeHumans: 1, humans: 1));
+
+    [Fact]
+    public void BotsWouldLeave_CountsOnlyTheOvershootAboveBotNumber()
+        => Assert.Equal(4, WouldLeave(botNumber: 3, minPlayers: 8, activeHumans: 1, humans: 1));
+
+    [Fact]
+    public void BotsWouldLeave_IsMeasuredAfterTheCaps_NotBeforeThem()
+        // QC computes it from the CLAMPED count (bot.qc:655 then :659): maxClients 4 with 1 human leaves room
+        // for 3 bots, not the 7 minplayers wanted, so only 3 can be deducted.
+        => Assert.Equal(3, WouldLeave(minPlayers: 8, activeHumans: 1, humans: 1, maxClients: 4));
+
+    [Fact]
+    public void BotsWouldLeave_BotVsHumanRoster_DeductsNothing()
+        // QC only sets it in the minplayers/bot_number arm; the bot_vs_human branch leaves the 0 from :639.
+        => Assert.Equal(0, WouldLeave(botVsHuman: 1f, teams: 2, activeHumans: 2, humans: 2, teamplay: true));
+
+    [Fact]
+    public void BotsWouldLeave_EmptyServer_DeductsNothing()
+        => Assert.Equal(0, WouldLeave(botNumber: 4, currentBots: 4, time: 10f));
+
+    // =============================================================================================
+    // the slot count is what caps the fill (QC maxclients — the engine global bot_fixcount clamps against)
+    // =============================================================================================
+
+    /// <summary>Fill a solo-host roster with <paramref name="slots"/> server slots and return the bot count it
+    /// settles on. One human, as a listen server always has.</summary>
+    private static int BotsFilledWith(int slots, int botNumber)
+    {
+        var world = new GameWorld(FlatFloor(), SpawnDicts(new Vector3(0f, 0f, 32f), new Vector3(128f, 0f, 32f)));
+        world.Boot("dm");
+        world.Bots.MaxClients = slots;
+        Cvars.Set("bot_number", botNumber.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        world.Clients.ClientConnect(isBot: false, netName: "host"); // the listen server's own player
+        RunTo(world, 12f);                                          // one add per frame from t=2.5
+        return world.Clients.BotCount;
+    }
+
+    [Fact]
+    public void SlotCount_16_LeavesRoomFor15Bots_TheOldHardcodedCeiling()
+        // The reported symptom, exactly: the host used to pin maxclients at 16, so a solo player asking for
+        // more than 15 bots silently got 15 — one slot is theirs.
+        => Assert.Equal(15, BotsFilledWith(slots: 16, botNumber: 24));
+
+    [Fact]
+    public void SlotCount_RaisedByMaxplayers_LiftsTheBotCeilingWithIt()
+        // ...and with `maxplayers 32` the same request is honoured in full.
+        => Assert.Equal(24, BotsFilledWith(slots: 32, botNumber: 24));
+
+    [Fact]
+    public void SlotCount_LoweredByMaxplayers_TightensTheBotCeiling()
+        => Assert.Equal(7, BotsFilledWith(slots: 8, botNumber: 24));
 
     // =============================================================================================
     // GameWorld integration: fill → spawn → move → fight → trim (the live loop)

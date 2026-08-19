@@ -159,6 +159,50 @@ public class VortexConfigLayerTests
         Assert.Equal(0.015625f, cvars.GetFloat("sys_ticrate"));
     }
 
+    /// <summary>
+    /// 32 server slots, not upstream's 16 — the number that decides how many bots a solo host can field
+    /// (slots minus your own). Loads the REAL server chain so the layer's <c>maxplayers 32</c> has to beat
+    /// xonotic-server.cfg:31's <c>maxplayers 16</c>, which is the whole point.
+    ///
+    /// <para>Asserts through <c>ServerSlots</c> rather than the cvar store precisely because there IS no cvar:
+    /// <c>maxplayers</c> is a command. A regression to <c>set maxplayers 32</c> in the layer would leave a
+    /// plausible-looking cvar behind and the real slot count at 16 — the exact failure this port already had
+    /// once — so the cvar must stay absent for this to be right.</para>
+    /// </summary>
+    [Fact]
+    public void Layer_Sets_32_Server_Slots()
+    {
+        RequireCoreContent();
+        ServerSlots.Reset();
+        try
+        {
+            var cvars = new CvarService();
+            ConfigLoader.LoadServerConfig(cvars, DiskReader);
+
+            Assert.Equal(32, ServerSlots.MaxClientsNext);
+            Assert.False(cvars.Has("maxplayers"), "maxplayers is a command — the layer must not `set` it.");
+        }
+        finally
+        {
+            ServerSlots.Reset(); // process-global (DP svs), so don't leak it into the next test
+        }
+    }
+
+    /// <summary>
+    /// The menu's half of the same default. Create Game feeds <c>menu_maxplayers</c> into <c>maxplayers</c>
+    /// (QC menu_loadmap_prepare, commands.cfg:114), so leaving this at upstream's 16 would mean every
+    /// menu-started match quietly re-imposed the old cap over the server default above.
+    /// </summary>
+    [Fact]
+    public void Layer_Sets_The_Menu_Slot_Default_To_Match()
+    {
+        RequireCoreContent();
+        var cvars = new CvarService();
+        // The client entry ships the seta this overrides, so load it too — the real boot ordering.
+        ConfigLoader.Load(cvars, DiskReader, "xonotic-client.cfg", ConfigLoader.VortexCommonEntry);
+        Assert.Equal(32f, cvars.GetFloat("menu_maxplayers"));
+    }
+
     [Fact]
     public void Layer_Centers_The_Nade_Throw()
     {

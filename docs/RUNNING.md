@@ -232,6 +232,18 @@ rule — so scripted runs and their `--cvar`/`--bots` pins can't pollute the pla
 - **server.cfg (DS-5):** on any host boot the server execs `~/XonData/server.cfg` (after the shipped config
   tree + `config.cfg`, before `--cvar` pins). Copy `server.cfg.example` (repo root) to start. `--serverconfig
   <name>` picks a different file. Absent by default, so nothing runs unless you opt in.
+- **Slot count — `maxplayers <n>`:** how many clients the server may hold, counting **humans and bots in one
+  budget** (DP `svs.maxclients`; it is a *command*, not a cvar, so `set maxplayers …` does nothing). **Vortex
+  ships 32** (`vortex-server.cfg`, overriding upstream's `16`), so a solo host can field **31 bots** — one slot
+  is yours. Change it in `server.cfg`, from the console, or with `--maxplayers <n>` (range 1–255). Like DP it
+  **takes effect at the next map**, not immediately: a running server prints `maxplayers can not be changed
+  while a server is running` and stores the value for the next start. Bare `maxplayers` reports the pending
+  value. The Create Game menu has its own default (`menu_maxplayers`, also 32) that it feeds to the host, so
+  raise both if you want a menu-started match to be bigger.
+  <br>Two consequences worth knowing: a server whose slots are filled by `bot_number` is genuinely **full** —
+  humans are refused with `server is full`, exactly as upstream, so leave headroom (or fill with `minplayers`,
+  whose bots are deductible and step aside for an arriving human). And `g_maxplayers` is a *separate, tighter*
+  gameplay cap layered on top — it can only lower the limit, never raise it past the slot count.
 - **rcon (DS-6):** DarkPlaces-compatible remote console on the discovery UDP port (`gamePort+1..+8`, logged as
   `rcon enabled on UDP <n>`). Set `rcon_password` (empty = OFF) in server.cfg. `rcon_secure 1` = time+HMAC-MD4
   (default, remote-safe), `2` = challenge+HMAC-MD4, `0` = plaintext (localhost only). Every authenticated
@@ -564,6 +576,10 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   registrations), so a launch-time command is always the final word. This is also the only way to script the
   console for a `--screenshot` capture — `--screenshot shot.png +toggleconsole +clear +help` photographs the
   console with a known state on screen.
+- **`--maxplayers <n>`** sets the server's slot count for this boot — humans and bots in one budget (DP's
+  `-dedicated N`/`-listen N`). Applied **after** the cfg tree and `server.cfg`, so it wins over the shipped
+  `maxplayers 32`; this deliberately inverts DP's own ordering (there the cfg wins, which would make the flag
+  inert) to match how `--cvar` already behaves. See the dedicated-host section above for the command form.
 - **`--data <dir>`** overrides the content mount (default `res://data`, resolved project-relative — a
   `res://`/`user://` or absolute OS path also works). Point a dev build at an external gamedir, or give a
   packaged build a data dir that isn't beside it. **`./vx run` passes this automatically** (`--data

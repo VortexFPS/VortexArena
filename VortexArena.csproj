@@ -29,6 +29,19 @@
   <PropertyGroup Condition="'$(Configuration)' == 'ExportRelease'">
     <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
+  <!-- ...with ONE documented exception. ReadyToRun compiles IL to native at publish time, which needs a
+       crossgen2 pack FOR THE TARGET RID, and Microsoft publishes none for linux-ppc64le: as of 2026-08-19
+       nuget.org 404s both Microsoft.NETCore.App.Crossgen2.linux-ppc64le and the matching
+       Microsoft.NETCore.App.Runtime.linux-ppc64le, while the linux-x64 pair resolve normally - so the
+       package IDs are right and the packages genuinely are not there (.NET on POWER is delivered by
+       Red Hat/IBM as distro packages, not through the public feed). Left on, a ppc64le export fails at
+       restore with NU1101, which names the package and not the cause. What turning it off costs is what
+       R2R buys - a first-call JIT hitch on a code path that has not run yet - a frame-time concern on a
+       client and close to irrelevant on the dedicated server POWER hardware would realistically run.
+       Revisit if a crossgen2 pack for this RID ever ships. See planning/ppc64le-port-2026-08-19.md. -->
+  <PropertyGroup Condition="$(RuntimeIdentifier.EndsWith('-ppc64le'))">
+    <PublishReadyToRun>false</PublishReadyToRun>
+  </PropertyGroup>
   <!-- Godot.NET.Sdk globs **/*.cs from the project root, which would double-compile the class
        libraries under src/ (and their obj/). The host compiles only its own code (root + game/). -->
   <ItemGroup>

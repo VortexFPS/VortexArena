@@ -23,7 +23,7 @@ cd "${path}" || exit 1
 
 # Prefer a locally built/renamed binary over the shipped one (Base script shape: it prefers
 # xonotic-$mode over the prebuilt xonotic-linux64-$mode).
-for candidate in ./vortexarena-dedicated.x86_64 ./VortexArena.x86_64 ./vortexarena-dedicated; do
+for candidate in ./vortexarena-dedicated.x86_64 ./vortexarena-dedicated.ppc64le                  ./vortexarena-dedicated.arm64 ./VortexArena.x86_64 ./vortexarena-dedicated; do
     if [ -x "$candidate" ]; then
         xonotic="$candidate"
         break
@@ -32,7 +32,8 @@ done
 
 if [ -z "${xonotic:-}" ]; then
     echo "run-dedicated.sh: no dedicated binary found beside this script" >&2
-    echo "(expected vortexarena-dedicated.x86_64 — export the 'linux-dedicated' preset, or see tools/package.sh)" >&2
+    echo "(expected vortexarena-dedicated.x86_64 or vortexarena-dedicated.<arch> — export the" >&2
+    echo " 'linux-dedicated' preset, or see tools/package.sh)" >&2
     exit 1
 fi
 

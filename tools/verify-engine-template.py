@@ -15,8 +15,10 @@ Four modes, matching the ends of the failure:
 
   --patches            the SOURCE is intact: every patch file matches its sha256 in engine.lock.json.
                        Cheap; run it in CI and before rebuilding a template.
-  --audit-presets      the BOOKKEEPING is intact: every preset in export_presets.cfg is either pinned in
-                       engine.lock.json or declared in its `unpinned_presets`. Pure text, no downloads.
+  --audit-presets      the BOOKKEEPING is intact: every preset in export_presets.cfg has exactly one
+                       home in engine.lock.json - pinned under template.platforms[].presets, declared a
+                       known gap under `unpinned_presets`, or declared build-from-source under
+                       `local_build_presets`. Pure text, no downloads.
                        This is the only check that sees a preset nobody thought about: the per-preset
                        modes below are invoked by name, so a fifth preset added later would be gated by
                        nothing and no step would go red.
@@ -174,6 +176,26 @@ def declared_gaps(lock: dict) -> dict[str, dict]:
     return {k: v for k, v in (lock.get("unpinned_presets") or {}).items() if not k.startswith("$")}
 
 
+def local_build_presets(lock: dict) -> dict[str, dict]:
+    """Presets whose template is BUILT ON THE MACHINE THAT EXPORTS, name -> details.
+
+    The third category, and it exists because the first two cannot describe it. A pinned preset names a
+    published artifact and a sha256; a declared gap names an EMPTY custom_template/release and the stock
+    template behind it. A source-only platform is neither: it has a populated field (there is no stock
+    template for it to fall back to, and blanking the field is the one dangerous value everywhere else),
+    and it can never have a hash, because Godot does not build reproducibly — two people building the same
+    tag from the same patches get different bytes, which the template $comment already records.
+
+    So what is checkable here is the SHAPE of the arrangement rather than the artifact: the field is
+    populated, it names the file `vx build-engine --install` writes, and that file is actually present
+    before an export is attempted. That last one is the useful gate — it turns "Godot aborted with a
+    confusing architecture error" into "the template is not built yet, run this".
+
+    These platforms are deliberately NOT published (2026-08-19). See the $comment in the lockfile.
+    """
+    return {k: v for k, v in (lock.get("local_build_presets") or {}).items() if not k.startswith("$")}
+
+
 def check_patches(lock: dict, patch_dir: Path) -> list[str]:
     """Verify each pinned patch file matches its recorded sha256. Returns a list of failures."""
     failures: list[str] = []
@@ -272,16 +294,21 @@ def check_preset_config(lock: dict, preset: str, presets_path: Path) -> tuple[li
     failures: list[str] = []
     known = pinned_presets(lock)
     gaps = declared_gaps(lock)
+    local = local_build_presets(lock)
     configured = parse_export_presets(presets_path)
 
     if preset in gaps:
         return check_declared_gap(preset, gaps[preset], configured, presets_path), False
+
+    if preset in local:
+        return check_local_build(preset, local[preset], configured, presets_path), False
 
     if preset not in known:
         # A typo must not read as "verified". Same reasoning as the --binary path below.
         die_usage(f"engine.lock.json pins no template for preset '{preset}'. "
                   f"Pinned presets: {', '.join(sorted(known)) or '(none)'}. "
                   f"Declared gaps: {', '.join(sorted(gaps)) or '(none)'}. "
+                  f"Local builds: {', '.join(sorted(local)) or '(none)'}. "
                   f"Add it to template.platforms[…].presets, or fix the spelling.")
 
     if preset not in configured:
@@ -407,6 +434,43 @@ def check_declared_gap(preset: str, gap: dict, configured: dict[str, str], prese
     return []
 
 
+def check_local_build(preset: str, spec: dict, configured: dict[str, str], presets_path: Path) -> list[str]:
+    """Report a preset whose template is built locally, and hold it to the shape that makes that safe.
+
+    Never a pass in the sense a pinned preset is: nothing here proves WHICH engine produced the file,
+    only that the arrangement is the declared one and that the file exists. Said out loud, like a gap.
+    """
+    if preset not in configured:
+        return [f"engine.lock.json declares '{preset}' as a local-build preset but {presets_path.name} has "
+                f"no preset by that name. Remove the stale local_build_presets entry, or fix the spelling."]
+
+    want = spec.get("template", "")
+    value = configured[preset].removeprefix("res://")
+
+    if not value:
+        return [f"{preset}: custom_template/release is EMPTY, but this preset is declared as a local build.\n"
+                f"    Empty means 'use the stock template', and there is no stock template for this "
+                f"platform at all — upstream Godot publishes none. Set it to {want} and build that file "
+                f"with: {spec.get('build_with', './vx build-engine --install')}"]
+
+    if want and value != want:
+        return [f"{preset}: custom_template/release is '{value}', but engine.lock.json declares this "
+                f"local-build preset's template as '{want}'. One of the two is stale."]
+
+    print(f"  LOCAL BUILD: {preset} exports from a template built on this machine - not published, not hashed.")
+    print(f"      why:         {spec.get('reason', '(none given)')}")
+    print(f"      template:    {value}")
+    print(f"      build it:    {spec.get('build_with', '(not recorded)')}")
+
+    if not (ROOT / value).is_file():
+        return [f"{preset}: the template it names is not on disk yet - {value}\n"
+                f"    Nothing can export this preset until it exists. Build it with: "
+                f"{spec.get('build_with', './vx build-engine --install')}\n"
+                f"    Hours, and it needs a C++ toolchain, scons and the .NET SDK "
+                f"(tools/build-engine.sh --help)."]
+    return []
+
+
 def audit_presets(lock: dict, presets_path: Path) -> list[str]:
     """Every preset in export_presets.cfg is either pinned in the lockfile or a declared gap.
 
@@ -419,19 +483,25 @@ def audit_presets(lock: dict, presets_path: Path) -> list[str]:
     configured = parse_export_presets(presets_path)
     known = pinned_presets(lock)
     gaps = declared_gaps(lock)
+    local = local_build_presets(lock)
 
     if not configured:
         return [f"{presets_path.name} declares no presets at all — it was regenerated or truncated."]
 
     for preset in sorted(configured):
         value = configured[preset]
-        in_known, in_gap = preset in known, preset in gaps
+        in_known, in_gap, in_local = preset in known, preset in gaps, preset in local
 
-        if in_known and in_gap:
+        # Exactly one home, and it is checked rather than assumed: the three categories make opposite
+        # assertions about the same field (pinned = hashes to the pin, gap = must be EMPTY, local = must
+        # be populated but unhashable), so a preset in two of them cannot be satisfied by any value.
+        homes = [n for n, yes in (("pinned", in_known), ("unpinned_presets", in_gap),
+                                  ("local_build_presets", in_local)) if yes]
+        if len(homes) > 1:
             failures.append(
-                f"{preset}: engine.lock.json both pins a template for this preset and lists it under "
-                f"unpinned_presets. Those say opposite things, so neither can be trusted — delete "
-                f"whichever is stale.")
+                f"{preset}: engine.lock.json declares this preset in {len(homes)} places at once "
+                f"({', '.join(homes)}). They say contradictory things about custom_template/release, so "
+                f"no value satisfies all of them — delete whichever is stale.")
         elif in_known:
             want = f"tools/engine-templates/{known[preset][1]['filename']}"
             if not value:
@@ -442,17 +512,19 @@ def audit_presets(lock: dict, presets_path: Path) -> list[str]:
             elif value.removeprefix("res://") != want:
                 failures.append(
                     f"{preset}: custom_template/release is '{value}', not the pinned '{want}'.")
-        elif in_gap:
-            pass  # check_declared_gap owns the per-preset verdict; the audit only asks that it be declared.
+        elif in_gap or in_local:
+            pass  # check_declared_gap / check_local_build own the per-preset verdict; the audit only
+                  # asks that every preset have one of them.
         else:
             failures.append(
-                f"{preset}: accounted for nowhere in engine.lock.json — neither pinned under "
-                f"template.platforms[…].presets nor declared under unpinned_presets.\n"
-                f"    A preset in neither list is gated by nothing: --preset-config is invoked by name "
-                f"from ci.sh and release.yml, so no step would go red for it. Pin it, or declare it a gap "
+                f"{preset}: accounted for nowhere in engine.lock.json — not pinned under "
+                f"template.platforms[…].presets, not declared under unpinned_presets, not declared under "
+                f"local_build_presets.\n"
+                f"    A preset in none of those lists is gated by nothing: --preset-config is invoked by "
+                f"name from ci.sh and release.yml, so no step would go red for it. Pin it, or declare it "
                 f"with a reason.")
 
-    for preset in sorted(set(known) | set(gaps)):
+    for preset in sorted(set(known) | set(gaps) | set(local)):
         if preset not in configured:
             failures.append(
                 f"{preset}: engine.lock.json describes this preset but {presets_path.name} has no preset "
@@ -461,9 +533,11 @@ def audit_presets(lock: dict, presets_path: Path) -> list[str]:
     if not failures:
         pinned = sorted(p for p in configured if p in known)
         gapped = sorted(p for p in configured if p in gaps)
+        locals_ = sorted(p for p in configured if p in local)
         print(f"  ok: {len(configured)} preset(s), all accounted for")
         print(f"      pinned:  {', '.join(pinned) or '(none)'}")
         print(f"      gaps:    {', '.join(gapped) or '(none)'}")
+        print(f"      local:   {', '.join(locals_) or '(none)'}")
     return failures
 
 
@@ -560,7 +634,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--patches", action="store_true", help="verify the patch files match their pinned sha256")
     ap.add_argument("--audit-presets", action="store_true",
-                    help="verify every preset in export_presets.cfg is pinned or a declared gap")
+                    help="verify every preset in export_presets.cfg is pinned, a declared gap, or a "
+                         "declared local build")
     ap.add_argument("--preset-config", action="append", metavar="PRESET", default=None,
                     help="verify a preset's custom_template/release points at the pinned template (repeatable)")
     ap.add_argument("--binary", type=Path, metavar="EXE", help="verify an exported binary carries the patch markers")

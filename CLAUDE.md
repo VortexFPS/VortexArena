@@ -18,6 +18,10 @@ stay independently runnable — **put real logic in the script, never in `vx`**.
 ./vx run                     # launch it: the RELEASE dist/ export by default, `debug` for the editor project
 ./vx test                    # the suite
 ./vx ci                      # the authoritative local gate
+./vx build-engine            # compile Godot itself from source (rare; hours). `vx setup`/`vx engine`
+                             # download prebuilt binaries, and that is the normal path — this is for a
+                             # patch change, an engine-upgrade rehearsal, or an architecture upstream
+                             # publishes nothing for. See docs/RUNNING.md.
 ```
 
 The underlying commands still work and are still the reference:
@@ -45,6 +49,10 @@ smoke: **docs/RUNNING.md**.
   (`python tools/extract-engine-cvar-help.py` → `data/core.pk3dir/engine-cvar-help.txt`, needs `../Base`).
 - **The developer console** (keys, completion, `search`, styling cvars) → **docs/RUNNING.md → "The developer
   console"**. `+<command>` on the command line runs console commands at boot.
+- **A second CPU architecture** (ppc64le / IBM POWER) → **planning/ppc64le-port-2026-08-19.md**.
+  Two spellings for one target, and both are load-bearing: the engine build, the template filename and a
+  preset's `binary_format/architecture` say `ppc64`; uname, .NET's RID, the zip names and the launcher
+  manifest say `ppc64le`. `Env.HostArch` returns the second, `Env.GodotArch` converts to the first.
 - Past investigations → `planning/*.md` postmortems (verified, dated).
 
 ## House rules

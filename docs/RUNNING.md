@@ -41,6 +41,84 @@ When nothing is found, the scripts print every location they tried rather than f
 
 ---
 
+## Building the engine itself (`./vx build-engine`)
+
+Normally you never do this: `./vx setup` downloads the Godot editor that `tools/godot.lock.json` pins, and
+`./vx engine` downloads the export templates that `tools/engine-patches/engine.lock.json` pins. Both are
+prebuilt, hash-verified and take minutes.
+
+`./vx build-engine` compiles Godot from source instead — the editor, the release export template, or both
+— at the tag the lockfile pins, with this tree's patches applied. It is the executable copy of
+`.github/workflows/build-engine-template.yml`: same tag, same patch set, same scons flags, same order.
+
+```bash
+./vx build-engine --dry-run                    # the plan and every command, nothing run
+./vx build-engine                              # host platform + host arch, editor and template
+./vx build-engine --target editor --install    # editor only, installed into .godot-bin/
+./vx build-engine --arch ppc64 --install       # a different architecture
+./vx build-engine --src ../godot-4.6.3-vortex  # reuse a clone you already have
+```
+
+**Reach for it when:**
+
+- **there is no prebuilt engine for your machine.** Upstream Godot publishes x86_64 and arm64 and nothing
+  else, so on ppc64le this is the only path — `vx doctor` and `vx setup` both say so and name this command.
+  See `planning/ppc64le-port-2026-08-19.md`.
+- **you are changing an engine patch** and want to see the result before CI does.
+- **you are rehearsing an engine upgrade** — `tools/engine-patches/README.md` recommends exactly that when
+  the first 4.8 snapshot carrying the mouse-input backport lands.
+
+**What it costs.** Hours, not minutes, and **two** full engine compiles for `--target both`. That is not
+waste to optimise away: a .NET-enabled engine cannot be built in one pass, because the C# bindings compile
+from generated glue, and the glue is produced by *running* an editor binary. The editor gets built even
+when a template is all you want.
+
+**What it needs**, and checks for rather than assumes: `git`, Python 3, `scons`, a C++ toolchain and the
+.NET SDK. It does not install them — Godot's own
+[per-platform dependency list](https://docs.godotengine.org/en/stable/contributing/development/compiling/)
+is the authority.
+
+**What it will not do:** build on a big-endian host. It refuses by name, up front, rather than failing three
+hours in — Godot 4 is little-endian only and .NET publishes no big-endian PowerPC runtime.
+
+It verifies the patch hashes against `engine.lock.json` before anything expensive starts, skips patches that
+are already applied so a re-run is safe, and prints the `sha256` / `bytes` / lockfile snippet a pin needs at
+the end.
+
+### Platforms with no prebuilt release (ppc64le)
+
+Releases carry Windows x86_64, Linux x86_64 and macOS universal. **IBM POWER (ppc64le) is supported as a
+build-from-source platform** — the game compiles and runs there, client and dedicated server alike, but no
+binaries are published for it and none are planned. Upstream Godot ships no PowerPC engine build, so there
+is nothing to prebuild against.
+
+The whole path on such a machine, from a fresh clone:
+
+```bash
+./vx setup                                     # deps, maps; it will tell you the engine is a compile here
+./vx build-engine --install                    # editor + export template (hours)
+./vx build                                     # the game's C#
+./vx export --preset linux-client-ppc64le      # or linux-dedicated-ppc64le for a server
+./vx run                                       # picks the ppc64le preset automatically on this host
+```
+
+`./vx run` on POWER resolves the ppc64le preset by itself — `DefaultPreset()` follows the architecture as
+well as the OS — so nothing after `setup` needs a flag. `./vx run debug` works as soon as the *editor* is
+built and skips the template and export entirely, which is the faster loop while iterating.
+
+Both presets live in `export_presets.cfg` and are declared under `local_build_presets` in
+`tools/engine-patches/engine.lock.json`: a third category next to pinned templates and declared gaps, for a
+template that is built on the machine that exports and can therefore never carry a published hash.
+`python tools/verify-engine-template.py --preset-config linux-client-ppc64le` is the pre-export gate — it
+fails in seconds with the build command when the template is not there yet, instead of letting Godot abort
+with a misleading architecture error.
+
+The release manifest declares this too: `latest.json` carries a `source_build` block naming the clone URL,
+the release's tag and the steps, so VortexLauncher can build from source at the right ref on POWER rather
+than reporting "no build available". Full background: `planning/ppc64le-port-2026-08-19.md`.
+
+---
+
 ## Build
 
 The Godot-free libraries + tests build with the plain .NET SDK; the Godot host needs the Godot SDK (restores from
@@ -154,6 +232,18 @@ rule — so scripted runs and their `--cvar`/`--bots` pins can't pollute the pla
 - **server.cfg (DS-5):** on any host boot the server execs `~/XonData/server.cfg` (after the shipped config
   tree + `config.cfg`, before `--cvar` pins). Copy `server.cfg.example` (repo root) to start. `--serverconfig
   <name>` picks a different file. Absent by default, so nothing runs unless you opt in.
+- **Slot count — `maxplayers <n>`:** how many clients the server may hold, counting **humans and bots in one
+  budget** (DP `svs.maxclients`; it is a *command*, not a cvar, so `set maxplayers …` does nothing). **Vortex
+  ships 32** (`vortex-server.cfg`, overriding upstream's `16`), so a solo host can field **31 bots** — one slot
+  is yours. Change it in `server.cfg`, from the console, or with `--maxplayers <n>` (range 1–255). Like DP it
+  **takes effect at the next map**, not immediately: a running server prints `maxplayers can not be changed
+  while a server is running` and stores the value for the next start. Bare `maxplayers` reports the pending
+  value. The Create Game menu has its own default (`menu_maxplayers`, also 32) that it feeds to the host, so
+  raise both if you want a menu-started match to be bigger.
+  <br>Two consequences worth knowing: a server whose slots are filled by `bot_number` is genuinely **full** —
+  humans are refused with `server is full`, exactly as upstream, so leave headroom (or fill with `minplayers`,
+  whose bots are deductible and step aside for an arriving human). And `g_maxplayers` is a *separate, tighter*
+  gameplay cap layered on top — it can only lower the limit, never raise it past the slot count.
 - **rcon (DS-6):** DarkPlaces-compatible remote console on the discovery UDP port (`gamePort+1..+8`, logged as
   `rcon enabled on UDP <n>`). Set `rcon_password` (empty = OFF) in server.cfg. `rcon_secure 1` = time+HMAC-MD4
   (default, remote-safe), `2` = challenge+HMAC-MD4, `0` = plaintext (localhost only). Every authenticated
@@ -290,7 +380,40 @@ Headless doesn't render. To walk around the scene:
 ./vx run debug                # the PROJECT: editor engine + Debug C#
 ```
 
-Extra args pass through to the game unchanged (`./vx run --host stormkeep --bots 2`). Two things to know:
+Extra args pass through to the game unchanged (`./vx run --host stormkeep --bots 2`).
+
+#### It is safe to type in any state of the tree
+
+`./vx run` is the one command that should always be the right answer. Before launching it checks what the
+launch actually needs and offers to run whatever is missing, one `[Y/n]` at a time:
+
+| what is missing | what it offers |
+|---|---|
+| the Godot engine | `./vx setup` — or `./vx build-engine --target editor --install` on an architecture with no upstream build |
+| the export templates | `./vx engine` — or `./vx build-engine --arch <a> --install` for a source-only platform |
+| the export itself | `./vx export --preset <the one for this machine>` |
+| the map packs | `./vx maps` (advisory — the game starts without them, it just has nothing to play) |
+| `data/` | nothing: the core content is committed, so its absence means a broken checkout |
+
+**A tree that is already built asks nothing** — every check short-circuits when its requirement is already
+met, and launching an existing export needs neither the engine nor the templates, so neither is demanded.
+Requirements are checked in dependency order and reported together, so a fresh clone sees the whole list at
+once instead of discovering it one failure per run.
+
+Nothing expensive starts without a yes. Compiling the engine takes hours and the map packs are about a
+gigabyte, so an unattended `vx run` that began either would be worse than the error it replaced:
+
+- **`-y` / `--yes`** — answer every prompt with yes. For scripts and unattended machines.
+- **`-n` / `--no-build-check`** — change nothing and prompt for nothing; report what is missing and launch
+  if it still can.
+- **stdin redirected** (CI, a pipe) — never prompts. It prints the problem and the exact command, and fails
+  only if the missing piece was required.
+
+If the game then exits non-zero within ten seconds, that is reported as a **failed launch rather than a
+session**, with the three things worth trying in order (re-export, `./vx run debug` for the real error, and
+`./vx doctor`). A run you actually played is never described that way.
+
+Two things to know about which build you get:
 
 | | `./vx run` (default, since 2026-08-03) | `./vx run debug` |
 |---|---|---|
@@ -453,6 +576,10 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   registrations), so a launch-time command is always the final word. This is also the only way to script the
   console for a `--screenshot` capture — `--screenshot shot.png +toggleconsole +clear +help` photographs the
   console with a known state on screen.
+- **`--maxplayers <n>`** sets the server's slot count for this boot — humans and bots in one budget (DP's
+  `-dedicated N`/`-listen N`). Applied **after** the cfg tree and `server.cfg`, so it wins over the shipped
+  `maxplayers 32`; this deliberately inverts DP's own ordering (there the cfg wins, which would make the flag
+  inert) to match how `--cvar` already behaves. See the dedicated-host section above for the command form.
 - **`--data <dir>`** overrides the content mount (default `res://data`, resolved project-relative — a
   `res://`/`user://` or absolute OS path also works). Point a dev build at an external gamedir, or give a
   packaged build a data dir that isn't beside it. **`./vx run` passes this automatically** (`--data

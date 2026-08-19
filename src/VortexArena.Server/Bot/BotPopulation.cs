@@ -29,8 +29,22 @@ public sealed class BotPopulation
 {
     private readonly GameWorld _world;
 
-    /// <summary>Engine <c>maxclients</c> (the spawnclient capacity cap in bot_fixcount). Host-set; default 16.</summary>
-    public int MaxClients = 16;
+    /// <summary>
+    /// Engine <c>maxclients</c> (the spawnclient capacity cap in bot_fixcount) — how many clients, humans AND
+    /// bots together, this server may hold. Host-set at server start from <c>ServerSlots.Adopt()</c>, which is
+    /// what the <c>maxplayers</c> command writes; the default matches <c>ServerSlots.DefaultSlots</c> so a world
+    /// built without a host (most tests) behaves exactly as it did when this was a hardcoded 16.
+    /// </summary>
+    public int MaxClients = VortexArena.Common.Config.ServerSlots.DefaultSlots;
+
+    /// <summary>
+    /// QC <c>bots_would_leave</c> (bot.qc:639,659): how many of the current bot target are fill-only — bots the
+    /// server added to reach <c>minplayers</c> rather than because <c>bot_number</c> asked for them, and which
+    /// would therefore make way for an arriving human. QC <c>nJoinAllowed</c> (client.qc:2200) adds this back to
+    /// the advertised free-slot count, so a server kept full by minplayers fill still shows as joinable.
+    /// Recomputed every fixcount pass.
+    /// </summary>
+    public int BotsWouldLeave { get; private set; }
 
     /// <summary>The shared map waypoint graph (QC g_waypoints), loaded once on the first frame with bots.</summary>
     public WaypointNetwork? Network { get; private set; }
@@ -417,13 +431,15 @@ public sealed class BotPopulation
             minPlayers: Cvars.Float("minplayers"),
             minPlayersPerTeam: Cvars.Float("minplayers_per_team"),
             botNumber: Cvars.Float("bot_number"),
-            // QC bot_fixcount calls GetPlayerLimit() (server/client.qc:2155), which short-circuits to 2 for
-            // duel — so bot-fill respects the 1v1 cap, not the raw g_maxplayers.
-            playerLimit: _world.GameType is Duel ? Duel.PlayerLimit : Cvars.Int("g_maxplayers"),
+            // QC bot_fixcount calls GetPlayerLimit() (server/client.qc:2154) — the SAME function the human join
+            // gate uses, so duel's 1v1 cap, g_maxplayers and the slot count can't disagree between the two.
+            playerLimit: _world.GetPlayerLimit(),
             maxClients: MaxClients,
             currentBots: _currentBots,
             time: time,
-            botJoinEmpty: Cvars.Bool("bot_join_empty"));
+            botJoinEmpty: Cvars.Bool("bot_join_empty"),
+            botsWouldLeave: out int botsWouldLeave);
+        BotsWouldLeave = botsWouldLeave;
 
         // only add ONE bot per frame to avoid utter chaos (QC bot.qc:667-681, multiple_per_frame=false).
         if (_currentBots < target)
@@ -439,12 +455,18 @@ public sealed class BotPopulation
     /// <summary>
     /// The pure fixcount target math (QC bot_fixcount:623-664), exposed for tests: how many bots should be on
     /// the server right now. <paramref name="availableTeams"/> is QC AVAILABLE_TEAMS (0 outside teamplay);
-    /// <paramref name="playerLimit"/> is GetPlayerLimit() (g_maxplayers; 0 = unlimited).
+    /// <paramref name="playerLimit"/> is GetPlayerLimit() (0 = unlimited).
+    /// <paramref name="botsWouldLeave"/> is QC <c>bots_would_leave</c> (bot.qc:639,659): how many of the target
+    /// are fill-only bots that would give their slot up to an arriving human — see <see cref="BotsWouldLeave"/>.
     /// </summary>
     public static int TargetBotCount(float botVsHuman, int availableTeams, int activeRealPlayers, int realPlayers,
         bool teamplay, float minPlayers, float minPlayersPerTeam, float botNumber, int playerLimit, int maxClients,
-        int currentBots, float time, bool botJoinEmpty)
+        int currentBots, float time, bool botJoinEmpty, out int botsWouldLeave)
     {
+        // QC bot.qc:639: cleared before the branch — only the minplayers/bot_number arm below ever sets it, so
+        // a bot_vs_human roster (and an empty server) reports none deductible.
+        botsWouldLeave = 0;
+
         // bot_vs_human: an all-bot team sized as |ratio| × active humans (QC bot.qc:642-643).
         if (botVsHuman != 0f && availableTeams == 2)
             return System.Math.Min((int)MathF.Ceiling(MathF.Abs(botVsHuman) * activeRealPlayers),
@@ -462,7 +484,11 @@ public sealed class BotPopulation
             int bots = System.Math.Max(minBots, min - activeRealPlayers);
             if (playerLimit > 0)
                 bots = System.Math.Min(bots, System.Math.Max(playerLimit - activeRealPlayers, 0));
-            return System.Math.Min(bots, maxClients - realPlayers);
+            bots = System.Math.Min(bots, maxClients - realPlayers);
+            // QC bot.qc:659 — computed from the CLAMPED count, after both caps above. Bots asked for explicitly
+            // via bot_number are not deductible; only the minplayers overshoot is.
+            botsWouldLeave = System.Math.Max(0, bots - minBots);
+            return bots;
         }
 
         return 0; // no players → remove bots (QC bot.qc:661-664)

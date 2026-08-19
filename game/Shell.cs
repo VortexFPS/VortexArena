@@ -58,6 +58,13 @@ public partial class Shell : Node
     /// <summary>Bot count for the <c>--host</c> listen server (CLI <c>--bots N</c>); 0 = no bots.</summary>
     public int BootBots { get; set; }
 
+    /// <summary>Server slot count for this boot (CLI <c>--maxplayers N</c>, DP's <c>-dedicated N</c>/<c>-listen N</c>);
+    /// 0 = unset, keep whatever the config tree chose. Applied in <see cref="_Ready"/> AFTER the cfg load rather
+    /// than at parse time: DP lets <c>xonotic-server.cfg</c>'s own <c>maxplayers</c> win over its CLI flag, which
+    /// would make this flag inert here, so it follows the port's <c>--cvar</c> convention (CLI is the last word)
+    /// instead. Deliberate divergence — see docs/RUNNING.md.</summary>
+    public int BootMaxPlayers { get; set; }
+
 #if VA_BOTPLAYER
     /// <summary>Bot-player harness (CLI <c>--bot-player</c>): drive the LOCAL player from a bot brain so an
     /// unattended run exercises the real player pipeline. Compile-gated — see Directory.Build.props.</summary>
@@ -210,6 +217,10 @@ public partial class Shell : Node
         // pure client / capture / smoke run that hasn't opted in is unaffected. `--serverconfig <name>` picks a
         // different file (DP -serverconfig).
         MaybeExecServerConfig();
+        // `--maxplayers N`: last word on the server's slot count, applied after the stock tree + server.cfg have
+        // both had their say (either may carry a `maxplayers` line) and before any server starts and adopts it.
+        if (BootMaxPlayers > 0)
+            VortexArena.Common.Config.ServerSlots.Set(BootMaxPlayers);
         // --cvar NAME VALUE (repeatable): pin a cvar at boot AFTER the config tree loads and BEFORE ApplyAll, so a
         // test/automation/A-B run can force e.g. `--cvar vid_vsync 2 --cvar cl_frameprofiler 2` without editing a
         // config. Overrides the loaded config.cfg value (last writer wins), exactly like a console `set` would.
@@ -969,6 +980,10 @@ public partial class Shell : Node
         // Apply the chosen match limits to the shared cvars so the hosted world reads them.
         if (config.TimeLimit > 0) MenuState.Cvars.Set("timelimit", config.TimeLimit.ToString());
         if (config.FragLimit > 0) MenuState.Cvars.Set("fraglimit", config.FragLimit.ToString());
+        // QC menu_loadmap_prepare runs `maxplayers <n>` just before the map loads (commands.cfg:114). Same moment
+        // here: the NetGame below adopts the pending count as it starts. 0 = the caller expressed no preference
+        // (a CLI/campaign boot), so whatever the config tree or --maxplayers chose stands.
+        if (config.Slots > 0) VortexArena.Common.Config.ServerSlots.Set(config.Slots);
 
         var net = new VortexArena.Game.Net.NetGame
         {

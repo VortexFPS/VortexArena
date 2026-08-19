@@ -171,6 +171,12 @@ public partial class Main : Node
             int b = Array.IndexOf(args, "--bots");
             if (b >= 0 && b + 1 < args.Length && int.TryParse(args[b + 1], out int bots))
                 shell.BootBots = bots;
+            // `--maxplayers <n>` (DP `-dedicated N` / `-listen N`): how many clients — humans AND bots together —
+            // this host's server may hold. Stashed rather than applied now: the cfg tree hasn't loaded yet and
+            // xonotic-server.cfg carries its own `maxplayers`, so Shell applies it once that has run.
+            int mp = Array.IndexOf(args, "--maxplayers");
+            if (mp >= 0 && mp + 1 < args.Length && int.TryParse(args[mp + 1], out int maxPlayers) && maxPlayers > 0)
+                shell.BootMaxPlayers = maxPlayers;
             // `--port <n>` (DP `-port`): bind the hosted listen server off the stock 26000 — scripted/agent
             // runs must not collide with a live instance (a busy port makes the host's self-client attach to
             // the WRONG server behind a plausible-looking handshake; see RUNNING.md).

@@ -10,7 +10,23 @@ namespace VortexArena.Formats;
 /// Both Quake IBSP maps and MD3 models store all multi-byte values little-endian
 /// (Darkplaces passes every field through <c>LittleLong</c>/<c>LittleFloat</c>/<c>LittleShort</c>).
 /// We therefore read explicitly little-endian via <see cref="BinaryPrimitives"/> so the parsers
-/// are correct on a big-endian host as well. (DPM would be big-endian, but DPM is out of scope here.)
+/// are correct on a big-endian host as well. The big-endian counterpart is
+/// <c>Dpm/DpmBinary.cs</c>, which does the same thing in the other direction for DPM models.
+///
+/// <para><b>The rest of the tree is not uniformly endian-explicit, and that is a bounded, deliberate
+/// state rather than an unexamined one.</b> Ten call sites outside this assembly serialise or parse
+/// bytes through <see cref="BitConverter"/>, which follows the HOST's byte order:
+/// <c>Gameplay/Effects/EffectEmitter.cs</c> (particle-effect blobs), <c>Gameplay/StatusEffects.cs</c>
+/// (status blob round-trip), <c>game/client/particles/SdfCollisionService.cs</c> (GPU buffer packing)
+/// and the WAV header parsing in <c>game/loaders/AssetLoader.cs</c>. On a little-endian host every one
+/// of them is correct; on a big-endian host every one of them is wrong.</para>
+///
+/// <para>They are left alone because <b>no target this game can be built for is big-endian.</b> Godot 4
+/// is little-endian only, and .NET publishes no big-endian PowerPC runtime — the supported POWER target
+/// is ppc64le, which is little-endian (planning/ppc64le-port-2026-08-19.md). Converting them would be a
+/// behaviour-neutral edit to particle serialisation and the audio loader in exchange for correctness on
+/// a platform that cannot run the engine. If a big-endian target ever becomes real, this paragraph is
+/// the list of what to convert, and <see cref="BinaryPrimitives"/> is what to convert it to.</para>
 ///
 /// All readers take an absolute byte <paramref name="offset"/> and bounds-check against the span,
 /// throwing <see cref="AssetParseException"/> on overrun rather than the default

@@ -15,6 +15,44 @@ internal static class Env
     internal static bool IsMacOS => RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
 
     /// <summary>
+    /// The host CPU architecture, in the spelling this tree uses for ANYTHING A HUMAN OR THE LAUNCHER
+    /// SEES — zip suffixes, manifest platform keys, dist/ directories, the godot.lock.json platform key.
+    ///
+    /// <para><b>There are two spellings and they are not interchangeable.</b> Godot's build system names
+    /// 64-bit PowerPC <c>ppc64</c> (its SConstruct aliases <c>ppc64le</c> to that, and the engine is
+    /// little-endian only), so the scons flag, the engine binary's filename and a preset's
+    /// <c>binary_format/architecture</c> must all say <c>ppc64</c>. Everything else — .NET's runtime
+    /// identifier, <c>uname -m</c>, every distro's package name — says <c>ppc64le</c>, which is the
+    /// better public name because it states the endianness that <c>ppc64</c> only implies. This property
+    /// returns the PUBLIC spelling; <see cref="GodotArch"/> converts to the engine's.</para>
+    ///
+    /// <para>Unknown architectures return the lowercased runtime name rather than throwing: a machine vx
+    /// has never seen should get a report that names it, not an exception.</para>
+    /// </summary>
+    internal static string HostArch => RuntimeInformation.ProcessArchitecture switch
+    {
+        Architecture.X64 => "x86_64",
+        Architecture.X86 => "x86_32",
+        Architecture.Arm64 => "arm64",
+        Architecture.Arm => "arm32",
+        Architecture.Ppc64le => "ppc64le",
+        Architecture.LoongArch64 => "loongarch64",
+        // RiscV64 is deliberately absent: the enum member does not exist on net8.0, which is the TFM
+        // this tool is pinned to, and the fallback already yields "riscv64" for it.
+        var other => other.ToString().ToLowerInvariant(),
+    };
+
+    /// <summary>The engine's spelling of <see cref="HostArch"/> — see that property for why they differ.</summary>
+    internal static string GodotArch => HostArch == "ppc64le" ? "ppc64" : HostArch;
+
+    /// <summary>
+    /// True when this tree publishes a prebuilt engine and release artifacts for the host architecture.
+    /// Everything else is a from-source machine: <c>tools/build-engine.sh</c> is the only way to get an
+    /// engine onto it, because upstream Godot publishes no binary for it.
+    /// </summary>
+    internal static bool HostArchHasPrebuiltEngine => HostArch is "x86_64" or "arm64";
+
+    /// <summary>
     /// The repo root: walk up from the executable until a directory carrying BOTH <c>project.godot</c> and
     /// <c>tools/lib</c> is found. Two markers rather than one because a lone <c>project.godot</c> also
     /// appears in map/editor fixtures, and being wrong here silently points every check at the wrong tree.

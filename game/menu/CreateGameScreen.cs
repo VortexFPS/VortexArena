@@ -99,6 +99,13 @@ public partial class CreateGameScreen : MenuScreen
     private static string GametypeIconName(string netName)
         => netName.Equals("freezetag", StringComparison.OrdinalIgnoreCase) ? "ft" : netName;
 
+    /// <summary>Top of the menu's "Player slots" range, and — less your own slot — of "Number of bots". Well under
+    /// the engine ceiling (<c>ServerSlots.MaxSlots</c>, 255) because this is a slider a user drags: the console's
+    /// <c>maxplayers</c> command is the way to ask for more than a listen server sensibly hosts.
+    /// <para>Twice the shipped default (32, vortex-server.cfg) rather than equal to it — a slider whose default
+    /// sits on its own maximum can only ever be dragged down, which is not a control.</para></summary>
+    private const int MenuMaxSlots = 64;
+
     // Bot skill rungs, copied from the QC "skill" mixed-slider labels.
     private static readonly string[] BotSkillNames =
     {
@@ -207,11 +214,16 @@ public partial class CreateGameScreen : MenuScreen
         _teamsRow = SettingRow(out _teamsLabel, "Teams:", null);
         col.AddChild(_teamsRow);
 
-        var slots = Widgets.Slider("menu_maxplayers", 1, 32, 1,
+        var slots = Widgets.Slider("menu_maxplayers", 1, MenuMaxSlots, 1,
             "The maximum amount of players or bots that can be connected to your server at once");
         col.AddChild(SettingRow(out _, "Player slots:", slots));
 
-        var bots = Widgets.Slider("bot_number", 0, 9, 1, "Amount of bots on your server");
+        // Bots share the slot budget with humans, so this tracks the slots slider above rather than the old fixed
+        // 9 — less the one slot you occupy. Nothing is lost by the pairing: menu_loadmap_prepare's `bot_number+1`
+        // term (see MenuSlotCount) raises the slot count to fit the bots you asked for, so the two sliders cannot
+        // be dragged into a contradiction where the fill silently drops bots. A console `bot_number` is still
+        // unbounded — this is the menu's range, not the game's.
+        var bots = Widgets.Slider("bot_number", 0, MenuMaxSlots - 1, 1, "Amount of bots on your server");
         col.AddChild(SettingRow(out Label botsLabel, "Number of bots:", bots));
         Dependent.Bind(bots, "bot_vs_human", 0, 0);
         Dependent.Bind(botsLabel, "bot_vs_human", 0, 0);
@@ -542,8 +554,28 @@ public partial class CreateGameScreen : MenuScreen
             BotSkill = (int)MenuState.Cvars.GetFloat("skill"),
             TimeLimit = timeLimit > 0 ? (int)timeLimit : 0,
             FragLimit = fragLimit > 0 ? (int)fragLimit : 0,
+            Slots = MenuSlotCount(),
         };
         RaiseStartGame(config);
+    }
+
+    /// <summary>
+    /// QC <c>menu_loadmap_prepare</c> (data/core.pk3dir/commands.cfg:114), whose rpn is
+    /// <c>max(menu_maxplayers, minplayers, bot_number + 1, minplayers_per_team * 4)</c> — the value it then hands
+    /// to the engine's <c>maxplayers</c> command.
+    ///
+    /// <para>The <c>bot_number + 1</c> term is the point of the max(): asking for N bots raises the slot count to
+    /// fit them AND you, so the two sliders can never be set to a contradiction where the fill silently loses
+    /// bots. <c>minplayers_per_team * 4</c> is upstream's fixed four-team worst case, not a live team count.</para>
+    /// </summary>
+    private static int MenuSlotCount()
+    {
+        VortexArena.Common.Services.ICvarService cv = MenuState.Cvars;
+        int slots = (int)cv.GetFloat("menu_maxplayers");
+        slots = System.Math.Max(slots, (int)cv.GetFloat("minplayers"));
+        slots = System.Math.Max(slots, (int)cv.GetFloat("bot_number") + 1);
+        slots = System.Math.Max(slots, (int)cv.GetFloat("minplayers_per_team") * 4);
+        return slots;
     }
 }
 

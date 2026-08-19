@@ -63,26 +63,55 @@ fi
 version="${version#v}"   # a "v0.1.0" tag → "0.1.0" in the file name
 info "version: $version"
 
-# target → (export-output marker, friendly zip suffix)
-marker_for()  { case "$1" in
-    windows-client)    echo "windows-client/VortexArena.exe" ;;
-    windows-dedicated) echo "windows-dedicated/vortexarena-dedicated.exe" ;;
-    linux-client)      echo "linux-client/VortexArena.x86_64" ;;
-    linux-dedicated)   echo "linux-dedicated/vortexarena-dedicated.x86_64" ;;
-    macos-client)      echo "macos-client/VortexArena.app" ;;
+# ── target names carry an optional ARCHITECTURE SUFFIX ────────────────────────
+# `linux-client` is the x86_64 build and `linux-client-ppc64le` is the same target built for 64-bit
+# little-endian PowerPC. x86_64 is the default and carries NO suffix, so every name that existed before
+# means exactly what it did before — nothing about the shipping matrix moves because a second
+# architecture became expressible.
+#
+# The suffix is the DISTRIBUTION spelling (ppc64le), which is what uname, .NET's runtime identifier and
+# every distro use, and it names the endianness that Godot's own `ppc64` only implies. The engine build
+# needs the other spelling; see tools/build-engine.sh and planning/ppc64le-port-2026-08-19.md.
+#
+# Adding an architecture is these two functions and nothing else: everything below asks base_of/arch_of
+# rather than matching a literal name.
+arch_of() { case "$1" in
+    *-ppc64le) echo "ppc64le" ;;
+    *-arm64)   echo "arm64" ;;
+    *)         echo "x86_64" ;;
 esac; }
-suffix_for()  { case "$1" in
-    windows-client)    echo "windows-x86_64" ;;
-    windows-dedicated) echo "windows-dedicated-x86_64" ;;
-    linux-client)      echo "linux-x86_64" ;;
-    linux-dedicated)   echo "linux-dedicated-x86_64" ;;
-    macos-client)      echo "macos-universal" ;;
+base_of() { case "$1" in
+    *-ppc64le|*-arm64) echo "${1%-*}" ;;
+    *)                 echo "$1" ;;
+esac; }
+
+# target → (export-output marker, friendly zip suffix). The marker is relative to dist/, and the target
+# name IS the dist directory, so a suffixed target reads its binary out of its own directory.
+marker_for()  { case "$(base_of "$1")" in
+    windows-client)    echo "$1/VortexArena.exe" ;;
+    windows-dedicated) echo "$1/vortexarena-dedicated.exe" ;;
+    linux-client)      echo "$1/VortexArena.$(arch_of "$1")" ;;
+    linux-dedicated)   echo "$1/vortexarena-dedicated.$(arch_of "$1")" ;;
+    macos-client)      echo "$1/VortexArena.app" ;;
+esac; }
+suffix_for()  { case "$(base_of "$1")" in
+    windows-client)    echo "windows-$(arch_of "$1")" ;;
+    windows-dedicated) echo "windows-dedicated-$(arch_of "$1")" ;;
+    linux-client)      echo "linux-$(arch_of "$1")" ;;
+    linux-dedicated)   echo "linux-dedicated-$(arch_of "$1")" ;;
+    macos-client)      echo "macos-universal" ;;   # genuinely universal: arm64 + x86_64 in one binary
 esac; }
 
 # There is deliberately no macos-dedicated. A dedicated server is a thing operators run on a host they
 # rent, and nobody rents macOS hosts; the macos-client target is already best-effort here (it exports
 # from the STOCK template, see engine.lock.json unpinned_presets) and adding a second macOS target
 # would double that unpinned surface for no operator who exists.
+#
+# ppc64le targets are deliberately NOT in this list, and that is policy rather than an unfinished job:
+# this project publishes no PowerPC binaries. It supports ppc64le as a BUILD-FROM-SOURCE platform, so the
+# export presets exist (export_presets.cfg, declared under engine.lock.json local_build_presets) and a
+# person on POWER packages their own build by naming it — `tools/package.sh linux-client-ppc64le`. Putting
+# them here would print a skip warning on every release for everyone, for an artifact nobody publishes.
 ALL_TARGETS=(windows-client windows-dedicated linux-client linux-dedicated macos-client)
 [ ${#requested[@]} -gt 0 ] || requested=("${ALL_TARGETS[@]}")
 
@@ -169,7 +198,7 @@ The complete corresponding source for this build, and the licence texts, are ava
 Licence texts for the bundled game content are in data/licenses/ beside this file.
 No charge, no registration, same place as the download — see GPLv3 section 6(d).
 EOF
-    case "$t" in
+    case "$(base_of "$t")" in
         windows-client)
             cat >> "$dir/README.txt" <<'EOF'
 
@@ -177,9 +206,9 @@ RUN:  double-click VortexArena.exe  (or VortexArena.console.exe for a debug cons
 EOF
             ;;
         linux-client)
-            cat >> "$dir/README.txt" <<'EOF'
+            cat >> "$dir/README.txt" <<EOF
 
-RUN:  ./run-client.sh        (or run ./VortexArena.x86_64 directly)
+RUN:  ./run-client.sh        (or run ./VortexArena.$(arch_of "$t") directly)
 EOF
             ;;
         windows-dedicated)
@@ -229,13 +258,13 @@ for t in "${targets[@]}"; do
     done
     write_readme "$tdir" "$t"
 
-    case "$t" in
+    case "$(base_of "$t")" in
         linux-client)
             cp "$ROOT/tools/run-client.sh" "$tdir/"
-            chmod +x "$tdir/run-client.sh" "$tdir/VortexArena.x86_64" 2>/dev/null || true ;;
+            chmod +x "$tdir/run-client.sh" "$tdir/VortexArena.$(arch_of "$t")" 2>/dev/null || true ;;
         linux-dedicated)
             cp "$ROOT/tools/run-dedicated.sh" "$tdir/"
-            chmod +x "$tdir/run-dedicated.sh" "$tdir/vortexarena-dedicated.x86_64" 2>/dev/null || true ;;
+            chmod +x "$tdir/run-dedicated.sh" "$tdir/vortexarena-dedicated.$(arch_of "$t")" 2>/dev/null || true ;;
         windows-dedicated)
             # No chmod: the zip is built on the Windows runner and unpacked on Windows, where the
             # executable bit does not exist. Copy only.

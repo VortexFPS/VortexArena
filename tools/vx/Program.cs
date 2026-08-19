@@ -36,6 +36,7 @@ internal static class Program
                 "setup" => Setup.Run(commandArgs, json),
                 "update" => Update.Run(commandArgs, json),
                 "engine" => Engine.Run(commandArgs, json),
+                "build-engine" => Wrappers.BuildEngine(commandArgs),
                 "build" => Wrappers.Build(commandArgs),
                 "test" => Wrappers.Test(commandArgs),
                 "run" => Wrappers.RunClient(commandArgs),
@@ -107,6 +108,17 @@ internal static class Program
                             --verify-only   report drift, change nothing
                             --force         re-download everything
                             --only <plat>   just these (repeatable)
+              build-engine
+                          Build Godot itself from source — the editor, the export
+                          template, or both — at the tag engine.lock.json pins, with
+                          this tree's patches applied. Hours, not minutes. Required
+                          on any architecture upstream publishes no binary for
+                          (ppc64le); optional everywhere else.
+                            --target <t>    editor | template | both (default both)
+                            --arch <a>      x86_64 | arm64 | ppc64 | ... (default:
+                                            the host)
+                            --install       put the results where the tree looks
+                            --dry-run       print every command, run none
 
               build       Build the Godot host C# (Release by default; incremental).
                             debug           build the Debug config (what `vx run
@@ -123,12 +135,24 @@ internal static class Program
               test        Run the suite.               --filter <expr>
               run         Launch the client — the RELEASE export from dist/ (what a
                           player runs). Extra args go to the game.
+
+                          Safe to type in ANY state of the tree: it checks what the
+                          launch needs — engine, export templates, an export,
+                          content — and offers to run whatever is missing, one
+                          [Y/n] at a time. A tree that is already built asks nothing.
                             debug           the Debug project via the editor engine
                                             instead (OS.IsDebugBuild() true, profiler +
-                                            showfps on; NOT release-representative)
+                                            showfps on; NOT release-representative).
+                                            Needs only the engine — no export and
+                                            no templates — so from a bare clone it
+                                            is the shorter road to a running game.
+                            -y, --yes       answer every prompt with yes. For scripts:
+                                            some fixes cost hours (compiling the engine)
+                                            or a gigabyte (the maps), so this is never
+                                            the default.
                             -n, --no-build-check
-                                            skip the "sources are newer than the build,
-                                            rebuild?" prompt and launch immediately
+                                            change nothing and prompt for nothing —
+                                            report what is missing, launch if it can
               server      Headless dedicated server.   [map] [args...]
               export      Export a release preset.     --preset <p> | --all
               package     Zip the exports.             (tools/package.sh)

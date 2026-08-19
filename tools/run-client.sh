@@ -16,7 +16,10 @@ link=$(readlink -f "${0}" 2>/dev/null)
 [ -n "${link}" ] && path=$(dirname "${link}")
 cd "${path}" || exit 1
 
-for candidate in ./VortexArena.x86_64 ./VortexArena ./vortexarena.x86_64; do
+# Architecture-suffixed first, then the bare name. The list is ordered, not exhaustive-by-accident:
+# each entry is a name some export or rename actually produces, and ppc64le is here because upstream
+# Godot ships no POWER build, so that binary is always locally built and easy to leave misnamed.
+for candidate in ./VortexArena.x86_64 ./VortexArena.ppc64le ./VortexArena.arm64                  ./VortexArena ./vortexarena.x86_64; do
     if [ -x "$candidate" ]; then
         xonotic="$candidate"
         break
@@ -25,7 +28,8 @@ done
 
 if [ -z "${xonotic:-}" ]; then
     echo "run-client.sh: no client binary found beside this script" >&2
-    echo "(expected VortexArena.x86_64 — export the 'linux-client' preset, or see tools/package.sh)" >&2
+    echo "(expected VortexArena.x86_64 or VortexArena.<arch> — export the 'linux-client' preset," >&2
+    echo " or see tools/package.sh)" >&2
     exit 1
 fi
 

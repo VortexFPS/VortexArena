@@ -91,8 +91,14 @@ internal static class Wrappers
         // no-op so older muscle memory and scripts keep working.
         bool debug = args.Contains("debug") || args.Contains("--debug");
         bool skipCheck = args.Contains("--no-build-check") || args.Contains("-n");
+        // --yes answers the preflight's prompts in advance, for a script or an unattended machine. It is
+        // NOT the default: some of what the preflight offers costs hours (compiling the engine) or a
+        // gigabyte (the maps), and starting either without being asked would be worse than the error it
+        // replaced.
+        bool assumeYes = args.Contains("--yes") || args.Contains("-y");
         string[] gameArgs = args
             .Where(a => a is not ("debug" or "--debug" or "--release" or "--no-build-check" or "-n"
+                                  or "--yes" or "-y"
                                   or "--no-render-thread" or "--render-thread"))
             .ToArray();
 
@@ -110,11 +116,70 @@ internal static class Wrappers
                             + "to a default build");
         }
 
-        return debug ? RunProject(gameArgs, skipCheck) : RunRelease(gameArgs, skipCheck);
+        return debug ? RunProject(gameArgs, skipCheck, assumeYes) : RunRelease(gameArgs, skipCheck, assumeYes);
     }
 
-    private static int RunProject(string[] gameArgs, bool skipCheck)
+    // ---- preflight ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// What both run paths need regardless of which build they launch: the game's content.
+    ///
+    /// <para>Neither is about the binary, and neither is caught by any staleness check - a clone with no
+    /// maps launches perfectly and then cannot start a match, which reads as a bug in the game.</para>
+    /// </summary>
+    private static IEnumerable<Requirement> ContentRequirements()
     {
+        yield return new Requirement(
+            "data/",
+            () => Directory.Exists(Path.Combine(Env.RepoRoot, "data")),
+            "data/ is missing — the core content is COMMITTED, so this checkout is incomplete.",
+            Command: null,   // nothing vx can fetch: it should already be here
+            Fix: null,
+            Fatal: true,
+            Note: "Re-clone, or `git checkout -- data`. Nothing will render without it.");
+
+        yield return new Requirement(
+            "the map packs",
+            () => !Setup.MapsIncomplete(),
+            "the compiled map packs are missing or incomplete — the game will start but has no maps to play.",
+            Command: "./vx maps",
+            Fix: () => Maps.Run([], json: false),
+            Fatal: false,
+            Note: "~1 GB, pinned by data/maps.lock.json. The menu works without them.");
+    }
+
+    /// <summary>
+    /// The engine, phrased so it is only required when something actually needs it.
+    ///
+    /// <para><paramref name="alreadySatisfied"/> is what keeps this honest: launching an export that is
+    /// already built needs no engine at all, so demanding one there would be a fabricated requirement.
+    /// It is a predicate rather than a bool because the state changes as earlier fixes run.</para>
+    /// </summary>
+    private static Requirement GodotRequirement(Func<bool> alreadySatisfied)
+        => new(
+            "the Godot editor",
+            () => alreadySatisfied() || Env.FindGodot() is not null,
+            "Godot is not installed here (tried $GODOT, .godot-bin/, PATH, the platform install dir).",
+            Command: Env.HostArchHasPrebuiltEngine
+                ? "./vx setup"
+                : "./vx build-engine --target editor --install",
+            Fix: Env.HostArchHasPrebuiltEngine
+                ? () => Setup.Run(["--yes"], json: false)
+                : () => BuildEngine(["--target", "editor", "--install"]),
+            Fatal: true,
+            Note: Env.HostArchHasPrebuiltEngine
+                ? null
+                : $"no upstream Godot build exists for {Env.HostArch}, so it has to be compiled here — "
+                  + "hours, and it needs a C++ toolchain, scons and the .NET SDK.");
+
+    private static int RunProject(string[] gameArgs, bool skipCheck, bool assumeYes)
+    {
+        // The editor engine IS the runtime here, so it is unconditionally required - no artifact can
+        // stand in for it the way an export does on the release path.
+        var required = new List<Requirement> { GodotRequirement(() => false) };
+        required.AddRange(ContentRequirements());
+        if (!Preflight.Run(required, assumeYes, noFix: skipCheck)) return 1;
+
         string? godot = Env.FindGodot();
         if (godot is null) { NoGodot(); return 1; }
 
@@ -129,16 +194,41 @@ internal static class Wrappers
         return Env.Exec(godot, argv);
     }
 
-    private static int RunRelease(string[] gameArgs, bool skipCheck)
+    private static int RunRelease(string[] gameArgs, bool skipCheck, bool assumeYes)
     {
         (string preset, string outRel) = AllPresets.First(p => p.Preset == DefaultPreset());
         string artifact = Path.Combine(Env.RepoRoot, outRel.Replace('/', Path.DirectorySeparatorChar));
-        if (!File.Exists(artifact) && !Directory.Exists(artifact))
+        bool Exported() => File.Exists(artifact) || Directory.Exists(artifact);
+
+        // Ordered: each fix is a prerequisite of the next. Both engine requirements short-circuit once an
+        // export exists, because running one needs neither - this walks a fresh clone to a launch without
+        // demanding anything a built tree does not need.
+        bool localBuild = LocalBuildPresets.Any(p => p.Preset == preset);
+        var required = new List<Requirement>
         {
-            Console.Error.WriteLine($"vx run: nothing exported at {outRel}");
-            Console.Error.WriteLine($"        ./vx export --preset {preset}   (or `vx run debug` for the editor project)");
-            return 1;
-        }
+            GodotRequirement(Exported),
+            new("the export template",
+                () => Exported() || Setup.TemplatesPresent(),
+                localBuild
+                    ? $"the export template for {preset} has not been built — no binary is published for "
+                      + $"{Env.HostArch}, so it is built here."
+                    : "the pinned export templates are not installed, and the export cannot run without them.",
+                Command: localBuild ? $"./vx build-engine --arch {Env.GodotArch} --install" : "./vx engine",
+                Fix: localBuild
+                    ? () => BuildEngine(["--arch", Env.GodotArch, "--install"])
+                    : () => Engine.Run([], json: false),
+                Fatal: true,
+                Note: localBuild ? "hours: the editor is compiled first, to generate the C# glue." : null),
+            new("the release export",
+                Exported,
+                $"nothing is exported at {outRel} — there is no built game to launch yet.",
+                Command: $"./vx export --preset {preset}",
+                Fix: () => Export(["--preset", preset]),
+                Fatal: true,
+                Note: "`./vx run debug` skips this entirely and runs the project in the editor engine."),
+        };
+        required.AddRange(ContentRequirements());
+        if (!Preflight.Run(required, assumeYes, noFix: skipCheck)) return 1;
         if (!skipCheck && !EnsureFresh(artifact, $"the {preset} export", $"./vx export --preset {preset}",
                                        () => Export(["--preset", preset])))
             return 1;
@@ -170,7 +260,33 @@ internal static class Wrappers
         Console.WriteLine($"→ {outRel}, release export (what a player runs)");
         // Launched from the install dir, exactly as a player would. That no longer decides where content is
         // found — --data does — but it still governs where relative paths in game args land.
-        return Env.Exec(launch, argv, Path.GetDirectoryName(artifact));
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        int exit = Env.Exec(launch, argv, Path.GetDirectoryName(artifact));
+        DiagnoseFailedLaunch(exit, started.Elapsed, preset);
+        return exit;
+    }
+
+    /// <summary>
+    /// A game that dies in the first few seconds did not "quit" — it failed to start, and the reason is
+    /// usually in a category vx can name even without reading the output.
+    ///
+    /// <para>Bounded on purpose. Quitting normally can also return non-zero on some platforms, and a
+    /// session someone actually played must never be described as a failure — so the window is short, and
+    /// this offers suggestions rather than a diagnosis it cannot actually make.</para>
+    /// </summary>
+    private static void DiagnoseFailedLaunch(int exit, TimeSpan ran, string preset)
+    {
+        if (exit == 0 || ran > TimeSpan.FromSeconds(10)) return;
+
+        Console.Error.WriteLine();
+        Console.Error.WriteLine($"vx run: the game exited {exit} after {ran.TotalSeconds:F1}s — that is a "
+                                + "failed launch rather than a session.");
+        Console.Error.WriteLine("        Most likely, in order:");
+        Console.Error.WriteLine($"          ./vx export --preset {preset}      re-export: a truncated export "
+                                + "is missing a runtime dll and dies at startup");
+        Console.Error.WriteLine("          ./vx run debug                      the editor engine prints the "
+                                + "real error where the release build swallows it");
+        Console.Error.WriteLine("          ./vx doctor                         driver, toolchain and content checks");
     }
 
     /// <summary>

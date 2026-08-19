@@ -135,12 +135,24 @@ internal static class Program
               test        Run the suite.               --filter <expr>
               run         Launch the client — the RELEASE export from dist/ (what a
                           player runs). Extra args go to the game.
+
+                          Safe to type in ANY state of the tree: it checks what the
+                          launch needs — engine, export templates, an export,
+                          content — and offers to run whatever is missing, one
+                          [Y/n] at a time. A tree that is already built asks nothing.
                             debug           the Debug project via the editor engine
                                             instead (OS.IsDebugBuild() true, profiler +
-                                            showfps on; NOT release-representative)
+                                            showfps on; NOT release-representative).
+                                            Needs only the engine — no export and
+                                            no templates — so from a bare clone it
+                                            is the shorter road to a running game.
+                            -y, --yes       answer every prompt with yes. For scripts:
+                                            some fixes cost hours (compiling the engine)
+                                            or a gigabyte (the maps), so this is never
+                                            the default.
                             -n, --no-build-check
-                                            skip the "sources are newer than the build,
-                                            rebuild?" prompt and launch immediately
+                                            change nothing and prompt for nothing —
+                                            report what is missing, launch if it can
               server      Headless dedicated server.   [map] [args...]
               export      Export a release preset.     --preset <p> | --all
               package     Zip the exports.             (tools/package.sh)

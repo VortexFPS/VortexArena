@@ -368,7 +368,40 @@ Headless doesn't render. To walk around the scene:
 ./vx run debug                # the PROJECT: editor engine + Debug C#
 ```
 
-Extra args pass through to the game unchanged (`./vx run --host stormkeep --bots 2`). Two things to know:
+Extra args pass through to the game unchanged (`./vx run --host stormkeep --bots 2`).
+
+#### It is safe to type in any state of the tree
+
+`./vx run` is the one command that should always be the right answer. Before launching it checks what the
+launch actually needs and offers to run whatever is missing, one `[Y/n]` at a time:
+
+| what is missing | what it offers |
+|---|---|
+| the Godot engine | `./vx setup` — or `./vx build-engine --target editor --install` on an architecture with no upstream build |
+| the export templates | `./vx engine` — or `./vx build-engine --arch <a> --install` for a source-only platform |
+| the export itself | `./vx export --preset <the one for this machine>` |
+| the map packs | `./vx maps` (advisory — the game starts without them, it just has nothing to play) |
+| `data/` | nothing: the core content is committed, so its absence means a broken checkout |
+
+**A tree that is already built asks nothing** — every check short-circuits when its requirement is already
+met, and launching an existing export needs neither the engine nor the templates, so neither is demanded.
+Requirements are checked in dependency order and reported together, so a fresh clone sees the whole list at
+once instead of discovering it one failure per run.
+
+Nothing expensive starts without a yes. Compiling the engine takes hours and the map packs are about a
+gigabyte, so an unattended `vx run` that began either would be worse than the error it replaced:
+
+- **`-y` / `--yes`** — answer every prompt with yes. For scripts and unattended machines.
+- **`-n` / `--no-build-check`** — change nothing and prompt for nothing; report what is missing and launch
+  if it still can.
+- **stdin redirected** (CI, a pipe) — never prompts. It prints the problem and the exact command, and fails
+  only if the missing piece was required.
+
+If the game then exits non-zero within ten seconds, that is reported as a **failed launch rather than a
+session**, with the three things worth trying in order (re-export, `./vx run debug` for the real error, and
+`./vx doctor`). A run you actually played is never described that way.
+
+Two things to know about which build you get:
 
 | | `./vx run` (default, since 2026-08-03) | `./vx run debug` |
 |---|---|---|

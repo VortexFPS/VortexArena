@@ -428,6 +428,7 @@ public sealed class ClientNet : IDisposable
         _handshakeSent = false;
         _wasConnected = false;
         Accepted = false;
+        RejectReason = null; // fresh session: clear any prior reject so a reconnect isn't born "failed"
         _remotes.Clear();
         LocalState = null; // drop the captured local entcs slice across reconnect/map change
         // session-scoped replication state: a fresh session re-sends all cvars and starts override-free.
@@ -1189,11 +1190,17 @@ public sealed class ClientNet : IDisposable
     /// conditional map submodels the server did, so its rendered world + prediction collision match authority.</summary>
     public string ServerGametype { get; private set; } = "";
 
+    /// <summary>The reason string from a server <c>HandshakeReject</c>, or null if we were never rejected. The host
+    /// reads this to surface a graceful "couldn't join" notice instead of leaving the loading screen hung — a reject
+    /// keeps <see cref="Accepted"/> false forever, which is otherwise indistinguishable from "still connecting".</summary>
+    public string? RejectReason { get; private set; }
+
     private void HandleReject(ref BitReader r)
     {
         string reason = r.ReadString();
         GD.PrintErr($"[ClientNet] handshake REJECTED: {reason}");
         Accepted = false;
+        RejectReason = string.IsNullOrWhiteSpace(reason) ? "The server refused the connection." : reason;
     }
 
     private void HandleSnapshot(ref BitReader r)

@@ -280,6 +280,19 @@ public abstract class NetTransport : IDisposable
         private Server() { }
 
         /// <summary>
+        /// True if UDP <paramref name="port"/> is free to host on. Godot's ENet binds with address reuse, so
+        /// <see cref="Start"/> "succeeds" even when another program (e.g. a DarkPlaces client, which also
+        /// defaults to 26000) already owns the port — that program then swallows the inbound packets and the
+        /// listen server's self-connect hangs on the loading screen forever.
+        ///
+        /// <para>The probe itself lives in <see cref="VortexArena.Net.HostPort.IsFree"/>, which needs no Godot
+        /// and is therefore reachable by the test suite — HostPortTests records which part of it is load-bearing
+        /// (not the flag you would guess) and what the range check is for. This stays as the entry point a
+        /// reader of the transport would look for.</para>
+        /// </summary>
+        public static bool IsPortFree(int port) => VortexArena.Net.HostPort.IsFree(port);
+
+        /// <summary>
         /// Start listening on <paramref name="port"/> for up to <paramref name="maxClients"/> clients. Returns
         /// the server, or null on failure (port in use, etc.). The caller subscribes to the events and calls
         /// <see cref="Poll"/> each frame. The peer list is maintained from the connect/disconnect signals.

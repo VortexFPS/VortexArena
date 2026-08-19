@@ -363,6 +363,21 @@ public sealed partial class NetGame : Node3D
     /// the player spawns (camera ready + health &gt; 0).</summary>
     public Action? DismissLoadingScreen { get; set; }
 
+    /// <summary>Callback (owned by <see cref="Shell"/>) invoked ONCE when a connection can't be completed —
+    /// the server rejected us, the link dropped before we spawned, or <see cref="ConnectTimeoutSeconds"/>
+    /// elapsed with no accept/first-snapshot. Shell tears the match down, dismisses the loading screen, and
+    /// returns to the menu with the reason. Null on the bare-CLI/headless paths (no menu to return to), where
+    /// the existing <c>--quit-after-seconds</c> / supervisor-exit handling owns failure instead. The string is a
+    /// short, player-facing reason.</summary>
+    public Action<string>? OnConnectionFailed { get; set; }
+
+    // Connection-failure watchdog (interactive path only — armed once OnConnectionFailed is wired). The deadline
+    // is stamped the first _Process frame we're live-but-not-yet-accepted, and never trips once the handshake is
+    // accepted; a reject or a dropped link fails immediately without waiting for it. _connectFailed latches so the
+    // callback fires exactly once even though _Process keeps running until the deferred teardown.
+    private ulong _connectDeadlineMsec;
+    private bool _connectFailed;
+
     /// <summary>True when this node is hosting a listen server (vs a pure remote <c>--connect</c> client).</summary>
     public bool IsListenServer => _isListenServer;
 
@@ -745,6 +760,71 @@ public sealed partial class NetGame : Node3D
         // O5: the phase table. Reported HERE, at the end of the synchronous load, not at first spawn — what
         // follows is handshake/network wait, which is a different question and is already logged separately.
         LoadTimeline.Report();
+    }
+
+    /// <summary>
+    /// The connect watchdog budget (seconds): how long we'll sit on the loading screen with no accept + no first
+    /// snapshot before giving up. Reuses DP's <c>net_connecttimeout</c> (default 30) from the shared store when
+    /// present; floored at 10s (DP's documented minimum) so a mistyped value can't make the game bail mid-handshake.
+    /// A reject or a dropped link fails immediately and never consults this.
+    /// </summary>
+    private float ConnectTimeoutSeconds
+    {
+        get
+        {
+            float t = _sharedCvars is not null && _sharedCvars.Has("net_connecttimeout")
+                ? _sharedCvars.GetFloat("net_connecttimeout") : 30f;
+            return t < 10f ? 10f : t;
+        }
+    }
+
+    /// <summary>
+    /// Detect a connection that will never complete and hand it to <see cref="OnConnectionFailed"/> exactly once.
+    /// Called each frame (interactive path) while the client is live but not yet spawned. Three failure modes:
+    /// an explicit server reject (<see cref="ClientNet.RejectReason"/>), a link that dropped after connecting
+    /// (<see cref="ClientNet.ConnectionLost"/>), and a silent stall — no accept and no first snapshot within
+    /// <see cref="ConnectTimeoutSeconds"/> (a dead host, a wrong/occupied port, a one-way link). The deadline is
+    /// armed lazily on the first call so it measures the handshake wait, not the preceding synchronous map load.
+    /// </summary>
+    private void CheckConnectionFailure()
+    {
+        if (_client is null) return;
+
+        // Immediate, specific failures — no reason to burn the whole timeout on these.
+        if (_client.RejectReason is { } reject)
+        {
+            FailConnection(reject);
+            return;
+        }
+        // The link came up and then dropped before we spawned (server quit, kicked us, or the peer timed out).
+        // ConnectionLost only latches after a successful connect, so this can't fire during the initial handshake.
+        if (_client.ConnectionLost)
+        {
+            FailConnection("Lost connection to the server.");
+            return;
+        }
+
+        // Silent stall: the handshake never completes. Accepted is the unambiguous "the server answered us" signal
+        // (the flat-floor camera goes ready BEFORE any server contact, so _cameraReady can't be used here). Arm the
+        // deadline on the first not-yet-accepted frame, then trip it — this catches a dead host, a wrong/occupied
+        // port, and the address-reuse silent-swallow (a non-Vortex binder eating our connect packets). Once accepted,
+        // the connection is healthy; any further wait (map stream, team/spawn prompt) is gameplay, not a failure.
+        if (_client.Accepted)
+            return;
+        if (_connectDeadlineMsec == 0UL)
+            _connectDeadlineMsec = Time.GetTicksMsec() + (ulong)(ConnectTimeoutSeconds * 1000f);
+        else if (Time.GetTicksMsec() >= _connectDeadlineMsec)
+            FailConnection("Couldn't connect to the server.");
+    }
+
+    /// <summary>Latch the failure and notify Shell once. _Process keeps running until Shell's deferred teardown
+    /// frees this node, so the latch is what guarantees a single callback.</summary>
+    private void FailConnection(string reason)
+    {
+        if (_connectFailed) return;
+        _connectFailed = true;
+        GD.PrintErr($"[NetGame] connection failed: {reason}");
+        OnConnectionFailed?.Invoke(reason);
     }
 
     /// <summary>Yield one process_frame so the LoadingScreen's _Process can repaint with whatever stage
@@ -4736,11 +4816,19 @@ public sealed partial class NetGame : Node3D
             CaptureGate.MarkReady();
         }
 
+        // Connection-failure watchdog (interactive path only): a reject, a dropped link, or a timeout with no
+        // accept/first-snapshot hands control back to Shell (menu + reason) instead of leaving the loading screen
+        // up forever. Runs before the stage block so a failure short-circuits the "still connecting" animation.
+        if (!clientSpawned && OnConnectionFailed is not null && !_connectFailed)
+            CheckConnectionFailure();
+
         // Loading screen progress during the async handshake + spawn phase (DP's progress bar filling up
         // while connecting/joining). The loading screen is owned by Shell; we BeginStage on each transition
         // (NOT every frame — that would reset the asymptote and stall the bar) and dismiss it via
         // DismissLoadingScreen when the player spawns. Final dismiss uses UpdateProgress to snap to 1.
-        if (LoadingScreen is not null || _fallbackOverlay is not null)
+        // Skipped once a failure has latched: Shell is tearing this match (and the loading layer) down, so we
+        // must not keep animating the screen it's about to free.
+        if (!_connectFailed && (LoadingScreen is not null || _fallbackOverlay is not null))
         {
             HandshakeStage stage =
                 clientSpawned          ? HandshakeStage.Spawned

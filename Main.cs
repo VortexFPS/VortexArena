@@ -175,8 +175,24 @@ public partial class Main : Node
             // runs must not collide with a live instance (a busy port makes the host's self-client attach to
             // the WRONG server behind a plausible-looking handshake; see RUNNING.md).
             int pt = Array.IndexOf(args, "--port");
-            if (pt >= 0 && pt + 1 < args.Length && int.TryParse(args[pt + 1], out int port) && port > 0)
-                shell.BootPort = port;
+            if (pt >= 0)
+            {
+                // Parsed and range-checked by VortexArena.Net.HostPort, which is also what
+                // Shell.ResolveHostPort probes through. The range check is not tidiness: IPEndPoint THROWS on
+                // anything outside 1..65535 rather than reporting it busy, so an unchecked value would take
+                // the host path down instead of falling back. A bad --port logs and boots on the default
+                // rather than refusing to start — a mistyped flag should not block the menu.
+                string? portText = pt + 1 < args.Length ? args[pt + 1] : null;
+                if (VortexArena.Net.HostPort.TryParse(portText, out int port, out string? portError))
+                {
+                    shell.BootPort = port;
+                    shell.BootPortExplicit = true; // pinned: host FAILS if taken, no auto-increment (Shell.ResolveHostPort)
+                }
+                else
+                {
+                    Log.Severe($"[Main] --port: {portError}. Hosting on {shell.BootPort} instead.");
+                }
+            }
 #if VA_BOTPLAYER
             // `--bot-player [skill]`: hand the LOCAL player to a bot brain so an unattended run drives the real
             // player pipeline (see Directory.Build.props / VaBotPlayer). The flag only exists in a build that

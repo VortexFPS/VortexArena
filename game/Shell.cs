@@ -72,6 +72,15 @@ public partial class Shell : Node
     /// already holding 26000 (a second host on a busy port otherwise self-connects to the WRONG server).</summary>
     public int BootPort { get; set; } = VortexArena.Game.Net.NetGame.DefaultPort;
 
+    /// <summary>True when the port was pinned by the user (CLI <c>--port N</c>). A pinned port is honoured
+    /// exactly — hosting FAILS loudly if it is taken. An unpinned (default) port auto-increments through
+    /// <see cref="HostPortScanLimit"/> instead, so a stray binder on 26000 (another live instance, a DarkPlaces
+    /// client — both default there) can't silently swallow the listen server's self-connect.</summary>
+    public bool BootPortExplicit { get; set; }
+
+    /// <summary>Top of the auto-increment scan range for an unpinned host port (inclusive).</summary>
+    private const int HostPortScanLimit = 26100;
+
     private CanvasLayer _menuLayer = null!;
     private MenuRoot _menu = null!;
     private ModelViewer? _viewer;
@@ -434,6 +443,8 @@ public partial class Shell : Node
             // Reachable only by clicking a Xonotic row in the browser, so it needs an id of its own to be
             // inspectable in a capture at all.
             "incompatible" => new DialogIncompatibleServer("^3Example ^7Xonotic Server", "192.0.2.10:26000"),
+            // Reached at runtime only on a failed connect (reject/drop/timeout), so it needs its own id to inspect.
+            "connfailed" => new DialogConnectionFailed("192.0.2.10:26000", "Couldn't connect to the server."),
             "teamselect" => new DialogTeamSelect(),
             "firstrun" => new DialogFirstRun(),
             "tos" => new DialogTermsOfService(),
@@ -783,6 +794,22 @@ public partial class Shell : Node
     /// remote client) is live. The no-net <see cref="ModelViewer"/> is intentionally NOT a "match" (no pause menu).</summary>
     private bool MatchRunning => _netGame is not null;
 
+    /// <summary>
+    /// A live match's connection failed before the player spawned (server reject, dropped link, or connect
+    /// timeout — see <see cref="VortexArena.Game.Net.NetGame.OnConnectionFailed"/>). Tear it down, return to the
+    /// main menu, and put a dismissable notice in front of the player naming the target and the reason — instead
+    /// of the old behaviour where the loading screen sat at "Connecting…" forever. The <paramref name="net"/>
+    /// guard drops a stale callback from a game the user already replaced (a second Create/Connect mid-failure).
+    /// </summary>
+    private void HandleConnectionFailed(VortexArena.Game.Net.NetGame net, string reason, string target)
+    {
+        if (net != _netGame)
+            return; // superseded by a newer match; its own failure (if any) will drive the menu
+        Log.Warn($"[Shell] connection to '{target}' failed: {reason}");
+        ReturnToMainMenu();
+        _menu.Push(new DialogConnectionFailed(target, reason));
+    }
+
     /// <summary>Disconnect: tear the match down, persist preferences, and show the main menu again.</summary>
     private void ReturnToMainMenu()
     {
@@ -867,6 +894,7 @@ public partial class Shell : Node
         net.ConfigureClient(address, ResolvePlayerName(), MenuState.Vfs, MenuState.Cvars, MenuState.SharedAssets);
         net.LoadingScreen = _loadingScreen;
         net.DismissLoadingScreen = DismissLoadingScreen;
+        net.OnConnectionFailed = reason => HandleConnectionFailed(net, reason, address);
         WireConsoleToNet(net);
         _netGame = net;
 
@@ -878,6 +906,39 @@ public partial class Shell : Node
     }
 
     /// <summary>
+    /// Pick the UDP port the listen server will bind. Godot's ENet binds with address reuse, so a taken port
+    /// "binds" anyway and the self-connect then hangs on the loading screen forever (the packets go to whoever
+    /// bound first — e.g. a DarkPlaces client, which also defaults to 26000). So probe first: the desired port
+    /// if free; otherwise auto-increment up to <see cref="HostPortScanLimit"/> — unless the port was pinned via
+    /// <c>--port</c> (<see cref="BootPortExplicit"/>), which must be honoured exactly. Returns -1 (with the
+    /// error already logged) when no port is usable.
+    /// </summary>
+    private int ResolveHostPort()
+    {
+        if (VortexArena.Game.Net.NetTransport.Server.IsPortFree(BootPort))
+            return BootPort;
+
+        if (BootPortExplicit)
+        {
+            Log.Severe($"[Shell] UDP {BootPort} (--port) is already in use by another program — " +
+                      "close it or pick a different --port.");
+            return -1;
+        }
+
+        for (int candidate = BootPort + 1; candidate <= HostPortScanLimit; candidate++)
+        {
+            if (VortexArena.Game.Net.NetTransport.Server.IsPortFree(candidate))
+            {
+                Log.Warn($"[Shell] UDP {BootPort} is in use by another program — hosting on {candidate} instead.");
+                return candidate;
+            }
+        }
+
+        Log.Severe($"[Shell] no free host port: UDP {BootPort}..{HostPortScanLimit} are all in use.");
+        return -1;
+    }
+
+    /// <summary>
     /// Host a LISTEN SERVER for the chosen config — boot a <see cref="VortexArena.Server.GameWorld"/> + a
     /// <see cref="VortexArena.Game.Net.ServerNet"/> in-process (filled with the config's bots), then self-connect a
     /// networked client to 127.0.0.1. This is the "Create Game" / <c>map</c> path, and also the boot path for
@@ -886,7 +947,19 @@ public partial class Shell : Node
     public async void StartListenServer(MatchConfig config)
     {
         Log.Info($"[Shell] hosting listen server: {config}");
-        TeardownGame();
+        TeardownGame(); // frees our own previous server's port before the probe below
+        int hostPort = ResolveHostPort();
+        if (hostPort < 0)
+        {
+            // Can't bind a host port (a pinned --port is taken, or the whole scan range is busy). Surface it the
+            // same way a failed connect does — back to the menu with a visible reason, not a silent no-op.
+            ReturnToMainMenu();
+            _menu.Push(new DialogConnectionFailed(config.Map ?? "",
+                BootPortExplicit
+                    ? $"UDP port {BootPort} is already in use. Close the other program, or host on a different --port."
+                    : $"No free network port ({BootPort}–{HostPortScanLimit}) was available to host on."));
+            return;
+        }
         ShowLoadingScreen(config.Map ?? "");
 
         // Hide the menu (and unfreeze) NOW so the loading screen is the only thing on screen during the blocking
@@ -907,7 +980,7 @@ public partial class Shell : Node
             gametype: string.IsNullOrWhiteSpace(config.Gametype) ? "dm" : config.Gametype,
             botCount: config.BotCount,
             botSkill: config.BotSkill,
-            port: BootPort,
+            port: hostPort,
             playerName: ResolvePlayerName(),
             serverName: MenuState.Cvars.GetString("hostname") is { Length: > 0 } hn ? hn : "Vortex Arena Listen Server",
             vfs: MenuState.Vfs,
@@ -917,6 +990,7 @@ public partial class Shell : Node
             sharedAssets: MenuState.SharedAssets);   // persist the model/sound/material caches across maps & servers
         net.LoadingScreen = _loadingScreen;
         net.DismissLoadingScreen = DismissLoadingScreen;
+        net.OnConnectionFailed = reason => HandleConnectionFailed(net, reason, config.Map ?? "");
         WireConsoleToNet(net);
         _netGame = net;
 

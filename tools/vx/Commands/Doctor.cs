@@ -284,6 +284,15 @@ internal static class Doctor
         // packs belong in ~/XonData/data/maps (UserPaths), which is mounted OVER this tree rather than into
         // it. REPORTED, NOT REMOVED — doctor changes nothing, and "delete the map file I do not recognise"
         // is not a decision to take on someone's behalf.
+        // Exports that exist but contain no game. A crashed export leaves a complete-looking binary with
+        // no embedded pck (ppc64le, 2026-08-20) — launching one dead-ends at Godot's "Is the .pck file
+        // missing?" dialog, which names neither the export nor the crash. `vx run` refuses its own preset's
+        // broken artifact; this is the only place the OTHER presets' artifacts get looked at.
+        foreach ((string bPreset, string bOut) in Wrappers.BrokenExports())
+            yield return new Check($"dist/ ({bPreset})", Status.Warn,
+                $"{bOut} exists but has NO game data — the export that wrote it crashed partway",
+                Fix: $"./vx export --preset {bPreset}     (and read its output: the crash is the real story)");
+
         string[] orphans = OrphanPacks(root).ToArray();
         if (orphans.Length > 0)
             yield return new Check("data/maps/ (unpinned)", Status.Warn,

@@ -337,7 +337,9 @@ internal static class Wrappers
     {
         (string preset, string outRel) = AllPresets.First(p => p.Preset == DefaultPreset());
         string artifact = Path.Combine(Env.RepoRoot, outRel.Replace('/', Path.DirectorySeparatorChar));
-        bool Exported() => File.Exists(artifact) || Directory.Exists(artifact);
+        // Complete, not merely present: a crashed export leaves a real file with no game in it, and
+        // launching that ends at Godot's "Is the .pck file missing?" dialog (see ExportIsComplete).
+        bool Exported() => ExportIsComplete(artifact, preset);
 
         // Ordered: each fix is a prerequisite of the next. Both engine requirements short-circuit once an
         // export exists, because running one needs neither - this walks a fresh clone to a launch without
@@ -363,7 +365,10 @@ internal static class Wrappers
                 Note: localBuild ? "hours: the editor is compiled first, to generate the C# glue." : null),
             new("the release export",
                 Exported,
-                $"nothing is exported at {outRel} — there is no built game to launch yet.",
+                File.Exists(artifact)
+                    ? $"the export at {outRel} is INCOMPLETE — a previous export crashed before the game "
+                      + "data was written into it, so launching it can only fail."
+                    : $"nothing is exported at {outRel} — there is no built game to launch yet.",
                 Command: $"./vx export --preset {preset}",
                 Fix: () => Export(["--preset", preset]),
                 Fatal: true,
@@ -569,6 +574,95 @@ internal static class Wrappers
     internal static IEnumerable<(string Preset, string Out)> AllPresets => Presets.Concat(LocalBuildPresets);
 
     /// <summary>
+    /// True when the exported artifact actually CONTAINS A GAME, not merely exists.
+    ///
+    /// <para><b>Existence was the old test, and a real machine proved it insufficient (ppc64le,
+    /// 2026-08-20).</b> Godot writes the output binary early — the template is copied to the destination,
+    /// THEN the pck is assembled and appended — so an export that crashes partway leaves a complete-looking
+    /// executable with no game data in it. That artifact passed the old check twice: `vx export` said "ok"
+    /// over a crash it had just mirrored to the terminal, and `vx run` launched it into Godot's "Is the
+    /// .pck file missing?" dialog. Every step was individually defensible and the sum was a lie.</para>
+    ///
+    /// <para>An embedded pck ends the file with a 12-byte trailer: a u64 pck size, then the magic
+    /// <c>GDPC</c> as the LAST FOUR BYTES — which is exactly where the loader looks
+    /// (core/io/file_access_pack.cpp). Verified against a real export before this was written: the
+    /// windows-client artifact ends <c>47 44 50 43</c>. A preset that does not embed gets the sibling-.pck
+    /// check instead; a directory artifact (the macOS .app) passes as-is, because its exporter hard-aborts
+    /// rather than half-writing and its pck lives inside the bundle.</para>
+    ///
+    /// <para>Unreadable counts as complete: a permission error must surface as the launch's real error, not
+    /// as this check refusing to launch.</para>
+    /// </summary>
+    internal static bool ExportIsComplete(string artifact, string preset)
+    {
+        if (Directory.Exists(artifact)) return true;
+        if (!File.Exists(artifact)) return false;
+
+        if (!PresetEmbedsPck(preset))
+            return File.Exists(Path.ChangeExtension(artifact, ".pck"));
+
+        try
+        {
+            using var fs = File.OpenRead(artifact);
+            if (fs.Length < 12) return false;
+            fs.Seek(-4, SeekOrigin.End);
+            Span<byte> magic = stackalloc byte[4];
+            fs.ReadExactly(magic);
+            return magic[0] == (byte)'G' && magic[1] == (byte)'D' && magic[2] == (byte)'P' && magic[3] == (byte)'C';
+        }
+        catch { return true; }
+    }
+
+    /// <summary>
+    /// Whether a preset embeds its pck into the binary, read from export_presets.cfg rather than assumed.
+    /// Every file-producing preset today says true, and that is also the default when the key is absent or
+    /// the file unreadable — the safe direction, since a false "does not embed" would wave a gutted binary
+    /// through on the strength of some unrelated .pck lying beside it.
+    /// </summary>
+    private static bool PresetEmbedsPck(string preset)
+    {
+        try
+        {
+            string[] lines = File.ReadAllLines(Path.Combine(Env.RepoRoot, "export_presets.cfg"));
+            // Find [preset.N] whose name matches, then read its [preset.N.options] block. Godot splits a
+            // preset across those two sections, joined on N.
+            string? section = null;
+            for (int i = 0; i < lines.Length; i++)
+                if (lines[i].StartsWith("[preset.", StringComparison.Ordinal)
+                    && !lines[i].Contains(".options", StringComparison.Ordinal))
+                {
+                    string here = lines[i].Trim().TrimStart('[').TrimEnd(']');
+                    for (int j = i + 1; j < lines.Length && !lines[j].StartsWith('['); j++)
+                        if (lines[j].Trim() == $"name=\"{preset}\"") { section = here; break; }
+                    if (section is not null) break;
+                }
+            if (section is null) return true;
+
+            bool inOptions = false;
+            foreach (string line in lines)
+            {
+                if (line.StartsWith('[')) inOptions = line.Trim() == $"[{section}.options]";
+                else if (inOptions && line.StartsWith("binary_format/embed_pck=", StringComparison.Ordinal))
+                    return line.Trim().EndsWith("=true", StringComparison.Ordinal);
+            }
+            return true;
+        }
+        catch { return true; }
+    }
+
+    /// <summary>Presets whose export output exists on disk but fails <see cref="ExportIsComplete"/> — for
+    /// <see cref="Doctor"/>, which reports them rather than fixing them.</summary>
+    internal static IEnumerable<(string Preset, string Out)> BrokenExports()
+    {
+        foreach ((string preset, string outRel) in AllPresets)
+        {
+            string artifact = Path.Combine(Env.RepoRoot, outRel.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(artifact) && !ExportIsComplete(artifact, preset))
+                yield return (preset, outRel);
+        }
+    }
+
+    /// <summary>
     /// The repo-relative export template a preset needs, read from engine.lock.json — or null when the
     /// lockfile does not describe one (a declared gap, or a preset it has never heard of).
     /// </summary>
@@ -668,10 +762,21 @@ internal static class Wrappers
             // settleDir: the savepack marker fires BEFORE the .NET export copies its assembly set —
             // ExecUntilDone waits for the artifact dir to quiesce so the kill can't truncate that copy
             // (a build missing one runtime dll dies at StartListenServer; see ExecUntilDone's note).
+            // Godot's crash handler announces itself in output ("handle_crash: Program crashed with
+            // signal N") while the process can still exit with a code that looks like any other failure.
+            // Watched for here because the artifact check below cannot tell WHY the pck is missing, and
+            // "the export crashed" is a materially better message than "the file is incomplete".
+            bool crashed = false;
             int rc = Env.ExecUntilDone(godot,
                 ["--headless", "--path", Env.RepoRoot, "--export-release", preset, outPath],
                 doneMarker: @"DONE.*savepack",
-                settleDir: Path.GetDirectoryName(outPath));
+                settleDir: Path.GetDirectoryName(outPath),
+                onLine: line =>
+                {
+                    if (line.Contains("handle_crash:", StringComparison.Ordinal)
+                        || line.Contains("Program crashed with signal", StringComparison.Ordinal))
+                        crashed = true;
+                });
 
             // Godot's headless export exits NON-ZERO on a fully successful export often enough that
             // run-release.sh stopped trusting the code entirely and gated on the artifact instead — a
@@ -704,6 +809,30 @@ internal static class Wrappers
                         "           (Editor → Manage Export Templates → Download and Install).");
                 return 1;
             }
+            // Existing is not enough: Godot copies the template to the destination FIRST and appends the
+            // pck at the end, so a crash partway leaves a complete-looking binary with no game inside. A
+            // ppc64le export did exactly that on 2026-08-20 and the old check called it "ok" over a crash
+            // it had just mirrored to this very terminal.
+            if (!ExportIsComplete(outPath, preset))
+            {
+                Console.Error.WriteLine($"vx export: {preset} wrote {outRel} but it contains NO GAME DATA "
+                                        + "(the embedded-pck trailer is missing).");
+                Console.Error.WriteLine(crashed
+                    ? "           Godot CRASHED partway through the export — the handle_crash banner is in "
+                      + "the output above. The binary is the template copy made before the crash; do not ship "
+                      + "or launch it."
+                    : "           The export ended before the pck was appended. The output above has the "
+                      + "engine's own account.");
+                if (LocalBuildPresets.Any(p => p.Preset == preset))
+                    Console.Error.WriteLine("           On a source-only platform, the known crash and its "
+                                            + "workaround live in planning/ppc64le-port-2026-08-19.md; "
+                                            + "`git pull` first — the workaround is a preset change.");
+                return 1;
+            }
+            if (crashed)
+                Console.Error.WriteLine($"   WARNING: the artifact looks complete, but Godot's crash handler "
+                                        + "fired during the export — treat this build with suspicion.");
+
             Console.WriteLine($"   ok: {outRel}");
             CleanStaleContentLink(outPath);
 

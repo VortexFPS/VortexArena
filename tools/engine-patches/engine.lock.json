@@ -129,6 +129,7 @@
       "See planning/ppc64le-port-2026-08-19.md."
     ],
     "linux-client-ppc64le": {
+      "export_quirk": "dotnet/include_scripts_content is TRUE for this preset, unlike every shipping preset, and it is a crash workaround rather than a choice about shipping sources. With the default (false), GodotTools calls AddFile(path, byte[]) once per .cs file to blank the script contents, and that byte[]-to-PackedByteArray marshaling crashed the export on ppc64le - signal 11 inside godotsharp_packed_byte_array_new_mem_copy, reported 2026-08-20, stacktrace in planning/ppc64le-port-2026-08-19.md. True keeps script handling on the C++ export pipeline, which makes no managed interop calls. Cost: the C# sources ship inside the pck - acceptable for a GPLv3 game on a platform whose every player builds from source anyway. Re-test on engine upgrades: if the marshaling is fixed, this can revert to false.",
       "reason": "64-bit little-endian PowerPC. No upstream Godot build exists for this architecture and no artifact is published for it here, so the export template is built on the machine that exports.",
       "template": "tools/engine-templates/godot.linuxbsd.template_release.ppc64.mono",
       "build_with": "./vx build-engine --arch ppc64 --install",
@@ -137,6 +138,7 @@
       "since": "2026-08-19"
     },
     "linux-dedicated-ppc64le": {
+      "export_quirk": "dotnet/include_scripts_content is TRUE for this preset, unlike every shipping preset, and it is a crash workaround rather than a choice about shipping sources. With the default (false), GodotTools calls AddFile(path, byte[]) once per .cs file to blank the script contents, and that byte[]-to-PackedByteArray marshaling crashed the export on ppc64le - signal 11 inside godotsharp_packed_byte_array_new_mem_copy, reported 2026-08-20, stacktrace in planning/ppc64le-port-2026-08-19.md. True keeps script handling on the C++ export pipeline, which makes no managed interop calls. Cost: the C# sources ship inside the pck - acceptable for a GPLv3 game on a platform whose every player builds from source anyway. Re-test on engine upgrades: if the marshaling is fixed, this can revert to false.",
       "reason": "Same template as linux-client-ppc64le - one file, two presets, exactly as the x86_64 Linux pair works. A dedicated_server export changes which resources are packed, not which engine it was built from.",
       "template": "tools/engine-templates/godot.linuxbsd.template_release.ppc64.mono",
       "build_with": "./vx build-engine --arch ppc64 --install",

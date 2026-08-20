@@ -222,7 +222,8 @@ internal static class Env
     /// and the word, and a too-strict pattern degrades silently into "hangs until the cap".</para>
     /// </summary>
     internal static int ExecUntilDone(string exe, IEnumerable<string> args, string doneMarker,
-                                      int graceSeconds = 2, int capSeconds = 600, string? settleDir = null)
+                                      int graceSeconds = 2, int capSeconds = 600, string? settleDir = null,
+                                      Action<string>? onLine = null)
     {
         var psi = new ProcessStartInfo(exe)
         {
@@ -244,6 +245,7 @@ internal static class Env
         {
             if (line is null) return;
             Console.WriteLine(line);                       // the tool's own output IS the output
+            onLine?.Invoke(line);                          // and the caller may read it as it passes
             if (marker.IsMatch(line)) done.Set();
         }
 

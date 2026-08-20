@@ -88,18 +88,67 @@ public class BoundedGateTracerTests
             worker.Start();
             held.Wait();
 
-            var sw = System.Diagnostics.Stopwatch.StartNew();
             for (int i = 0; i < 8; i++)
                 tracer.Trace(new Vector3(0, 0, 100), Vector3.Zero, Vector3.Zero,
                     new Vector3(0, 0, -100), MoveFilter.Normal, null);
-            sw.Stop();
             release.Set();
             worker.Join();
 
             Assert.Equal(0, live.Calls);   // all eight degraded to the static twin
-            // Naive per-trace waiting would be ~8x25 = 200ms; the shared budget caps it near ONE timeout.
-            Assert.True(sw.ElapsedMilliseconds < 120,
-                $"8 contended traces took {sw.ElapsedMilliseconds}ms - the frame budget did not stick");
+
+            // The budget, asserted as the count it actually controls rather than as elapsed wall time.
+            // Exactly one trace may wait: the first spends the whole 25 ms budget, and BudgetBlown then
+            // refuses a wait to the other seven. Naive per-trace waiting would let all eight wait, which
+            // is the ~8x25 ms frame this mechanism exists to prevent.
+            //
+            // This used to assert `sw.ElapsedMilliseconds < 120`, and that made the test flaky on the
+            // macOS CI runner — four failures at 139-169 ms. Wall time here is one Monitor.TryEnter
+            // timeout plus however long a loaded, oversubscribed runner takes to schedule eight
+            // iterations, so the threshold was measuring the machine as much as the code. The wait COUNT
+            // is a property of the budget alone.
+            Assert.Equal(1, BoundedGateTracer.BudgetedWaitsSinceReset);
+        }
+        finally
+        {
+            BoundedGateTracer.FrameWaitBudgetMs = savedBudget;
+            BoundedGateTracer.ResetFrame();
+            BoundedGateTracer.FallbacksSinceRead = 0;
+        }
+    }
+
+    /// <summary>The counterweight to the test above, and the reason its assertion means anything: with the
+    /// frame budget effectively removed, EVERY trace is allowed its own wait. That is the pre-budget
+    /// behaviour — 8 traces x TimeoutMs of waiting, the 10-16 ms frame with zero fallbacks that the first
+    /// live capture showed — so a change that quietly stopped the budget from binding would turn the count
+    /// above from 1 into 8 and be caught, rather than passing because nothing ever waits.
+    ///
+    /// <para>Runs at the default 2 ms timeout rather than the 25 ms one, because here all eight waits are
+    /// actually paid and the point is the count, not the duration.</para></summary>
+    [Fact]
+    public void WithoutTheFrameBudget_EveryTraceWaitsSeparately()
+    {
+        var live = new SentinelTracer();
+        var gate = new object();
+        var tracer = new BoundedGateTracer(live, FloorWorld(), gate) { TimeoutMs = 2 };
+        BoundedGateTracer.ResetFrame();
+        double savedBudget = BoundedGateTracer.FrameWaitBudgetMs;
+        BoundedGateTracer.FrameWaitBudgetMs = double.MaxValue;   // a budget that can never blow
+        try
+        {
+            using var held = new ManualResetEventSlim(false);
+            using var release = new ManualResetEventSlim(false);
+            var worker = new Thread(() => { lock (gate) { held.Set(); release.Wait(); } });
+            worker.Start();
+            held.Wait();
+
+            for (int i = 0; i < 8; i++)
+                tracer.Trace(new Vector3(0, 0, 100), Vector3.Zero, Vector3.Zero,
+                    new Vector3(0, 0, -100), MoveFilter.Normal, null);
+            release.Set();
+            worker.Join();
+
+            Assert.Equal(0, live.Calls);                                  // still all eight fell back
+            Assert.Equal(8, BoundedGateTracer.BudgetedWaitsSinceReset);   // but each one paid for it
         }
         finally
         {

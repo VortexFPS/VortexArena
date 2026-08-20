@@ -49,12 +49,30 @@ public sealed class BoundedGateTracer : ITraceService
     /// as the <c>cn.tracefb</c> mark beside <c>sv.gatewait_ms</c>). Main-thread only.</summary>
     public static int FallbacksSinceRead;
 
+    /// <summary>Traces allowed to WAIT on the gate since the last <see cref="ResetFrame"/> — calls that reached
+    /// <see cref="Monitor.TryEnter"/> with a non-zero timeout because the frame's budget was still unspent.
+    ///
+    /// <para>This is the budget working, stated as a count rather than as elapsed time: on a contended frame it
+    /// should be 1, because the first trace spends the whole budget and every trace after it is refused a wait.
+    /// A number that climbs with the trace count is the exact regression <see cref="FrameWaitBudgetMs"/> was
+    /// added to prevent — 4-8 traces each waiting just under <see cref="TimeoutMs"/>, rebuilding the 10-16 ms
+    /// frame with no fallbacks recorded. Surfaced beside <c>cn.tracefb</c> as <c>cn.tracewait</c>.</para>
+    ///
+    /// <para>Counting the waits rather than timing them is also what makes this testable: how long a
+    /// <see cref="Monitor.TryEnter"/> actually blocks depends on the machine, but how many were permitted
+    /// depends only on the budget.</para></summary>
+    public static int BudgetedWaitsSinceReset;
+
     // Cumulative gate-wait this frame (Stopwatch ticks). Static: one threaded host per process, main-thread
     // writers only — the same single-writer contract FallbacksSinceRead already carries.
     private static long _waitTicksThisFrame;
 
     /// <summary>Per-frame reset (the host calls this where it reads the counters): re-arms the wait budget.</summary>
-    public static void ResetFrame() => _waitTicksThisFrame = 0;
+    public static void ResetFrame()
+    {
+        _waitTicksThisFrame = 0;
+        BudgetedWaitsSinceReset = 0;
+    }
 
     private bool BudgetBlown
         => _waitTicksThisFrame * 1000.0 / System.Diagnostics.Stopwatch.Frequency >= FrameWaitBudgetMs;
@@ -94,6 +112,8 @@ public sealed class BoundedGateTracer : ITraceService
     private bool TryGate()
     {
         int wait = BudgetBlown ? 0 : TimeoutMs;
+        if (wait > 0)
+            BudgetedWaitsSinceReset++;
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         bool got = Monitor.TryEnter(_gate, wait);
         _waitTicksThisFrame += System.Diagnostics.Stopwatch.GetTimestamp() - t0;

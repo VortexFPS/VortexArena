@@ -4211,10 +4211,17 @@ public sealed partial class NetGame : Node3D
             // Bounded-tracer degradations this frame (see BoundedGateTracer): >0 on a frame means the sim
             // gate was contended past the timeout and those traces ran against the static world instead.
             int fb = VortexArena.Engine.Collision.BoundedGateTracer.FallbacksSinceRead;
+            // How many traces the frame budget actually let wait. Read BEFORE ResetFrame, which clears it.
+            // Beside cn.tracefb it separates the two ways a contended frame can look: many fallbacks with
+            // ONE wait is the budget doing its job, while a wait count that tracks the trace count is the
+            // per-trace-timeout-only regression FrameWaitBudgetMs exists to stop.
+            int waits = VortexArena.Engine.Collision.BoundedGateTracer.BudgetedWaitsSinceReset;
             VortexArena.Engine.Collision.BoundedGateTracer.FallbacksSinceRead = 0;
             VortexArena.Engine.Collision.BoundedGateTracer.ResetFrame();   // re-arm the per-frame wait budget
             if (fb > 0)
                 VortexArena.Common.Diagnostics.Prof.Mark("cn.tracefb", fb);
+            if (waits > 0)
+                VortexArena.Common.Diagnostics.Prof.Mark("cn.tracewait", waits);
         }
 
         // DP CL_Input: apply the frame's accumulated mouse-look FIRST, so everything below (input sampling,

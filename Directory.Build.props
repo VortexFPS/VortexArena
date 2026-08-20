@@ -24,8 +24,23 @@
 
          Raising this is a deliberate migration, not a cleanup. Read the .NET 10 breaking change "C# 14
          overload resolution with span parameters" first, and note that its runtime half does not appear until
-         the tests run. -->
-    <LangVersion>13.0</LangVersion>
+         the tests run.
+
+         LOWERED 13.0 -> 12.0 (2026-08-20) after it broke a real machine. The pin itself was right and stays;
+         the VALUE contradicted global.json, which asks for SDK 8.0.0 and therefore accepts an SDK 8 that tops
+         out at C# 12. On a box with only SDK 8 the version check passed and every project then failed to
+         COMPILE with `CS1617: Invalid option '13.0' for /langversion` — reported from a Fedora ppc64le
+         machine on SDK 8.0.129, where 8 is simply what the distro ships. Not a PowerPC problem: any SDK-8-only
+         machine hits it, and that is most distro packages.
+
+         12.0 is the floor global.json actually promises, so the two files now agree. Nothing in the tree needs
+         13 — verified by building the whole solution at 12.0 before changing this. LangVersionTests pins the
+         relationship so the next person to raise one file is told to raise the other.
+
+         To move to 13, raise global.json's sdk.version to 9.0.0 in the SAME change, and know that it drops
+         every machine whose distro ships SDK 8 — which is the platform this project just committed to
+         supporting from source (planning/ppc64le-port-2026-08-19.md). -->
+    <LangVersion>12.0</LangVersion>
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

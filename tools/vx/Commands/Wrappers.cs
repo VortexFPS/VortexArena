@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Vx.Commands;
 
 /// <summary>
@@ -156,10 +158,20 @@ internal static class Wrappers
     /// It is a predicate rather than a bool because the state changes as earlier fixes run.</para>
     /// </summary>
     private static Requirement GodotRequirement(Func<bool> alreadySatisfied)
-        => new(
-            "the Godot editor",
-            () => alreadySatisfied() || Env.FindGodot() is not null,
-            "Godot is not installed here (tried $GODOT, .godot-bin/, PATH, the platform install dir).",
+    {
+        // Probed once here so the message can name what is actually wrong; the predicate re-probes, because
+        // after a fix the answer legitimately changes. Skipped entirely when an export already exists, which
+        // needs no engine at all.
+        bool needed = !alreadySatisfied();
+        string? found = needed ? Env.FindGodot() : null;
+        string? defect = found is not null ? MonoDefect(found) : null;
+
+        return new Requirement(
+            "a .NET-capable Godot",
+            () => alreadySatisfied() || (Env.FindGodot() is { } g && MonoDefect(g) is null),
+            found is null
+                ? "Godot is not installed here (tried $GODOT, .godot-bin/, PATH, the platform install dir)."
+                : $"the Godot at {found} cannot run this game's C# — {defect}.",
             Command: Env.HostArchHasPrebuiltEngine
                 ? "./vx setup"
                 : "./vx build-engine --target editor --install",
@@ -170,7 +182,41 @@ internal static class Wrappers
             Note: Env.HostArchHasPrebuiltEngine
                 ? null
                 : $"no upstream Godot build exists for {Env.HostArch}, so it has to be compiled here — "
-                  + "hours, and it needs a C++ toolchain, scons and the .NET SDK.");
+                  + "hours, and it needs a C++ toolchain, scons and the .NET SDK. Build it with "
+                  + "module_mono_enabled=yes; a plain build cannot run the game at all.");
+    }
+
+    /// <summary>
+    /// Why the Godot at <paramref name="path"/> cannot run this game's C#, or null when it can.
+    ///
+    /// <para><b>This is a launch blocker, not a warning, and it was one before it was checked.</b> A plain
+    /// (non-.NET) Godot starts fine, opens the project fine, and then fails at the only thing that matters
+    /// here. Reported 2026-08-20 from a ppc64le machine carrying a self-built engine in <c>.godot-bin/</c>:
+    /// <c>vx doctor</c> said "this is NOT a .NET/mono build" and every other command carried on regardless,
+    /// so the export died with a bare <c>exit 255</c> several steps from the cause.</para>
+    ///
+    /// <para>An unreadable version counts as a defect rather than "cannot tell". On that machine
+    /// <c>--version</c> printed NOTHING, which is not a working engine under any reading — and treating
+    /// silence as fine is what let the run get as far as it did. The message names what was observed, so a
+    /// false positive diagnoses itself, and <c>$GODOT</c> overrides the choice of binary outright.</para>
+    /// </summary>
+    private static string? MonoDefect(string path)
+    {
+        var v = Env.Run(path, TimeSpan.FromSeconds(15), "--version");
+        string version = v.Out.Length > 0 ? v.Out.Split('\n')[0].Trim() : "";
+
+        if (version.Length == 0)
+            return "`--version` printed nothing, so this is not a working Godot binary "
+                 + (v.Err.Length > 0 ? $"({Truncate(v.Err)})" : "(no output at all)");
+
+        if (!version.Contains("mono", StringComparison.OrdinalIgnoreCase))
+            return $"it reports '{version}', which is not a .NET/mono build";
+
+        return null;
+    }
+
+    private static string Truncate(string s)
+        => s.Length <= 90 ? s.Replace('\n', ' ') : s[..90].Replace('\n', ' ') + "...";
 
     private static int RunProject(string[] gameArgs, bool skipCheck, bool assumeYes)
     {
@@ -208,7 +254,7 @@ internal static class Wrappers
         {
             GodotRequirement(Exported),
             new("the export template",
-                () => Exported() || Setup.TemplatesPresent(),
+                () => Exported() || TemplateForPresetPresent(preset),
                 localBuild
                     ? $"the export template for {preset} has not been built — no binary is published for "
                       + $"{Env.HostArch}, so it is built here."
@@ -426,21 +472,60 @@ internal static class Wrappers
     /// <summary>Every preset that can be exported by name, shipping or source-only.</summary>
     internal static IEnumerable<(string Preset, string Out)> AllPresets => Presets.Concat(LocalBuildPresets);
 
+    /// <summary>
+    /// The repo-relative export template a preset needs, read from engine.lock.json — or null when the
+    /// lockfile does not describe one (a declared gap, or a preset it has never heard of).
+    /// </summary>
+    private static string? TemplatePathForPreset(string preset)
+    {
+        try
+        {
+            string lockPath = Path.Combine(Env.RepoRoot, "tools", "engine-patches", "engine.lock.json");
+            if (!File.Exists(lockPath)) return null;
+            JsonNode doc = JsonNode.Parse(File.ReadAllText(lockPath))!;
+
+            // Built on this machine (a source-only platform): the lockfile names the path directly, since
+            // there is no published artifact to derive it from.
+            if (doc["local_build_presets"]?[preset]?["template"]?.GetValue<string>() is { Length: > 0 } local)
+                return local;
+
+            // Pinned: the template lives under tools/engine-templates/ by the filename its platform pins.
+            if (doc["template"]?["platforms"]?.AsObject() is { } platforms)
+                foreach (KeyValuePair<string, JsonNode?> platform in platforms)
+                {
+                    if (platform.Value is not { } entry) continue;
+                    if (entry["presets"]?.AsArray().Any(p => p!.GetValue<string>() == preset) == true
+                        && entry["filename"]?.GetValue<string>() is { Length: > 0 } filename)
+                        return $"tools/engine-templates/{filename}";
+                }
+        }
+        catch { /* a malformed lockfile is verify-engine-template.py's problem, not a reason not to launch */ }
+        return null;
+    }
+
+    /// <summary>
+    /// True when the export template <paramref name="preset"/> actually needs is on disk.
+    ///
+    /// <para><b>Replaces a "is tools/engine-templates/ non-empty?" check that was wrong on any machine with
+    /// more than one architecture in play.</b> Reported 2026-08-20: on ppc64le, <c>vx setup</c> had fetched the
+    /// pinned x86_64 templates, so the directory was non-empty, so the check passed — and the export then
+    /// failed with a bare exit 255 because the ppc64le template, which nobody publishes and which has to be
+    /// built locally, was not there. A per-preset check cannot be fooled that way.</para>
+    ///
+    /// <para>Falls back to the old directory check only for a preset the lockfile does not describe, where
+    /// there is no filename to look for and something is better than nothing.</para>
+    /// </summary>
+    private static bool TemplateForPresetPresent(string preset)
+    {
+        if (TemplatePathForPreset(preset) is not { } rel)
+            return Setup.TemplatesPresent();
+        return File.Exists(Path.Combine(Env.RepoRoot, rel.Replace('/', Path.DirectorySeparatorChar)));
+    }
+
     internal static int Export(string[] args)
     {
         string? godot = Env.FindGodot();
         if (godot is null) { NoGodot(); return 1; }
-
-        // The pinned templates are a HARD prerequisite, not a nicety: three of the four presets set
-        // custom_template/release, and Godot aborts the export outright when that path is populated but
-        // missing. Checking here turns that into one clear sentence instead of an engine-level abort.
-        string templates = Path.Combine(Env.RepoRoot, "tools", "engine-templates");
-        if (!Directory.Exists(templates) || Directory.GetFiles(templates).Length == 0)
-        {
-            Console.Error.WriteLine("vx export: the pinned export templates are not installed.");
-            Console.Error.WriteLine("           ./vx engine        (fetches what engine.lock.json pins)");
-            return 1;
-        }
 
         // --all is the SHIPPING matrix, not "every preset that exists": the source-only presets have no
         // published template, so including them would make --all fail on every machine that is not the one
@@ -457,6 +542,23 @@ internal static class Wrappers
             Console.Error.WriteLine($"           available: {string.Join(", ", Presets.Select(x => x.Preset))}");
             Console.Error.WriteLine($"           source-only: {string.Join(", ", LocalBuildPresets.Select(x => x.Preset))}");
             return 2;
+        }
+
+        // The template is a HARD prerequisite, not a nicety: a preset that sets custom_template/release makes
+        // Godot abort the export outright when that path is populated but missing, with a message about an
+        // ARCHITECTURE MISMATCH rather than a missing file. Checked per preset rather than "is the directory
+        // non-empty" — see TemplateForPresetPresent for the machine that distinction was reported from.
+        foreach ((string preset, string _) in targets)
+        {
+            if (TemplateForPresetPresent(preset)) continue;
+            bool local = LocalBuildPresets.Any(p => p.Preset == preset);
+            Console.Error.WriteLine($"vx export: {preset} has no export template on disk"
+                                    + (TemplatePathForPreset(preset) is { } want ? $" ({want})" : "") + ".");
+            Console.Error.WriteLine(local
+                ? $"           Nothing publishes one for {Env.HostArch}, so it is built here:\n"
+                  + $"           ./vx build-engine --arch {Env.GodotArch} --install     (hours)"
+                : "           ./vx engine        (fetches what engine.lock.json pins)");
+            return 1;
         }
 
         foreach ((string preset, string outRel) in targets)
@@ -486,7 +588,20 @@ internal static class Wrappers
                 // custom_template/release falls back to the EDITOR's stock export templates, which are a
                 // separate ~1.2 GB .tpz that nothing here installs. macos-client is deliberately in that
                 // state (engine.lock.json, unpinned_presets) — see ./vx doctor.
-                if (!EditorTemplatesPresent())
+                if (LocalBuildPresets.Any(p => p.Preset == preset))
+                {
+                    // Reaching here means the template EXISTS (checked before the export) but nothing came
+                    // out — so the usual suspect is the ENGINE that ran it, not the template. On a
+                    // source-only platform both were built by hand, and a non-.NET Godot is the failure that
+                    // looks exactly like this: it starts, opens the project, and exports nothing.
+                    Console.Error.WriteLine(
+                        "           This preset builds its own engine. Check that BOTH the editor and the\n" +
+                        "           template were built with module_mono_enabled=yes — a plain Godot cannot\n" +
+                        "           export a C# game — and that the template matches the preset:\n" +
+                        $"           python tools/verify-engine-template.py --preset-config {preset}\n" +
+                        "           ./vx doctor");
+                }
+                else if (!EditorTemplatesPresent())
                     Console.Error.WriteLine(
                         "           If Godot reported \"No export template found\": this preset uses the EDITOR's\n" +
                         "           stock templates. Install them once via the Godot editor\n" +

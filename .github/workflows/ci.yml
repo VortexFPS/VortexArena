@@ -130,13 +130,19 @@ jobs:
   oldest-sdk:
     name: Tests (oldest SDK global.json accepts)
     runs-on: ubuntu-latest
-    env:
+    steps:
+      - uses: actions/checkout@v5
+
       # setup-dotnet installs INTO this directory rather than alongside the runner's preinstalled SDKs, and
       # puts it first on PATH. The isolation IS the job: with 9 and 10 still visible, rollForward:latestMajor
       # picks the newest and this leg quietly becomes a duplicate of `test`.
-      DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-oldest
-    steps:
-      - uses: actions/checkout@v5
+      #
+      # Set in a STEP rather than a job-level `env:` block, because `runner` is not one of the contexts
+      # available to jobs.<id>.env - putting ${{ runner.temp }} there makes GitHub reject the whole workflow
+      # file before a single job starts. That is how this was found: run 32397388364 failed with no jobs at
+      # all and "this run likely failed because of a workflow file issue".
+      - name: Install the SDK into a directory of its own
+        run: echo "DOTNET_INSTALL_DIR=${{ runner.temp }}/dotnet-oldest" >> "$GITHUB_ENV"
 
       - uses: actions/setup-dotnet@v5
         with:

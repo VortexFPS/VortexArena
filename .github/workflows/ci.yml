@@ -7,6 +7,8 @@
 #   build-host â€” always: compile the Godot host project (VortexArena.csproj) from a clean clone with
 #                NO Godot editor installed â€” proves the Godot.NET.Sdk/GodotSharp 4.6.3 restore works
 #                purely from nuget.org.
+#   oldest-sdk - always: build and test on the OLDEST .NET SDK global.json accepts (8.x), which no other
+#                job and no machine here uses. See that job for the failure it exists to catch.
 # Export + packaging + GitHub Releases live in a SEPARATE workflow (.github/workflows/release.yml),
 # triggered on `v*` tags (and workflow_dispatch). Keeping the heavy Godot export off this per-push gate is
 # deliberate (ADR-0014): the mono export templates are ~1 GB and the data is ~1.5 GB.
@@ -109,3 +111,76 @@ jobs:
 
       - name: Build the Godot host project
         run: dotnet build VortexArena.csproj -c Debug
+
+  # WHY THIS JOB EXISTS. global.json asks for SDK 8.0.0 with rollForward:latestMajor, so an SDK 8 satisfies
+  # it - but every machine involved in this project (the dev box, all three CI legs above) has 9 or newer,
+  # and latestMajor means all of them silently compile with the newest one present. Nothing anywhere
+  # actually built this tree on the oldest SDK it claims to accept.
+  #
+  # That gap shipped a real break on 2026-08-20. LangVersion was pinned to 13.0, which needs SDK 9; the
+  # global.json check passed on SDK 8 and then EVERY project failed to compile with `CS1617: Invalid option
+  # '13.0' for /langversion`. It was found by a contributor on Fedora ppc64le, where 8 is simply what the
+  # distribution ships - and that is the general case rather than a PowerPC quirk. Most distro packages are
+  # a major behind, and this project supports being built from source on exactly those machines
+  # (planning/ppc64le-port-2026-08-19.md).
+  #
+  # LangVersionTests guards the DECLARED contradiction by reading the two files against each other, and
+  # would have caught that one. It cannot catch the other half: a C# 13 language FEATURE someone writes,
+  # which compiles everywhere here and not on SDK 8. Only a real compile on a real SDK 8 catches that.
+  oldest-sdk:
+    name: Tests (oldest SDK global.json accepts)
+    runs-on: ubuntu-latest
+    env:
+      # setup-dotnet installs INTO this directory rather than alongside the runner's preinstalled SDKs, and
+      # puts it first on PATH. The isolation IS the job: with 9 and 10 still visible, rollForward:latestMajor
+      # picks the newest and this leg quietly becomes a duplicate of `test`.
+      DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-oldest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      # Without this the job is a tautology: it would pass on SDK 10 exactly as it passes on SDK 8, so the
+      # one thing it exists to prove would go unproven the first time the isolation above stopped working,
+      # and nothing would go red to say so. Assert the selected SDK, and print the evidence either way.
+      - name: Assert the SDK in use really is 8.x
+        run: |
+          set -euo pipefail
+          echo "dotnet on PATH: $(command -v dotnet)"
+          dotnet --list-sdks
+          selected="$(dotnet --version)"
+          echo "global.json selected: $selected"
+          case "$selected" in
+            8.*) echo "ok: building on SDK $selected" ;;
+            *)
+              echo "::error::this leg must run on SDK 8, but global.json selected $selected."
+              echo "::error::DOTNET_INSTALL_DIR isolation is not taking effect, so this job would prove"
+              echo "::error::nothing the 'test' job does not already cover. Fix the isolation rather than"
+              echo "::error::relaxing this check."
+              exit 1
+              ;;
+          esac
+
+      # The libraries and the suite. This is the shape the 2026-08-20 break took: the first project to
+      # compile was the SourceGen analyzer, and it failed there before anything else got a chance.
+      - name: Build and test the libraries on SDK 8
+        run: >
+          dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj
+          -c Debug
+          --logger "trx;LogFileName=test-results-sdk8.trx"
+          --results-directory TestResults
+
+      # ./vx is the front door on a fresh clone and the first thing anyone on a distro SDK runs, so it has
+      # to compile there too. It carries its own <LangVersion>latest</LangVersion>, which resolves to
+      # whatever the SDK supports and is therefore fine on 8 - but only a build here says so.
+      - name: Build the vx task runner on SDK 8
+        run: dotnet build tools/vx/Vx.csproj -c Release
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-sdk8
+          path: TestResults

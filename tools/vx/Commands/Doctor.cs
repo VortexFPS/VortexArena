@@ -9,7 +9,33 @@ internal enum Status { Ok, Warn, Missing }
 /// True when a fresh clone cannot be built or tested without it. Only these decide the exit code — Godot is
 /// not required to build and test, so a machine without it is diagnosed, not failed.
 /// </param>
-internal sealed record Check(string Name, Status Status, string Detail, bool Required = false, string? Fix = null);
+/// <summary>
+/// A runnable answer to a failed check: the command as a person would type it, and the same thing as
+/// something vx can call.
+///
+/// <para>It lives beside the check rather than in a table somewhere else, because the two would drift — a
+/// check whose remedy is written elsewhere is one nobody updates when the remedy changes.</para>
+/// </summary>
+internal sealed record Fixer(string Command, Func<int> Run);
+
+/// <param name="Required">
+/// True when a fresh clone cannot be built or tested without it. Only these decide the exit code — Godot is
+/// not required to build and test, so a machine without it is diagnosed, not failed.
+/// </param>
+/// <param name="Fix">The human-readable sentence, for the cases with no runnable answer (and as the note
+/// beside one that has).</param>
+/// <param name="Repair">
+/// How to fix it, runnably, or null when vx cannot. <b>Doctor never calls this</b> — it changes nothing, by
+/// design — but <c>vx run</c> offers it as a [Y/n], so someone who just wants to play is walked to a working
+/// build instead of reading a diagnosis and retyping it.
+/// </param>
+/// <param name="Recheck">
+/// A CHEAP re-probe of this one item, to confirm a repair worked. Cheap is the point: re-running every
+/// doctor check would mean another HTTPS request (the TLS probe) and half a dozen subprocesses, far too much
+/// to pay after each fix. Null means "cannot re-check" and the repair's exit code is trusted.
+/// </param>
+internal sealed record Check(string Name, Status Status, string Detail, bool Required = false, string? Fix = null,
+                             Fixer? Repair = null, Func<bool>? Recheck = null);
 
 /// <summary>
 /// <c>vx doctor</c> — say what is installed, what is missing, and what to do about it. CHANGES NOTHING, by
@@ -28,6 +54,32 @@ internal static class Doctor
     /// </summary>
     private const int JsonSchemaVersion = 1;
 
+    /// <summary>
+    /// Every check, in report order. Exposed so <c>vx run</c> can offer the repairs without keeping a second
+    /// list of what can go wrong — see <see cref="Check.Repair"/>.
+    /// </summary>
+    /// <param name="includeNetworkProbes">
+    /// False skips the checks that go out to the network. <c>vx run</c> passes false: the only such probe is
+    /// Python's TLS trust, which is a warning about <c>vx maps --rebuild</c> and the tools/*.py scripts —
+    /// nothing a launch depends on — and paying for it here would put an HTTPS request in front of
+    /// starting a game. Measured 0.34 s online; OFFLINE it is a ten-second stall before a warning the launch
+    /// cannot act on anyway, which is the case that decided this.
+    /// </param>
+    internal static List<Check> Findings(bool includeNetworkProbes = true)
+        => Toolchain(includeNetworkProbes).Concat(Content()).ToList();
+
+    /// <summary>
+    /// The remedy every missing system dependency shares: let setup drive the detected package manager. One
+    /// command covers them all, so five missing tools cost one prompt rather than five.
+    ///
+    /// <para><c>--yes</c> is safe here ONLY because the caller already asked, naming the command — it answers
+    /// setup's own confirmation rather than skipping consent. It runs the system package manager, sudo
+    /// included, which is why the requirement offering it says so out loud.</para>
+    /// </summary>
+    private static int InstallSystemDeps() => Setup.Run(["--install-deps", "--yes"], json: false);
+
+    private static readonly Fixer SystemDeps = new("./vx setup --install-deps", InstallSystemDeps);
+
     internal static int Run(string[] args, bool json)
     {
         var checks = new List<Check>();
@@ -43,7 +95,7 @@ internal static class Doctor
 
     // ---------------------------------------------------------------------------------------------------
 
-    private static IEnumerable<Check> Toolchain()
+    private static IEnumerable<Check> Toolchain(bool includeNetworkProbes = true)
     {
         // --- the host itself -------------------------------------------------------------------------
         // Reported first because it changes what every line under it MEANS. On x86_64 and arm64 the
@@ -108,7 +160,11 @@ internal static class Doctor
             yield return new Check("Python 3", Status.Missing, envSet, Required: true,
                 Fix: Packages.Advice("python3", Env.IsMacOS ? "xcode-select --install"
                     : Env.IsWindows ? "https://www.python.org/downloads/  (tick 'Add python.exe to PATH')"
-                    : "install python3 with your distro's package manager"));
+                    : "install python3 with your distro's package manager"),
+                // Windows has no repair: winget can install Python, but the new PATH does not reach an
+                // already-running shell, so the fix would appear to have failed. Say it, do not do it.
+                Repair: Env.IsWindows ? null : SystemDeps,
+                Recheck: () => Env.FindPython() is not null);
         }
         else
         {
@@ -123,8 +179,10 @@ internal static class Doctor
             // the maps-src pipeline, and for anyone running the tools/*.py scripts directly — and the
             // symptom (CERTIFICATE_VERIFY_FAILED, four retries deep inside a fetcher) points nowhere near
             // the cause, which is why it is worth naming at all. Apple's /usr/bin/python3 is unaffected.
-            var ssl = Env.Run(py, TimeSpan.FromSeconds(20),
-                "-c", "import urllib.request as u; u.urlopen('https://api.github.com', timeout=10); print('ok')");
+            var ssl = includeNetworkProbes
+                ? Env.Run(py, TimeSpan.FromSeconds(20),
+                    "-c", "import urllib.request as u; u.urlopen('https://api.github.com', timeout=10); print('ok')")
+                : (Code: 0, Out: "", Err: "");   // not asked for: reported as Ok rather than invented as a fault
             if (ssl.Code != 0 && ssl.Err.Contains("CERTIFICATE_VERIFY_FAILED"))
                 yield return new Check("Python TLS trust", Status.Warn,
                     "urllib cannot verify HTTPS — affects 'vx maps --rebuild' and the tools/*.py scripts run "
@@ -135,7 +193,7 @@ internal static class Doctor
             else if (ssl.Code != 0)
                 yield return new Check("Python TLS trust", Status.Warn,
                     $"could not verify (offline?): {Truncate(ssl.Err, 60)}");
-            else
+            else if (includeNetworkProbes)
                 yield return new Check("Python TLS trust", Status.Ok, "HTTPS verified");
         }
 
@@ -143,7 +201,9 @@ internal static class Doctor
         string? git = Env.Which("git");
         yield return git is null
             ? new Check("git", Status.Missing, "not on PATH", Required: true,
-                Fix: Packages.Advice("git", "install git — https://git-scm.com/downloads"))
+                Fix: Packages.Advice("git", "install git — https://git-scm.com/downloads"),
+                Repair: Env.IsWindows ? null : SystemDeps,
+                Recheck: () => Env.Which("git") is not null)
             : new Check("git", Status.Ok, Env.Run(git, "--version").Out);
 
         // --- Godot: needed to RUN or EXPORT, not to build or test ------------------------------------
@@ -171,14 +231,19 @@ internal static class Doctor
             to ?? "absent — tools/lib/run-timeout.sh uses its shell fallback",
             Fix: to is null && Env.IsMacOS
                 ? $"optional: {Packages.Advice("coreutils", "brew install coreutils")}  (provides gtimeout)"
-                : null);
+                : null,
+            Repair: to is null && !Env.IsWindows ? SystemDeps : null,
+            Recheck: () => (Env.Which("timeout") ?? Env.Which("gtimeout")) is not null);
 
         // --- helpers the fetch/package paths shell out to ---------------------------------------------
         foreach (string t in new[] { "curl", "unzip" })
         {
             string? hit = Env.Which(t);
-            yield return new Check(t, hit is null ? Status.Warn : Status.Ok, hit ?? "not on PATH",
-                Fix: hit is null ? Packages.Advice(t, $"install {t}") : null);
+            string tool = t;   // captured per iteration: the Recheck closure outlives this loop body
+            yield return new Check(tool, hit is null ? Status.Warn : Status.Ok, hit ?? "not on PATH",
+                Fix: hit is null ? Packages.Advice(tool, $"install {tool}") : null,
+                Repair: hit is null && !Env.IsWindows ? SystemDeps : null,
+                Recheck: () => Env.Which(tool) is not null);
         }
 
         // Named explicitly so `--install-deps` is a discoverable option rather than one buried in --help,
@@ -203,7 +268,9 @@ internal static class Doctor
             ? new Check("data/maps/ (compiled maps)", Status.Ok, $"{packs} pack(s)")
             : new Check("data/maps/ (compiled maps)", Status.Warn,
                 "none — map-dependent tests self-skip and the host smoke cannot run",
-                Fix: "$PYTHON tools/data/fetch-maps.py     (or --rebuild to compile from source)");
+                Fix: "$PYTHON tools/data/fetch-maps.py     (or --rebuild to compile from source)",
+                Repair: new Fixer("./vx maps", () => Maps.Run([], json: false)),
+                Recheck: () => Directory.Exists(maps) && Directory.GetFiles(maps, "*.pk3").Length > 0);
 
         // Packs present but no longer pinned. `vx maps` verifies the other direction — every pinned pack is
         // installed and matches — so a pack DROPPED from the lockfile, or renamed, or left by an older fetch
@@ -221,13 +288,20 @@ internal static class Doctor
                 Fix: "left by an older fetcher or a dropped pin — the VFS still mounts them; delete if unwanted");
 
         // Godot's OWN export templates, needed by any preset with an empty custom_template/release
-        // (today: macos-client, a declared exception in engine.lock.json). Separate from the pinned
-        // custom templates below, and nothing in vx installs them - it is a ~1.2 GB editor download.
+        // (today: macos-client, a declared exception in engine.lock.json). Separate from the pinned custom
+        // templates below.
+        //
+        // The advice here used to be "nothing in vx installs them, use the editor's GUI". That stopped being
+        // true when `vx engine --editor` landed (it fetches what godot.lock.json pins under
+        // editor_templates), and a stale hint sending someone into a GUI for what one command does is worse
+        // than no hint at all.
         yield return Wrappers.EditorTemplatesPresent()
             ? new Check("Godot editor templates", Status.Ok, "installed")
             : new Check("Godot editor templates", Status.Warn,
                 "not installed - presets without a pinned custom template cannot export (macos-client)",
-                Fix: "Godot editor -> Editor -> Manage Export Templates -> Download and Install");
+                Fix: "./vx engine --editor     (~1.2 GB; or the Godot editor's Manage Export Templates)",
+                Repair: new Fixer("./vx engine --editor", () => Engine.Run(["--editor"], json: false)),
+                Recheck: Wrappers.EditorTemplatesPresent);
 
         // The repo-local engine install find-godot.sh probes before PATH.
         string bin = Path.Combine(root, ".godot-bin");

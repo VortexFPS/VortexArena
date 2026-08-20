@@ -124,6 +124,58 @@ internal static class Wrappers
     // ---- preflight ------------------------------------------------------------------------------------
 
     /// <summary>
+    /// Everything <c>vx doctor</c> found wrong that vx knows how to fix, turned into offers.
+    ///
+    /// <para><b>Single-sourced from doctor on purpose.</b> The list of what can go wrong on a machine already
+    /// exists and is maintained; a second copy here would be the one that goes stale. Each
+    /// <see cref="Check"/> carries its own <see cref="Check.Repair"/> and a cheap <see cref="Check.Recheck"/>,
+    /// so this method is only a translation — it decides nothing about what a broken toolchain looks
+    /// like.</para>
+    ///
+    /// <para>What is deliberately NOT offered: findings with no repair and no consequence for launching. A
+    /// warning vx cannot act on is doctor's job to report, and repeating it before every launch would train
+    /// people to scroll past the ones that matter. Required findings with no repair ARE surfaced, because
+    /// those stop the launch and the person needs to know why.</para>
+    ///
+    /// <para>Several checks share one remedy (the system package manager installs python, git, curl and
+    /// unzip in a single pass), which is why the repairs are deduplicated by command: five missing tools
+    /// should cost one prompt, and the four that follow re-probe as satisfied once the first has run.</para>
+    /// </summary>
+    private static IEnumerable<Requirement> ToolchainRequirements()
+    {
+        var offered = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (Check c in Doctor.Findings(includeNetworkProbes: false))
+        {
+            if (c.Status == Status.Ok) continue;
+
+            if (c.Repair is null)
+            {
+                // Nothing to run. Worth stopping for only when it blocks a build outright.
+                if (c.Required)
+                    yield return new Requirement(c.Name, () => false, $"{c.Name}: {c.Detail}",
+                                                 Command: null, Fix: null, Fatal: true, Note: c.Fix);
+                continue;
+            }
+
+            // Same command as an earlier finding: let the first one fix both. Its Recheck is what proves it.
+            if (!offered.Add(c.Repair.Command) && c.Recheck is not null)
+                continue;
+
+            yield return new Requirement(
+                c.Name,
+                c.Recheck ?? (() => false),
+                $"{c.Name}: {c.Detail}",
+                Command: c.Repair.Command,
+                Fix: c.Repair.Run,
+                Fatal: c.Required,
+                Note: c.Repair.Command.Contains("--install-deps", StringComparison.Ordinal)
+                    ? "runs your system package manager, sudo included, for everything missing at once"
+                    : c.Fix);
+        }
+    }
+
+    /// <summary>
     /// What both run paths need regardless of which build they launch: the game's content.
     ///
     /// <para>Neither is about the binary, and neither is caught by any staleness check - a clone with no
@@ -220,9 +272,12 @@ internal static class Wrappers
 
     private static int RunProject(string[] gameArgs, bool skipCheck, bool assumeYes)
     {
+        // Toolchain first: every later fix is a command, and a command cannot run when the tool it needs is
+        // the thing that is missing.
+        var required = new List<Requirement>(ToolchainRequirements());
         // The editor engine IS the runtime here, so it is unconditionally required - no artifact can
         // stand in for it the way an export does on the release path.
-        var required = new List<Requirement> { GodotRequirement(() => false) };
+        required.Add(GodotRequirement(() => false));
         required.AddRange(ContentRequirements());
         if (!Preflight.Run(required, assumeYes, noFix: skipCheck)) return 1;
 
@@ -250,7 +305,10 @@ internal static class Wrappers
         // export exists, because running one needs neither - this walks a fresh clone to a launch without
         // demanding anything a built tree does not need.
         bool localBuild = LocalBuildPresets.Any(p => p.Preset == preset);
-        var required = new List<Requirement>
+        // Toolchain first, for the same reason as the debug path: `./vx maps` fetches nothing on a box with
+        // no curl, and `./vx build-engine` needs python and git before it needs anything else.
+        var required = new List<Requirement>(ToolchainRequirements());
+        required.AddRange(new[]
         {
             GodotRequirement(Exported),
             new("the export template",
@@ -272,7 +330,7 @@ internal static class Wrappers
                 Fix: () => Export(["--preset", preset]),
                 Fatal: true,
                 Note: "`./vx run debug` skips this entirely and runs the project in the editor engine."),
-        };
+        });
         required.AddRange(ContentRequirements());
         if (!Preflight.Run(required, assumeYes, noFix: skipCheck)) return 1;
         if (!skipCheck && !EnsureFresh(artifact, $"the {preset} export", $"./vx export --preset {preset}",

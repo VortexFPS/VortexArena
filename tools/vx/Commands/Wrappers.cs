@@ -252,9 +252,21 @@ internal static class Wrappers
     /// silence as fine is what let the run get as far as it did. The message names what was observed, so a
     /// false positive diagnoses itself, and <c>$GODOT</c> overrides the choice of binary outright.</para>
     /// </summary>
-    private static string? MonoDefect(string path)
+    internal static string? MonoDefect(string path)
     {
         var v = Env.Run(path, TimeSpan.FromSeconds(15), "--version");
+        return MonoDefect(path, v.Out, v.Err);
+    }
+
+    /// <summary>
+    /// The same verdict for a caller that has already run <c>--version</c> and should not pay for it
+    /// twice (<see cref="Doctor"/> reports the version anyway). Deliberately NOT memoized: a repair
+    /// between two probes is exactly when the answer changes, and a cached "broken" would outlive its
+    /// own fix.
+    /// </summary>
+    internal static string? MonoDefect(string path, string versionOut, string versionErr)
+    {
+        var v = (Out: versionOut, Err: versionErr);
         string version = v.Out.Length > 0 ? v.Out.Split('\n')[0].Trim() : "";
 
         if (version.Length == 0)
@@ -264,7 +276,33 @@ internal static class Wrappers
         if (!version.Contains("mono", StringComparison.OrdinalIgnoreCase))
             return $"it reports '{version}', which is not a .NET/mono build";
 
+        // A mono BINARY is not yet a working editor. Godot resolves its C# API and GodotTools assemblies
+        // from <exe dir>/GodotSharp/, and without them it starts, opens the project, and dies at the first
+        // thing needing C# — "ERROR: .NET: Assemblies not found" followed by signal 11, which reads as an
+        // engine crash rather than a missing directory. Reported from ppc64le on 2026-08-20, where
+        // `build-engine --install` had copied the binary and nothing else.
+        //
+        // Asserted ONLY for a repo-local install, deliberately. Everywhere else the layout belongs to
+        // whoever packaged it — macOS keeps these inside the bundle at Contents/Resources/GodotSharp — and
+        // a false positive here would refuse to launch on a machine that works.
+        if (IsRepoLocalEngine(path) && !Directory.Exists(Path.Combine(Path.GetDirectoryName(path)!, "GodotSharp")))
+            return "its GodotSharp/ assemblies are missing from .godot-bin/, so it cannot load any C# at all "
+                 + "(a binary alone is not an editor; ./vx build-engine --install copies both)";
+
         return null;
+    }
+
+    /// <summary>True when this engine is the clone's own, installed under <c>.godot-bin/</c>.</summary>
+    private static bool IsRepoLocalEngine(string path)
+    {
+        try
+        {
+            string dir = Path.GetFullPath(Path.GetDirectoryName(path) ?? "");
+            string bin = Path.GetFullPath(Path.Combine(Env.RepoRoot, ".godot-bin"));
+            return string.Equals(dir.TrimEnd(Path.DirectorySeparatorChar), bin.TrimEnd(Path.DirectorySeparatorChar),
+                                 Env.IsWindows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+        catch { return false; }
     }
 
     private static string Truncate(string s)

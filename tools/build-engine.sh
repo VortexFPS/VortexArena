@@ -58,8 +58,10 @@
 # Godot's own per-platform dependency list is the authority:
 #   https://docs.godotengine.org/en/stable/contributing/development/compiling/
 #
-# Expect hours, not minutes. Two full engine compiles for --target both; the second is much cheaper
-# than the first because scons reuses objects, but neither is quick on a laptop.
+# Expect tens of minutes to hours, depending entirely on the machine. Two full engine compiles for
+# --target both; the second is much cheaper than the first because scons reuses objects. MEASURED: 36
+# minutes for both on the ppc64le box that first ran this, at -j10 (2026-08-20) - so "hours" was
+# pessimistic there, and a laptop with four cores will still be slower than that.
 #
 # It says HOW MANY hours before it starts. The "sizing the job" step reports the CPU, the core count it
 # will use, the source-file count of the tree it is about to compile and the free space it has, then
@@ -665,6 +667,26 @@ if $install; then
             cp -f "$built_editor" "$ROOT/.godot-bin/godot"
             chmod +x "$ROOT/.godot-bin/godot"
             info "editor → .godot-bin/godot"
+        fi
+
+        # THE BINARY ALONE IS NOT AN EDITOR. Godot resolves its C# API and GodotTools assemblies from
+        # <exe dir>/GodotSharp/, which build_assemblies.py wrote into the source tree's bin/ back in step 7.
+        # Without them the editor starts, opens the project, and dies at the first thing that needs C#:
+        #
+        #     ERROR: .NET: Assemblies not found   at: initialize (modules/mono/mono_gd/gd_mono.cpp:647)
+        #     handle_crash: Program crashed with signal 11
+        #
+        # Reported from ppc64le on 2026-08-20, where this install step had put a perfectly good editor next
+        # to nothing at all and the export it was asked to run aborted. The official archives ship this
+        # directory beside the executable; an install that omits it is simply incomplete.
+        if [ -d "$src/bin/GodotSharp" ]; then
+            rm -rf "$ROOT/.godot-bin/GodotSharp"
+            cp -R "$src/bin/GodotSharp" "$ROOT/.godot-bin/GodotSharp"
+            info "assemblies → .godot-bin/GodotSharp/"
+        else
+            error "$src/bin/GodotSharp is missing, so the installed editor cannot run C#."
+            error "It is produced by build_assemblies.py (step 7). Re-run without --target template,"
+            error "or run that step by hand, before using this editor."
         fi
     fi
     if [ -f "$built_template" ]; then

@@ -219,10 +219,14 @@ internal static class Doctor
         else
         {
             var v = Env.Run(godot, TimeSpan.FromSeconds(20), "--version");
-            bool mono = v.Out.Contains("mono", StringComparison.OrdinalIgnoreCase);
-            yield return new Check("Godot 4.6.3 (mono)", mono ? Status.Ok : Status.Warn,
+            // One implementation of "can this engine run our C#", shared with the preflight, so the
+            // two cannot disagree about a machine. It covers more than the mono suffix: an engine
+            // whose GodotSharp/ assemblies are missing reports a perfectly good version and still
+            // cannot load a single C# file (ppc64le, 2026-08-20).
+            string? defect = Wrappers.MonoDefect(godot, v.Out, v.Err);
+            yield return new Check("Godot 4.6.3 (mono)", defect is null ? Status.Ok : Status.Warn,
                 $"{(v.Out.Length > 0 ? v.Out.Split('\n')[0] : "?")}  ({godot})",
-                Fix: mono ? null : "this is NOT a .NET/mono build — it cannot run the game's C#");
+                Fix: defect);
         }
 
         // --- portable timeout: which implementation run-timeout.sh will pick --------------------------

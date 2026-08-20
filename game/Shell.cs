@@ -88,6 +88,22 @@ public partial class Shell : Node
     /// <summary>Top of the auto-increment scan range for an unpinned host port (inclusive).</summary>
     private const int HostPortScanLimit = 26100;
 
+    /// <summary>Boot-failure exit code for "UDP port in use", as documented in docs/RUNNING.md under DS-4.
+    /// A supervisor (systemd <c>Restart=on-failure</c>, the launcher's RestartPolicy.OnFailure) reads this to
+    /// tell "the port is taken, retrying will not help until something frees it" from a crash worth
+    /// restarting.</summary>
+    private const int HostPortInUseExit = 2;
+
+    /// <summary>True when nothing interactive is in front of this process: a dedicated server, or any headless
+    /// run (CI smokes, scripted captures, an agent driving the game).
+    ///
+    /// <para>The distinction that matters is "can a human read and dismiss a modal", not "is this a server" —
+    /// <c>--headless --host</c> is a listen server with no display, and a dialog is exactly as useless there as
+    /// on a dedicated box. Anything that would block waiting for a click has to take a different branch on
+    /// this side of the check.</para></summary>
+    private static bool IsUnattended =>
+        VortexArena.Game.Net.NetGame.DedicatedRequested || DisplayServer.GetName() == "headless";
+
     private CanvasLayer _menuLayer = null!;
     private MenuRoot _menu = null!;
     private ModelViewer? _viewer;
@@ -816,6 +832,19 @@ public partial class Shell : Node
     {
         if (net != _netGame)
             return; // superseded by a newer match; its own failure (if any) will drive the menu
+
+        // Unattended runs exit instead of returning to a menu, for the same reason the port-bind failure above
+        // does: a dedicated server or a headless run has nobody to read the notice and no input to dismiss it,
+        // so the menu branch leaves the process alive and idle where a supervisor needs a failure. Plain
+        // non-zero rather than a DS-4 code — DS-4 enumerates BOOT failures (2 = port in use, 3 = map not
+        // found), and a handshake that was refused or timed out is not one of those.
+        if (IsUnattended)
+        {
+            Log.Severe($"[Shell] connection to '{target}' failed: {reason}; exiting (nothing here can prompt).");
+            GetTree().Quit(1);
+            return;
+        }
+
         Log.Warn($"[Shell] connection to '{target}' failed: {reason}");
         ReturnToMainMenu();
         _menu.Push(new DialogConnectionFailed(target, reason));
@@ -936,6 +965,19 @@ public partial class Shell : Node
             return -1;
         }
 
+        // A DEDICATED server never moves. Its port is half of the address players connect to and the
+        // browser advertises, so quietly hosting on 26001 does not rescue the server — it strands it,
+        // running and healthy at an address nobody was told about, which is a worse failure than not
+        // starting because nothing reports it. Auto-increment is a LISTEN-server convenience (somebody
+        // is sitting there, and the game they wanted is the game they get); a dedicated host has an
+        // operator instead, and an operator can be told.
+        if (VortexArena.Game.Net.NetGame.DedicatedRequested)
+        {
+            Log.Severe($"[Shell] UDP {BootPort} is already in use, and a dedicated server will not move to " +
+                       "another port — free it, or pass --port <n> to host somewhere else deliberately.");
+            return -1;
+        }
+
         for (int candidate = BootPort + 1; candidate <= HostPortScanLimit; candidate++)
         {
             if (VortexArena.Game.Net.NetTransport.Server.IsPortFree(candidate))
@@ -962,8 +1004,23 @@ public partial class Shell : Node
         int hostPort = ResolveHostPort();
         if (hostPort < 0)
         {
-            // Can't bind a host port (a pinned --port is taken, or the whole scan range is busy). Surface it the
-            // same way a failed connect does — back to the menu with a visible reason, not a silent no-op.
+            // No bindable port (a pinned --port is taken, a dedicated server's port is taken, or the whole
+            // scan range is busy). ResolveHostPort has already logged which.
+            //
+            // Unattended runs EXIT rather than showing this. A dedicated server or a headless run has no
+            // player to read a modal and no input to dismiss one, so the dialog branch would leave the
+            // process alive, idle, and sitting on a menu nobody can see — a hang where a supervisor needs a
+            // failure. Exit 2 is the code docs/RUNNING.md (DS-4) already documents for "UDP port in use";
+            // until now nothing implemented it, so systemd Restart=on-failure had nothing to act on.
+            if (IsUnattended)
+            {
+                Log.Severe("[Shell] cannot host without a port; exiting (DS-4 exit 2 = UDP port in use).");
+                GetTree().Quit(HostPortInUseExit);
+                return;
+            }
+
+            // Interactive: surface it the same way a failed connect does — back to the menu with a visible
+            // reason, not a silent no-op.
             ReturnToMainMenu();
             _menu.Push(new DialogConnectionFailed(config.Map ?? "",
                 BootPortExplicit

@@ -6,7 +6,26 @@
     <VortexArenaTfm>net8.0</VortexArenaTfm>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
+    <!-- Pinned, NOT "latest". "latest" means "whatever the SDK on this machine implements", and global.json
+         here rolls forward to the newest major — so CI, on a runner image carrying the .NET 10 SDK, compiles
+         this tree as C# 14 while every dev box on SDK 9 compiles C# 13. Two language versions over one source
+         tree, and the difference is invisible until something happens to land on a semantic that changed.
+
+         Conductor found out what that costs. C# 14's first-class span conversions rebind span-based extension
+         methods, and it broke there twice from one root: at compile time `byte[].Reverse()` started resolving
+         to MemoryExtensions.Reverse(Span<T>) — which returns void — and at runtime the same rebinding inside
+         expression lambdas took 35 EF Core tests down with a TypeLoadException over ReadOnlySpan<string>.
+         Neither reproduced locally, because locally it was still C# 13.
+
+         Nothing in this tree is broken by C# 14 today (no expression trees, no .Reverse() on an array). That
+         is a fact about the current code, not a property of the setup: the exposure returns the moment
+         somebody writes one of those lines, and it returns as a red CI run with no local repro. 13.0 is what
+         dev boxes already produce, so this pins the status quo and changes nothing that builds today.
+
+         Raising this is a deliberate migration, not a cleanup. Read the .NET 10 breaking change "C# 14
+         overload resolution with span parameters" first, and note that its runtime half does not appear until
+         the tests run. -->
+    <LangVersion>13.0</LangVersion>
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

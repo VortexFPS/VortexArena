@@ -413,6 +413,17 @@ public sealed class ClientNet : IDisposable
     /// Re-establish the link to the original server after a drop: rebuild the ENet transport and reset the
     /// handshake + delta baseline + remote-entity state so the fresh session starts clean. Returns false if the
     /// socket couldn't be created.
+    ///
+    /// <para><b>No callers yet</b>, by decision rather than by oversight: <see cref="ConnectionLost"/> exists to
+    /// let the host prompt or auto-reconnect, and this is the other half of that, kept ready. Wiring it up is a
+    /// feature (what to prompt, whether to retry unattended, how many times) rather than a fix, so it is left
+    /// for whoever builds that.</para>
+    ///
+    /// <para>It used to be a trap as well as unused. NetGame's connect watchdog armed its deadline once and
+    /// never cleared it, so the first call would have arrived with a deadline long past and been failed before
+    /// its first packet — a bug nobody could hit, waiting for the day somebody wired this up and then had to
+    /// find it. NetGame.CheckConnectionFailure now disarms on accept, so a re-armed handshake is measured on
+    /// its own clock and this is safe to call.</para>
     /// </summary>
     public bool Reconnect()
     {

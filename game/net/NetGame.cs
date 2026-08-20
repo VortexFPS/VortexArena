@@ -365,16 +365,24 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>Callback (owned by <see cref="Shell"/>) invoked ONCE when a connection can't be completed —
     /// the server rejected us, the link dropped before we spawned, or <see cref="ConnectTimeoutSeconds"/>
-    /// elapsed with no accept/first-snapshot. Shell tears the match down, dismisses the loading screen, and
-    /// returns to the menu with the reason. Null on the bare-CLI/headless paths (no menu to return to), where
-    /// the existing <c>--quit-after-seconds</c> / supervisor-exit handling owns failure instead. The string is a
-    /// short, player-facing reason.</summary>
+    /// elapsed with no accept/first-snapshot. The string is a short, player-facing reason.
+    ///
+    /// <para>Shell wires this on every match it starts, headless included, and decides there what a failure
+    /// means: an interactive session goes back to the menu with the reason, while an unattended one (dedicated
+    /// server, or any headless run) logs and exits — a modal nobody can dismiss is a hang, not a report. Left
+    /// null only by callers that construct a NetGame outside Shell, where the watchdog stays disarmed and
+    /// <c>--quit-after-seconds</c> owns the timeout instead.</para></summary>
     public Action<string>? OnConnectionFailed { get; set; }
 
-    // Connection-failure watchdog (interactive path only — armed once OnConnectionFailed is wired). The deadline
-    // is stamped the first _Process frame we're live-but-not-yet-accepted, and never trips once the handshake is
-    // accepted; a reject or a dropped link fails immediately without waiting for it. _connectFailed latches so the
-    // callback fires exactly once even though _Process keeps running until the deferred teardown.
+    // Connection-failure watchdog, armed once OnConnectionFailed is wired. The deadline is stamped the first
+    // _Process frame we are live-but-not-yet-accepted and CLEARED again on accept, so it always measures the
+    // handshake currently in flight rather than one that finished minutes ago (see CheckConnectionFailure). A
+    // reject or a dropped link fails immediately without consulting it at all.
+    //
+    // _connectFailed does NOT reset, and that asymmetry is deliberate: the deadline is a per-attempt
+    // measurement, while this is a one-shot notification latch. _Process keeps running until Shell's deferred
+    // teardown frees this node, so clearing it would let a second OnConnectionFailed reach a Shell that has
+    // already torn the match down and moved on.
     private ulong _connectDeadlineMsec;
     private bool _connectFailed;
 
@@ -810,7 +818,16 @@ public sealed partial class NetGame : Node3D
         // port, and the address-reuse silent-swallow (a non-Vortex binder eating our connect packets). Once accepted,
         // the connection is healthy; any further wait (map stream, team/spawn prompt) is gameplay, not a failure.
         if (_client.Accepted)
+        {
+            // Disarm on the way past. The deadline is stamped for ONE handshake, so leaving it armed after a
+            // successful accept sets a trap for any path that puts the session back to not-accepted —
+            // ClientNet.Reconnect() does exactly that, and would arrive here with a deadline minutes in the
+            // past and be failed instantly, before its first packet. Clearing it here means the next
+            // not-yet-accepted frame arms a fresh one and the watchdog measures the handshake actually in
+            // flight, with no coordination needed from whoever triggers the reconnect.
+            _connectDeadlineMsec = 0UL;
             return;
+        }
         if (_connectDeadlineMsec == 0UL)
             _connectDeadlineMsec = Time.GetTicksMsec() + (ulong)(ConnectTimeoutSeconds * 1000f);
         else if (Time.GetTicksMsec() >= _connectDeadlineMsec)

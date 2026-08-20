@@ -223,7 +223,8 @@ internal static class Env
     /// </summary>
     internal static int ExecUntilDone(string exe, IEnumerable<string> args, string doneMarker,
                                       int graceSeconds = 2, int capSeconds = 600, string? settleDir = null,
-                                      Action<string>? onLine = null)
+                                      Action<string>? onLine = null,
+                                      IReadOnlyDictionary<string, string>? extraEnv = null)
     {
         var psi = new ProcessStartInfo(exe)
         {
@@ -233,6 +234,8 @@ internal static class Env
             WorkingDirectory = RepoRoot,
         };
         foreach (string a in args) psi.ArgumentList.Add(a);
+        if (extraEnv is not null)
+            foreach ((string k, string v) in extraEnv) psi.Environment[k] = v;
 
         using Process? p = Process.Start(psi);
         if (p is null) { Console.Error.WriteLine($"vx: could not start {exe}"); return 127; }

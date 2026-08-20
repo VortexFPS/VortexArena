@@ -767,16 +767,52 @@ internal static class Wrappers
             // Watched for here because the artifact check below cannot tell WHY the pck is missing, and
             // "the export crashed" is a materially better message than "the file is incomplete".
             bool crashed = false;
-            int rc = Env.ExecUntilDone(godot,
-                ["--headless", "--path", Env.RepoRoot, "--export-release", preset, outPath],
-                doneMarker: @"DONE.*savepack",
-                settleDir: Path.GetDirectoryName(outPath),
-                onLine: line =>
-                {
-                    if (line.Contains("handle_crash:", StringComparison.Ordinal)
-                        || line.Contains("Program crashed with signal", StringComparison.Ordinal))
-                        crashed = true;
-                });
+            int RunExportOnce(IReadOnlyDictionary<string, string>? extraEnv)
+            {
+                crashed = false;
+                return Env.ExecUntilDone(godot,
+                    ["--headless", "--path", Env.RepoRoot, "--export-release", preset, outPath],
+                    doneMarker: @"DONE.*savepack",
+                    settleDir: Path.GetDirectoryName(outPath),
+                    extraEnv: extraEnv,
+                    onLine: line =>
+                    {
+                        if (line.Contains("handle_crash:", StringComparison.Ordinal)
+                            || line.Contains("Program crashed with signal", StringComparison.Ordinal))
+                            crashed = true;
+                    });
+            }
+
+            int rc = RunExportOnce(null);
+
+            // ONE automatic retry under the Mono interpreter, and only where it can mean something.
+            //
+            // On the architectures with no upstream engine build (ppc64le, s390x, ...), .NET itself runs on
+            // the Mono VM — and the two export crashes ppc64le has produced so far both died inside a
+            // freshly JIT-compiled `native_indirect` interop wrapper, at that wrapper's FIRST use, at two
+            // different call sites on two different days (planning/ppc64le-port-2026-08-19.md, field log).
+            // Dodging individual call sites is whack-a-mole against a codegen bug; asking MonoVM to
+            // INTERPRET instead of JIT (MONO_ENV_OPTIONS=--interp) removes the suspect entirely. The editor
+            // export is a one-off tool run, so interpreter speed is an acceptable price there.
+            //
+            // Gated on the architecture, not attempted everywhere: on CoreCLR machines the variable is
+            // inert and a crashed export would just crash again, minutes later, for nothing. And it is ONE
+            // retry, announced — silently looping on a crash would hide the bug this exists to survive.
+            bool retriedInterp = false;
+            if (crashed && !ExportIsComplete(outPath, preset) && !Env.HostArchHasPrebuiltEngine)
+            {
+                Console.Error.WriteLine();
+                Console.Error.WriteLine($"vx export: Godot CRASHED during the export (handle_crash in the output "
+                                        + "above), inside .NET interop on an architecture where .NET runs on the "
+                                        + "Mono VM.");
+                Console.Error.WriteLine("           Retrying ONCE with MONO_ENV_OPTIONS=--interp — the Mono "
+                                        + "interpreter instead of its JIT. Slower, and only for this export; if "
+                                        + "it works, the JIT is the bug and the field log in "
+                                        + "planning/ppc64le-port-2026-08-19.md says what to report upstream.");
+                Console.Error.WriteLine();
+                rc = RunExportOnce(new Dictionary<string, string> { ["MONO_ENV_OPTIONS"] = "--interp" });
+                retriedInterp = true;
+            }
 
             // Godot's headless export exits NON-ZERO on a fully successful export often enough that
             // run-release.sh stopped trusting the code entirely and gated on the artifact instead — a
@@ -820,15 +856,27 @@ internal static class Wrappers
                 Console.Error.WriteLine(crashed
                     ? "           Godot CRASHED partway through the export — the handle_crash banner is in "
                       + "the output above. The binary is the template copy made before the crash; do not ship "
-                      + "or launch it."
+                      + "or launch it. It is left in place for inspection; the next export overwrites it."
                     : "           The export ended before the pck was appended. The output above has the "
                       + "engine's own account.");
-                if (LocalBuildPresets.Any(p => p.Preset == preset))
-                    Console.Error.WriteLine("           On a source-only platform, the known crash and its "
-                                            + "workaround live in planning/ppc64le-port-2026-08-19.md; "
-                                            + "`git pull` first — the workaround is a preset change.");
+                if (retriedInterp)
+                    Console.Error.WriteLine("           The Mono-interpreter retry did NOT rescue it, so the "
+                                            + "failure is not (only) the JIT. Next things worth trying, in "
+                                            + "order: update the runtime (`dnf upgrade 'dotnet*'`), then "
+                                            + "`./vx run debug` to see whether the game itself is affected — "
+                                            + "the field log in planning/ppc64le-port-2026-08-19.md tracks "
+                                            + "what is already known.");
+                else if (LocalBuildPresets.Any(p => p.Preset == preset))
+                    Console.Error.WriteLine("           On a source-only platform, the known crashes and their "
+                                            + "workarounds live in planning/ppc64le-port-2026-08-19.md; "
+                                            + "`git pull` first — the workarounds are tooling changes.");
                 return 1;
             }
+            if (retriedInterp)
+                Console.WriteLine("   note: this export completed UNDER THE MONO INTERPRETER after the JIT run "
+                                  + "crashed. The exported game ships the same MonoVM runtime, so whether IT is "
+                                  + "affected is a separate question — launching it answers that. Worth "
+                                  + "reporting upstream: planning/ppc64le-port-2026-08-19.md field log.");
             if (crashed)
                 Console.Error.WriteLine($"   WARNING: the artifact looks complete, but Godot's crash handler "
                                         + "fired during the export — treat this build with suspicion.");

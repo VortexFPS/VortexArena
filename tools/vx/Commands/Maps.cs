@@ -134,8 +134,17 @@ internal static class Maps
         }
 
         Directory.CreateDirectory(dest);
-        double totalMb = stale.Sum(s => s.Pack.Size) / (double)(1 << 20);
-        if (!json) Console.WriteLine($"fetching {stale.Count} pack(s), {totalMb:F1} MB\n");
+        long totalBytes = stale.Sum(s => s.Pack.Size);
+        if (!json)
+        {
+            // A .pk3 is installed exactly as it arrives — it stays a zip and the VFS mounts it — so the
+            // download size IS the disk cost. Nothing else vx fetches has that property, hence saying so.
+            Console.WriteLine($"fetching {stale.Count} pack(s), {Env.HumanBytes(totalBytes)} "
+                              + "(installed as-is, so that is also the disk cost)");
+            if (Env.SpaceNote(totalBytes, dest, headroom: 1.05) is { } note)
+                Console.WriteLine($"  {note}");
+            Console.WriteLine();
+        }
 
         var installed = new List<string>();
         for (int i = 0; i < stale.Count; i++)
@@ -144,7 +153,7 @@ internal static class Maps
             string target = Path.Combine(dest, p.Name + ".pk3");
             string partial = target + ".part";
             if (!json)
-                Console.WriteLine($"  [{i + 1}/{stale.Count}] {p.Name} ({p.Size / (double)(1 << 20):F1} MB)");
+                Console.WriteLine($"  [{i + 1}/{stale.Count}] {p.Name} ({Env.HumanBytes(p.Size)})");
 
             try
             {

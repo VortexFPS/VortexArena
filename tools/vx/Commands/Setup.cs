@@ -360,7 +360,11 @@ internal static class Setup
         string zip = Path.Combine(binDir, plat["filename"]!.GetValue<string>());
 
         Console.WriteLine($"   {url}");
-        Console.WriteLine($"   {size / (double)(1 << 20):F0} MB");
+        // The x3 is not padding. This archive is UNPACKED beside itself and the zip is only deleted once
+        // extraction finishes, so the peak is the archive plus its contents; the Godot mono archives roughly
+        // double when unpacked, which puts the high-water mark near three times the download.
+        Console.WriteLine($"   {Env.HumanBytes(size)} to download, unpacked into .godot-bin/"
+                          + (Env.SpaceNote(size * 3, binDir, headroom: 1.0) is { } note ? $"  ({note})" : ""));
         if (!(File.Exists(zip) && new FileInfo(zip).Length == size))
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };

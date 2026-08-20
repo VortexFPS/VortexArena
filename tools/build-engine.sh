@@ -60,6 +60,13 @@
 #
 # Expect hours, not minutes. Two full engine compiles for --target both; the second is much cheaper
 # than the first because scons reuses objects, but neither is quick on a laptop.
+#
+# It says HOW MANY hours before it starts. The "sizing the job" step reports the CPU, the core count it
+# will use, the source-file count of the tree it is about to compile and the free space it has, then
+# estimates each target. The first build on a machine estimates from a calibration compile (a floor: it
+# cannot see the C++ the build generates, and excludes linking); every build after that estimates from
+# what actually happened here, recorded in _scratch/build-engine-history.json. Both say which they are,
+# because an estimate whose basis is hidden cannot be argued with when it is wrong.
 # ---------------------------------------------------------------------------------------------------
 set -euo pipefail
 
@@ -202,7 +209,7 @@ ENGINE_VERSION="$(read_lock engine.version)"
 
 # Windows binaries carry .exe; every path below is built from these two.
 exe=""
-[ "$platform" = "windows" ] && exe=".exe"
+if [ "$platform" = "windows" ]; then exe=".exe"; fi
 EDITOR_BIN="bin/godot.${platform}.editor.${arch}.mono${exe}"
 TEMPLATE_BIN="bin/godot.${platform}.template_release.${arch}.mono${exe}"
 
@@ -217,12 +224,182 @@ SCONS_COMMON=(module_mono_enabled=yes cvtt_export_templates=yes)
 # application/export_d3d12=0 — the project runs Vulkan, and the D3D12 driver would pull an extra SDK
 # for nothing.
 SCONS_EXTRA=()
-[ "$platform" = "windows" ] && SCONS_EXTRA+=(d3d12=no)
+if [ "$platform" = "windows" ]; then SCONS_EXTRA+=(d3d12=no); fi
 
 # NOTE for ppc64: no accesskit=no is needed, and adding one would be a silent configuration drift from
 # CI. Checked against 4.6.3-stable's platform/linuxbsd/detect.py: the per-arch LIBPATH table (arm64,
 # arm32, rv64, x86_64, x86_32 — no ppc64) is only consulted when accesskit_sdk_path is NON-EMPTY. It is
 # empty by default and empty in CI, which takes the else branch to ACCESSKIT_DYNAMIC and needs no SDK.
+
+# ─ how long is this going to take ──────────────────────────────────
+# Everything here MEASURES rather than assumes, and prints what it measured. An estimate whose inputs are
+# invisible is worse than none: nobody can tell a wrong answer from a wrong machine, so nobody trusts the
+# right one either. The first build on a machine has no history to go on and calibrates against that
+# machine's own compiler; every build after that uses what actually happened here last time.
+HISTORY="$ROOT/_scratch/build-engine-history.json"
+
+fmt_duration() {
+    _d=${1%.*}
+    if [ "$_d" -lt 90 ]; then printf '%ds' "$_d"
+    elif [ "$_d" -lt 5400 ]; then printf '%dm' "$((_d / 60))"
+    else printf '%dh %dm' "$((_d / 3600))" "$(((_d % 3600) / 60))"
+    fi
+}
+
+# CPU model and logical core count. Unknown is printed as unknown rather than guessed at.
+cpu_summary() {
+    _model=""
+    case "$platform" in
+        linuxbsd)
+            if [ -r /proc/cpuinfo ]; then
+                _model="$(grep -m1 -E '^model name|^Model|^cpu[[:space:]]+:' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ *//')"
+            fi
+            ;;
+        macos)   _model="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || true)" ;;
+        windows) _model="$(wmic cpu get name 2>/dev/null | sed -n 2p | tr -d '\r' | sed 's/ *$//' || true)" ;;
+    esac
+    [ -n "$_model" ] || _model="unknown CPU"
+    printf '%s (%s logical cores, building with -j%s)' "$_model" "$(nproc 2>/dev/null || echo '?')" "$jobs"
+}
+
+# Translation units in the tree about to be compiled. A real count of real files rather than a remembered
+# constant: it moves with the engine version and with which modules are enabled.
+#
+# It UNDERCOUNTS, knowably. Godot generates a large amount of C++ during the build — the mono glue, shader
+# and doc data, *.gen.cpp — none of which exists to be counted before the build creates it. So an estimate
+# derived from this number is a floor, and the wording downstream says so. The recorded time from a real
+# build has no such problem, which is the other reason it replaces this at the first opportunity.
+count_tus() {
+    _n=0
+    for _ext in cpp cc c mm; do
+        _c="$(find "$src" -type f -name "*.$_ext" -not -path '*/.git/*' 2>/dev/null | wc -l | tr -d ' ')"
+        _n=$((_n + _c))
+    done
+    printf '%s' "$_n"
+}
+
+# Seconds to compile ONE representative C++ translation unit here, as a float, or nothing when there is no
+# usable compiler to ask.
+#
+# "Representative" is load-bearing. A bare `int main(){}` measures process startup and would underestimate a
+# Godot TU by an order of magnitude, so this pulls in the standard headers Godot leans on and instantiates
+# templates over them at -O2, which is the shape of the real work. It is still a proxy, which is why the
+# estimate says so out loud and why one real build replaces it permanently.
+calibrate_cc() {
+    _cxx="${CXX:-}"
+    if [ -z "$_cxx" ]; then
+        _cxx="$(command -v g++ 2>/dev/null || command -v clang++ 2>/dev/null || true)"
+    fi
+    [ -n "$_cxx" ] || return 1
+
+    _tmp="$(mktemp -d 2>/dev/null)" || return 1
+    cat > "$_tmp/cal.cpp" <<'CALIBRATION'
+#include <algorithm>
+#include <functional>
+#include <map>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
+template <typename T> struct Holder {
+    std::vector<T> v;
+    std::map<std::string, T> m;
+    std::unordered_map<std::string, std::vector<T>> u;
+    void fill(int n) {
+        for (int i = 0; i < n; ++i) {
+            v.push_back(T(i));
+            m[std::to_string(i)] = T(i);
+            u[std::to_string(i)].push_back(T(i));
+        }
+    }
+    T total() const {
+        T t{};
+        for (const auto &x : v) { t += x; }
+        std::for_each(v.begin(), v.end(), [&](const T &x) { t += x; });
+        return t;
+    }
+};
+template struct Holder<int>;
+template struct Holder<double>;
+template struct Holder<long long>;
+int main() { Holder<int> a; a.fill(8); return int(a.total()); }
+CALIBRATION
+
+    _t0="$(date +%s%N 2>/dev/null)" || { rm -rf "$_tmp"; return 1; }
+    if ! "$_cxx" -std=c++17 -O2 -c "$_tmp/cal.cpp" -o "$_tmp/cal.o" >/dev/null 2>&1; then
+        rm -rf "$_tmp"
+        return 1
+    fi
+    _t1="$(date +%s%N)"
+    rm -rf "$_tmp"
+    awk -v a="$_t0" -v b="$_t1" 'BEGIN { printf "%.2f", (b - a) / 1000000000 }'
+}
+
+history_key() { printf '%s-%s-%s' "$platform" "$arch" "$1"; }
+
+# Prints "<seconds> <jobs> <tu>" for a build of this shape recorded here before, or fails.
+history_get() {
+    [ -f "$HISTORY" ] || return 1
+    "$VX_PY" -c "
+import json, sys
+try:
+    with open(sys.argv[1], encoding='utf-8') as fh:
+        h = json.load(fh)
+except Exception:
+    sys.exit(1)
+e = h.get(sys.argv[2])
+if not e:
+    sys.exit(1)
+print(int(e['seconds']), e.get('jobs', 0), e.get('tu', 0))
+" "$HISTORY" "$1" 2>/dev/null
+}
+
+history_put() {
+    mkdir -p "$(dirname "$HISTORY")"
+    "$VX_PY" -c "
+import json, os, sys
+path, key, seconds, jobs, tu = sys.argv[1:6]
+h = {}
+if os.path.exists(path):
+    try:
+        with open(path, encoding='utf-8') as fh:
+            h = json.load(fh)
+    except Exception:
+        h = {}
+h[key] = {'seconds': int(seconds), 'jobs': int(jobs), 'tu': int(tu)}
+with open(path, 'w', encoding='utf-8') as fh:
+    json.dump(h, fh, indent=2, sort_keys=True)
+" "$HISTORY" "$1" "$2" "$3" "$4" 2>/dev/null || true
+}
+
+# The estimate for one scons target: from history when there is any, from calibration when there is not.
+# Both paths name their basis, because both can be wrong and the reader needs to know which one to distrust.
+estimate_for() {
+    _target="$1" _tu="$2" _percore="$3"
+    if _prev="$(history_get "$(history_key "$_target")")"; then
+        set -- $_prev
+        _secs="$1" _pjobs="$2"
+        if [ "${_pjobs:-0}" -gt 0 ] && [ "$_pjobs" -ne "$jobs" ]; then
+            # Scaled for a changed job count. Compile time is near-linear in cores until memory bandwidth
+            # caps it, so this is right for a small change and optimistic for a large one ─ which is why the
+            # previous run's -j is printed rather than hidden inside the number.
+            _scaled="$(awk -v s="$_secs" -v p="$_pjobs" -v j="$jobs" 'BEGIN { printf "%d", s * p / j }')"
+            printf '~%s  (took %s here at -j%s, scaled to -j%s)' \
+                "$(fmt_duration "$_scaled")" "$(fmt_duration "$_secs")" "$_pjobs" "$jobs"
+        else
+            printf '~%s  (what it took here last time, same -j%s)' "$(fmt_duration "$_secs")" "$jobs"
+        fi
+        return 0
+    fi
+
+    if [ -z "$_percore" ]; then
+        printf 'unknown  (nothing recorded here yet, and no compiler to calibrate against)'
+        return 0
+    fi
+    _secs="$(awk -v tu="$_tu" -v pc="$_percore" -v j="$jobs" 'BEGIN { printf "%d", tu * pc / j }')"
+    printf '~%s  (>=%s files x %ss measured here / %s jobs; a FLOOR: excludes linking and the C++ the build generates)' \
+        "$(fmt_duration "$_secs")" "$_tu" "$_percore" "$jobs"
+}
 
 run() {
     if $dry_run; then
@@ -257,7 +434,7 @@ cat <<EOF
   install     $($install && echo "yes — .godot-bin/ and tools/engine-templates/" || echo "no (pass --install)")
 EOF
 
-$dry_run && info "dry run: nothing below is executed"
+if $dry_run; then info "dry run: nothing below is executed"; fi
 
 # ── 0. tools ─────────────────────────────────────────────────────────────────────────────────────
 step "checking the toolchain"
@@ -340,6 +517,40 @@ fi
 # ── 4. preflight ─────────────────────────────────────────────────────────────────────────────────
 # `--help` makes Godot's SConstruct configure fully, print its options and exit 0; a malformed argument
 # line exits non-zero with the reason. One minute here beats discovering a typo fifty minutes in.
+step "sizing the job"
+info "$(cpu_summary)"
+
+TU=0
+PERCORE=""
+if [ -d "$src" ]; then
+    TU="$(count_tus)"
+    info "$TU source files to compile in $src"
+
+    # Free space on the volume the build writes into. scons builds IN TREE, so the objects land beside the
+    # sources and this is the number that matters. No threshold is asserted here: what a build of this
+    # engine actually consumes has never been measured on this project, and inventing a limit would either
+    # block a machine that would have worked or wave through one that will not.
+    if command -v df >/dev/null 2>&1; then
+        info "disk: $(df -h "$src" 2>/dev/null | awk 'NR==2 {print $4 " free on " $NF}')  (objects go into the source tree)"
+    fi
+
+    if ! PERCORE="$(calibrate_cc)"; then
+        PERCORE=""
+        warn "no g++/clang++ found to calibrate against; set \$CXX if your compiler is elsewhere"
+    fi
+
+    printf '\n'
+    printf '  editor    %s\n' "$(estimate_for editor "$TU" "$PERCORE")"
+    if [ "$target" = "template" ] || [ "$target" = "both" ]; then
+        printf '  template  %s\n' "$(estimate_for template_release "$TU" "$PERCORE")"
+    fi
+    printf '\n'
+    info "estimates. The REAL time is recorded in _scratch/build-engine-history.json when this finishes, and"
+    info "every later build on this machine is estimated from that instead of from a calibration."
+else
+    info "no source tree yet, so there is nothing to size (dry run)"
+fi
+
 step "preflighting the scons argument line"
 run "${SCONS[@]}" --directory="$src" "platform=$platform" target=editor "arch=$arch" \
     "${SCONS_COMMON[@]}" ${SCONS_EXTRA[@]+"${SCONS_EXTRA[@]}"} "-j$jobs" --help >/dev/null
@@ -349,8 +560,15 @@ info "scons accepts the argument line"
 # The editor is built even when only a template was asked for, because the glue cannot be generated
 # without running one. It is not shipped.
 step "building the editor (required to generate the C# glue)"
+_editor_t0="$(date +%s)"
 run "${SCONS[@]}" --directory="$src" "platform=$platform" target=editor "arch=$arch" \
     "${SCONS_COMMON[@]}" ${SCONS_EXTRA[@]+"${SCONS_EXTRA[@]}"} "-j$jobs"
+
+if ! $dry_run; then
+    _editor_secs=$(( $(date +%s) - _editor_t0 ))
+    info "editor built in $(fmt_duration "$_editor_secs")"
+    history_put "$(history_key editor)" "$_editor_secs" "$jobs" "$TU"
+fi
 
 if ! $dry_run && [ ! -f "$src/$EDITOR_BIN" ]; then
     error "the editor build reported success but $EDITOR_BIN is not there."
@@ -373,11 +591,20 @@ run_in "$src" "$VX_PY" ./modules/mono/build_scripts/build_assemblies.py \
 # ── 8. the export template ───────────────────────────────────────────────────────────────────────
 if [ "$target" = "template" ] || [ "$target" = "both" ]; then
     step "building the release export template"
+    _tpl_t0="$(date +%s)"
     run "${SCONS[@]}" --directory="$src" "platform=$platform" target=template_release "arch=$arch" \
         "${SCONS_COMMON[@]}" ${SCONS_EXTRA[@]+"${SCONS_EXTRA[@]}"} "-j$jobs"
+    if ! $dry_run; then
+        _tpl_secs=$(( $(date +%s) - _tpl_t0 ))
+        info "template built in $(fmt_duration "$_tpl_secs")"
+        history_put "$(history_key template_release)" "$_tpl_secs" "$jobs" "$TU"
+    fi
 fi
 
-$dry_run && { info "dry run complete — nothing was built"; exit 0; }
+if $dry_run; then
+    info "dry run complete — nothing was built"
+    exit 0
+fi
 
 # ── results ──────────────────────────────────────────────────────────────────────────────────────
 step "results"

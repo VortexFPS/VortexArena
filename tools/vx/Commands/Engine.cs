@@ -80,6 +80,16 @@ internal static class Engine
             stale.Add((name, file, e["url"]!.GetValue<string>(), want, e["bytes"]!.GetValue<long>()));
         }
 
+        if (stale.Count > 0)
+        {
+            long totalBytes = stale.Sum(s => s.Size);
+            Console.WriteLine($"fetching {stale.Count} template(s), {Env.HumanBytes(totalBytes)}");
+            // Templates are stored exactly as downloaded, so needed == final size. The headroom is small and
+            // exists only because a filesystem at 100% fails for reasons unrelated to this download.
+            if (Env.SpaceNote(totalBytes, dest, headroom: 1.05) is { } note)
+                Console.WriteLine($"  {note}");
+        }
+
         if (stale.Count == 0)
         {
             Console.WriteLine("everything is present and matches the lockfile");
@@ -97,7 +107,7 @@ internal static class Engine
         Directory.CreateDirectory(dest);
         foreach ((string name, string file, string url, string want, long size) in stale)
         {
-            Console.WriteLine($"  {name}: fetching {file} ({size / (double)(1 << 20):F0} MB)");
+            Console.WriteLine($"  {name}: fetching {file} ({Env.HumanBytes(size)})");
             string target = Path.Combine(dest, file);
             string partial = target + ".part";
             try
@@ -166,7 +176,7 @@ internal static class Engine
         }
 
         Console.WriteLine($"vx engine --editor: installing Godot's export templates");
-        Console.WriteLine($"   {size / (double)(1 << 20):F0} MB  ->  {dest}");
+        Console.WriteLine($"   {Env.HumanBytes(size)}  ->  {dest}" + (Env.SpaceNote(size * 2, dest, headroom: 1.0) is { } note ? $"  ({note})" : ""));
         Console.WriteLine("   (outside the clone: Godot resolves these from a fixed per-user directory)");
 
         Directory.CreateDirectory(root);

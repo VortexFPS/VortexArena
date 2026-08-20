@@ -74,6 +74,64 @@ internal static class Env
         return Directory.GetCurrentDirectory();
     }
 
+    // ---- sizes and space --------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Bytes as a person reads them. Decimal units (MB = 10^6), deliberately: every size vx quotes comes from
+    /// a lockfile that recorded it to compare against a download, and download sizes are quoted in decimal by
+    /// every browser, CDN and package manager a reader will have seen. Quoting 666 MB where curl said 699 MB
+    /// would look like a different file.
+    /// </summary>
+    internal static string HumanBytes(long bytes)
+    {
+        if (bytes < 0) return "?";
+        if (bytes < 1_000) return $"{bytes} B";
+        if (bytes < 1_000_000) return $"{bytes / 1e3:F0} kB";
+        if (bytes < 1_000_000_000) return $"{bytes / 1e6:F0} MB";
+        return $"{bytes / 1e9:F1} GB";
+    }
+
+    /// <summary>
+    /// Free bytes on the volume holding <paramref name="path"/>, or null when it cannot be determined.
+    ///
+    /// <para>Walks UP to the nearest existing directory first: the thing being asked about is usually where a
+    /// download is ABOUT to go, so it does not exist yet, and asking the OS about a non-existent path answers
+    /// nothing useful. Null rather than an exception or a zero — callers treat "unknown" as "do not
+    /// block", because a space check must never be the reason a working machine refuses to fetch.</para>
+    /// </summary>
+    internal static long? FreeSpace(string path)
+    {
+        try
+        {
+            string? probe = Path.GetFullPath(path);
+            while (probe is not null && !Directory.Exists(probe))
+                probe = Path.GetDirectoryName(probe);
+            if (probe is null) return null;
+            return new DriveInfo(Path.GetPathRoot(probe)!).AvailableFreeSpace;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// One line describing what a fetch will cost and whether it fits: the size, the space left, and a plain
+    /// warning when it is close. Returns null when free space is unknown, so callers can print just the size.
+    ///
+    /// <para><paramref name="headroom"/> is the multiple of <paramref name="needed"/> that must be free before
+    /// this stays quiet. It defaults above 1.0 because "exactly enough" is not enough: an archive that is
+    /// unpacked needs the archive AND its contents on disk at once, and a filesystem at 100% fails in ways
+    /// that have nothing to do with the download.</para>
+    /// </summary>
+    internal static string? SpaceNote(long needed, string destination, double headroom = 1.3)
+    {
+        if (FreeSpace(destination) is not { } free) return null;
+        string sizes = $"{HumanBytes(needed)} needed, {HumanBytes(free)} free";
+        if (free < needed)
+            return $"{sizes} — NOT ENOUGH SPACE; this will fail partway";
+        if (free < (long)(needed * headroom))
+            return $"{sizes} — that is tight; unpacking needs room for the archive and its contents";
+        return sizes;
+    }
+
     /// <summary>First match for <paramref name="exe"/> on PATH, or null. The equivalent of `command -v`.</summary>
     internal static string? Which(string exe)
     {

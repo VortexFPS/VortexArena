@@ -251,6 +251,13 @@ public partial class Main : Node
         // docs/RUNNING.md "Visual capture"). An agent can then read the PNG to *see* the running game.
         MaybeCaptureScreenshot(args);
 
+        // An unattended run must not query the public master servers when it falls back to the menu (see
+        // MultiplayerScreen.SuppressAutoRefresh).
+        if (Array.IndexOf(args, "--quit-after-seconds") >= 0
+            || Array.Exists(args, a => a.StartsWith("--legacy-", StringComparison.Ordinal))
+            || System.Environment.GetEnvironmentVariable("VORTEX_NO_MASTER_QUERY") is "1")
+            VortexArena.Game.Menu.MultiplayerScreen.SuppressAutoRefresh = true;
+
         // `--quit-after-seconds <s>`: wall-clock self-quit for scripted/CI runs (the headless host smoke).
         // Godot's own `--quit-after` counts FRAMES (wall-time varies wildly headless), and Windows `timeout`
         // can't kill the Godot child — an orphaned host then holds UDP 26000 and later runs fail with

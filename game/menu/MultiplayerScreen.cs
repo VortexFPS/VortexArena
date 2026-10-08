@@ -41,6 +41,15 @@ public partial class MultiplayerScreen : MenuScreen
     /// 10 seconds, so flipping between tabs doesn't hammer them (serverlist.qc <c>focusEnter</c>).
     /// </summary>
     private ulong _nextRefreshMsec;
+
+    /// <summary>
+    /// Set once at boot for an unattended run (a scripted launch that quits by itself, a legacy session started
+    /// from the command line, or VORTEX_NO_MASTER_QUERY=1): the Servers tab then does NOT query the masters just
+    /// because it became visible. Such a run can fall back to this menu when its session ends, with nobody
+    /// watching, and would otherwise announce itself to the public masters and ping every listed server. The
+    /// Refresh button still works - a person pressing it has asked.
+    /// </summary>
+    public static bool SuppressAutoRefresh;
     private const ulong RefreshCooldownMsec = 10_000;
     private bool _wasVisible;
 
@@ -263,7 +272,7 @@ public partial class MultiplayerScreen : MenuScreen
         if (!visible)
             return;
 
-        if (becameVisible && Time.GetTicksMsec() >= _nextRefreshMsec)
+        if (becameVisible && !SuppressAutoRefresh && Time.GetTicksMsec() >= _nextRefreshMsec)
             OnRefresh();
 
         bool paused = MenuState.Cvars.GetFloat("net_slist_pause") != 0f;

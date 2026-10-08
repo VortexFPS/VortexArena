@@ -86,6 +86,13 @@ public sealed class HeadlessLegacyPresentation : ILegacyPresentation, ILegacyCal
         if (Map.MapName != state.WorldModel || Map.Bsp is null) Map.LoadMap(state.WorldModel);
     }
 
+    public void LevelFilesArrived(CsqcClientState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ModelData.ClearCache();
+        if (Map.MapName != state.WorldModel || Map.Bsp is null) Map.LoadMap(state.WorldModel);
+    }
+
     private void Count(string member) => _null.Calls[member] = _null.Calls.GetValueOrDefault(member) + 1;
 
     // ---- scene: forwarded, with the view remembered -------------------------------------------------

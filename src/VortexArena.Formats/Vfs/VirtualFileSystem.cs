@@ -60,6 +60,8 @@ public sealed class VirtualFileSystem : IDisposable
         GameDir,
         /// <summary><see cref="MountContentRoot(string)"/> — <c>&lt;root&gt;/maps</c> then <c>&lt;root&gt;</c>.</summary>
         ContentRoot,
+        /// <summary><see cref="MountBelowDirectories(string)"/> — one downloaded archive, under the loose trees.</summary>
+        BelowDirectories,
     }
 
     /// <summary>What one <see cref="Rescan"/> did to the search path. <see cref="Added"/> counts mounts built
@@ -115,6 +117,45 @@ public sealed class VirtualFileSystem : IDisposable
             PrependLocked(new[] { mount });
         }
         return true;
+    }
+
+    /// <summary>
+    /// Mounts one archive (or directory) where Darkplaces puts a package it downloaded while joining a server
+    /// (<c>FS_AddPack(..., keep_plain_dirs = true)</c>: "find the first item whose next one is a pak or NULL"):
+    /// below the loose directory trees at the head of the search path, above every archive mounted so far.
+    /// So a downloaded package can add files and can replace what other ARCHIVES hold, but never a loose file.
+    /// Nothing else changes order. An archive that is not a readable zip throws, as in <see cref="Mount"/>.
+    /// </summary>
+    /// <returns>True if mounted; false if the path does not exist.</returns>
+    public bool MountBelowDirectories(string path)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+
+        IMount mount;
+        if (Directory.Exists(path))
+            mount = new DirectoryMount(path);
+        else if (File.Exists(path))
+            mount = new Pk3Mount(path);
+        else
+            return false;
+
+        lock (_mountLock)
+        {
+            _sources.Add((MountSource.BelowDirectories, path));
+            var next = new List<IMount>(_mounts);
+            InsertBelowLeadingDirectories(next, mount);
+            _mounts = next;
+            ClearLookupCaches();
+        }
+        return true;
+    }
+
+    private static void InsertBelowLeadingDirectories(List<IMount> list, IMount mount)
+    {
+        int at = 0;
+        while (at < list.Count && list[at] is DirectoryMount)
+            at++;
+        list.Insert(at, mount);
     }
 
     /// <summary>
@@ -318,6 +359,10 @@ public sealed class VirtualFileSystem : IDisposable
                     case MountSource.ContentRoot:
                         PrependInto(next, BuildGameDirMounts(Path.Combine(path, "maps"), reuse));
                         PrependInto(next, BuildGameDirMounts(path, reuse));
+                        break;
+                    case MountSource.BelowDirectories:
+                        if (BuildSingleMount(path, reuse) is { } below)
+                            InsertBelowLeadingDirectories(next, below);
                         break;
                 }
             }

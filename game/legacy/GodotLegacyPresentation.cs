@@ -242,17 +242,15 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
             _mapRoot = null;
         }
 
-        // The name is the server's. It has to be a plain path inside the game data and nothing else.
-        if (!LegacyQcHost.IsSafePath(map) || !map.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase) || !_vfs.Exists(map))
+        // A level whose server announced package downloads loads its files when they are mounted
+        // (LevelFilesArrived, GodotLegacyPresentation.Downloads.cs); any other level loads them now.
+        _levelBsp = null;
+        if (state.LevelLoadDeferred)
         {
-            Map.LoadMap(map);   // records why (LoadError) and leaves an empty world
-            _note($"map \"{map}\" is not in the Xonotic data: the world is empty ({Map.LoadError})");
+            _note($"map \"{map}\": the server announced package downloads; the level's files are loaded when they are done");
             return;
         }
-
-        // The level's models and sounds start loading on worker threads now, under the map build and CSQC_Init.
-        BeginPrecache(state);
-        LoadWorld(map, state.WorldNameNoExtension);
+        LoadLevelFiles(state);
     }
 
     // The level's map: parsed once and used three ways (see BeginLevel). False if it could not be drawn - the

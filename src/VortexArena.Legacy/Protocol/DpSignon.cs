@@ -32,6 +32,42 @@ public sealed class DpSignonConfig
     /// file is already on hand. Null means "never", so it is always downloaded.
     /// </summary>
     public Func<string, int, int, bool>? HaveFile { get; set; }
+
+    /// <summary>
+    /// Whether the level may be entered without its map. DarkPlaces prints "Map %s not found" and goes on
+    /// into an empty world; with this set, the signon stops there instead (after the fallbacks below) and
+    /// <see cref="DpSignon.MissingWorld"/> says so, so that the owner can leave the server with a reason.
+    /// Needs <see cref="FileExists"/>.
+    /// </summary>
+    public bool RequireWorld { get; set; }
+    /// <summary>FS_FileExists over the game data, for the map named by svc_serverinfo.</summary>
+    public Func<string, bool>? FileExists { get; set; }
+    /// <summary>
+    /// Whether a map that no package download delivered is asked for through the game connection
+    /// ("download maps/x.bsp", and before it the package the server named for it). DarkPlaces does this for
+    /// every game but Nexuiz and Xonotic, where it switches the extension off after the client program;
+    /// a stock Xonotic server refuses the request ("sv_allowdownloads 0"), which costs one round trip.
+    /// </summary>
+    public bool InBandFallback { get; set; } = true;
+}
+
+/// <summary>
+/// The package downloads a server starts with stuffed "curl" commands (libcurl.c), as far as the signon
+/// depends on them: the level's loading waits while a download for this map is running.
+/// </summary>
+public interface IDpPackageDownloads
+{
+    /// <summary>Curl_Have_forthismap.</summary>
+    bool HaveForThisMap { get; }
+    /// <summary>Curl_Register_predownload: tell the owner when the downloads for this map have ended
+    /// (the owner then calls <see cref="DpClient.ContinueDownloads"/>).</summary>
+    void RegisterPredownload();
+    /// <summary>Curl_Curl_f: one "curl" command, tokenized; [0] is "curl".</summary>
+    void Command(IReadOnlyList<string> argv, bool loadBegun);
+    /// <summary>Curl_CancelAll ("stopdownload" stops these too).</summary>
+    void CancelAll();
+    /// <summary>The packages the server named for a file ("--as x.pk3 --for maps/x.bsp") that are not mounted.</summary>
+    IReadOnlyList<string> PackagesFor(string file);
 }
 
 /// <summary>
@@ -64,6 +100,10 @@ public sealed class DpSignon
     private bool _loadBegun;      // cl.loadbegun
     private bool _loadFinished;   // cl.loadfinished
     private bool _beginDownloadsPending;
+    private bool _waitingForPackages;
+    // The in-band requests for a missing map: what is still to be tried, and what was asked for last.
+    private List<string>? _fallbacks;
+    private string? _requested;
 
     public DpSignon(DpSignonConfig config, DpDownload download)
     {
@@ -94,6 +134,26 @@ public sealed class DpSignon
     /// <summary>The last download to finish, whatever its outcome.</summary>
     public DpDownloadResult? LastDownload { get; private set; }
 
+    /// <summary>The package downloads ("curl"), or null: the commands are then somebody else's.</summary>
+    public IDpPackageDownloads? Packages { get; set; }
+    /// <summary>cl.worldname: the map svc_serverinfo named ("maps/x.bsp"), or empty.</summary>
+    public string WorldModel { get; private set; } = "";
+    /// <summary>The map the level cannot start without and that nothing delivered, or null. The signon has
+    /// stopped: no "prespawn" is sent. Only with <see cref="DpSignonConfig.RequireWorld"/>.</summary>
+    public string? MissingWorld { get; private set; }
+    /// <summary>cl.loadfinished: every download is done and "prespawn" has been queued.</summary>
+    public bool LoadFinished => _loadFinished;
+    /// <summary>True while the level's loading waits for package downloads.</summary>
+    public bool WaitingForPackages => _waitingForPackages;
+    /// <summary>What was asked for through the game connection for the missing map, in order, and how each
+    /// request ended: for the message when nothing worked.</summary>
+    public List<string> FallbackLog { get; } = new();
+    /// <summary>A file other than the client program arrived through the game connection. The owner stores
+    /// and mounts it before this returns; the map is looked for again afterwards.</summary>
+    public event Action<DpDownloadResult>? FileDownloaded;
+    /// <summary>Console lines DarkPlaces prints about the downloads ("Map %s not found", "Downloading new CSQC code").</summary>
+    public event Action<string>? Note;
+
     /// <summary>NetConn_ConnectionEstablished: a new connection starts the sequence over.</summary>
     public void Reset()
     {
@@ -107,6 +167,12 @@ public sealed class DpSignon
         CsprogsVerified = false;
         LastDownload = null;
         _downloadCsqc = _loadBegun = _loadFinished = _beginDownloadsPending = false;
+        _waitingForPackages = false;
+        _fallbacks = null;
+        _requested = null;
+        WorldModel = "";
+        MissingWorld = null;
+        FallbackLog.Clear();
         Download.Abort();
     }
 
@@ -117,12 +183,18 @@ public sealed class DpSignon
     /// after the message has been parsed. Callers must keep that order: parse the message, then feed
     /// its stufftext to <see cref="HandleCommand"/>, then call <see cref="EndOfMessage"/>.
     /// </summary>
-    public void OnServerInfo()
+    public void OnServerInfo(string worldModel = "")
     {
         ServerExtensionDownload = 0;
         _downloadCsqc = true;
         _loadBegun = false;
         _loadFinished = false;
+        _waitingForPackages = false;
+        _fallbacks = null;
+        _requested = null;
+        WorldModel = worldModel ?? "";
+        MissingWorld = null;
+        FallbackLog.Clear();
     }
 
     /// <summary>
@@ -199,10 +271,28 @@ public sealed class DpSignon
                 int size = args.Count > 1 ? DpStuffText.Atoi(args[1]) : 0;
                 string name = args.Count > 2 ? args[2] : "";
                 bool deflate = args.Count >= 4 && args[3] == "deflate";
+                // DarkPlaces takes whatever a server starts. With the map required, only what was asked for is
+                // taken: a server cannot push files of its own choosing into the client's memory.
+                if (_config.RequireWorld && name != CsqcProgName && name != _requested)
+                {
+                    Note?.Invoke($"cl_downloadbegin: \"{Printable(name)}\" was not asked for; ignored");
+                    return true;
+                }
                 if (Download.Begin(size, name, deflate))
+                {
+                    Note?.Invoke($"Downloading {Printable(name)} ({size} bytes{(deflate ? ", deflated" : "")}) through the game connection");
                     Commands.Add("sv_startdownload");
+                }
+                else Note?.Invoke("cl_downloadbegin: received bogus information");
                 return true;
             }
+
+            case "curl":
+                // libcurl.c Curl_Curl_f. Handled here and not by the console, so that the downloads a server
+                // names in the message that carries signon 1 are known before cl_begindownloads runs.
+                if (Packages is null) return false;
+                Packages.Command(args, _loadBegun);
+                return true;
 
             case "cl_downloadfinished":
             {
@@ -217,8 +307,16 @@ public sealed class DpSignon
             }
 
             case "stopdownload":
-                // The server refused or abandoned the download ("Download rejected").
+                // The server refused or abandoned the download ("Download rejected"). CL_StopDownload_f
+                // stops the package downloads too.
+                Packages?.CancelAll();
+                if (Download.Active) Note?.Invoke($"Download of {Printable(Download.Name)} aborted");
                 Download.Abort();
+                if (_requested is { } refused)
+                {
+                    FallbackLog.Add($"\"download {refused}\" was refused by the server");
+                    _requested = null;
+                }
                 BeginDownloads();
                 return true;
 
@@ -237,7 +335,22 @@ public sealed class DpSignon
     private void FinishedDownload(DpDownloadResult result)
     {
         LastDownload = result;
-        if (result.Status != DpDownloadStatus.Completed || result.Name != CsqcProgName)
+        if (result.Name != CsqcProgName)
+        {
+            // A file asked for because the map is missing. The owner mounts it; BeginDownloads looks again.
+            if (_requested is { } asked && asked == result.Name)
+            {
+                _requested = null;
+                if (result.Status == DpDownloadStatus.Completed)
+                {
+                    FallbackLog.Add($"\"download {asked}\" delivered {result.Data.Length} bytes");
+                    FileDownloaded?.Invoke(result);
+                }
+                else FallbackLog.Add($"\"download {asked}\" ended with {result.Status}");
+            }
+            return;
+        }
+        if (result.Status != DpDownloadStatus.Completed)
             return;
         CsprogsData = result.Data;
         CsprogsVerified = result.Crc == CsqcProgCrc && (CsqcProgSize == -1 || result.Data.Length == CsqcProgSize);
@@ -262,6 +375,15 @@ public sealed class DpSignon
     // that is here: after the client program the loading is declared finished.
     private void BeginDownloads()
     {
+        // "this would be a good place to do curl downloads": while a package for this map is on its way,
+        // come back later (the owner calls PackagesFinished).
+        if (Packages is { HaveForThisMap: true } packages)
+        {
+            packages.RegisterPredownload();
+            _waitingForPackages = true;
+            return;
+        }
+        _waitingForPackages = false;
         _loadBegun = true;
         // if already downloading something, don't stop it
         if (Download.Active)
@@ -273,11 +395,42 @@ public sealed class DpSignon
             if (CsqcProgName.Length != 0 && CsqcProgCrc >= 0 && ServerExtensionDownload != 0
                 && !(_config.HaveFile?.Invoke(CsqcProgName, CsqcProgSize, CsqcProgCrc) ?? false))
             {
+                Note?.Invoke($"Downloading new CSQC code to dlcache/{Printable(CsqcProgName)}.{CsqcProgSize}.{CsqcProgCrc}");
                 Commands.Add(ServerExtensionDownload == 2
                     ? $"download {CsqcProgName} deflate"
                     : $"download {CsqcProgName}");
                 return;
             }
+        }
+
+        // The map (cl.model_name[1]). DarkPlaces asks the server for a model it does not have and goes on
+        // without it if that fails too; here the level is not entered without its world.
+        if (_config.RequireWorld && !_loadFinished && WorldModel.Length != 0 && _config.FileExists is { } exists && !exists(WorldModel))
+        {
+            if (_fallbacks is null)
+            {
+                Note?.Invoke($"Map {Printable(WorldModel)} not found");
+                _fallbacks = new List<string>();
+                if (_config.InBandFallback && ServerExtensionDownload != 0 && !DpDownload.IsNastyPath(WorldModel))
+                {
+                    // The package the server named for the map first (a whole package brings the map's
+                    // textures with it), then the map file alone.
+                    if (Packages is { } named)
+                        foreach (string package in named.PackagesFor(WorldModel))
+                            if (!DpDownload.IsNastyPath(package) && _fallbacks.Count < 3) _fallbacks.Add(package);
+                    _fallbacks.Add(WorldModel);
+                }
+            }
+            if (_fallbacks.Count > 0)
+            {
+                _requested = _fallbacks[0];
+                _fallbacks.RemoveAt(0);
+                Note?.Invoke($"Asking the server for {Printable(_requested)} through the game connection");
+                Commands.Add($"download {_requested}");
+                return;
+            }
+            MissingWorld = WorldModel;
+            return;
         }
 
         if (!_loadFinished)
@@ -286,5 +439,27 @@ public sealed class DpSignon
             // now issue the spawn to move on to signon 2 like normal
             Commands.Add("prespawn");
         }
+    }
+
+    /// <summary>
+    /// Curl_CheckCommandWhenDone running "cl_begindownloads": the package downloads this level waited for
+    /// have ended, whether they worked or not. Does nothing unless the signon was waiting for them.
+    /// </summary>
+    public void PackagesFinished()
+    {
+        if (!_waitingForPackages) return;
+        _waitingForPackages = false;
+        BeginDownloads();
+    }
+
+    private static string Printable(string text)
+    {
+        System.Text.StringBuilder result = new(Math.Min(text.Length, 120));
+        foreach (char c in text)
+        {
+            if (result.Length >= 120) break;
+            result.Append(c < ' ' || c == 127 ? '?' : c);
+        }
+        return result.ToString();
     }
 }

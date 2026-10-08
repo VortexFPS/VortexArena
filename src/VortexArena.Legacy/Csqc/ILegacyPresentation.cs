@@ -36,6 +36,13 @@ public interface ILegacyPresentation
     /// program is created. The default does nothing.</summary>
     void BeginLevel(CsqcClientState state) { }
 
+    /// <summary>Called before the level's program is loaded when the game data changed after
+    /// <see cref="BeginLevel"/> (packages the server named were downloaded and mounted, or the map arrived
+    /// through the game connection), or when <see cref="CsqcClientState.LevelLoadDeferred"/> told
+    /// BeginLevel to wait for exactly that: DarkPlaces loads the world only when its curl downloads are
+    /// done. An implementation with a world loads it now if it has not. The default does nothing.</summary>
+    void LevelFilesArrived(CsqcClientState state) { }
+
     /// <summary>Called once per level when its program has been loaded and CSQC_Init has returned (or the
     /// server named no program): the end of cl_parse.c CL_BeginDownloads, by which point DarkPlaces has every
     /// model and sound of the level in memory. An implementation that draws finishes loading what the server

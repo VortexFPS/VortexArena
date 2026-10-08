@@ -66,6 +66,10 @@ public sealed class CsqcClientState
     public string WorldMessage { get; private set; } = "";
     /// <summary>cl.worldname: "maps/x.bsp", or empty before a level is known.</summary>
     public string WorldModel { get; private set; } = "";
+    /// <summary>Set for a level whose server announced package downloads ahead of svc_serverinfo: the
+    /// presentation leaves the world and the precache alone in BeginLevel and loads them in
+    /// LevelFilesArrived, when the packages are mounted.</summary>
+    public bool LevelLoadDeferred { get; set; }
     /// <summary>cl.worldnamenoextension: "maps/x".</summary>
     public string WorldNameNoExtension { get; private set; } = "";
     /// <summary>cl.worldbasename: "x". The program's mapname global.</summary>

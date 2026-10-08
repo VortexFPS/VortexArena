@@ -159,6 +159,7 @@ public partial class ShowNamesLayer : Control
             return;
 
         Vector2 vp = GetViewportRect().Size;
+        _pixelsPerUnit = PixelsPerVirtualUnit(vp.Y, CvarF("vid_conheight", 600f));
         float frametime = (float)GetProcessDeltaTime();
         float now = NowSec();
         NVec3 viewOrigin = Coords.ToQuake(Camera.GlobalPosition);
@@ -233,7 +234,7 @@ public partial class ShowNamesLayer : Control
             tag.Origin = origin;
 
             // ---- line of sight (QC traceline(view_origin, this.origin, MOVE_NOMONSTERS, this)) ----
-            float crossDist = CvarF("hud_shownames_crosshairdistance", 0f);
+            float crossDist = VirtualF("hud_shownames_crosshairdistance", 0f);
             bool hit;
             if (crossDist == 0f && sameteam)
             {
@@ -374,7 +375,7 @@ public partial class ShowNamesLayer : Control
             }
 
             // ---- the tag geometry (QC mySize / myPos) ----
-            float fontsize = CvarF("hud_shownames_fontsize", 12f);
+            float fontsize = VirtualF("hud_shownames_fontsize", 12f);
             float aspect = CvarF("hud_shownames_aspect", 8f);
             Vector2 mySize = new(aspect * fontsize, fontsize);
             Vector2 myPos = new(o.X - 0.5f * mySize.X, o.Y - mySize.Y);
@@ -389,7 +390,7 @@ public partial class ShowNamesLayer : Control
 
             // ---- teammate status bar box adjustment (QC autocvar_hud_shownames_status branch) ----
             bool drawStatus = CvarBool("hud_shownames_status") && sameteam && !dead;
-            float statusBarHeight = CvarF("hud_shownames_statusbar_height", 4f);
+            float statusBarHeight = VirtualF("hud_shownames_statusbar_height", 4f);
             if (drawStatus)
             {
                 Vector2 sz = new(0.5f * mySize.X, resize * statusBarHeight);
@@ -429,9 +430,9 @@ public partial class ShowNamesLayer : Control
 
         // ---- pass 2: draw (QC the per-tag drawing after the alpha math) — reads the pass-1 draw params ----
         Font font = HudPanel.HudFont ?? ThemeDB.FallbackFont;
-        float fontsizeCv = CvarF("hud_shownames_fontsize", 12f);
+        float fontsizeCv = VirtualF("hud_shownames_fontsize", 12f);
         float aspectCv = CvarF("hud_shownames_aspect", 8f);
-        float statusBarHeightCv = CvarF("hud_shownames_statusbar_height", 4f);
+        float statusBarHeightCv = VirtualF("hud_shownames_statusbar_height", 4f);
         bool highlight = CvarBool("hud_shownames_statusbar_highlight");
 
         foreach (int netId in _drawIds)
@@ -516,8 +517,10 @@ public partial class ShowNamesLayer : Control
         foreach (HudText.Run run in runs)
         {
             var rc = new Color(run.Color.R, run.Color.G, run.Color.B, alpha);
-            // The old call's y was the BASELINE; DrawQ_String's is the top of the cell, 4.5/6 of it above.
-            DpText.Draw(this, DpText.Hud, new Vector2(x, y - size * 0.75f), run.Text, size, rc);
+            // QC: drawcolorcodedstring(myPos, ...) with myPos.y = o.y - fontsize * resize - the TOP of the
+            // character cell, so the cell ends at the projected point and a teammate's status bar (which
+            // starts at o.y) sits directly under the name.
+            DpText.Draw(this, DpText.Hud, new Vector2(x, y), run.Text, size, rc);
             x += DpText.Measure(DpText.Hud, run.Text, size);
         }
     }
@@ -693,7 +696,7 @@ public partial class ShowNamesLayer : Control
             if (selfF > 0f) selfResize = 0.5f + 0.5f * (selfF - MathF.Max(0f, selfDist - selfMinDist)) / selfF;
         }
 
-        float selfFontsize = CvarF("hud_shownames_fontsize", 12f);
+        float selfFontsize = VirtualF("hud_shownames_fontsize", 12f);
         float selfAspect = CvarF("hud_shownames_aspect", 8f);
         Vector2 selfMySize = new(selfAspect * selfFontsize, selfFontsize);
         Vector2 selfMyPos = new(selfO.X - 0.5f * selfMySize.X, selfO.Y - selfMySize.Y);
@@ -704,7 +707,7 @@ public partial class ShowNamesLayer : Control
         selfTag.BoxOfs = selfMySize / 2f;
 
         bool selfDrawStatus = CvarBool("hud_shownames_status") && !selfDead;
-        float selfBarH = CvarF("hud_shownames_statusbar_height", 4f);
+        float selfBarH = VirtualF("hud_shownames_statusbar_height", 4f);
         if (selfDrawStatus)
         {
             Vector2 sz = new(0.5f * selfMySize.X, selfResize * selfBarH);
@@ -808,6 +811,24 @@ public partial class ShowNamesLayer : Control
     }
 
     private static bool CvarBool(string name) => CvarF(name, 0f) != 0f;
+
+    // Draw_ShowNames works in the 2D virtual resolution (vid_conwidth x vid_conheight; project_3d_to_2d returns
+    // positions in it): hud_shownames_fontsize 12 is twelve of ITS units, which DarkPlaces stretches over the
+    // window - 14.4 pixels in a 720-pixel-high window with the stock vid_conheight of 600. This layer projects to
+    // window pixels instead, so every cvar that is a 2D length (the font size, the status bar's height, the
+    // crosshair distance) is multiplied by the window's pixels per virtual unit - the same factor HudPanel
+    // gives hud_fontsize. World lengths (hud_shownames_offset, the min/max distances) are not.
+    private float _pixelsPerUnit = 1f;
+
+    /// <summary>Window pixels per unit of DarkPlaces' 2D virtual resolution: window height / vid_conheight
+    /// (600 when the cvar is unset or not positive).</summary>
+    public static float PixelsPerVirtualUnit(float windowHeight, float conHeight)
+    {
+        if (!(conHeight > 0f) || !float.IsFinite(conHeight)) conHeight = 600f;
+        return windowHeight > 0f && float.IsFinite(windowHeight) ? windowHeight / conHeight : 1f;
+    }
+
+    private float VirtualF(string name, float fallback) => CvarF(name, fallback) * _pixelsPerUnit;
 
     private static float NowSec()
         => Api.Services is not null ? Api.Clock.Time : Time.GetTicksMsec() / 1000f;

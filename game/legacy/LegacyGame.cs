@@ -118,6 +118,10 @@ public partial class LegacyGame : Node
     private LegacyDrawLayer? _drawLayer;
     // The menu's console when the session runs on it (Menu is set); null for a private session.
     private VortexArena.Legacy.Menu.LegacyConsole? _shared;
+    private LegacyQcHost? _services;
+    // The engine commands of this session ("+attack", "impulse", "+showscores", ...). Through a relay: on the
+    // Xonotic menu's console the interpreter outlives the session and must not hold it (LegacySessionCommands).
+    private readonly LegacySessionCommands _commands = new();
     private Action<string, IReadOnlyList<string>>? _unknownCommandBefore;
     private bool _shutDown, _failed, _inGame, _loadingDismissed;
     private double _startedAt, _inGameAt = -1, _nextStatus, _autoJoinAfter;
@@ -217,7 +221,11 @@ public partial class LegacyGame : Node
         AddChild(canvas);
         _drawLayer = new LegacyDrawLayer { Name = "LegacyDraw" };
         canvas.AddChild(_drawLayer);
-        AssetLoader assets = Menu?.Assets ?? new AssetLoader(_vfs);
+        // The session's OWN loader, also when it runs under the Xonotic menu (which shares its game data and
+        // its console with the session, but not this): a loader keeps every texture, material, mesh and sound
+        // it has made for as long as it lives, so a level loaded through the menu's stayed in memory after the
+        // game was left - about 0.9 GB of a level nobody was in. This one dies with the session.
+        AssetLoader assets = new(_vfs);
         _presentation = new GodotLegacyPresentation(_sceneRoot, _drawLayer, _vfs, assets, _cvars, Log);
 
         RegisterEngineCommands(_interpreter);
@@ -280,6 +288,7 @@ public partial class LegacyGame : Node
         _options.PredictMovement = !_cvars.Has("cl_movement") || _cvars.GetFloat("cl_movement") != 0;
 
         _shared?.EnterSession();   // from here to the end of Start is the session's own work
+        _services = services;
         _session = new LegacyClientSession(services, _interpreter, _presentation, _options) { EngineMessages = _presentation };
         if (_cvars.Has("cl_nettimesyncboundmode")) _session.Clock.BoundMode = (int)_cvars.GetFloat("cl_nettimesyncboundmode");
         _session.Event += text => Log("event: " + Printable(text, 600));
@@ -365,6 +374,7 @@ public partial class LegacyGame : Node
         _server.Print += OnServerPrint;
         _server.Note += text => Log("server: " + Printable(text, 400));
         _server.LevelChanging += OnLevelChanging;
+        _server.PlayerCvar += OnServerPlayerCvar;
         _server.LevelChanged += (from, to) => Log(string.Create(CultureInfo.InvariantCulture,
             $"server: level change {from} -> {to} took {_server?.LastLevelChangeSeconds:0.00} s"));
         // One store in DarkPlaces; two here. What the PLAYER changes while the game runs is sent on (see
@@ -466,6 +476,17 @@ public partial class LegacyGame : Node
         ConsoleCommand($"{name} \"{value}\"");
     }
 
+    // DarkPlaces has one cvar store, so its menu sees the campaign level the server program has just unlocked.
+    // Here the server hands exactly those cvars back (LegacyLocalServer.PlayerCvar) and they go into the
+    // console the Xonotic menu runs on. A game without that menu has no such store: the program's campaign.cfg
+    // (written under the legacy user folder) carries the progress to the next start instead.
+    private void OnServerPlayerCvar(string name, string value)
+    {
+        if ((_shared ?? Menu?.Console) is not { } console) return;
+        if (console.AcceptLocalServerCvar(name, value))
+            Log($"local game: the server program saved {Printable(name)} = {Printable(value, 16)} (campaign progress); it is now in the player's Xonotic settings");
+    }
+
     private void OnSharedCvarChanged(string name)
     {
         if (_server is not { } server || _shared is not { } shared || shared.SessionOrigin || _shutDown) return;
@@ -542,33 +563,33 @@ public partial class LegacyGame : Node
             // Binds in the session's configuration (binds-xonotic.cfg) and from the server stay in the session:
             // the player's bind table is not this interpreter's to write.
             foreach (string name in new[] { "bind", "unbind", "unbindall", "in_bind", "in_unbind", "in_bindmap", "in_releaseall", "bindlist" })
-                interpreter.RegisterCommand(name, _ => { }, "ignored in a legacy session: the player's own binds are used, read-only");
+                _commands.Register(interpreter, name, _ => { }, "ignored in a legacy session: the player's own binds are used, read-only");
             // Engine commands with nothing to do here, kept from reaching the server as unknown commands.
             foreach (string name in new[] { "snd_restart", "r_restart", "vid_restart", "menu_restart", "toggleconsole", "screenshot", "curl", "stopsound", "cd" })
-                interpreter.RegisterCommand(name, _ => { }, "ignored in a legacy session");
+                _commands.Register(interpreter, name, _ => { }, "ignored in a legacy session");
             // A server may tell a DarkPlaces client to go elsewhere or to exit. This client does neither on a server's say-so.
             foreach (string name in new[] { "connect", "reconnect", "quit", "exit", "playdemo", "record" })
             {
                 string refused = name;
-                interpreter.RegisterCommand(name, _ => Log($"the session asked to run \"{refused}\": not followed"), "refused in a legacy session");
+                _commands.Register(interpreter, name, _ => Log($"the session asked to run \"{refused}\": not followed"), "refused in a legacy session");
             }
-            interpreter.RegisterCommand("disconnect", _ => Callable.From(() => { if (!_shutDown) Disconnected?.Invoke(); }).CallDeferred(),
+            _commands.Register(interpreter, "disconnect", _ => Callable.From(() => { if (!_shutDown) Disconnected?.Invoke(); }).CallDeferred(),
                 "leave the server and return to the menu");
-            interpreter.RegisterCommand("togglemenu", argv =>
+            _commands.Register(interpreter, "togglemenu", argv =>
             {
                 int mode = argv.Count > 1 && int.TryParse(argv[1], out int parsed) ? parsed : 1;
                 ToggleMenu?.Invoke(mode);
             }, "open or close the menu");
-            interpreter.RegisterCommand("loadfont", argv => _presentation?.LoadFontCommand(argv), "loadfont slot face[,fallback...] [sizes...]");
+            _commands.Register(interpreter, "loadfont", argv => _presentation?.LoadFontCommand(argv), "loadfont slot face[,fallback...] [sizes...]");
         }
         if (_shared is null && LocalGame is not null)
         {
             // A listen server's console: these run on the SERVER (sv_ccmds.c, prvm_edict.c PRVM_GameCommand).
             // On the menu's console the menu registers them itself, for local and remote sessions alike.
             foreach (string name in LegacyLocalCommands.ServerCommands)
-                interpreter.RegisterCommand(name, argv => ServerCommand(JoinArguments(argv)), "runs on the local game's server");
+                _commands.Register(interpreter, name, argv => ServerCommand(JoinArguments(argv)), "runs on the local game's server");
             foreach (string name in new[] { "map", "devmap", "changelevel", "restart", "maps" })
-                interpreter.RegisterCommand(name, argv =>
+                _commands.Register(interpreter, name, argv =>
                 {
                     string line = JoinArguments(argv);
                     Callable.From(() => { if (!_shutDown && MapCommand?.Invoke(line) != true) Log($"\"{Printable(line, 120)}\": not acted on"); }).CallDeferred();
@@ -577,11 +598,11 @@ public partial class LegacyGame : Node
         // sbar.c Sbar_ShowScores / Sbar_DontShowScores: "+showscores" is the ENGINE's command. It sets sb_showscores
         // and tells the program through its sb_showscores global (CL_VM_UpdateShowingScoresState); Xonotic's
         // scoreboard is drawn while that global is set. The program does not register the command itself.
-        interpreter.RegisterCommand("+showscores", _ => _session?.Host?.UpdateShowingScoresState(true), "show the scoreboard while held");
-        interpreter.RegisterCommand("-showscores", _ => _session?.Host?.UpdateShowingScoresState(false), "hide the scoreboard");
-        interpreter.RegisterCommand("messagemode", _ => OpenChat?.Invoke(false), "open the chat input line");
-        interpreter.RegisterCommand("messagemode2", _ => OpenChat?.Invoke(true), "open the team chat input line");
-        interpreter.RegisterCommand("impulse", argv =>
+        _commands.Register(interpreter, "+showscores", _ => _session?.Host?.UpdateShowingScoresState(true), "show the scoreboard while held");
+        _commands.Register(interpreter, "-showscores", _ => _session?.Host?.UpdateShowingScoresState(false), "hide the scoreboard");
+        _commands.Register(interpreter, "messagemode", _ => OpenChat?.Invoke(false), "open the chat input line");
+        _commands.Register(interpreter, "messagemode2", _ => OpenChat?.Invoke(true), "open the team chat input line");
+        _commands.Register(interpreter, "impulse", argv =>
         {
             if (argv.Count > 1 && int.TryParse(argv[1], out int impulse)) _pendingImpulse = (byte)Math.Clamp(impulse, 0, 255);
         }, "send an impulse number to the server (select weapon, use item, etc)");
@@ -615,8 +636,8 @@ public partial class LegacyGame : Node
 
         void Button(string name, ButtonSetter set)
         {
-            interpreter.RegisterCommand("+" + name, _ => set(ref _scriptHeld, true), "engine button: press");
-            interpreter.RegisterCommand("-" + name, _ => set(ref _scriptHeld, false), "engine button: release");
+            _commands.Register(interpreter, "+" + name, _ => set(ref _scriptHeld, true), "engine button: press");
+            _commands.Register(interpreter, "-" + name, _ => set(ref _scriptHeld, false), "engine button: release");
         }
     }
 
@@ -1295,6 +1316,11 @@ public partial class LegacyGame : Node
             _transport = null;
             _presentation?.Shutdown();
             _session = null;
+            // On the menu's console the cvar store outlives the session: unless the program's host lets go of
+            // it, the store holds the host, the host this node, and this node the whole game that was played.
+            _services?.Detach();
+            _services = null;
+            _commands.Release();
             if (_shared is { } shared)
             {
                 // The console is the menu's and outlives the session: put back what the session changed, and
@@ -1307,17 +1333,45 @@ public partial class LegacyGame : Node
             else _vfs?.Dispose();
             _vfs = null;
             if (!Headless) MouseCapture.SetWantCapture(false);
-            if (LocalGame is not null)
-            {
-                // A server program and its level are a few hundred megabytes of arrays; give them back now,
-                // while the screen is changing anyway, rather than whenever the collector next feels like it.
-                long before = GC.GetTotalMemory(false);
-                GC.Collect();
-                Log($"memory after the local game: managed {before / (1024 * 1024)} MB -> {GC.GetTotalMemory(false) / (1024 * 1024)} MB, " +
-                    $"working set {System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024)} MB");
-            }
+            ReleaseLevelMemory(Godot.Engine.GetMainLoop() as SceneTree);
         }
     }
 
     public override void _ExitTree() => Shutdown();
+
+    // A level is several hundred megabytes: the parsed map and the programs as managed arrays, and textures,
+    // meshes and sounds on Godot's side, each of which stays allocated for as long as a managed wrapper of it
+    // exists - until the collector has RUN that wrapper's finalizer, not merely until nothing refers to it. So
+    // the collector is asked now (the server's and the program's arrays), and once more a little later, when
+    // the session's nodes have really been freed (QueueFree waits for the end of the frame) and their wrappers
+    // can go: collect, let the finalizers hand the resources back to Godot, collect what those were holding.
+    // It costs one pause of some tens of milliseconds while the screen is changing anyway. Static, and given
+    // the tree rather than this node: nothing here may keep the session alive.
+    private static void ReleaseLevelMemory(SceneTree? tree)
+    {
+        long before = GC.GetTotalMemory(false);
+        GC.Collect();
+        Log($"memory when the session ended: managed {before / (1024 * 1024)} MB -> {GC.GetTotalMemory(false) / (1024 * 1024)} MB; {LegacyData.MemoryReport()}");
+        if (tree is null) return;
+        int passes = 0;
+        void Pass()
+        {
+            long began = System.Diagnostics.Stopwatch.GetTimestamp();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            // Twice: what the first pass's finalizers released on Godot's side frees further wrappers. The last
+            // collection is an aggressive one: it also gives the emptied heap back to the operating system
+            // (several hundred megabytes of a level's arrays would otherwise stay committed, if unused).
+            if (++passes < 2)
+            {
+                GC.Collect();
+                tree.CreateTimer(0.5, processAlways: true, processInPhysics: false, ignoreTimeScale: true).Timeout += Pass;
+                return;
+            }
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+            Log(string.Create(CultureInfo.InvariantCulture,
+                $"memory after the level was released (the last pass took {System.Diagnostics.Stopwatch.GetElapsedTime(began).TotalMilliseconds:0} ms): {LegacyData.MemoryReport()}"));
+        }
+        tree.CreateTimer(0.25, processAlways: true, processInPhysics: false, ignoreTimeScale: true).Timeout += Pass;
+    }
 }

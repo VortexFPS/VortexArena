@@ -48,7 +48,23 @@ public sealed class LegacyQcHost : IQcHost
     {
         _cvars = cvars;
         _vfs = vfs;
-        _cvars.Changed += name => CvarChanged?.Invoke(name);
+        _onCvarChanged = name => CvarChanged?.Invoke(name);
+        _cvars.Changed += _onCvarChanged;
+    }
+
+    private readonly Action<string> _onCvarChanged;
+
+    /// <summary>
+    /// Lets go of the cvar store. A session started from the Xonotic menu runs on the MENU's store, which
+    /// outlives it: while this host stays subscribed there, the store keeps the host alive, the host keeps
+    /// its print sink (the session) alive, and with the session its program, its level and every picture of
+    /// it - a whole game held for as long as the menu is open. Call it when the session ends; a host that
+    /// owns its store (a private session, a server, the menu itself) need not.
+    /// </summary>
+    public void Detach()
+    {
+        _cvars.Changed -= _onCvarChanged;
+        CvarChanged = null;
     }
 
     /// <summary>A cvar's value changed, by whatever route (the console, the program, the host). What keeps a
@@ -165,7 +181,7 @@ public sealed class LegacyQcHost : IQcHost
         string? written = WritePath(path);
         if (written is not null && WrittenFiles().Contains(written))
         {
-            try { return new FileStream(written, FileMode.Open, FileAccess.Read, FileShare.ReadWrite); }
+            try { return new FileStream(written, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
@@ -234,7 +250,12 @@ public sealed class LegacyQcHost : IQcHost
         {
             Directory.CreateDirectory(Path.GetDirectoryName(full)!);
             WrittenFiles().Add(full);
-            FileStream file = new(full, append ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.Read);
+            // fs.c FS_SysOpenFiledesc opens with _SH_DENYNO and FS_Write goes straight to the descriptor:
+            // what a program has written is in the file at once, and a file it never closed can be opened
+            // again. Xonotic's CampaignSaveCvar depends on both - it writes campaign.cfg and never calls
+            // fclose, then (on the last level) reads and rewrites the same file a second time. So: no
+            // buffer of our own, and nobody is locked out.
+            FileStream file = new(full, append ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, bufferSize: 0);
             return new BudgetedStream(file, this);
         }
         catch (IOException) { return null; }

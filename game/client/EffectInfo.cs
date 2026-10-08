@@ -119,6 +119,9 @@ public sealed class EffectInfo
         var built = new EffectInfo { TextLoader = textLoader };
         try { built.Load(key); }
         catch { /* leave empty; callers fall back to the heuristic classifier */ }
+        // The loader is read only inside Load, and this instance lives as long as the process: keeping the
+        // delegate would keep whoever supplied it (a legacy session's whole presentation, with its level).
+        built.TextLoader = null;
 
         lock (SharedGate)
         {

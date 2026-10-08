@@ -49,11 +49,17 @@ public enum LegacyMapCommand
 /// <item>While the game runs, a cvar the PLAYER changes (console, menu) is sent on
 /// (<see cref="LegacyLocalServer.SetCvar"/>), so <c>bot_number 6</c> or <c>timelimit 5</c> typed in
 /// the console acts at once.</item>
-/// <item>Nothing comes back. What the server program sets (it sets hundreds: per-map settings,
-/// <c>_campaign_*</c>, vote results) stays in the server's store and dies with the game, which is the
-/// effect DarkPlaces gets from <c>set</c> (not <c>seta</c>) and from <c>settemp</c> being restored
-/// when a map ends. The one exception a host has to make by hand is the campaign's progress, which
-/// the program writes to <c>campaign.cfg</c> in the user directory for the menu to read back.</item>
+/// <item>One thing comes back: the campaign's progress. What else the server program sets (it sets
+/// hundreds: per-map settings, <c>_campaign_*</c>, vote results) stays in the server's store and dies
+/// with the game, which is the effect DarkPlaces gets from <c>set</c> (not <c>seta</c>) and from
+/// <c>settemp</c> being restored when a map ends. But when a campaign level is won, server/campaign.qc
+/// CampaignSaveCvar sets <c>g_campaign&lt;name&gt;_index</c> (and <c>_won</c> after the last level) and
+/// rewrites <c>campaign.cfg</c>; in DarkPlaces the menu's level list reads that very variable on its
+/// next frame, and the file is only for the next start of the game (quake.rc: "exec data/campaign.cfg").
+/// So those cvars - <see cref="LegacyLocalCvars.IsCampaignProgress"/>, nothing else - are handed back
+/// by <see cref="LegacyLocalServer.PlayerCvar"/> for the owner to put in the player's store. Only a
+/// local game has such a path at all: a remote server's program does not run here, and what a remote
+/// server's console text or client program sets is put back when the session ends.</item>
 /// </list>
 /// </summary>
 public sealed class LegacyLocalGameRequest
@@ -133,6 +139,27 @@ public static class LegacyLocalCvars
         foreach (string prefix in s_clientOnly)
             if (name.StartsWith(prefix, StringComparison.Ordinal)) return false;
         if (name == "sv_public" && float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out float publicity) && publicity > 0) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether a cvar the server program of a LOCAL game has set is the campaign's progress, which is
+    /// the player's and goes back to the player's store: <c>g_campaign&lt;campaign name&gt;_index</c>
+    /// (how many levels are unlocked) and <c>g_campaign&lt;campaign name&gt;_won</c>, the two that
+    /// server/campaign.qc CampaignSaveCvar writes, holding a whole number that is not negative.
+    /// Everything else a server program sets - <c>g_campaign</c>, <c>g_campaign_skill</c>,
+    /// <c>_campaign_index</c>, limits, per-map settings - is refused here.
+    /// </summary>
+    public static bool IsCampaignProgress(string name, string value)
+    {
+        const string prefix = "g_campaign";
+        if (name.Length <= prefix.Length || name.Length > 96 || !name.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        if (!name.EndsWith("_index", StringComparison.Ordinal) && !name.EndsWith("_won", StringComparison.Ordinal)) return false;
+        foreach (char c in name)
+            if (!(c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '_' or '-' or '.')) return false;
+        if (value.Length is 0 or > 6) return false;
+        foreach (char c in value)
+            if (c is < '0' or > '9') return false;
         return true;
     }
 

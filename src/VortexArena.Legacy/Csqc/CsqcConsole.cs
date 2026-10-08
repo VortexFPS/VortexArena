@@ -25,20 +25,23 @@ public sealed class CsqcConsole
     private readonly DpStuffTextBuffer _buffer = new();
     private readonly List<string> _lines = new();
     private readonly HashSet<string> _qcCommands = new(StringComparer.OrdinalIgnoreCase);
+    // cl_cmd, cmd and whatever the program creates: through a relay, so that an interpreter which outlives
+    // this console (the Xonotic menu's) does not hold it - and through it the session - after Detach.
+    private readonly LegacySessionCommands _commands = new();
 
     public CsqcConsole(ConfigInterpreter interpreter, LegacyQcHost services)
     {
         Interpreter = interpreter ?? throw new ArgumentNullException(nameof(interpreter));
         _services = services ?? throw new ArgumentNullException(nameof(services));
 
-        interpreter.RegisterCommand("cl_cmd", argv =>
+        _commands.Register(interpreter, "cl_cmd", argv =>
         {
             // PRVM_GameCommand passes Cmd_Args: everything after the command word.
             GameCommands++;
             Host?.GameCommand(JoinArguments(argv, 1));
         }, "calls the client QC function GameCommand with the supplied string as argument");
 
-        interpreter.RegisterCommand("cmd", argv =>
+        _commands.Register(interpreter, "cmd", argv =>
         {
             string text = JoinArguments(argv, 1);
             if (text.Length == 0) return;
@@ -46,7 +49,7 @@ public sealed class CsqcConsole
             SendToServer?.Invoke(text);
         }, "send a console commandline to the server (used by some mods)");
 
-        interpreter.RegisterCommand("cl_particles_reloadeffects", argv => Host?.ReloadEffects(argv.Count > 1 ? argv[1] : null),
+        _commands.Register(interpreter, "cl_particles_reloadeffects", argv => Host?.ReloadEffects(argv.Count > 1 ? argv[1] : null),
             "reloads effectinfo.txt and maps/levelname_effectinfo.txt (where levelname is the current map) if parameter is given, loads from custom file (no levelname_effectinfo are loaded in this case)");
 
         // Xonotic's client program issues a few menu_cmd commands (to sync a menu that is not running
@@ -54,11 +57,24 @@ public sealed class CsqcConsole
         // menu program IS running on this interpreter (Menu/MenuHost.cs registers menu_cmd for itself, on
         // the console a session started from the Xonotic menu shares with it), its command is left alone.
         if (!interpreter.CommandNames.Contains("menu_cmd"))
-            interpreter.RegisterCommand("menu_cmd", _ => MenuCommands++,
+            _commands.Register(interpreter, "menu_cmd", _ => MenuCommands++,
                 "calls the menu QC function GameCommand with the supplied string as argument");
     }
 
     public ConfigInterpreter Interpreter { get; }
+
+    /// <summary>
+    /// The session is over: the commands this console put on the interpreter stay known but lead nowhere
+    /// (DarkPlaces: "client: program is not loaded"), and the interpreter no longer holds this console, its
+    /// program or its connection. Call it when the interpreter is not the session's own.
+    /// </summary>
+    public void Detach()
+    {
+        _commands.Release();
+        Host = null;
+        EngineCommand = null;
+        SendToServer = null;
+    }
 
     /// <summary>The loaded program, which <c>cl_cmd</c> and QuakeC-created commands call into. Null while none is.</summary>
     public CsqcHost? Host { get; set; }
@@ -164,7 +180,7 @@ public sealed class CsqcConsole
     public void RegisterQcCommand(string name)
     {
         if (name.Length == 0 || name.Length > 128 || _qcCommands.Count >= 4096 || !_qcCommands.Add(name)) return;
-        Interpreter.RegisterCommand(name, argv => Host?.ConsoleCommand(JoinArguments(argv, 0)), "console command created by QuakeC");
+        _commands.Register(Interpreter, name, argv => Host?.ConsoleCommand(JoinArguments(argv, 0)), "console command created by QuakeC");
     }
 
     /// <summary>

@@ -76,6 +76,23 @@ public static class DpText
     private static CvarService? _cvars;
     private static bool _dirty = true, _hooked;
     private static int _hinting = -1, _atlasGlyphs;
+    // r_font_kerning: "Use kerning if available" (DarkPlaces' default, and Xonotic leaves it on).
+    private static bool _kerning = true;
+
+    /// <summary>r_font_kerning, as last read.</summary>
+    public static bool KerningEnabled { get { Ensure(); return _kerning; } }
+
+    /// <summary>ft2.c Font_GetKerningForMap for a font file at a font map's FreeType size, in pixels of the map
+    /// (whole pixels or nothing); for a consumer that builds its own font from a slot's files.</summary>
+    public static float KerningOfMap(FontFile main, int pixelSize, int left, int right) => GlyphAtlas.Kerning(main, pixelSize, left, right);
+
+    // ft2.c Font_GetKerningForMap between two characters of a slot at a font map's FreeType size.
+    private static float KerningFor(int slot, int pixelSize, int left, int right)
+    {
+        if (!_kerning || left == 0) return 0;
+        FontFile[] faces = State(slot).Faces;
+        return faces.Length > 0 ? GlyphAtlas.Kerning(faces[0], pixelSize, left, right) : 0;
+    }
     private static float _snapping = 1;
     private static Vector2 _window;
     private static LegacyTextLook _look = LegacyTextLook.Plain;
@@ -145,6 +162,7 @@ public static class DpText
 
         _snapping = Cvar("r_font_size_snapping", 1);
         _look = new LegacyTextLook(Cvar("r_textcontrast", 1), Cvar("r_textbrightness", 0), Cvar("r_textshadow", 0));
+        _kerning = Cvar("r_font_kerning", 1) != 0;
         int hinting = Math.Clamp((int)Cvar("r_font_hinting", 3), 0, 3);
         if (hinting != _hinting)
         {
@@ -278,6 +296,51 @@ public static class DpText
             Cvar("r_font_postprocess_shadow_x", 0), Cvar("r_font_postprocess_shadow_y", 0), Cvar("r_font_postprocess_shadow_z", 0));
     }
 
+    // A developer aid, as the VORTEX_LEGACY_* variables are: VORTEX_FONT_PROBE names a file that receives, once,
+    // what THIS engine returns for every loaded font file at FreeType sizes 3 to 56 - a line "A <file> <size>
+    // <codepoint>:<advance> ..." for printable ASCII and Latin-1, and a line "K <file> <size> <left>,<right>:
+    // <kerning> ..." for the ASCII pairs that kern. It exists to be compared with DarkPlaces' own FreeType
+    // (ft2.c Font_LoadMap takes glyph->advance.x of the fully loaded, auto-hinted glyph). On a stock Godot 4.6
+    // the kerning agrees everywhere and the advances of a CFF font (Xolonium) do not: the text server stores
+    // FT_Get_Advance's answer, which for a CFF glyph is the rounded UNHINTED advance (the advance-only load
+    // skips the outline, so the auto-hinter has no edges to fit) - one pixel off for about three glyphs in ten.
+    private static bool _probed;
+    private static void WriteMetricsProbe()
+    {
+        if (_probed) return;
+        _probed = true;
+        string? path = System.Environment.GetEnvironmentVariable("VORTEX_FONT_PROBE");
+        if (string.IsNullOrEmpty(path)) return;
+        System.Globalization.CultureInfo inv = System.Globalization.CultureInfo.InvariantCulture;
+        StringBuilder text = new();
+        foreach (KeyValuePair<string, FontFile> file in FontFiles)
+        {
+            FontFile face = file.Value;
+            for (int size = 3; size <= 56; size++)
+            {
+                text.Append("A ").Append(file.Key).Append(' ').Append(size);
+                for (int rune = 0x20; rune < 0x100; rune++)
+                    if ((rune < 0x7F || rune >= 0xA0) && face.HasChar(rune))
+                        text.Append(' ').Append(rune).Append(':').Append(GlyphAtlas.Get(face, size, rune).Advance.ToString(inv));
+                text.Append((char)10).Append("K ").Append(file.Key).Append(' ').Append(size);
+                for (int left = 0x20; left < 0x7F; left++)
+                    for (int right = 0x20; right < 0x7F; right++)
+                        if (GlyphAtlas.Kerning(face, size, left, right) is not 0 and float kerning)
+                            text.Append(' ').Append(left).Append(',').Append(right).Append(':').Append(kerning.ToString(inv));
+                text.Append((char)10);
+            }
+        }
+        try
+        {
+            System.IO.File.WriteAllText(path, text.ToString());
+            GD.Print($"[DpText] font probe: {FontFiles.Count} font files written to {path}");
+        }
+        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException) { GD.Print("[DpText] font probe: " + e.Message); }
+        // The probe filled the atlas with glyphs nothing draws.
+        GlyphAtlas.Clear();
+        Glyphs.Clear();
+    }
+
     private static SlotState State(int slot) => States[(uint)slot < (uint)States.Length ? slot : 0] ?? (States[0] ??= new SlotState());
 
     /// <summary>
@@ -340,9 +403,15 @@ public static class DpText
         if (string.IsNullOrEmpty(text) || !(size > 0)) return 0;
         LegacyTextLayout layout = Layout(slot, size, out _, fontScaleX);
         if (layout.ScaleX == 0) return 0;
+        if (!_probed) WriteMetricsProbe();
         float raster = 0;
+        int previous = 0;
         foreach (Rune rune in text.EnumerateRunes())
-            if (rune.Value >= ' ') raster += GlyphFor(slot, layout.PixelSize, rune.Value).Advance;
+        {
+            if (rune.Value < ' ') continue;
+            raster += KerningFor(slot, layout.PixelSize, previous, rune.Value) + GlyphFor(slot, layout.PixelSize, rune.Value).Advance;
+            previous = rune.Value;
+        }
         return layout.Width(raster);
     }
 
@@ -388,9 +457,13 @@ public static class DpText
             Color modulate = new(c.R, c.G, c.B, c.A);
             float drop = pass == 1 ? _look.Shadow : 0;
             float pen = 0;
+            int previous = 0;
             foreach (Rune rune in text.EnumerateRunes())
             {
                 if (rune.Value < ' ') continue;
+                // "if (prevch && Font_GetKerningForMap(...)) x += kx * dw;"
+                pen += KerningFor(slot, pixelSize, previous, rune.Value);
+                previous = rune.Value;
                 LegacyGlyphAtlas.Glyph glyph = GlyphFor(slot, pixelSize, rune.Value);
                 if (glyph.Texture is not null)
                 {

@@ -39,6 +39,7 @@ public sealed class LegacyGlyphAtlas
     }
 
     private readonly Dictionary<(ulong Face, int Size, int Rune), Glyph> _glyphs = new();
+    private readonly Dictionary<(ulong Face, int Size, int Left, int Right), float> _kerning = new();
     private readonly List<Page> _pages = new();
     private LegacyGlyphPostprocess _postprocess = new(0, 0);
     private bool _dirty;
@@ -66,7 +67,43 @@ public sealed class LegacyGlyphAtlas
     {
         _glyphs.Clear();
         _pages.Clear();
+        _kerning.Clear();
         _dirty = false;
+    }
+
+    /// <summary>
+    /// ft2.c Font_GetKerningForMap: how far the pen moves between two characters before the right one is
+    /// drawn, in pixels of the font map. DarkPlaces asks FreeType for the pair in its default mode
+    /// (FT_Get_Kerning with FT_KERNING_DEFAULT: scaled, and fitted to whole pixels), at the font map's own
+    /// FreeType size, and snaps the result to the pixel grid ("Font_SnapTo(kern / 64 / size, 1 / size)") -
+    /// so a pair either moves the pen by whole pixels or not at all: none of Xolonium's pairs survive below a
+    /// FreeType size of 10, three at 10 (AY, LY, YA), 159 of the ASCII pairs at 16. The pair is always looked
+    /// up in the slot's MAIN file (<paramref name="main"/>), also when a character is drawn from a fallback:
+    /// "ul = qFT_Get_Char_Index(font->face, l)". A file with no 'kern' table has no kerning (has_kerning).
+    /// </summary>
+    public float Kerning(FontFile main, int size, int left, int right)
+    {
+        if (left < ' ' || right < ' ') return 0;
+        size = Math.Clamp(size, 1, LegacyTextLayout.MaxPixelSize);
+        (ulong, int, int, int) key = (main.GetInstanceId(), size, left, right);
+        if (_kerning.TryGetValue(key, out float known)) return known;
+        float kerning = 0;
+        Godot.Collections.Array<Rid> rids = main.GetRids();
+        if (rids.Count > 0)
+        {
+            TextServer server = TextServerManager.GetPrimaryInterface();
+            long leftIndex = server.FontGetGlyphIndex(rids[0], size, left, 0), rightIndex = server.FontGetGlyphIndex(rids[0], size, right, 0);
+            if (leftIndex != 0 && rightIndex != 0)
+            {
+                // The text server hands FT_Get_Kerning's vector back as it is: 26.6 fixed point (text_server_adv.cpp
+                // _font_get_kerning, "return Vector2(delta.x, delta.y)").
+                float raw = server.FontGetKerning(rids[0], size, new Vector2I((int)leftIndex, (int)rightIndex)).X;
+                if (float.IsFinite(raw)) kerning = LegacyTextLayout.SnapKerning(raw);
+            }
+        }
+        if (_kerning.Count >= 65536) _kerning.Clear();
+        _kerning[key] = kerning;
+        return kerning;
     }
 
     /// <summary>
@@ -173,11 +210,17 @@ public sealed class LegacyGlyphAtlas
     }
 
     /// <summary>The width of text at a size in pixels: the sum of its glyphs' advances, as DrawQ_TextWidth walks it.</summary>
-    public float Measure(IReadOnlyList<FontFile> faces, string text, int size)
+    public float Measure(IReadOnlyList<FontFile> faces, string text, int size, bool kerning = true)
     {
         float width = 0;
+        int previous = 0;
         foreach (Rune rune in text.EnumerateRunes())
-            if (FaceFor(faces, rune.Value) is { } face) width += Get(face, size, rune.Value).Advance;
+        {
+            if (FaceFor(faces, rune.Value) is not { } face) continue;
+            if (kerning && previous != 0) width += Kerning(faces[0], size, previous, rune.Value);
+            width += Get(face, size, rune.Value).Advance;
+            previous = rune.Value;
+        }
         return width;
     }
 
@@ -186,12 +229,16 @@ public sealed class LegacyGlyphAtlas
     /// starting at <paramref name="baseline"/>.X, in the canvas item's current transform - the caller
     /// scales that when the text is not drawn at the rasterised size. Returns the pen's x afterwards.
     /// </summary>
-    public float DrawText(CanvasItem target, IReadOnlyList<FontFile> faces, Vector2 baseline, string text, int size, Color color)
+    public float DrawText(CanvasItem target, IReadOnlyList<FontFile> faces, Vector2 baseline, string text, int size, Color color, bool kerning = true)
     {
         float pen = baseline.X;
+        int previous = 0;
         foreach (Rune rune in text.EnumerateRunes())
         {
             if (FaceFor(faces, rune.Value) is not { } face) continue;
+            // "if (prevch && Font_GetKerningForMap(...)) x += kx * dw;"
+            if (kerning && previous != 0) pen += Kerning(faces[0], size, previous, rune.Value);
+            previous = rune.Value;
             Glyph glyph = Get(face, size, rune.Value);
             if (glyph.Texture is not null)
                 target.DrawTextureRectRegion(glyph.Texture, new Rect2(new Vector2(pen, baseline.Y) + glyph.Offset, glyph.Region.Size), glyph.Region, color);

@@ -110,7 +110,7 @@ public sealed class LegacyLocalServer : IDisposable
     /// local game has been left it has to read 0, or a server was orphaned.</summary>
     public static int LiveThreads => Volatile.Read(ref s_liveThreads);
 
-    private enum EventKind { Print, Note, LevelChanging, LevelChanged }
+    private enum EventKind { Print, Note, LevelChanging, LevelChanged, PlayerCvar }
 
     private readonly SvLocalGameOptions _options;
     private readonly bool _threaded;
@@ -167,6 +167,14 @@ public sealed class LegacyLocalServer : IDisposable
     public event Action<string>? LevelChanging;
     /// <summary>A level change has completed: (map it was, map it is now). Equal for a restart.</summary>
     public event Action<string, string>? LevelChanged;
+    /// <summary>
+    /// The server program has set a cvar that is the PLAYER's (name, value): the campaign's progress,
+    /// <see cref="LegacyLocalCvars.IsCampaignProgress"/>, and nothing else. In DarkPlaces the menu reads
+    /// the same variable because there is one store; here the owner puts it into the player's. Raised
+    /// when the program sets it, and once more for each such cvar when the level or the game ends (also
+    /// from <see cref="Dispose"/>), so that a value which was created rather than changed is not missed.
+    /// </summary>
+    public event Action<string, string>? PlayerCvar;
 
     // ---- readable from the owner's thread --------------------------------------------------------------
 
@@ -248,6 +256,7 @@ public sealed class LegacyLocalServer : IDisposable
                 case EventKind.Note: Note?.Invoke(item.A); break;
                 case EventKind.LevelChanging: LevelChanging?.Invoke(item.A); break;
                 case EventKind.LevelChanged: LevelChanged?.Invoke(item.A, item.B); break;
+                case EventKind.PlayerCvar: PlayerCvar?.Invoke(item.A, item.B); break;
             }
         }
     }
@@ -275,6 +284,18 @@ public sealed class LegacyLocalServer : IDisposable
         });
     }
 
+    /// <summary>
+    /// Runs <paramref name="work"/> with the game on the server's thread, before its next frame - the general
+    /// form of <see cref="Command"/> and <see cref="SetCvar"/>, for a host that needs the server program itself
+    /// (a diagnostic tool, a test calling one of the program's functions). Nothing in it may touch the owner's
+    /// objects: it does not run on the owner's thread when the server has its own.
+    /// </summary>
+    public void Post(Action<SvLocalGame> work)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        if (!_disposed) Enqueue(work);
+    }
+
     private void Enqueue(Action<SvLocalGame> action)
     {
         if (_actions.Count >= 4096) return;   // an owner flooding a stalled server loses commands, not memory
@@ -297,6 +318,12 @@ public sealed class LegacyLocalServer : IDisposable
         }
         else EndGame();
         if (State is LegacyLocalServerState.Starting or LegacyLocalServerState.Running) _state = (int)LegacyLocalServerState.Stopped;
+        // The game is over and Update will not run again: what the program saved in its last frames (a level
+        // won as the player leaves) still goes to the player. Console output and notes are dropped. Not while
+        // the server's thread is still alive (a start that could not be interrupted): the queue is its to fill.
+        if (!_threaded || _finished.IsSet)
+            while (_events.TryDequeue(out (EventKind Kind, string A, string B) item))
+                if (item.Kind == EventKind.PlayerCvar) PlayerCvar?.Invoke(item.A, item.B);
     }
 
     // ---- the server's side -----------------------------------------------------------------------------
@@ -362,8 +389,20 @@ public sealed class LegacyLocalServer : IDisposable
             return false;
         }
         _game = game;
+        // The values the server starts with came from the player: only what the program makes of them is news.
+        foreach ((string name, string value) in _options.Cvars)
+            if (LegacyLocalCvars.IsCampaignProgress(name, value)) _playerCvarsPosted[name] = value;
         game.Event += text => Post(EventKind.Note, text, "");
-        game.Server.LevelEnding += host => { if (!_ending) Post(EventKind.LevelChanging, host.WorldBaseName, ""); };
+        // The campaign's progress, as the program sets it (CampaignSaveCvar: registercvar, then cvar_set).
+        game.Environment.Cvars.Changed += name =>
+        {
+            if (name.StartsWith("g_campaign", StringComparison.Ordinal)) PostPlayerCvar(game, name);
+        };
+        game.Server.LevelEnding += host =>
+        {
+            PostPlayerCvars(game);
+            if (!_ending) Post(EventKind.LevelChanging, host.WorldBaseName, "");
+        };
         game.LevelChanged += (from, to) =>
         {
             Interlocked.Increment(ref _levels);
@@ -433,11 +472,35 @@ public sealed class LegacyLocalServer : IDisposable
         _listenAddress = game.ListenAddress;
     }
 
+    // What the owner has been told of the player's cvars, so that each value is handed over once.
+    private readonly Dictionary<string, string> _playerCvarsPosted = new(StringComparer.Ordinal);
+
+    private void PostPlayerCvar(SvLocalGame game, string name)
+    {
+        if (!game.Environment.Cvars.Has(name)) return;
+        string value = game.Environment.Cvars.GetString(name);
+        if (!LegacyLocalCvars.IsCampaignProgress(name, value)) return;
+        if (_playerCvarsPosted.TryGetValue(name, out string? posted) && posted == value) return;
+        if (_playerCvarsPosted.Count >= 256 && !_playerCvarsPosted.ContainsKey(name)) return;
+        _playerCvarsPosted[name] = value;
+        Interlocked.Increment(ref _queuedEvents);
+        _events.Enqueue((EventKind.PlayerCvar, name, value));
+    }
+
+    // registercvar with the value it is then set to raises no change: look once more when a level or the game ends.
+    private void PostPlayerCvars(SvLocalGame game)
+    {
+        foreach (string name in game.Environment.Cvars.Names)
+            if (name.StartsWith("g_campaign", StringComparison.Ordinal)) PostPlayerCvar(game, name);
+    }
+
     private void EndGame()
     {
         _ending = true;
         if (_game is not { } game) return;
         _game = null;
+        try { PostPlayerCvars(game); }
+        catch (Exception e) when (e is not OutOfMemoryException) { }
         game.Dispose();
         if (State == LegacyLocalServerState.Running) _state = (int)LegacyLocalServerState.Stopped;
     }

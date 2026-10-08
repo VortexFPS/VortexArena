@@ -400,6 +400,7 @@ public sealed partial class GodotLegacyPresentation
             {
                 VortexArena.Formats.Bsp.BspData view = (VortexArena.Formats.Bsp.BspData)s_memberwiseClone.Invoke(bsp, null)!;
                 s_bspFaces.SetValue(view, faces);
+                _levelMaps.Add(view);
                 node = MapLoader.BuildMap(view, _assets.Assets, _levelName);
             }
         }

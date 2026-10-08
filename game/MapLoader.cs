@@ -1228,6 +1228,31 @@ public static class MapLoader
     private static readonly Dictionary<(BspData, int), Texture2D?> _deluxemapCache = new();
 
     /// <summary>
+    /// Forgets the lightmap and deluxe pages uploaded for <paramref name="bsp"/> and gives up this cache's
+    /// hold on them and on the parsed map itself. For an owner whose level is over (a legacy session leaving
+    /// its level): both caches are keyed by the map object and are otherwise kept for the life of the
+    /// process. Nothing is destroyed here: a page still bound to a material lives until that material is
+    /// freed, and the rest goes when the collector finds it unreferenced. Returns how many pages were let go. The native game does not call this; its map lifetime is unchanged.
+    /// </summary>
+    public static int ReleaseLightmaps(BspData bsp)
+    {
+        int released = 0;
+        foreach (Dictionary<(BspData, int), Texture2D?> cache in new[] { _lightmapCache, _deluxemapCache })
+        {
+            List<(BspData, int)>? keys = null;
+            foreach (KeyValuePair<(BspData, int), Texture2D?> entry in cache)
+            {
+                if (!ReferenceEquals(entry.Key.Item1, bsp)) continue;
+                (keys ??= new List<(BspData, int)>()).Add(entry.Key);
+                released++;
+            }
+            if (keys is not null)
+                foreach ((BspData, int) key in keys) cache.Remove(key);
+        }
+        return released;
+    }
+
+    /// <summary>
     /// The effective "is this map deluxemapped" decision, refined for external-lightmap maps that
     /// <see cref="VortexArena.Formats.Bsp.BspReader"/> could not resolve at parse time (no VFS there, so it can't
     /// probe the external pages). DP detects deluxemapping on the external set the same way as the internal

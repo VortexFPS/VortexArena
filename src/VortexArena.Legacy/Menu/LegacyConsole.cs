@@ -196,6 +196,37 @@ public sealed class LegacyConsole
         return restored;
     }
 
+    /// <summary>
+    /// A cvar the server program of a LOCAL game has set, offered to the player's store: taken only if it
+    /// is the campaign's progress (<see cref="VortexArena.Legacy.Local.LegacyLocalCvars.IsCampaignProgress"/>),
+    /// and then it is the player's own value - it is not put back when the session ends, and the menu's
+    /// level list (menu/xonotic/campaign.qc XonoticCampaignList_draw compares the cvar with what it shows,
+    /// every frame) unlocks the next level. It is not a saved cvar, in DarkPlaces either: the server program
+    /// has written it to campaign.cfg, which <see cref="LoadConfig"/> executes at the next start.
+    /// Never call this for a remote server: nothing a remote server does may reach the player's configuration.
+    /// </summary>
+    public bool AcceptLocalServerCvar(string name, string value)
+    {
+        if (!VortexArena.Legacy.Local.LegacyLocalCvars.IsCampaignProgress(name, value)) return false;
+        // Whatever is running around this call, the change is made as the player's (see OnCvarChanged).
+        int depth = _sessionDepth;
+        _sessionDepth = 0;
+        try
+        {
+            // The menu creates it the same way when its level list is first shown: registercvar(name, "", 0).
+            if (!Cvars.Has(name))
+            {
+                Cvars.Register(name, "", CvarFlags.None);
+                _programCvars.Add(name);
+            }
+            Cvars.Set(name, value);
+            _sessionTouched.Remove(name);
+            if (_sessionSnapshot is { } snapshot) snapshot[name] = value;
+        }
+        finally { _sessionDepth = depth; }
+        return true;
+    }
+
     private void OnCvarChanged(string name)
     {
         // One variable under two names: copy the write across. (Set does nothing when the value is already there.)
@@ -275,7 +306,14 @@ public sealed class LegacyConsole
         if (!LegacyQcHost.IsSafePath(path)) return null;
         if (UserFile(path) is { } user && File.Exists(user))
         {
-            try { return File.ReadAllText(user, Encoding.UTF8); }
+            try
+            {
+                // Shared for writing too (fs.c opens with _SH_DENYNO): a program may still hold the file open -
+                // Xonotic's server never closes the campaign.cfg it has written.
+                using FileStream stream = new(user, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using StreamReader reader = new(stream, Encoding.UTF8);
+                return reader.ReadToEnd();
+            }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
         }
         try { return _vfs.Exists(path) ? _vfs.ReadText(path) : null; }

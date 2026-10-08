@@ -847,6 +847,9 @@ public partial class LegacyMenu : Node
                 case "sv" when command.Length > 3:
                     _session?.ServerCommand(command[3..]);
                     break;
+                case "mem":
+                    Log("memory " + (parts.Length >= 2 ? parts[1] : "") + ": " + LegacyData.MemoryReport());
+                    break;
                 case "sync" when parts.Length >= 2 && parts[1] is "game" or "menu" or "level":
                     // "sync level": until the session has entered the level AFTER the one it is in (a level change).
                     _scriptWaitLevel = (_session?.LevelsEntered ?? 0) + 1;

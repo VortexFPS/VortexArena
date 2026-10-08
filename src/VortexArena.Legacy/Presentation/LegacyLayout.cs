@@ -61,6 +61,14 @@ public readonly record struct LegacyTextLayout(int PixelSize, float ScaleX, floa
     public const int MaxPixelSize = 256;
 
     /// <summary>
+    /// ft2.c Font_LoadSize / Font_GetKerningForMap: a kerning value as FT_Get_Kerning returns it (26.6 fixed
+    /// point, in pixels of the font map's FreeType size) becomes "Font_SnapTo((kern / 64.0) / size, 1 / size)"
+    /// of a character cell - floor(x + 0.5) whole pixels of the map. The pen moves by that before the right
+    /// character of the pair is drawn.
+    /// </summary>
+    public static float SnapKerning(float kern26Dot6) => MathF.Floor(kern26Dot6 / 64f + 0.5f);
+
+    /// <summary>
     /// A character cell of <paramref name="width"/> by <paramref name="height"/> virtual pixels, times
     /// the drawfontscale. The font is rasterised at <see cref="PixelSize"/> (the cell height, as
     /// DarkPlaces asks FreeType for it) and the result stretched by <see cref="ScaleX"/> /

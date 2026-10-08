@@ -86,6 +86,12 @@ public sealed class LegacyCanvas : ILegacyDraw
     public void ReadTextCvars(Func<string, float?> cvar)
     {
         FontSizeSnapping = cvar("r_font_size_snapping") ?? 1;
+        bool kerning = (cvar("r_font_kerning") ?? 1) != 0;
+        if (kerning != FontKerning)
+        {
+            FontKerning = kerning;
+            _measured.Clear();
+        }
         if (cvar("r_font_hinting") is { } hinting) FontHinting = (int)hinting;
         int before = Atlas.GlyphCount;
         Atlas.SetPostprocess(cvar("r_font_postprocess_outline") ?? 0, cvar("r_font_postprocess_blur") ?? 0,
@@ -269,9 +275,48 @@ public sealed class LegacyCanvas : ILegacyDraw
     internal float RasterWidth(string text, int font, in LegacyTextLayout layout)
     {
         float width = 0;
+        int previous = 0;
         foreach ((string stretch, int glyph) in Stretches(text, font))
-            width += glyph >= 0 ? BitmapFont(font).Widths.Advance(glyph, layout.Cell) : OutlineWidth(stretch, font, layout.PixelSize);
+        {
+            if (glyph >= 0)
+            {
+                width += BitmapFont(font).Widths.Advance(glyph, layout.Cell);
+                previous = 0;   // "prevch = 0" after an old-font character
+                continue;
+            }
+            width += KerningBetween(font, layout.PixelSize, previous, stretch) + OutlineWidth(stretch, font, layout.PixelSize);
+            previous = LastRune(stretch);
+        }
         return width;
+    }
+
+    /// <summary>r_font_kerning: "Use kerning if available". On in DarkPlaces and in Xonotic.</summary>
+    public bool FontKerning { get; private set; } = true;
+
+    /// <summary>
+    /// ft2.c Font_GetKerningForMap between two characters of a slot, in pixels of the font map: looked up in
+    /// the slot's main file whatever file draws them, whole pixels or nothing (<see cref="LegacyGlyphAtlas.Kerning"/>).
+    /// </summary>
+    internal float Kerning(int font, int pixelSize, int left, int right)
+    {
+        if (!FontKerning || left == 0 || right == 0) return 0;
+        FontForSlot(font);
+        return _slotFaces.TryGetValue(font, out FontFile[]? faces) && faces.Length > 0 ? Atlas.Kerning(faces[0], pixelSize, left, right) : 0;
+    }
+
+    /// <summary>The kerning between the character before a stretch of text and the stretch's first character:
+    /// DrawQ_String keeps its previous character across colour codes, so a pair split by one still kerns.</summary>
+    internal float KerningBetween(int font, int pixelSize, int previous, string stretch)
+    {
+        if (previous == 0 || stretch.Length == 0 || !FontKerning) return 0;
+        return Rune.DecodeFromUtf16(stretch, out Rune first, out _) == System.Buffers.OperationStatus.Done ? Kerning(font, pixelSize, previous, first.Value) : 0;
+    }
+
+    /// <summary>The last character of a stretch (0 for an empty one): DrawQ_String's prevch after drawing it.</summary>
+    internal static int LastRune(string stretch)
+    {
+        if (stretch.Length == 0) return 0;
+        return Rune.DecodeLastFromUtf16(stretch, out Rune last, out _) == System.Buffers.OperationStatus.Done ? last.Value : 0;
     }
 
     /// <summary>
@@ -361,6 +406,7 @@ public sealed class LegacyCanvas : ILegacyDraw
     /// </summary>
     internal float DrawOutline(CanvasItem target, string drawable, int font, int pixelSize, float pen, float baseline, Color color)
     {
+        int previous = 0;
         foreach (Rune rune in drawable.EnumerateRunes())
         {
             if (Glyph(font, rune.Value, pixelSize) is not { } glyph)
@@ -369,6 +415,9 @@ public sealed class LegacyCanvas : ILegacyDraw
                 target.DrawString(FontForSlot(font), new Vector2(pen, baseline), drawable, HorizontalAlignment.Left, -1f, pixelSize, color);
                 return pen + OutlineWidth(drawable, font, pixelSize);
             }
+            // "if (prevch && Font_GetKerningForMap(...)) x += kx * dw;"
+            pen += Kerning(font, pixelSize, previous, rune.Value);
+            previous = rune.Value;
             LegacyGlyphAtlas.Glyph picture = Atlas.Get(glyph.Face, pixelSize, rune.Value);
             if (picture.Texture is not null)
                 target.DrawTextureRectRegion(picture.Texture, new Rect2(new Vector2(pen, baseline) + picture.Offset, picture.Region.Size), picture.Region, color);
@@ -386,10 +435,12 @@ public sealed class LegacyCanvas : ILegacyDraw
         {
             raster = 0;
             bool outline = true;
+            int previous = 0;
             foreach (Rune rune in drawable.EnumerateRunes())
             {
                 if (Glyph(font, rune.Value, pixelSize) is not { } glyph) { outline = false; break; }
-                raster += glyph.Advance;
+                raster += Kerning(font, pixelSize, previous, rune.Value) + glyph.Advance;
+                previous = rune.Value;
             }
             if (!outline) raster = FontForSlot(font).GetStringSize(drawable, HorizontalAlignment.Left, -1f, pixelSize).X;
             if (_measured.Count >= MaxMeasuredStrings) _measured.Clear();

@@ -254,6 +254,7 @@ public sealed class LegacyClientSession : IDisposable
         if (_disposed) return;
         _disposed = true;
         UnloadProgram();
+        Console.Detach();
     }
 
     // CL_UpdateMoveVars: Xonotic publishes its physics settings as stats; the two that matter to the

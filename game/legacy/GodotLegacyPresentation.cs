@@ -149,7 +149,7 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         ReleaseAllProxies();
-        _levelBsp = null;
+        ReleaseLevelMaps();
         _staticEntities.Clear();
         StopAllSounds();
         ModelData.ClearCache();
@@ -178,8 +178,10 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
                 _note($"map \"{map}\" could not be parsed: {Map.LoadError}");
                 return;
             }
-            BspCollisionBuilder.Result built = BspCollisionBuilder.Build(bsp);
-            Map.UseMap(map, bsp, built);
+            // One collision build, the DarkPlaces-exact one (curved surfaces as coarse triangles, as a
+            // Xonotic server collides). Building the native slab form here first only had it thrown
+            // away and rebuilt inside UseMap.
+            Map.UseMap(map, bsp);
 
             // The client draws the world it loaded locally (VF_DRAWWORLD): model 0 only. Every "*N" submodel (a
             // door, a platform, a gametype-only wall) is an entity's model and is built when one is submitted
@@ -187,10 +189,12 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
             HashSet<int> submodels = new();
             for (int i = 1; i < bsp.Models.Length; i++) submodels.Add(i);
             _levelBsp = bsp;
+            _levelMaps.Add(bsp);
             _levelName = state.WorldNameNoExtension;
             _mapRoot = MapLoader.BuildMap(bsp, _assets.Assets, state.WorldNameNoExtension, submodels);
             _sceneRoot.AddChild(_mapRoot);
-            _effects.SetCollisionWorld(built.World);
+            // Particles collide with the same world the game does.
+            if (Map.Collision is { } collision) _effects.SetCollisionWorld(collision);
             _effects.SetDecalGeometry(bsp);
             ModelLighting.ApplyMap(bsp.LightGrid);
             ApplyEnvironment(bsp);
@@ -278,11 +282,26 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
     {
         StopAllSounds();
         ReleaseAllProxies();
+        ReleaseLevelMaps();
         DrawList.Clear();
         _drawLayer.Present(Canvas);
         ModelLighting.Clear();
         _host = null;
     }
+
+    // The map loader keeps the lightmap pages it uploaded in a process-wide cache keyed by the parsed map - and
+    // with them the parsed map. A level this session is done with (and every per-submodel view of it, each of
+    // which got pages of its own) is taken out, or each level ever played stays in memory.
+    private void ReleaseLevelMaps()
+    {
+        int pages = 0;
+        foreach (BspData map in _levelMaps) pages += MapLoader.ReleaseLightmaps(map);
+        if (_levelMaps.Count > 0) _note($"level released: {_levelMaps.Count} map views, {pages} lightmap pages forgotten");
+        _levelMaps.Clear();
+        _levelBsp = null;
+    }
+
+    private readonly List<BspData> _levelMaps = new();
 
     // ---- small conversions shared by the partial files ------------------------------------------------
 

@@ -324,6 +324,8 @@ public partial class LegacyDrawLayer : Control
             // In rasterised pixels of this call: one real pixel is 1 / (scale * layout scale) of them.
             float pen = shadow ? look.Shadow / (scale.X * MathF.Abs(layout.ScaleX)) : 0;
             float drop = shadow ? look.Shadow / (scale.Y * MathF.Abs(layout.ScaleY)) : 0;
+            // DrawQ_String's prevch: kept across colour codes, forgotten after an old-font character.
+            int previous = 0;
             foreach (LegacyTextRun run in _runs)
             {
                 LegacyColor shown = shadow ? look.ShadowColor(run.Color) : look.Color(run.Color);
@@ -332,9 +334,12 @@ public partial class LegacyDrawLayer : Control
                 {
                     if (glyph < 0)
                     {
+                        pen += source.KerningBetween(c.Font, layout.PixelSize, previous, text);
                         pen = source.DrawOutline(target, text, c.Font, layout.PixelSize, pen, layout.Baseline + drop, color);
+                        previous = LegacyCanvas.LastRune(text);
                         continue;
                     }
+                    previous = 0;
                     // An old-font character: its cell of the 16 x 16 bitmap font, as wide as the font's width table
                     // says, in the text's colour ("s = (ch & 15)*0.0625f + (0.5f / tw)", "u = 0.0625f * thisw - (1.0f / tw)").
                     (string picture, LegacyBitmapFontWidths widths) = source.BitmapFont(c.Font);

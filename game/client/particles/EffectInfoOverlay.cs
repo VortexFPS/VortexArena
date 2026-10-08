@@ -138,6 +138,8 @@ public sealed class EffectInfoOverlay
         var built = new EffectInfoOverlay { TextLoader = textLoader };
         try { built.Load(key); }
         catch { /* leave empty; Auto everywhere */ }
+        // Read only inside Load; this instance lives as long as the process and must not keep its first caller.
+        built.TextLoader = null;
 
         lock (SharedGate)
         {

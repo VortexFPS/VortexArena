@@ -93,6 +93,38 @@ public static class LegacyData
         return true;
     }
 
+    /// <summary>
+    /// One line of what the process holds right now, for the review scripts' "mem" and the session log: the
+    /// working set, the managed heap, and Godot's own counters (static memory, video memory in textures and in
+    /// vertex/index buffers, objects, nodes, resources). The numbers that have to come back down when a level
+    /// is left.
+    /// </summary>
+    public static string MemoryReport()
+    {
+        const double mb = 1024.0 * 1024.0;
+        long workingSet;
+        using (System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess())
+        {
+            process.Refresh();
+            workingSet = process.WorkingSet64;
+        }
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"working set {workingSet / mb:0} MB, private {PrivateBytes() / mb:0} MB, managed {GC.GetTotalMemory(false) / mb:0} MB, " +
+            $"static {Godot.Performance.GetMonitor(Godot.Performance.Monitor.MemoryStatic) / mb:0} MB, " +
+            $"textures {Godot.Performance.GetMonitor(Godot.Performance.Monitor.RenderTextureMemUsed) / mb:0} MB, " +
+            $"buffers {Godot.Performance.GetMonitor(Godot.Performance.Monitor.RenderBufferMemUsed) / mb:0} MB, " +
+            $"video {Godot.Performance.GetMonitor(Godot.Performance.Monitor.RenderVideoMemUsed) / mb:0} MB, " +
+            $"objects {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectCount):0}, nodes {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectNodeCount):0}, " +
+            $"resources {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectResourceCount):0}, orphan nodes {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectOrphanNodeCount):0}");
+    }
+
+    private static long PrivateBytes()
+    {
+        using System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess();
+        process.Refresh();
+        return process.PrivateMemorySize64;
+    }
+
     /// <summary>The root of everything a legacy session may write: <c>&lt;user directory&gt;/legacy</c>.</summary>
     public static string UserRoot
     {

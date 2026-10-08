@@ -225,6 +225,24 @@ public static class DpBitmapFont
         pages.Add(page);
         for (int i = 0; i < pages.Count; i++) font.SetTextureImage(0, sizeKey, i, pages[i]);
 
+        // ft2.c Font_LoadSize "load the default kerning vector": the pairs of the first 256 characters, looked up
+        // in the slot's main file and snapped to whole pixels of the map (most are nothing at small sizes). Godot
+        // then moves its pen by them as DrawQ_String does. A bitmap font's glyph index is the character itself.
+        font.ClearKerningMap(0, entry.Key);
+        if (DpText.KerningEnabled && faces.Count > 0)
+        {
+            FontFile main = faces[0];
+            List<int> kerned = new();
+            foreach ((int rune, Rid _, long _) in wanted)
+                if (rune < 256 && main.HasChar(rune)) kerned.Add(rune);
+            foreach (int left in kerned)
+                foreach (int right in kerned)
+                {
+                    float kerning = DpText.KerningOfMap(main, raster, left, right);
+                    if (kerning != 0) font.SetKerning(0, entry.Key, new Vector2I(left, right), new Vector2(kerning * sx, 0));
+                }
+        }
+
         // Anything not baked: the slot's own files, plain. (Unifont's sixty thousand glyphs are not pre-rendered.)
         Godot.Collections.Array<Font> fallbacks = new();
         foreach (FontFile face in faces) fallbacks.Add(face);

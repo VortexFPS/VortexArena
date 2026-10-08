@@ -898,3 +898,27 @@ Training lives in its own repository, [VortexFPS/NeuralBotLab](https://github.co
 The environment host it drives is still here — [`tools/neural/README.md`](../tools/neural/README.md) covers
 building it and the layout contract across the two repositories. The design is
 [`planning/neural-bots-2026-08-07.md`](../planning/neural-bots-2026-08-07.md).
+
+---
+
+## Joining a stock Xonotic server (legacy compatibility mode)
+
+The client can join an unmodified Xonotic (DarkPlaces) server by speaking its protocol and running the
+client program the server supplies. It needs a Xonotic `data` directory to read that game's assets and
+default configuration from:
+
+```bash
+"$GODOT" --path . --legacy-data <Xonotic data dir> --legacy-connect <host[:port]>
+```
+
+or in the console: `legacy_xonotic_data "<dir>"`, then `legacy_connect <host[:port]>`. `legacy_status 1`
+prints a one-line status every second.
+
+**State (2026-10-07): it runs; nobody has looked at it.** A windowless (`--headless`) client joins a live
+server, plays, and disconnects with no faults, but no frame has been seen and no sound heard. The settings,
+what is isolated from your own configuration, and the 11-point checklist for a first windowed run are in
+`planning/specs/legacy-compat.md` §12.
+
+To test without a public server, run the reference dedicated server in WSL (no window). UDP from Windows to
+`127.0.0.1` inside WSL2 is not forwarded, so bind it to the WSL address (`wsl hostname -I`) and keep it off
+the public master list with `sv_public 0`; `_scratch/legacy-live-join.txt` records a working command line.

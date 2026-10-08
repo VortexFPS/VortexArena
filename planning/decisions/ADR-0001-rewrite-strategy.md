@@ -46,3 +46,16 @@ modernized freely.
   build anyway. It optimizes the easy axis at the cost of the result.
 - **Strategy 2 (clean-room):** rejected as a blanket approach — silently changes movement/collision/protocol
   behavior; endless feel-chasing.
+
+---
+
+## Amendment — 2026-10-07: a QuakeC VM now ships, for legacy compatibility only
+
+[ADR-0019](ADR-0019-legacy-compatibility-mode.md) adds a QuakeC virtual machine
+(`src/VortexArena.QuakeC`) so the client can join stock Xonotic servers, which send their own
+`csprogs.dat` and expect the client to run it.
+
+This does not reopen the decision above. Strategy 3 still governs how the game was ported, and no native
+Vortex gameplay runs in that VM: it executes server-supplied Xonotic client programs in a separate
+"legacy" mode and nothing else. The one sentence of this ADR that is no longer true is the consequence
+"We do **not** ship a QC VM" — the shipped client now contains one.

@@ -21,12 +21,18 @@ Status values: `Proposed` · `Accepted` · `Superseded by ADR-NNNN` · `Deprecat
 | [0010](ADR-0010-determinism-and-numerics.md) | Determinism approach: low-divergence float + error smoothing | Accepted | Deterministic-enough float on a fixed tick; lean on existing prediction-error compensation; revisit if it fails. |
 | [0011](ADR-0011-protocol-ecosystem-boundary.md) | XonoticGodot is its own network ecosystem (no DP wire interop) | Accepted | Own protocol; enforce build parity on connect; drop d0_blind_id. |
 | [0012](ADR-0012-platform-scope.md) | Platform scope: desktop + dedicated server first; web deferred | Accepted | No stable C#→WASM; target desktop and a headless server. |
-| [0013](ADR-0013-modding-untrusted-client-code.md) | Sandboxed WebAssembly for server-pushed client mods (client code only) | Proposed | Restore the `csprogs.dat`-style download as sandboxed `client.wasm` via Wasmtime .NET; server stays compiled; reject→reconcile handshake. See [`specs/modding.md`](../specs/modding.md). |
+| [0013](ADR-0013-modding-untrusted-client-code.md) | Sandboxed WebAssembly for server-pushed client mods (client code only) | Superseded by ADR-0020 | Restore the `csprogs.dat`-style download as sandboxed `client.wasm` via Wasmtime .NET; server stays compiled; reject→reconcile handshake. Core choice kept; guest-language and interface policy replaced. |
 | [0014](ADR-0014-ci-packaging-distribution.md) | CI topology, perf baselines, packaging and dedicated-server distribution | Accepted | `ci.yml` with a `ci/ci.sh` mirror; per-platform release zips; perf baselines gate merges. |
 | [0015](ADR-0015-launcher-updater.md) | Launcher/updater: Avalonia shell, Velopack self-update, split game payload | Accepted | **Moved** to [`VortexFPS/VortexLauncher`](https://github.com/VortexFPS/VortexLauncher) with the code (stage 6); the file here is a pointer stub. `latest.json` is the only interface between the repos. |
 | [0016](ADR-0016-content-ownership.md) | Vortex Arena owns its content | Accepted | Core content committed at `data/`; no build-time upstream clone; compiled maps are lockfile-pinned release assets; map sources in VortexMaps. Convert before committing — git keeps every blob. |
 | [0017](ADR-0017-engine-patches.md) | Engine patches are pinned, built in CI, and asserted in the shipped binary | Accepted | An empty `custom_template/release` ships a **stock** engine silently, and `test -f` cannot see it — so assert the binary's content. Expires when Godot 4.8 ships the backport. |
 | [0018](ADR-0018-config-layer.md) | Vortex config is a layer, not a fork of the Xonotic config | Accepted | Never edit `xonotic-*.cfg`; diverge additively in `vortex-*.cfg`. The one divergence that existed was lost exactly once by hand-editing upstream, with nothing noticing. |
+| [0019](ADR-0019-legacy-compatibility-mode.md) | Legacy compatibility mode: join stock Xonotic servers | Accepted | A second client stack: DarkPlaces protocol (client side) + a QuakeC VM running the server-supplied `csprogs.dat`. Native game unchanged. See [`specs/legacy-compat.md`](../specs/legacy-compat.md). |
+| [0020](ADR-0020-wasm-sandbox-csharp-guests.md) | WebAssembly sandbox for downloadable client code, C# first-class | Accepted | Wasmtime 48 LTS; `vortex_1` core-wasm interface with a per-frame command buffer; C# guests via NativeAOT-LLVM; WASI answered, never granted; epoch watchdog. See [`specs/modding.md`](../specs/modding.md). |
+
+**Amended 2026-10-07** by [0019](ADR-0019-legacy-compatibility-mode.md): [0001](ADR-0001-rewrite-strategy.md)
+(a QuakeC VM now ships, for legacy mode only) and [0011](ADR-0011-protocol-ecosystem-boundary.md) (the
+client also speaks the DarkPlaces protocol; Vortex servers do not).
 
 **Amended 2026-07-30** by the repo restructure: [0006](ADR-0006-asset-pipeline.md) (offline conversion is
 partly built, as TGA→PNG), [0008](ADR-0008-solution-structure.md) (the `Client`/`Menu` projects never

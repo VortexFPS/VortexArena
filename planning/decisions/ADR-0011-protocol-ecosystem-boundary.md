@@ -33,3 +33,21 @@ Treat **XonoticGodot as its own ecosystem** with its own (cleaner) protocol:
 - **Full DP protocol compatibility:** rejected — disproportionate cost, brittle, and would dictate the whole
   netcode design for a benefit (joining old servers) that conflicts with also replacing the gameplay.
 - **Dual-stack (speak both):** rejected for v1 — doubles the netcode surface.
+
+---
+
+## Amendment — 2026-10-07: the client also speaks the DarkPlaces protocol, in a separate legacy mode
+
+[ADR-0019](ADR-0019-legacy-compatibility-mode.md) adds client-side DarkPlaces protocol support
+(`src/VortexArena.Legacy`) so a Vortex client can join stock Xonotic servers.
+
+What stays as decided here: the native protocol is Vortex's own, Vortex servers speak only that
+protocol, and build parity is still enforced between a Vortex client and a Vortex server. `d0_blind_id`
+is still not implemented (legacy mode connects in plaintext, which default-configured Xonotic servers
+allow).
+
+What changes: the consequence "**No interop** with the existing Xonotic/Darkplaces server population"
+now applies to Vortex *servers* only, and the rejected alternative "Dual-stack (speak both)" is adopted
+for the client. The cost this ADR predicted for it — a second netcode surface — is accepted, and is
+contained by keeping the legacy stack in its own library rather than threading it through
+`game/net/`.

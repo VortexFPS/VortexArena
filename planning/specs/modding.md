@@ -1,355 +1,404 @@
-# Spec — Modding & Untrusted Client Code (WebAssembly)
+# Spec — The mod sandbox: downloadable client code in WebAssembly, written in C#
 
-Implements [ADR-0013](../decisions/ADR-0013-modding-untrusted-client-code.md) and evolves
-[ADR-0011](../decisions/ADR-0011-protocol-ecosystem-boundary.md). Reference: Darkplaces `sv_curl` + the native
-download protocol (the original `.pk3` push), `qcsrc/client/` (CSQC — the client presentation this replaces), and
-the XonoticGodot pieces it builds on: `game/net/NetProtocol.cs` (handshake + `BuildParity`),
-`game/net/{ClientNet,ServerNet,NetTransport}.cs` (the link), `src/XonoticGodot.Formats/Vfs/VirtualFileSystem.cs`
-(`Mount`), `game/hud/`, and `game/console/`.
+Implements [ADR-0020](../decisions/ADR-0020-wasm-sandbox-csharp-guests.md) (which supersedes ADR-0013) and
+evolves [ADR-0011](../decisions/ADR-0011-protocol-ecosystem-boundary.md)'s build-parity gate.
 
-## 1. Goal & scope
+Rewritten 2026-10-07. The previous version of this spec described a design that was never built; this
+one describes what is built, what was measured, and what remains. Section 12 says which is which.
 
-Restore **"connect to a modded server → the client auto-downloads and runs the mod"** for the **client
-presentation layer**, sandboxed via Wasmtime .NET. **Client code only is wasm; the server is compiled** (a mod
-ships a custom server binary + a downloadable `client.wasm` + asset packs).
+Sibling document: [`legacy-compat.md`](legacy-compat.md) covers the *other* way the client runs
+downloaded code — Xonotic's QuakeC `csprogs.dat`, for joining stock Xonotic servers. The two share a
+presentation bridge and nothing else.
 
-**In scope:** mod-manifest negotiation; download + verify + mount of `client.wasm` and asset packs; the Wasmtime
-sandbox host; the curated builtin API; mod lifecycle; player consent; the guest SDK.
+## 1. Goal and scope
 
-**Out of scope:** `server.wasm` (server logic stays compiled C#); wasm in the predict/reconcile loop; carrying
-*physics/predicted* gameplay changes via download (those need a matching compiled client — documented limitation).
+Restore "connect to a modded server and the client downloads and runs the mod", for **Vortex** servers,
+with the mod's client code written in **C#** and run where it cannot harm the player's machine.
 
-## 2. The presentation / simulation boundary
+**Vocabulary:**
 
-The single most important rule: **the guest READS simulation state and WRITES to the screen / audio / UI. It
-never mutates authoritative state.** Anything that affects the gameplay *outcome* stays server-authoritative and
-is networked to the client as state the mod merely renders.
+- **wasm (WebAssembly)** — a compact, portable bytecode designed to be executed in a sandbox. A compiled
+  unit is a **module**.
+- **Guest / host** — the mod's code inside the sandbox is the guest; the Vortex client is the host.
+- **Import / export** — a function the host provides to the guest is an import (from the guest's point
+  of view); a function the guest provides for the host to call is an export.
+- **Linear memory** — the guest's entire memory: one resizable byte array. The guest cannot address
+  anything outside it; the host can read and write inside it.
+- **Wasmtime** — the wasm runtime that compiles and executes the module, used through its .NET package.
+- **Trap** — the sandbox aborting the guest (out-of-bounds access, exhausted time budget, explicit abort).
+- **WASI** — the WebAssembly System Interface: standard operating-system-like imports (files, clock,
+  environment). **Not granted here**; see §7.
+- **NativeAOT-LLVM** — the experimental .NET ahead-of-time compiler with a wasm backend; how C# becomes a
+  module.
 
-| Concern | Owner | Notes |
+**In scope:** the sandbox host; the guest interface (`vortex_1`); the C# guest SDK; the mod manifest and
+content-addressed cache; the reject-to-reconcile handshake; download, verification and mounting of mod
+content; player consent; the Godot bridge that draws what the guest asks for.
+
+**Out of scope:** server-side wasm (a mod's server half is a custom-compiled server); wasm in the
+predict/reconcile loop; carrying movement-physics changes by download.
+
+## 2. The boundary: read state, write presentation
+
+**The guest reads simulation state and writes to the screen, audio and UI. It never changes
+authoritative state.** Anything that affects the outcome of the game stays in compiled C# on the server
+and reaches the client as networked state the mod merely presents.
+
+| Concern | Owner |
+|---|---|
+| HUD, scoreboard, minimap, crosshair, centerprint, notifications, kill feed | **guest** |
+| Damage indicators, screen flashes, cosmetic particles, announcer and sound-cue selection | **guest** |
+| Mod cvars, console commands, UI panels | **guest** |
+| Movement physics, prediction and reconciliation; collision | compiled C# |
+| Weapons, damage, items, rules, scoring, spawns; entity simulation | compiled C# (server) |
+| Asset decoding, the virtual filesystem, sockets, the operating system | compiled C# |
+
+**What a player gets without a custom client build:**
+
+- A presentation mod → fully automatic: the stock client downloads the module and assets and runs them.
+- A server-rules mod (mutators, game types, balance — not predicted) → automatic: the server is
+  authoritative and the stock client renders the state it is sent.
+- A movement-physics mod (predicted) → **not** automatic: prediction is compiled C# on both ends.
+
+## 3. Components
+
+```
+   modded Vortex SERVER (compiled C#)
+     custom gameplay + ModManifest { client.wasm, assetPacks[], consent, … }
+          │ handshake: base protocol hash, then ManifestOffer        │ HTTP / in-band content
+   ┌──────▼───────────────────────────────────────────────────────────▼───────────────────┐
+   │ CLIENT                                                                               │
+   │  game/net ──► ContentDownloader ──► sha256 verify ──► ModCache (by hash)             │
+   │                     ├─ asset packs ──► VirtualFileSystem.Mount()                     │
+   │                     └─ client.wasm ──► WasmModSandbox ──(IModHost)──► game/modding   │
+   │                                         src/VortexArena.Modding      draw list,      │
+   │                                         (Godot-free, in the suite)   audio, state    │
+   └──────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+| Piece | Location | Godot-free |
 |---|---|---|
-| HUD, scoreboard, minimap, crosshair | **wasm guest** | immediate-mode draw builtins |
-| Centerprint, notifications, killfeed | **wasm guest** | reads networked events, renders them |
-| Damage/hit indicators, screen flashes | **wasm guest** | via the draw builtins |
-| Cosmetic particles / effects | **wasm guest** | client-only, non-authoritative |
-| Viewmodel cosmetics (bob/sway choice) | **wasm guest** | not the authoritative weapon |
-| Announcer / sound-cue selection | **wasm guest** | `play_sound(assetId,…)` |
-| Mod cvars + console commands | **wasm guest** | mod-scoped, registered via builtins |
-| Mod UI panels / menus | **wasm guest** | contributed into the HUD/menu |
-| Movement physics + **prediction/reconciliation** | **compiled C#** | stays bit-compatible server↔client |
-| Collision / trace | **compiled C#** | engine service |
-| Weapon firing, damage, items, rules, scoring, spawns | **compiled C#** | server-authoritative; networked |
-| Entity simulation / think / triggers | **compiled C#** | server |
-| Asset decode (BSP/MD3/IQM/shader), the VFS, FS, sockets, OS | **compiled C#** | guest sees assets only by handle |
+| Sandbox host, interface constants, limits, command decoder, WASI stand-ins | `src/VortexArena.Modding/` | yes |
+| Mod manifest, content cache, content diff | `src/VortexArena.Modding/` | yes |
+| Host bridge (`IModHost` over HUD draw list, audio, networked state), consent and download UI | `game/modding/` | no |
+| Handshake frames and the reconcile flow | `game/net/NetProtocol.cs`, `ClientNet.cs`, `ServerNet.cs` | no |
+| Guest SDK: interface reference, C# library and template, Rust reference guest | `modding-sdk/` | n/a |
+| Tests, including the hostile-module set | `tests/VortexArena.Tests/Modding/` | yes |
 
-**Drop-in matrix (player perspective):**
+The Wasmtime dependency sits in the Godot-free library on purpose. The test project cannot see `game/`,
+and the hostile-module tests are the part of this subsystem that most needs to run in the ordinary suite.
 
-- Presentation mod (HUD/effects/UI) → **drop-in**: stock client downloads wasm + assets, runs.
-- Server-rules mod (mutators, gametypes, balance, scoring — *not predicted*) → **drop-in**: server is
-  authoritative and networks state; the stock client renders it (optionally with mod presentation wasm).
-- Movement-physics mod (*predicted*) → **not drop-in**: needs a matching compiled client. Out of scope here.
+## 4. The sandbox host — `WasmModSandbox`
 
-## 3. Architecture & components
+One instance is one downloaded module, instantiated with no authority except the `IModHost` it was given.
 
+**Its contract with the rest of the client:** a guest can waste its own budget and nothing else. Whatever
+it does, the call into it returns `false`, the sandbox moves to `Disabled` with a reason, and the game
+carries on without the mod. Nothing throws at the caller once loading has succeeded.
+
+**Lifecycle**
+
+| Call | What runs | Budget |
+|---|---|---|
+| `Load(name, bytes, host, limits)` | Size check, validation, compilation, import and export checks, instantiation (including the module's own start function) | `InitBudgetMs` |
+| `Init()` | `_initialize` if exported (a C# guest's runtime start-up), then `mod_init` | `InitBudgetMs` each |
+| `Frame(dt)` | `mod_frame(dt)` | `FrameBudgetMs` |
+| `Event(id, payload)` | `mod_alloc(len)`, copy the payload in, `mod_event(id, ptr, len)` | `FrameBudgetMs` |
+| `Shutdown()` | `mod_shutdown` (best effort) | `InitBudgetMs` |
+| `Dispose()` | Frees the module, store and engine | — |
+
+A fresh sandbox is created per match so no guest state survives into the next server's session.
+
+**Refused at load, before any guest code runs:** a module larger than `MaxModuleBytes`; bytes that are
+not a valid module; any import that is not a function; any import from a namespace other than `vortex_1`
+or `wasi_snapshot_preview1`; a `vortex_1` import the client does not provide, or one declared with the
+wrong signature; a missing `memory` or `mod_frame` export; a known export with the wrong signature; a
+64-bit memory; an initial memory larger than the limit.
+
+**Limits** (`ModLimits`; a server's manifest may ask for less than the client's ceiling, never more):
+
+| Limit | Default | Enforced by |
+|---|---|---|
+| `MaxMemoryBytes` | 64 MiB | Wasmtime store limiter; `memory.grow` past it fails *inside the guest* |
+| `MaxModuleBytes` | 16 MiB | Checked before parsing |
+| `FrameBudgetMs` | 8 ms | Epoch interruption |
+| `InitBudgetMs` | 2,000 ms | Epoch interruption |
+| `MaxStackBytes` | 1 MiB | Wasmtime; runaway recursion traps instead of reaching the host stack |
+| `MaxCommandBytes` | 1 MiB | Host, on every `commands` call |
+| `MaxStringBytes` | 4,096 | Host, on every string read from guest memory |
+| `MaxLogLinesPerCall` | 32 | Host; further lines are dropped |
+| `MaxTableElements` | 100,000 | Wasmtime store limiter |
+
+**The time budget is a watchdog, not a scheduler.** A timer advances Wasmtime's "epoch" every 2 ms and
+each call sets a deadline in epochs; the guest cannot evade it. The operating system's timer is coarser
+than 2 ms on Windows (about 15 ms unless something has raised the timer resolution), so a stuck guest is
+stopped within tens of milliseconds, not exactly at the budget. The watchdog cannot interrupt a guest
+that is parked *inside a host import*, which is why every `IModHost` member must return promptly.
+
+**Engine configuration.** Epoch interruption on; fuel off; threads, 64-bit memory, multiple memories,
+the garbage-collection proposal and the component model off. On macOS only, Mach-port trap handling is
+turned off in favour of signals, because the default fights the .NET runtime's own handlers — and that
+setting is applied conditionally because the function behind it does not exist in the Windows and Linux
+libraries (calling it there throws `EntryPointNotFoundException`).
+
+**Availability.** `WasmModSandbox.IsAvailable` is false where the Wasmtime native library cannot be
+loaded. The NuGet package ships binaries for Windows, Linux and macOS on x64 and arm64. On
+`linux-ppc64le` there is none; the client then behaves as if `cl_allow_mods` were 0.
+
+## 5. The guest interface, version 1 — `vortex_1`
+
+Constants live in `src/VortexArena.Modding/ModAbi.cs`; the author-facing reference is
+[`modding-sdk/ABI.md`](../../modding-sdk/ABI.md). They change together.
+
+**Conventions.** Plain wasm: 32-bit integers, 32- and 64-bit floats, and `(pointer, length)` pairs into
+the guest's own linear memory. Strings are UTF-8, not NUL-terminated. Everything is little-endian.
+
+**Versioning.** The version is the import namespace. Additions (a new import, a new command opcode, new
+fields at the *end* of a state record) are allowed within `vortex_1`. Anything else needs `vortex_2`,
+with the client offering both for as long as mods built against the old one exist.
+
+**Imports the host provides**
+
+| Import | Signature | Meaning |
+|---|---|---|
+| `log` | `(level, ptr, len)` | Write a line to the mod log. Levels 0 info, 1 warning, 2 error. Rate-limited. |
+| `commands` | `(ptr, len)` | Execute a buffer of draw and sound commands (below). |
+| `state_read` | `(kind, index, ptr, cap) → i32` | Copy a state record into guest memory; returns bytes written, or -1 if there is no such record. |
+| `entity_count` | `() → i32` | How many entities `state_read(Entity, i)` can index. |
+| `cvar_get` | `(namePtr, nameLen, outPtr, cap) → i32` | Copy a cvar's value; returns its full length, or -1 if the mod may not read it. |
+| `asset_id` | `(kind, ptr, len) → i32` | Resolve a path *inside the mod's own packs* to an id; 0 if absent. Kinds: 1 picture, 2 sound, 3 font. |
+| `text_width` | `(font, size: f32, ptr, len) → f32` | Measure a string. |
+| `time_now` | `() → f64` | Game time in seconds. The only clock. |
+| `send_to_server` | `(ptr, len) → i32` | Queue a message to the server half of the mod; 0 if dropped. |
+
+There is no filesystem, socket, process, environment or wall-clock import, and none can be added without
+changing `IModHost` — the interface *is* the capability list.
+
+**Exports the guest provides**
+
+| Export | Signature | Required |
+|---|---|---|
+| `memory` | the linear memory | yes |
+| `mod_frame` | `(dt: f32)` | yes |
+| `_initialize` | `()` | no — present in C# guests; runs first |
+| `mod_init` | `()` | no |
+| `mod_event` | `(id, ptr, len)` | no |
+| `mod_alloc` | `(size) → ptr` | only if `mod_event` takes payloads |
+| `mod_shutdown` | `()` | no |
+
+**The command buffer.** Draw and sound requests are written by the guest into its own memory and flushed
+with one `commands` call, rather than one import per primitive. Measured on the development machine
+(Wasmtime 48.0.2, .NET 8, x64): about 47 ns for a guest-to-host call, against about 1.4 ns per command
+when 1,000 are flushed together. A HUD with a few thousand primitives per frame therefore costs
+microseconds instead of a visible fraction of a millisecond.
+
+Each record is `u16 opcode, u16 size, payload`, where `size` covers the whole record and is a multiple
+of 4.
+
+| Opcode | Name | Payload |
+|---|---|---|
+| 1 | DrawRect | `f32 x, y, w, h; u32 rgba` |
+| 2 | DrawPic | `i32 assetId; f32 x, y, w, h; u32 rgba` |
+| 3 | DrawText | `i32 fontId; f32 x, y, size; u32 rgba; u32 byteLength; utf8…` (padded to 4) |
+| 4 | SetClip | `f32 x, y, w, h` |
+| 5 | ResetClip | — |
+| 6 | PlaySound | `i32 assetId; i32 channel; f32 volume, pitch` |
+
+Coordinates are in the virtual 2D space reported by `state_read(Screen)`. The decoder
+(`ModCommandDecoder`) rejects a buffer on the first malformed record — truncated header, bad size,
+unknown opcode, wrong payload length, a text length that does not match its record, or a coordinate that
+is NaN or infinite — and the mod is disabled.
+
+**State records** (`state_read` kinds; the structs are in `ModAbi.cs`): 1 `Screen` (pixel and virtual
+size), 2 `LocalPlayer` (origin, velocity, view angles, health, armour, team, flags), 3 `Entity` (index,
+model id, origin, angles, team, frame, flags), 4 `Match` (time, limits, player count). Records only ever
+grow at the end, and a guest reads only as many bytes as it asked for.
+
+## 6. Guest-memory rules (the security-critical part)
+
+Every pointer and length a guest hands to an import is hostile. All of them go through two functions,
+`GuestBytes` and `GuestString`, which:
+
+1. look the memory up afresh on every call (it can grow, and so move, between any two host calls);
+2. reject a negative pointer or length;
+3. reject a length above the applicable limit;
+4. reject a range that ends past the current end of memory, computed in 64 bits so it cannot wrap.
+
+A rejection throws inside the import, which Wasmtime turns into a trap, which disables the mod. No guest
+pointer is ever passed to another host API. Invalid UTF-8 decodes to U+FFFD rather than failing: bad text
+is the guest's own problem.
+
+## 7. WASI: answered, never granted
+
+`Linker.DefineWasi()` is never called. It would hand the guest real file descriptors, environment
+variables and a wall clock.
+
+But a C# guest cannot avoid *importing* some WASI functions: the .NET runtime compiled into the module
+uses them to start up and to print an unhandled exception. So the host defines inert stand-ins for
+whatever `wasi_snapshot_preview1` functions a module imports:
+
+| WASI function | What the guest gets |
+|---|---|
+| `fd_write` to descriptor 1 or 2 | The text goes to the mod log (rate-limited like `log`) |
+| `fd_write` to anything else, and every other `fd_*` | "Bad file descriptor" — there are none, including no pre-opened directories, which is how a WASI C library learns it has no filesystem |
+| `clock_time_get` | Game time |
+| `random_get` | Random bytes (a guest could synthesise its own; this leaks nothing) |
+| `environ_sizes_get`, `args_sizes_get`, `environ_get`, `args_get` | Success, zero entries |
+| `proc_exit` | A trap; the mod is disabled |
+| Everything else (`path_open`, sockets, polling, …) | "Function not supported" |
+
+**Not yet measured:** exactly which WASI functions a NativeAOT-LLVM module imports. That needs the WASI
+SDK to finish a C# guest build (§8). The stand-ins are defined per import by name and signature, so an
+unexpected one falls into the last row rather than failing to load — but a function that falls there and
+that the .NET runtime *requires to succeed* would surface as a start-up failure of the guest. Settle this
+with one real build before calling the C# path done.
+
+## 8. Authoring a mod in C#
+
+**Toolchain** (pinned in `modding-sdk/csharp/`):
+
+| Piece | Version | Notes |
+|---|---|---|
+| .NET SDK | 10.0.x | The mod project targets `net10.0`; the game itself stays on .NET 8. |
+| `Microsoft.DotNet.ILCompiler.LLVM` + `runtime.<host>.Microsoft.DotNet.ILCompiler.LLVM` | `10.0.0-rc.1.26357.1` | From the `dotnet-experimental` package feed, not nuget.org. |
+| WASI SDK | 29.0 | A clang and linker bundle; pointed to by the `WASI_SDK_PATH` environment variable. The compiler package names this exact version. |
+| Build host | Windows x64 or Linux x64 | No macOS host yet. |
+
+**Shape of a mod** (see `modding-sdk/csharp/templates/hello-hud/`):
+
+```csharp
+using Vortex.Modding;
+
+public static class HelloHud
+{
+    [UnmanagedCallersOnly(EntryPoint = "mod_init")]
+    public static void Init() => Mod.Log("hello from C#");
+
+    [UnmanagedCallersOnly(EntryPoint = "mod_frame")]
+    public static void Frame(float dt)
+    {
+        ScreenState screen = Mod.Screen;
+        Draw.Rect(8, screen.VirtualHeight - 40, 200, 32, Color.Rgba(0, 0, 0, 160));
+        Draw.Text(Fonts.Default, 16, screen.VirtualHeight - 34, 16, Color.White, $"speed {Mod.LocalPlayer.Speed:0}");
+        Draw.Flush();   // one host call for the whole frame
+    }
+}
 ```
-                 ┌──────────────────────── modded SERVER (compiled C#) ───────────────────────┐
-                 │  custom gameplay  +  ModManifest{ client.wasm, assetPacks[], consent, … }   │
-                 └───────────────▲───────────────────────────────────────────┬─────────────────┘
-   handshake (reject→reconcile)  │ ManifestOffer                              │ HTTP / in-band content
-                 ┌───────────────┴───────────────────────────────────────────▼─────────────────┐
-                 │ CLIENT                                                                         │
-                 │  ClientNet ──▶ ContentDownloader ──▶ sha256 verify ──▶ ModCache (by hash)      │
-                 │                         │                                   │                  │
-                 │                         ├── asset packs ──▶ VirtualFileSystem.Mount()          │
-                 │                         └── client.wasm ──▶ WasmtimeModSandbox (locked down)    │
-                 │                                                   │ builtins (read state/draw/  │
-                 │                                                   ▼ sound/cvar/comms)           │
-                 │                                  HUD / Renderer / Sound / Console (compiled C#) │
-                 └────────────────────────────────────────────────────────────────────────────────┘
-```
 
-Components to build:
+The SDK library is thin: `[DllImport("vortex_1"), WasmImportLinkage]` declarations for the imports, the
+state structs, and a command-buffer writer whose layout matches `ModCommandWriter` in the host library.
 
-1. **Mod manifest + handshake negotiation** (reject→reconcile) — `game/net`.
-2. **Content download pipeline** — HTTP-first + in-band fallback, hash-pinned, content-addressed cache.
-3. **VFS mount** of asset packs — reuse `VirtualFileSystem.Mount`.
-4. **Wasmtime sandbox host** — instantiate, limits, lifecycle, watchdog.
-5. **Builtin host-import API** — the curated capability surface (the CSQC-builtin analogue).
-6. **Client↔server-mod comms channel** — a reserved net message both ends understand.
-7. **Consent UI + download UI + cache management** — `game/modding`.
+**What a C# guest costs compared with a Rust one:** the module carries a .NET runtime and garbage
+collector, so it is megabytes rather than kilobytes; start-up runs that runtime's initialisation (hence
+the 2-second init budget); and garbage collections happen inside the frame budget. Standard NativeAOT
+restrictions apply: no run-time code generation, no dynamic assembly loading, trimmed reflection.
+Per-frame allocation is the thing to avoid, exactly as in the engine's own hot paths.
 
-## 4. Project / file layout
+**Rust** remains the reference guest (`modding-sdk/rust/`): it needs no WASI stand-ins, builds on macOS,
+and is what the interface conformance tests should be written against once a Rust wasm target is
+installed.
 
-Pure, testable logic lives in a Godot-free library; the Wasmtime impl and Godot bridges live under `game/`
-(mirrors the engine-services facade pattern, and respects the "tests can't see `game/`" rule — see
-`memory`/console note).
+## 9. Manifest and the reject-to-reconcile handshake
 
-```
-src/XonoticGodot.Modding/                 # PURE C# (no Godot, no Wasmtime): contracts + orchestration → unit-tested
-  ModManifest.cs  Artifact.cs        #   manifest + artifact schema (serialize/deserialize)
-  ModCache.cs                        #   content-addressed cache (keyed by sha256), LRU + size budget
-  ContentDiff.cs                     #   "what's missing?" given a manifest + cache
-  IContentDownloader.cs              #   HTTP / in-band abstraction (impl in game/)
-  IModSandbox.cs  ModBuiltins.cs     #   sandbox + builtin-API CONTRACTS (impl in game/)
-  ModLimits.cs                       #   fuel/epoch/memory budgets + clamps
-game/modding/                        # GODOT-FACING: Wasmtime impl + bridges + UI
-  WasmtimeModSandbox.cs              #   IModSandbox via Wasmtime .NET
-  HudDrawBridge.cs SoundBridge.cs    #   builtins → Godot renderer/audio
-  StateBridge.cs                     #   builtins → read networked sim state
-  HttpContentDownloader.cs           #   IContentDownloader (HttpClient) + in-band
-  ModConsentDialog.cs ModDownloadScreen.cs
-game/net/NetProtocol.cs              # + ManifestOffer/Need/ContentChunk; split BuildParity→BaseProtocolHash
-game/net/{ClientNet,ServerNet}.cs    # the reconcile flow
-modding-sdk/                         # GUEST side: ABI + language bindings + templates
-  ABI.md                             #   host-import signatures + guest-export contract (the wire of the sandbox)
-  rust/rebirth-mod/                  #   ergonomic Rust crate over the raw imports
-  assemblyscript/                    #   AssemblyScript package
-  templates/hello-hud/               #   minimal working mod
-tests/XonoticGodot.Tests/Modding/         # manifest/verify/cache/diff + a malicious-wasm corpus
-```
+Carried forward from the previous design; not yet built.
 
-## 5. Mod manifest & the reject→reconcile handshake
+Today `NetProtocol.BuildParity()` (`game/net/NetProtocol.cs:172-182`) folds the protocol version and the
+content registry hashes into one value, and the server rejects a mismatch. Split it:
 
-Today `NetProtocol.BuildParity()` mixes protocol version + content registry hashes into one value the server
-*rejects* on mismatch. **Split it:**
-
-- `BaseProtocolHash()` — protocol version + engine wire framing + the `NetMessageId` enum. **Hard gate**: a
-  mismatch means the two binaries can't talk → `HandshakeReject` (unchanged behavior).
-- Gameplay content (the `Effects`/`Notifications` registries, etc.) is **described by the mod manifest**. A
-  vanilla server advertises a canonical "no-mod" manifest; a modded server advertises its content.
-
-**Manifest schema** (logical; serialized with the existing `BitWriter`/`BitReader`, or JSON for the
-out-of-band copy):
+- **`BaseProtocolHash`** — protocol version, wire framing, the message-id enum. Stays a hard gate: a
+  mismatch means the two programs cannot talk.
+- **The mod manifest** — what the server advertises about its content. A vanilla server advertises the
+  canonical "no mod" manifest.
 
 ```
 ModManifest {
-  modId:          string         // "overkill", "instagib-deluxe"
-  modVersion:     string         // semver or content tag
-  baseProtocol:   uint           // MUST equal client BaseProtocolHash (hard gate)
-  clientModule:   Artifact?      // the client.wasm (null ⇒ assets-only mod)
-  assetPacks:     Artifact[]     // .pk3s to Mount()
-  apiVersion:     uint           // builtin-API version the wasm was built against
-  limits:         { maxMemoryBytes, fuelPerFrame, epochMs }   // server HINTS; client clamps to its own max
-  consent:        { title, description, author, url }          // shown to the player before download
+  modId, modVersion            // "overkill", "1.4.0"
+  baseProtocol : uint          // must equal the client's BaseProtocolHash
+  clientModule : Artifact?     // the client.wasm; null for an assets-only mod
+  assetPacks   : Artifact[]    // .pk3 files to mount
+  abi          : string        // "vortex_1"
+  limits       : { maxMemoryBytes, frameBudgetMs }   // requests; the client clamps them (ModLimits.ClampTo)
+  consent      : { title, description, author, url } // shown to the player before any download
 }
-Artifact { name:string, sizeBytes:long, sha256:byte[32], url:string?, inbandId:uint? }
+Artifact { name, sizeBytes, sha256, url?, inbandId? }
 ```
 
-**New `NetControl` values** (extend the enum in `NetProtocol.cs`):
+New `NetControl` frames: `ManifestOffer` (20, server→client), `ManifestNeed` (21), `ContentChunk` (22),
+`ManifestReady` (23), `ManifestDecline` (24).
 
-```
-ManifestOffer  = 20,  // server → client (reliable): the ModManifest (or vanilla sentinel)
-ManifestNeed   = 21,  // client → server (reliable): list of inbandId artifacts to stream (if no HTTP)
-ContentChunk   = 22,  // server → client (reliable): chunked artifact bytes (in-band fallback)
-ManifestReady  = 23,  // client → server (reliable): provisioned + consented → admit me to the match
-ManifestDecline= 24,  // client → server (reliable): user declined / verify failed / cap exceeded → drop
-```
+Flow: handshake with `BaseProtocolHash` → accept plus `ManifestOffer` → the client diffs the manifest
+against its cache by SHA-256 → if anything is missing, or the mod has never been consented to, show the
+consent dialog (author, description, total download size) → download each missing artifact over HTTPS
+from `Artifact.url`, or in-band → verify SHA-256 → mount packs, load and initialise the module →
+`ManifestReady`. A decline, a verification failure, a size cap or a timeout sends `ManifestDecline` and
+disconnects with a reason.
 
-**Flow:**
+The manifest arrives over the authenticated game connection and carries the hashes, so a compromised
+mirror cannot substitute content. The virtual filesystem needs two additions for this: a per-mod scope
+(so `asset_id` resolves only inside the mod's packs) and unmounting a single pack
+(`VirtualFileSystem` today can only `Rescan`).
 
-1. Client connects → `HandshakeRequest` with **`BaseProtocolHash`** + name.
-2. Server: base mismatch → `HandshakeReject`. Else → `HandshakeAccept` (netId, tickrate) **+ `ManifestOffer`**.
-3. Client computes the missing/mismatched set (`ContentDiff` vs `ModCache` by sha256). If empty **and** the mod
-   is already consented/cached → send `ManifestReady`, enter match. Else show the **consent dialog** (author,
-   description, total download size).
-4. On consent: download each missing artifact — **HTTP from `Artifact.url`** (CDN/mirror friendly, like
-   `sv_curl_defaulturl`), else request `ManifestNeed` and receive `ContentChunk`s in-band. Verify **sha256**;
-   store in `ModCache` keyed by hash.
-5. Mount asset packs (`vfs.Mount`); instantiate `client.wasm` (§6); call `mod_init`. Send `ManifestReady`.
-6. Decline / verify failure / size-cap / timeout → `ManifestDecline` + graceful disconnect with a reason.
+## 10. Threat table
 
-**Trust note:** the manifest (with its hashes) arrives over the authenticated game connection; HTTP bodies are
-**verified by hash**, so a compromised mirror cannot substitute content. Prefer HTTPS for the mirror anyway.
-
-## 6. Sandbox host (Wasmtime .NET) — concrete lockdown
-
-API names per the deep-research pass; treat as a sketch (cross-check the **source on `main`**, not the published
-HTML docs, which are stale — they omit `Store.SetLimits` and still show `AddFuel`/`ConsumeFuel`).
-
-```csharp
-// ── engine: deny-by-default + DoS guards. Determinism NOT needed (presentation-only). ──
-var config = new Config()
-    .WithFuelConsumption(true)        // deterministic CPU bound (trap on exhaustion)
-    .WithEpochInterruption(true)      // wall-clock watchdog (cannot be evaded by the guest)
-    .WithSIMD(false)                  // keep the surface minimal
-    .WithWasmThreads(false);          // single-threaded guest
-using var engine = new Engine(config);
-
-// ── module is validated on load; reject anything that imports outside our "env" namespace ──
-using var module = Module.FromBytes(engine, manifest.modId, wasmBytes);
-
-using var store = new Store(engine);
-store.SetLimits(                      // memory-class caps (pair with fuel/epoch for CPU)
-    memorySize:    limits.MaxMemoryBytes,   // e.g. 64 MiB
-    tableElements: 100_000,
-    instances: 1, tables: 4, memories: 1);
-
-// ── NO WASI. The ONLY capabilities are our curated builtins (see §7). ──
-var linker = new Linker(engine);
-linker.Define("env", "hud_draw_text",
-    Function.FromCallback(store, (Caller c, int ptr, int len, float x, float y, int rgba) =>
-        HudDrawBridge.DrawText(ReadGuestUtf8(c, ptr, len), x, y, rgba)));
-// … the rest of the builtin table …
-
-var instance = linker.Instantiate(store, module);
-var modInit  = instance.GetAction("mod_init");
-var modFrame = instance.GetAction<float>("mod_frame");
-```
-
-Per-frame call, fuel reset + watchdog + graceful-degradation:
-
-```csharp
-store.Fuel = limits.FuelPerFrame;          // a store starts at 0 fuel — MUST set each call
-store.SetEpochDeadline(limits.EpochTicks); // a background thread calls engine.IncrementEpoch() every epochMs
-try {
-    modFrame.Invoke(dt);
-} catch (TrapException) {                   // fuel/epoch/OOB/guest-abort
-    DisableModForSession("client.wasm exceeded its budget or trapped");  // never crash the client
-}
-```
-
-Guest-memory access from a builtin **must be bounds-checked** before any read/write:
-
-```csharp
-static string ReadGuestUtf8(Caller c, int ptr, int len) {
-    var mem = c.GetMemory("memory") ?? throw new TrapException("no memory");
-    if (ptr < 0 || len < 0 || (long)ptr + len > mem.GetLength()) throw new TrapException("oob");
-    return mem.ReadString(ptr, len, Encoding.UTF8);
-}
-```
-
-**Deployment gotchas (encode in build/CI):**
-
-- **Target x64/arm64 explicitly** in Godot export presets — an "Any CPU" config won't copy the RID-specific
-  `libwasmtime` native.
-- **macOS: code-sign + notarize** the bundled `libwasmtime.dylib`.
-- Validate that a **real exported build** (not just `dotnet run`) loads the native on all five RIDs.
-- The **epoch watchdog won't interrupt a guest blocked inside a host call** → keep every builtin **non-blocking
-  and fast**; never do I/O on the builtin thread.
-
-## 7. The builtin host-import API (the capability surface = the security boundary)
-
-Principles:
-
-- **Read-only** access to simulation state; **write** only to the frame's screen/audio/UI scratch.
-- **Every `(ptr,len)` from the guest is validated** against the guest's own linear memory before use; never
-  forward a guest pointer to a host API.
-- **No ambient authority.** Assets are referenced by **pre-registered integer id**, never by path from the
-  guest — at load the host enumerates the mod's mounted pack and hands out ids (`asset_id("gfx/hud/panel") → i32`).
-- The guest gets **no** filesystem, socket, env, clock-beyond-game-time, or process builtins. None exist.
-
-**v1 builtin table** (host imports, namespace `env`):
-
-| Category | Builtins (illustrative) |
-|---|---|
-| **State (read)** | `get_local_player(out*)`, `entity_count()`, `get_entity(i, out*)` → {origin,angles,modelId,team,frame,flags}, `get_match_state(out*)` → {gametype,timelimit,scores}, `get_cvar(nameptr,len,out*)` (whitelist) |
-| **Draw (immediate)** | `hud_draw_text`, `hud_draw_pic(assetId,x,y,w,h,rgba)`, `hud_draw_rect`, `hud_measure_text`, `screen_size(out*)`, `set_clip` |
-| **Audio** | `play_sound(assetId,channel,vol)`, `announcer(cueId)` |
-| **Input/UI** | `get_cursor(out*)`, `register_panel(id,…)`, `ui_key_down(uiKey)` (UI scope only — **not** movement) |
-| **Config** | `register_cvar(name,default,flags)`, `get_mod_cvar`/`set_mod_cvar`, `register_command(name)`, `console_print` |
-| **Comms** | `send_to_server_mod(ptr,len)` (reserved `clc_stringcmd`-style channel) |
-| **Assets** | `asset_id(pathptr,len)` → i32 (resolved against the mod's VFS scope) |
-| **Time** | `client_time()`, `frame_time()` |
-
-**Guest exports** the host calls (the other half of the ABI):
-
-```
-mod_init()                              // once, after instantiation
-mod_frame(dt: f32)                      // per render frame — draw HUD/effects here
-mod_event(eventId: i32, ptr: i32, len: i32)   // server→client mod messages, notifications, command dispatch
-mod_shutdown()                          // on unload / disconnect / map change (best-effort, budgeted)
-memory                                  // the guest's linear memory (exported)
-mod_alloc(size: i32) -> i32 ; mod_free(ptr: i32, size: i32)   // so the host can hand the guest buffers
-```
-
-**ABI choice:** **core-wasm** for v1 — scalars + `(ptr,len)` into guest linear memory, UTF-8 strings, flat
-structs defined in `modding-sdk/ABI.md`. This is the most portable across Rust/AssemblyScript/C. The **Component
-Model / WIT** (richer typed interfaces) is a future upgrade — its C# tooling is still preview.
-
-## 8. Mod lifecycle
-
-- **Provision** → create engine/store/instance, register builtins + asset ids, call `mod_init`.
-- **Per frame** → reset fuel, set epoch deadline, call `mod_frame(dt)`; builtins draw into the current frame.
-- **Server→client message** → `mod_event(eventId, ptr, len)`.
-- **Mod console command** → dispatch to the guest (via `mod_event` or a registered callback).
-- **Teardown** (disconnect / map change / error) → `mod_shutdown` (budgeted, best-effort) → dispose store/
-  instance. **Recreate per match** to prevent state bleed (Wasmtime stores are cheap).
-- **Misbehavior** (trap / budget exceed / OOB) → **disable the mod for the session**, log, optionally notify the
-  player; the game continues with **vanilla presentation**. The client must **never crash** because of a mod.
-
-## 9. Guest authoring & SDK
-
-- **Languages:** Rust (most mature wasm story), AssemblyScript (TypeScript-like, friendliest for modders),
-  C/C++ (`clang --target=wasm32`). All have **cross-platform** toolchains (build on Win/Linux/macOS).
-- **C#→Wasm** is allowed for **Windows/Linux/CI** authors (`componentize-dotnet` / NativeAOT-LLVM, preview) but
-  **cannot build on a macOS host** today — so it is **not** the default guest language. Promote it when a macOS
-  compiler host lands.
-- **Ship `modding-sdk/`** with: `ABI.md` (the import/export contract), a Rust crate (`rebirth-mod`) and an
-  AssemblyScript package wrapping the raw imports ergonomically, a `hello-hud` template, and a build script that
-  runs `wasm-opt`/strip and checks the artifact against the size/fuel budget.
-
-## 10. Security model & threat table
-
-| Threat | Mitigation |
-|---|---|
-| Guest tries filesystem / network / env / OS / process | **No ambient authority** — no WASI, zero default imports. Confirmed deny-by-default. |
-| Guest infinite loop / CPU DoS | **Fuel per frame** + **epoch watchdog** (the latter cannot be evaded). |
-| Guest memory bomb | `Store.SetLimits(memorySize…)` + `ResourceLimiter` gating growth. |
-| Guest OOB via crafted `(ptr,len)` to a builtin | Host **bounds-checks every guest pointer/length** vs. linear memory → trap on violation. **Fuzz this.** |
-| Guest feeds evil data to a builtin with authority | Builtins wield **no** ambient authority; assets by pre-registered id; no path/socket builtins exist. |
-| Huge / zip-bomb asset download | Per-artifact + total **size caps**, streaming, **sha256 pin**, decompression limits in the VFS mount. |
-| MITM / compromised mirror | **sha256 from the manifest** (delivered over the authenticated connection); verify body; prefer HTTPS. |
-| State bleed between matches/mods | **Fresh store/instance per match.** |
-| Privacy / non-consensual mods | **Explicit join consent**; sandbox blocks disk/net/env so there is no exfiltration path. |
-| Re-entrancy (builtin re-enters the guest) | Builtins are **synchronous, non-reentrant**; none re-enter the instance. |
-
-**Pre-ship checklist** (do not expose builtins to untrusted modules until all are ✔):
-
-- [ ] Review **Wasmtime security advisories** + Spectre/Cranelift mitigation posture (open item from research).
-- [ ] **Fuzz** the `(ptr,len)` marshaling on every builtin.
-- [ ] Verify a **real exported build** packages + loads `libwasmtime` on all five RIDs.
-- [ ] macOS **code-sign / notarize** the dylib.
-- [ ] Confirm **fuel set every frame** + **epoch watchdog thread** running.
-- [ ] Enforce download **size/time caps**; downloads cancellable.
-- [ ] Test **graceful mod-disable** on trap / OOM / timeout — client never crashes.
-- [ ] Reject modules importing anything **outside the `env` builtin namespace** at load.
-
-## 11. Determinism note
-
-Presentation wasm is **not** in the predict/reconcile loop, so wasm determinism is **not required** for netcode
-correctness — a deliberate simplification (see [ADR-0013](../decisions/ADR-0013-modding-untrusted-client-code.md)).
-If a future feature ever runs *predicted* logic in wasm (out of scope), enable
-`WithCraneliftNaNCanonicalization(true)` and keep SIMD/threads disabled per the research. For demo/replay
-reproducibility, feed the mod the same recorded state rather than relying on guest determinism.
-
-## 12. Phased plan
-
-Each milestone ships behind a cvar (`cl_allow_mods 0` until M5).
-
-| M | Deliverable | Proves |
+| Threat | Mitigation | Tested |
 |---|---|---|
-| **M0** | Manifest + reconcile handshake, **assets only** (no wasm). Split `BuildParity`→`BaseProtocolHash`; advertise/diff/download/verify/mount asset packs; consent + cache + caps + download UI. | the content pipeline end-to-end (the "Level 1" asset download) |
-| **M1** | Sandbox host MVP: load a trivial **zero-import** wasm with fuel/epoch/memory limits + watchdog; call `mod_init`/`mod_frame`; cross-platform packaging validated on all 5 RIDs. | the sandbox + native deployment |
-| **M2** | **Builtin API v1** (read-state + draw + sound). Port one real CSQC-style element (e.g. a damage indicator or scoreboard panel) authored in Rust/AssemblyScript as the proving mod. | the capability surface + ergonomics |
-| **M3** | Client↔server-mod **comms channel** + mod cvars/commands + console integration; graceful-degradation paths. | mod ↔ server interaction |
-| **M4** | **Guest SDK** (Rust + AssemblyScript bindings, templates, docs, build scripts). | authorability |
-| **M5** | **Hardening**: builtin security review, marshaling fuzzing, Wasmtime advisory review, size/time-cap soak, malicious-mod test suite, demo/replay compat. | safe to enable by default |
+| Guest reaches the filesystem, network, environment or process | No such import exists; WASI is answered, not granted (§7) | yes |
+| Guest imports something outside the interface | Refused at load, by namespace, name, kind and signature | yes |
+| Infinite loop | Epoch watchdog → trap → disabled | yes |
+| Unbounded recursion | Wasmtime stack limit → trap | yes |
+| Memory bomb | Store limiter; `memory.grow` returns -1 in the guest | yes |
+| Out-of-bounds guest read/write | Wasm semantics → trap | yes |
+| Bad `(ptr, len)` to an import: past the end, negative, wrapping, oversized | `GuestBytes` (§6) → trap | yes |
+| Malformed command buffer; NaN coordinates | `ModCommandDecoder` rejects; deterministic fuzz of 20,000 buffers | yes |
+| Hang in the module's start function | Instantiation runs under the init budget; load is refused | yes |
+| Log flood | Per-call line cap | yes |
+| Guest calls `proc_exit` | Trap | yes |
+| Re-entrancy: an import calling back into the sandbox | Guarded; throws at the host caller | no test yet |
+| Compiler bug in Wasmtime (sandbox escape) | Long-term-support line, prompt patching; arm64 is the higher-risk backend | n/a |
+| Zip bomb or oversized download | Per-artifact and total size caps, streaming, SHA-256 pin | not built |
+| Malicious mirror | SHA-256 from the manifest | not built |
+| State bleed between matches | Fresh sandbox per match | by construction |
+| Non-consensual mods | Explicit consent before any download | not built |
+| Signal-handler conflict between Wasmtime, .NET and Godot | Mach ports off on macOS | **not tested inside Godot** |
 
-## 13. Testing
+## 11. Before mods are enabled by default
 
-- **Pure-logic unit tests** (`tests/XonoticGodot.Tests/Modding/`, no Godot): manifest serialize/parse, sha256 verify,
-  `ContentDiff`, cache LRU/size budget, `BaseProtocolHash` split, size-cap logic.
-- **Malicious-wasm corpus**: fuel bomb, memory bomb, OOB pointer, deliberate trap, missing/bad exports, import
-  outside `env` — each MUST be safely contained (mod disabled), never crash the host.
-- **Marshaling fuzz**: random `(ptr,len)` into each builtin.
-- **Cross-platform CI matrix**: load + run a sample `.wasm` on win/linux/macOS × x64/arm64.
-- **Golden HUD render test**: the proving mod renders a known frame → compare.
+`cl_allow_mods` stays 0 until every line is true:
 
-## 14. Open questions / risks
+- [ ] A real C# guest builds and runs under the sandbox, and the WASI imports it needs are known (§7).
+- [ ] Traps (out-of-bounds, abort, stack overflow, timeout) are exercised **inside the Godot client** on
+      Windows, Linux and macOS, not only in the test host.
+- [ ] A real exported build loads the Wasmtime native library on all six supported platform/CPU pairs.
+- [ ] macOS: the bundled Wasmtime library is signed and notarised with the app.
+- [ ] The native library is at or above the first 48.x patch release carrying all published advisories.
+- [ ] Download size and time caps, cancellation and SHA-256 verification are built and tested.
+- [ ] Consent UI is built; a declined mod never downloads.
+- [ ] The `IModHost` implementation in `game/modding/` has been reviewed member by member.
 
-- Wasmtime **CVE / Spectre posture** — review before exposing builtins (from research).
-- **Mirror infrastructure** — who hosts mod content (server operator? a master? Steam Workshop?) — ties to
-  [OPEN-QUESTIONS](../OPEN-QUESTIONS.md) Q9.
-- **macOS C#→Wasm authoring** timeline — affects whether C# becomes a first-class mod language.
-- **Native-lib deployment under Godot export** per OS (the "Any CPU" + notarization pitfalls).
-- **Builtin-API versioning** policy (`apiVersion`): a mod built against API vN running on engine vM.
-- Core-wasm ABI now vs. **Component Model / WIT** later (typed interfaces; tooling maturity).
+## 12. Status (2026-10-07)
+
+| Part | State |
+|---|---|
+| Sandbox host, limits, import/export checks, command decoder, WASI stand-ins (`src/VortexArena.Modding`) | **Built and tested** — 33 tests in `tests/VortexArena.Tests/Modding/`, on Windows x64 |
+| Interface reference (`modding-sdk/ABI.md`) | Written |
+| C# guest SDK and template (`modding-sdk/csharp/`) | **Written, not yet compiled to wasm** — blocked on installing the WASI SDK 29.0 |
+| Rust reference guest | Not started |
+| Manifest, cache, content diff | Not started |
+| Handshake split and reconcile flow | Not started |
+| Godot bridge (`game/modding/`), consent and download UI | Not started |
+| Platforms other than Windows x64 | Not exercised |
+
+Task IDs are in [`TODO.md`](../TODO.md) (`MS-1` onwards).
+
+## 13. Open questions
+
+- **Mirror infrastructure** — who hosts mod content (server operator, a master, a workshop)? Ties to
+  open question Q9.
+- **Component Model later?** Typed interfaces would replace hand-written bindings; revisit when the .NET
+  package gains a component API and C# guest tooling leaves preview.
+- **`linux-ppc64le`** — build Wasmtime's Pulley interpreter for it, adopt a managed runtime there, or
+  leave mods unavailable?
+- **Fuel for deterministic budgets** — only if a feature ever needs the same guest to behave identically
+  on two machines (demo playback is better served by replaying recorded state into the guest).
+- **A trusted tier** — an API-whitelist loader for locally installed C# mods was rejected for server-pushed
+  code; whether it is worth having for mods the player installs deliberately is open.

@@ -1,6 +1,6 @@
 # ADR-0013 — Sandboxed WebAssembly for server-pushed client mods (client code only)
 
-**Status:** Proposed
+**Status:** Superseded by [ADR-0020](ADR-0020-wasm-sandbox-csharp-guests.md) (2026-10-07)
 
 ## Context
 

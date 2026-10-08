@@ -93,9 +93,38 @@ Everything else is modernized freely. See [`specs/determinism-and-physics.md`](s
 
 ## 6. What we explicitly do NOT build
 
-- A QuakeC VM or bytecode interpreter (the CLR replaces it).
+- A QuakeC VM **for the native game** (the CLR replaces it). One does ship for legacy mode — see §7.
 - The Darkplaces renderer (`gl_*.c`, `r_*.c`) — Godot replaces it wholesale.
-- Bit-exact Darkplaces wire-protocol compatibility (XonoticGodot is its own ecosystem; see
-  [ADR-0011](decisions/ADR-0011-protocol-ecosystem-boundary.md)).
+- Darkplaces wire-protocol compatibility **for Vortex servers** (the native game is its own ecosystem;
+  see [ADR-0011](decisions/ADR-0011-protocol-ecosystem-boundary.md)). The client speaks it in legacy
+  mode — see §7.
 - A C# web client in the near term (no stable C#→WASM export; see
   [ADR-0012](decisions/ADR-0012-platform-scope.md)).
+
+## 7. Running code the engine did not ship with (added 2026-10-07)
+
+Two subsystems run downloaded code on the client. They are separate from the native game stack above
+and from each other, and they share one presentation bridge (a per-frame 2D draw list, sound cues, and
+— for legacy mode — entity submission and view setup).
+
+| | Legacy compatibility mode | Mod sandbox |
+|---|---|---|
+| Purpose | Join stock **Xonotic** servers as a drop-in replacement for the DarkPlaces engine | Let **Vortex** servers push client-side mods written in C# |
+| Decision | [ADR-0019](decisions/ADR-0019-legacy-compatibility-mode.md) | [ADR-0020](decisions/ADR-0020-wasm-sandbox-csharp-guests.md) |
+| Spec | [`specs/legacy-compat.md`](specs/legacy-compat.md) | [`specs/modding.md`](specs/modding.md) |
+| Downloaded code | `csprogs.dat` — QuakeC bytecode | `client.wasm` — WebAssembly (C# via NativeAOT-LLVM, or Rust) |
+| Runs in | `src/VortexArena.QuakeC` — a managed interpreter | `src/VortexArena.Modding` — Wasmtime |
+| Network | DarkPlaces protocol DP7, `src/VortexArena.Legacy` | the native protocol plus a mod manifest |
+| What the code owns | The whole client: view, entities, HUD, prediction | Presentation only: HUD, effects, UI |
+| Safety comes from | Load-time validation of every instruction + bounds-checked builtins | The wasm sandbox + a deny-by-default import table |
+
+All three libraries are Godot-free, like `Common`, so the suite can test them with real fixtures (the
+stock `csprogs.dat`, recorded DarkPlaces demos, hostile wasm modules). The Godot side of each lives in
+`game/legacy/` and `game/modding/`.
+
+```
+src/
+├── VortexArena.QuakeC     the QuakeC VM + engine-independent builtins          (no dependencies)
+├── VortexArena.Legacy     DarkPlaces protocol client + CSQC hosting            (→ QuakeC, Formats, Net)
+└── VortexArena.Modding    mod manifest/cache + the Wasmtime sandbox host       (→ Wasmtime NuGet)
+```

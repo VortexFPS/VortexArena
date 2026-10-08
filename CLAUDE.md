@@ -53,6 +53,18 @@ smoke: **docs/RUNNING.md**.
   Two spellings for one target, and both are load-bearing: the engine build, the template filename and a
   preset's `binary_format/architecture` say `ppc64`; uname, .NET's RID, the zip names and the launcher
   manifest say `ppc64le`. `Env.HostArch` returns the second, `Env.GodotArch` converts to the first.
+- **Joining stock Xonotic servers** (legacy compatibility mode: the DarkPlaces protocol plus a QuakeC VM
+  that runs the server's own `csprogs.dat`) → **planning/specs/legacy-compat.md**. Code:
+  `src/VortexArena.QuakeC` (the VM and builtins), `src/VortexArena.Legacy` (protocol, hosting). It is a
+  second client stack beside `game/net/`, not a mode inside it. Progress is measured by
+  `CsqcRealDataProbeTests`, which prints every engine builtin the real client program calls that nothing
+  implements; it needs the `../Base` checkout. To run it: `--legacy-data <Xonotic data dir> --legacy-connect
+  <host>` (spec §12, which also holds the checklist of what nobody has yet looked at in a window).
+- **Client mods in the WebAssembly sandbox** → **planning/specs/modding.md** and `modding-sdk/ABI.md`.
+  Code: `src/VortexArena.Modding` (host; Wasmtime), `game/modding/` (Godot side), `modding-sdk/` (what a
+  mod author uses — guest code, excluded from the host build). `IModHost` is the complete list of what a
+  mod can reach: adding a member widens what a stranger's code can do, so treat it like a new network
+  message. Off by default (`cl_allow_mods 0`).
 - Past investigations → `planning/*.md` postmortems (verified, dated).
 
 ## House rules

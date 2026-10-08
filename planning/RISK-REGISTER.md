@@ -21,6 +21,12 @@ Status legend: ☐ open · ◐ mitigating · ☑ retired · ⚠ realized
 | R12 | **Scope creep across 20 gametypes / 44 mutators** — pressure to ship "everything" v1. | Med | Product | ☐ | Define a v1 content subset (see [OPEN-QUESTIONS](OPEN-QUESTIONS.md) Q7); the rest is incremental. |
 | R13 | **Determinism across CPU architectures** (x64 vs ARM) for cross-play prediction. | Low-Med | Net/Engine | ☐ | Lean on the existing error-compensation/smoothing (Xonotic already tolerates prediction error); only require *low-divergence* determinism, not lockstep. See [ADR-0010](decisions/ADR-0010-determinism-and-numerics.md). |
 | R14 | **Licensing** — Xonotic code is GPL; assets carry mixed licenses. The C# rewrite's license + asset redistribution must be settled. | Med | Legal | ☐ | Decide license up front (see [OPEN-QUESTIONS](OPEN-QUESTIONS.md) Q1). Likely GPLv3+ to stay compatible. |
+| R15 | **Legacy-mode long tail** — a stock Xonotic client program uses 195 engine builtins, 1,790 cvar-bound variables, and DarkPlaces' console, particle, skeletal-animation and trace behaviour. FTEQW (the only other engine to try) stalled on exactly this in 2018. | **High** | Legacy | ☐ | Measure, do not estimate: run the real `csprogs.dat` in the suite and log every unimplemented builtin by call count; implement in that order. See [`specs/legacy-compat.md`](specs/legacy-compat.md) §9. |
+| R16 | **Unframed network payloads** — `svc_csqcentities` has no length field; any VM or builtin deviation desynchronises the whole message stream and looks like a protocol bug. | **High** | Legacy | ☐ | Differential testing against recorded DarkPlaces demos; report the QuakeC function and byte offset where a read ran past the message. |
+| R17 | **Downloaded code is hostile by default** — both `csprogs.dat` and `client.wasm` come from whatever server the player joined. | **High** | Legacy / Modding | ◐ | QuakeC: validate every instruction at load, bounds-check at run time, runaway cap. Wasm: no ambient authority, epoch watchdog, memory cap, hostile-module tests in the suite. The builtin and import tables are the reviewed boundary. |
+| R18 | **Experimental C#→wasm toolchain** — NativeAOT-LLVM is a prerelease compiler on a non-default package feed, needs the WASI SDK, builds on Windows/Linux x64 only, and is not productised before .NET 12. | Med | Modding | ☐ | Keep the interface language-neutral with Rust as the reference guest; pin compiler and WASI SDK versions in the SDK; re-evaluate each .NET preview. [ADR-0020](decisions/ADR-0020-wasm-sandbox-csharp-guests.md). |
+| R19 | **Wasmtime on arm64 and patch cadence** — the April 2026 critical sandbox escape was arm64-only; the .NET package lags upstream patch releases. | Med | Modding | ☐ | Track Wasmtime advisories; be able to ship a newer native library than the NuGet package bundles; keep mods off by default until the pre-ship checklist in [`specs/modding.md`](specs/modding.md) is complete. |
+| R20 | **No Wasmtime binary for `linux-ppc64le`.** | Low | Modding | ⏸ | The sandbox reports itself unavailable and mods stay off on that platform. Revisit with a self-built Pulley interpreter or a managed runtime if it matters. |
 
 ## How risks map to phases
 
@@ -30,3 +36,5 @@ Status legend: ☐ open · ◐ mitigating · ☑ retired · ⚠ realized
 - **Phase 3** retires R4 (and exercises R13).
 - **Phases 4–5** burn down R8, R9, R11, R12.
 - R5, R6, R7, R14 are **cross-cutting** and managed continuously.
+- R15–R20 belong to the two downloaded-code subsystems added 2026-10-07 (legacy compatibility mode and
+  the mod sandbox). They run on their own track, outside the original phases.

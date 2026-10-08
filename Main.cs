@@ -254,7 +254,7 @@ public partial class Main : Node
         // An unattended run must not query the public master servers when it falls back to the menu (see
         // MultiplayerScreen.SuppressAutoRefresh).
         if (Array.IndexOf(args, "--quit-after-seconds") >= 0
-            || Array.Exists(args, a => a.StartsWith("--legacy-", StringComparison.Ordinal))
+            || Array.Exists(args, a => a.StartsWith("--legacy-", StringComparison.Ordinal) && a != "--legacy-data")
             || System.Environment.GetEnvironmentVariable("VORTEX_NO_MASTER_QUERY") is "1")
             VortexArena.Game.Menu.MultiplayerScreen.SuppressAutoRefresh = true;
 

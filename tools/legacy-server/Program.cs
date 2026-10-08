@@ -30,6 +30,8 @@ internal static partial class Program
         "  clients [--map NAME] [--clients N] [--out FILE]       several in-process clients: visibility, reconnect, timeout, kick, full server, garbage, commands\n" +
         "  soak   [--map NAME] [--seconds N] [--bots N] [--clients N] [--out FILE]\n" +
         "                                                        a long run with bots and in-process clients; memory, edicts, strings, frame times\n" +
+        "  perf   [--map NAME] [--bots N] [--seconds N] [--mode profile|ops] [--out FILE]\n" +
+        "                                                        what a frame of the client program costs, headless and repeatable; prints a digest of its memory\n" +
         "  trace  [--map NAME] --from \"x y z\" [--to \"x y z\"] [--mins \"x y z\"] [--maxs \"x y z\"] [--mode nudge|leaves|scan|pvs|file|bench]\n" +
         "                                                        one question to a level's collision world, answered in full\n" +
         "  run also takes --dump FILE (every entity's class, origin and box, as \"prvm_edicts server\" prints them) and --mode stats;\n" +
@@ -129,6 +131,8 @@ internal static partial class Program
                 "clients" => Clients(o),
                 "trace" => TraceMode(o),
                 "soak" => Soak(o),
+                "perf" => Perf(o),
+                "micro" => Micro(o),
                 _ => Fail(Usage),
             };
         }

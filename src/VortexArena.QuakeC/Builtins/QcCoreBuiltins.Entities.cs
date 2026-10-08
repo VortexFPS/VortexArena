@@ -174,6 +174,7 @@ public sealed partial class QcCoreBuiltins
         {
             if (vm.IsFree(e) || !string.Equals(vm.GetString(vm.FieldInt(e, field)), match, StringComparison.Ordinal)) continue;
             vm.FieldInt(e, chainField) = chain;
+            vm.NoteFieldWrite(e, chainField);
             chain = e;
         }
         vm.ReturnInt(chain);
@@ -189,6 +190,7 @@ public sealed partial class QcCoreBuiltins
         {
             if (vm.IsFree(e) || vm.FieldFloat(e, field) != match) continue;
             vm.FieldInt(e, chainField) = chain;
+            vm.NoteFieldWrite(e, chainField);
             chain = e;
         }
         vm.ReturnInt(chain);
@@ -206,6 +208,7 @@ public sealed partial class QcCoreBuiltins
             float value = vm.FieldFloat(e, field);
             if (value == 0 || (QcVm.FloatToInt(value) & flags) == 0) continue;
             vm.FieldInt(e, chainField) = chain;
+            vm.NoteFieldWrite(e, chainField);
             chain = e;
         }
         vm.ReturnInt(chain);
@@ -257,7 +260,7 @@ public sealed partial class QcCoreBuiltins
         int to = vm.ArgEdict(1);
         if (to == 0) { Warning("copyentity: can not modify world entity\n"); return; }
         if (vm.IsFree(to)) { Warning("copyentity: can not modify free entity\n"); return; }
-        for (int i = 0; i < vm.EntityFields; i++) vm.FieldInt(to, i) = vm.FieldInt(from, i);
+        vm.CopyEdict(from, to);
         EdictLinked?.Invoke(to);
     }
 
@@ -475,6 +478,14 @@ public sealed partial class QcCoreBuiltins
     /// unescaped the text, or must not). False if the text cannot be a value of the field's type.
     /// </summary>
     private bool ParseEpair(int edict, QcDef key, string s)
+    {
+        bool ok = ParseEpairValue(edict, key, s);
+        // After the write: the VM re-reads what it mirrors (QcVm.MirrorField).
+        _vm.NoteFieldWrite(edict, key.Offset, key.Type == QcType.Vector ? 3 : 1);
+        return ok;
+    }
+
+    private bool ParseEpairValue(int edict, QcDef key, string s)
     {
         switch (key.Type)
         {

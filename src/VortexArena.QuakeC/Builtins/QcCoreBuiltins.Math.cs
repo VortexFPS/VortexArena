@@ -320,6 +320,7 @@ public sealed partial class QcCoreBuiltins
 
         current += move;
         angle = AngleMod(current);
+        _vm.NoteFieldWrite(edict, angles.Offset + axis);
     }
 
     // mathlib.h ANGLEMOD

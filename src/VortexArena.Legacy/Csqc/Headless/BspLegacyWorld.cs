@@ -100,7 +100,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
     private readonly VirtualFileSystem _files;
     private readonly Dictionary<string, long>? _calls;
     private CsqcHost? _host;
-    private int _ownerField = -1, _clipGroupField = -1, _enemyField = -1;
+    private int _ownerField = -1, _clipGroupField = -1, _enemyField = -1, _solidMirror;
 
     // The map as DarkPlaces collides with it - brushes and patch triangles in one world. The trace
     // library tests a box against both, a line against the brushes and the front of the triangles, a
@@ -298,6 +298,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         _ownerField = FieldOffset(host, "owner", 1);
         _clipGroupField = FieldOffset(host, "clipgroup", 1);
         _enemyField = FieldOffset(host, "enemy", 1);
+        _solidMirror = host.Vm.MirrorField(host.Fields.Solid);
         SetupGrid();
     }
 
@@ -583,7 +584,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
     // those, only the ones a move can stop on (.solid of SOLID_BBOX or more). A client program links
     // thousands of entities that are not solid; testing that here keeps them out of the bounded list,
     // so the bound is on what a trace actually clips against.
-    private int EdictsInBox(QcVm vm, int solidField, Vector3 mins, Vector3 maxs, Span<int> list)
+    private int EdictsInBox(QcVm vm, Vector3 mins, Vector3 maxs, Span<int> list)
     {
         if (++_markNumber == int.MaxValue)
         {
@@ -591,7 +592,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
             _markNumber = 1;
         }
         int count = 0;
-        Visit(vm, solidField, _outside, mins, maxs, list, ref count);
+        Visit(vm, _outside, mins, maxs, list, ref count);
         // "add 1 unit of padding to the box"; a box off the grid is clamped onto it.
         float fx0 = MathF.Floor((mins.X - 1 + _gridBiasX) * _gridScaleX), fy0 = MathF.Floor((mins.Y - 1 + _gridBiasY) * _gridScaleY);
         float fx1 = MathF.Floor((maxs.X + 1 + _gridBiasX) * _gridScaleX) + 1, fy1 = MathF.Floor((maxs.Y + 1 + _gridBiasY) * _gridScaleY) + 1;
@@ -601,20 +602,25 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         for (int y = y0; y < y1; y++)
             for (int x = x0; x < x1; x++)
                 if (_cells[y * Grid + x] is { Count: > 0 } cell)
-                    Visit(vm, solidField, cell, mins, maxs, list, ref count);
+                    Visit(vm, cell, mins, maxs, list, ref count);
         return count;
     }
 
-    private void Visit(QcVm vm, int solidField, List<int> edicts, Vector3 mins, Vector3 maxs, Span<int> list, ref int count)
+    private void Visit(QcVm vm, List<int> edicts, Vector3 mins, Vector3 maxs, Span<int> list, ref int count)
     {
         int numEdicts = vm.NumEdicts;
+        // .solid is read from the VM's mirror of it (QcVm.MirrorField), not from the entity: this loop
+        // looks at some forty entities for every one a trace can stop on, and each entity's own copy
+        // lies in ten kilobytes of fields nothing else here touches - a cache miss apiece, which was a
+        // third of what a trace cost.
+        int solidMirror = _solidMirror;
         foreach (int edict in edicts)
         {
             if (_marks[edict] == _markNumber) continue;
             _marks[edict] = _markNumber;
             ref LinkedEdict link = ref _links[edict];
             if (!CollisionWorld.BoxesOverlap(mins, maxs, link.AbsMin, link.AbsMax)) continue;
-            if (edict >= numEdicts || vm.IsFree(edict) || !(vm.FieldFloat(edict, solidField) >= SolidBBox)) continue;
+            if (edict >= numEdicts || vm.IsFree(edict) || !(vm.MirroredFloat(solidMirror, edict) >= SolidBBox)) continue;
             if (count == list.Length)
             {
                 CandidateOverflows++;
@@ -637,7 +643,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         if (_host is not { } host) return;
         QcVm vm = host.Vm;
         CsqcFieldOffsets f = host.Fields;
-        int count = EdictsInBox(vm, f.Solid, mins, maxs, _touched);
+        int count = EdictsInBox(vm, mins, maxs, _touched);
         int passOwnerMirror = -1;
         for (int i = 0; i < count; i++)
         {

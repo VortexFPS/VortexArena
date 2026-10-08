@@ -503,3 +503,36 @@ All of them need `--legacy-data <Xonotic data dir>` (or the cvar `legacy_xonotic
 - **Review script aids** (only under `VORTEX_LEGACY_SCRIPT`, private local game): `warp <classname>[#n] [x y z]`, `warp top <classname>[#n]`,
   `warp at <x> <y> <z>`, `watch <seconds> <classname>...`, `track <seconds>`. `VORTEX_LEGACY_NOPRECACHE=1` turns the precache
   workers off (the other arm of a memory comparison).
+
+## 14. What a frame of the client program costs, and how to measure it without a window (added 2026-10-08)
+
+`tools/legacy-server` has a `perf` mode: a local game with bots on a simulated clock, the headless client
+joined to it and driven by a seeded input script, `CSQC_UpdateView` timed once a step. A run is repeatable
+(seeded random numbers on both sides, the simulated clock in place of every wall clock the program can read)
+and ends by printing a digest of the client program's whole memory: two builds that compute the same thing
+print the same digest. `--mode profile` splits the frame per builtin, `--mode verify` checks the entity index
+and field mirrors below on every frame, `--dump FILE` writes per-frame times (take the per-frame minimum over
+several runs to remove what else the machine was doing), and a build made with `-p:QcOpStats=1` adds
+`--mode ops` (instructions per frame by opcode, pair and function; memory touched). `micro` is the
+interpreter's floor on a five-instruction loop.
+
+What it measured on stormkeep with 4 bots (Ryzen 9 3900X, .NET 8): 62,000 instructions, 2,400 QuakeC calls
+and 1,950 builtin calls a frame; the frame touches 141 KB of instructions, 34 KB of globals and 154 KB of
+entity fields (out of 32 MB: 3,300 entities of 2,545 cells each).
+
+What was changed because of it, all invisible to the program (same digest; `ClientProgramEquivalenceTests`):
+
+- **addentities visits only entities that can have something to do.** The VM keeps a bit per entity that is
+  clear while `.think`, `.predraw` and `.drawmask` are all zero (`QcVm.WatchFields`); about 100 of 3,300
+  entities are in it. Reading three fields of every entity was a quarter of a millisecond of cache misses
+  headless and most of a millisecond in the game.
+- **Traces read `.solid` from a mirror** (`QcVm.MirrorField`) instead of from each candidate entity.
+- **Last frame's memory is prefetched** before the next `CSQC_UpdateView` (`QcVm.PrefetchRecorded`).
+- **Short temporary strings are reused by content** (`QcVm.CachedString`: substring, strcat, ftos): 13.3 KB
+  of allocation a frame became 1.5 KB.
+- The loop reads an 8-byte copy of each instruction, and function entry reads a flat table.
+
+What was tried and removed (the reasons are in the header of `QcVm.Run.cs`): fused instruction pairs
+(34% fewer dispatches, no change in time) and translating functions to .NET methods (three times faster on a
+hot loop, no faster on the real frame, because the program calls something every 14 instructions). ADR-0019
+decision 5 therefore stands unchanged: the interpreter is the only execution path.

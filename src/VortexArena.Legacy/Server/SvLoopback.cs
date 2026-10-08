@@ -41,6 +41,7 @@ public sealed class SvLoopbackClient : IDisposable
             PrintSink = print ?? (_ => { }),
             WarningSink = warning ?? (_ => { }),
         };
+        Services = services;
         Presentation = new HeadlessLegacyPresentation(files);
         options ??= new LegacyClientOptions();
         options.Client.Signon.Rate = Cvars.Has("_cl_rate") && Cvars.GetFloat("_cl_rate") > 0 ? (int)Cvars.GetFloat("_cl_rate") : 262144;
@@ -54,6 +55,8 @@ public sealed class SvLoopbackClient : IDisposable
     public IPEndPoint Address { get; }
     public LegacyClientSession Session { get; }
     public HeadlessLegacyPresentation Presentation { get; }
+    /// <summary>The engine services the client's program runs against (its clock can be replaced).</summary>
+    public LegacyQcHost Services { get; }
     public CvarService Cvars { get; }
     /// <summary>The input the client applies in the next step.</summary>
     public LegacyInput Input;

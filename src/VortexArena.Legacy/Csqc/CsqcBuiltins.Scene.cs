@@ -133,16 +133,53 @@ public sealed partial class CsqcBuiltins
         int drawMask = ArgInt(0);
         _presentation.Scene.AddEngineEntities(drawMask);
         _host.SetFloat(_g.Time, (float)_state.Time);
-        // The count is re-read every pass: a think function may spawn, and the new entity is visited too.
+        if (!vm.HasWatchedFields)
+        {
+            // The count is re-read every pass: a think function may spawn, and the new entity is visited too.
+            for (int i = 1; i < vm.NumEdicts; i++) AddEntitiesVisit(vm, i, drawMask);
+            return;
+        }
+        // The same pass over only the entities that can have something to do here: the VM keeps a bit
+        // per entity that is clear only while its think, predraw and drawmask are all zero (CsqcHost
+        // asks for that with WatchFields), and for such an entity every step below is a no-op. Xonotic's
+        // client holds some 3,300 entities with ten kilobytes of fields each, about a tenth of which
+        // draw or think; reading three fields of every one was a quarter of a millisecond of cache
+        // misses a frame. The index is read as it stands at each step, so an entity a think function
+        // spawns or arms further on is visited in its turn, exactly as the full pass visits it.
+        if (_host.VerifyEntityIndex) VerifyEntityIndex(vm);
+        for (int i = vm.NextWatched(1); i > 0; i = vm.NextWatched(i + 1)) AddEntitiesVisit(vm, i, drawMask);
+        if (_host.VerifyEntityIndex) VerifyEntityIndex(vm);
+    }
+
+    private void AddEntitiesVisit(QcVm vm, int i, int drawMask)
+    {
+        if (vm.IsFree(i)) return;
+        _host.Think(i);
+        if (vm.IsFree(i)) return;
+        _host.Predraw(i);
+        if (vm.IsFree(i)) return;
+        if ((Int(vm.FieldFloat(i, _f.DrawMask)) & drawMask) == 0)
+        {
+            // Nothing left for this pass to act on (the common case is an entity whose fields were
+            // written once with zeroes, or one that has stopped drawing): out of the index until the
+            // program writes one of the three again. The VM checks that all three are zero itself.
+            if (vm.PeekField(i, _f.DrawMask) == 0) vm.ClearWatched(i);
+            return;
+        }
+        AddRenderEdict(i, i);
+    }
+
+    // The index's promise, checked (CsqcHostOptions.VerifyEntityIndex): an entity it leaves out has
+    // nothing the pass would act on.
+    private void VerifyEntityIndex(QcVm vm)
+    {
+        if (vm.VerifyMirrors() is { } difference) throw Fault("field mirror: " + difference);
         for (int i = 1; i < vm.NumEdicts; i++)
         {
-            if (vm.IsFree(i)) continue;
-            _host.Think(i);
-            if (vm.IsFree(i)) continue;
-            _host.Predraw(i);
-            if (vm.IsFree(i)) continue;
-            if ((Int(vm.FieldFloat(i, _f.DrawMask)) & drawMask) == 0) continue;
-            AddRenderEdict(i, i);
+            if (vm.IsFree(i) || vm.IsWatched(i)) continue;
+            // PeekField: looking must not mark.
+            if (vm.PeekField(i, _f.Think) != 0 || vm.PeekField(i, _f.Predraw) != 0 || vm.PeekField(i, _f.DrawMask) != 0)
+                throw Fault($"entity index: entity {i} has think {vm.PeekField(i, _f.Think)}, predraw {vm.PeekField(i, _f.Predraw)}, drawmask bits {vm.PeekField(i, _f.DrawMask):X8} but is not marked");
         }
     }
 

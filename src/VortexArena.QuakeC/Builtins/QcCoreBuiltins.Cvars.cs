@@ -16,19 +16,34 @@ public sealed partial class QcCoreBuiltins
     {
         Parms(1, "VM_checkextension");
         string name = vm.ArgString(0);
-        bool supported = Extensions.Contains(name);
-        if (!supported)
+        // Programs ask every frame, and mostly for extensions this engine does not have - which is the
+        // slow answer below (a pass over the whole set). The answer for a name never changes.
+        // (...unless the owner adds to the set, which is what the count is kept for.)
+        if (_extensionAnswersFor != Extensions.Count)
         {
-            // The set may have been built with a case-sensitive comparer; the C compares with strcasecmp.
-            foreach (string extension in Extensions)
+            _extensionAnswers.Clear();
+            _extensionAnswersFor = Extensions.Count;
+        }
+        if (!_extensionAnswers.TryGetValue(name, out bool supported))
+        {
+            supported = Extensions.Contains(name);
+            if (!supported)
             {
-                if (!string.Equals(extension, name, StringComparison.OrdinalIgnoreCase)) continue;
-                supported = true;
-                break;
+                // The set may have been built with a case-sensitive comparer; the C compares with strcasecmp.
+                foreach (string extension in Extensions)
+                {
+                    if (!string.Equals(extension, name, StringComparison.OrdinalIgnoreCase)) continue;
+                    supported = true;
+                    break;
+                }
             }
+            if (_extensionAnswers.Count < 1024) _extensionAnswers[name] = supported;
         }
         vm.ReturnFloat(supported ? 1 : 0);
     }
+
+    private readonly Dictionary<string, bool> _extensionAnswers = new(StringComparer.Ordinal);
+    private int _extensionAnswersFor = -1;
 
     // #46 void(string s, ...) localcmd
     private void LocalCmd(QcVm vm)

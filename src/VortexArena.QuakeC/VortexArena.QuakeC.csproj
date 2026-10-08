@@ -7,5 +7,8 @@
     <TargetFramework>$(VortexArenaTfm)</TargetFramework>
     <RootNamespace>VortexArena.QuakeC</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Measuring builds only: per-opcode and per-function statement counters in the interpreter loop
+         (tools/legacy-server "perf" mode prints them). Never set for a shipped build. -->
+    <DefineConstants Condition="'$(QcOpStats)' == '1'">$(DefineConstants);QC_OPSTATS</DefineConstants>
   </PropertyGroup>
 </Project>

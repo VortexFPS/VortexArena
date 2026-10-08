@@ -424,7 +424,7 @@ public sealed partial class CsqcBuiltins
         {
             int e = _touched[i];
             // "Quake did not return non-solid entities but darkplaces does"
-            if (vm.FieldFloat(e, _f.Solid) == SolidNot && !includeNonSolid) continue;
+            if (!includeNonSolid && vm.FieldFloat(e, _f.Solid) == SolidNot) continue;
             QcVector origin = vm.FieldVector(e, _f.Origin), emins = vm.FieldVector(e, _f.Mins), emaxs = vm.FieldVector(e, _f.Maxs);
             float x = org.X - origin.X, y = org.Y - origin.Y, z = org.Z - origin.Z;
             if (distanceToBox)

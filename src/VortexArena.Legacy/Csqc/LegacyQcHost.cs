@@ -92,11 +92,30 @@ public sealed class LegacyQcHost : IQcHost
     public void Warning(string text) => WarningSink(text);
     public bool Developer => _cvars.GetFloat("developer") != 0f;
     public bool Utf8Enabled => !_cvars.Has("utf8_enable") || _cvars.GetFloat("utf8_enable") != 0f;
-    public double RealTime => _clock.Elapsed.TotalSeconds;
+    public double RealTime => RealTimeSource?.Invoke() ?? _clock.Elapsed.TotalSeconds;
+
+    /// <summary>Replaces the wall clock behind <see cref="RealTime"/> (cltime, gettime, entity reuse
+    /// delays). Null (the default): a stopwatch started with this host. Set only by runs that must be
+    /// repeatable - a simulated-clock harness comparing two builds.</summary>
+    public Func<double>? RealTimeSource { get; set; }
 
     // ---- cvars -------------------------------------------------------------------------------------
 
-    private bool Visible(string name) => name.Length > 0 && !IsPrivateCvar(name) && _cvars.Has(name);
+    // Whether a name is on the private list is a matter of its spelling alone, and the test (three
+    // prefix checks and a case-blind search for "password") costs more than the cvar lookup it guards;
+    // a program reads the same few dozen names every frame.
+    private readonly Dictionary<string, bool> _privateNames = new(StringComparer.Ordinal);
+
+    private bool IsPrivate(string name)
+    {
+        if (_privateNames.TryGetValue(name, out bool isPrivate)) return isPrivate;
+        isPrivate = IsPrivateCvar(name);
+        if (_privateNames.Count >= 8192) _privateNames.Clear();
+        _privateNames[name] = isPrivate;
+        return isPrivate;
+    }
+
+    private bool Visible(string name) => name.Length > 0 && !IsPrivate(name) && _cvars.Has(name);
 
     public bool CvarExists(string name) => Visible(name);
     public string CvarString(string name) => Visible(name) ? _cvars.GetString(name) : "";

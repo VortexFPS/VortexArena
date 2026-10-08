@@ -70,6 +70,26 @@ public sealed class CsqcHostOptions
     /// <summary>The uri_get builtin (#513): (url, id) to "request started". Null: no HTTP, as when
     /// DarkPlaces runs without libcurl.</summary>
     public Func<string, int, bool>? UriGet { get; init; }
+
+    /// <summary>Seed for the program's random() and randomvec(). Null (the default): unseeded, as in play.
+    /// A measuring or comparing run sets it so that two runs of one build do the same thing.</summary>
+    public int? RandomSeed { get; init; }
+
+    /// <summary>Replaces the monotonic clock behind gettime(GETTIME_REALTIME / GETTIME_HIRES) and the
+    /// frame-start reading. Null (the default): the stopwatch. For repeatable runs only.</summary>
+    public Func<double>? DirtyTime { get; init; }
+
+    /// <summary>Keep the per-entity index that lets addentities skip entities with no think, predraw or
+    /// drawmask (QcVm.WatchFields). On by default; off runs the plain pass over every entity.</summary>
+    public bool EntityIndex { get; init; } = true;
+
+    /// <summary>Check the index against every entity on each addentities, faulting the program if an
+    /// entity it leaves out has something to do. For tests and measuring runs: it costs what the index saves.</summary>
+    public bool VerifyEntityIndex { get; init; }
+
+    /// <summary>Before each CSQC_UpdateView, ask the processor for the memory the previous one touched
+    /// (QcVm.PrefetchRecorded). On by default; it changes nothing the program can observe.</summary>
+    public bool PrefetchFrameMemory { get; init; } = true;
 }
 
 /// <summary>
@@ -156,6 +176,8 @@ public sealed partial class CsqcHost : IDisposable
     public long TempEntitiesConsumed { get; private set; }
     public long TempEntitiesDeclined { get; private set; }
 
+    internal bool VerifyEntityIndex => _options.VerifyEntityIndex;
+
     private bool CanRun => !_disposed && (FaultCount == 0 || _options.KeepRunningAfterFault);
 
     /// <summary>True when the program will not be run again: it faulted (and the host was not asked to
@@ -224,6 +246,8 @@ public sealed partial class CsqcHost : IDisposable
             // gettime(GETTIME_HIRES): seconds since the frame began (Sys_DirtyTime() - host.dirtytime).
             FrameDirtyTime = () => _frameStart,
         };
+        if (_options.RandomSeed is int seed) _core.Random = new Random(seed);
+        if (_options.DirtyTime is not null) _core.DirtyTime = _options.DirtyTime;
         _core.Register();
         QcStringBuiltins strings = new(Vm, services) { OpenFile = _core.FileStream };
         strings.Register();
@@ -260,6 +284,12 @@ public sealed partial class CsqcHost : IDisposable
             // A program whose own definition of an engine field is too small to hold it.
             throw new CsqcLoadException("CSQC csprogs.dat failed to load: " + e.Message, e);
         }
+
+        // After the engine fields above: watching freezes the field layout.
+        if (_options.EntityIndex && Fields.Think >= 0 && Fields.Predraw >= 0 && Fields.DrawMask >= 0)
+            Vm.WatchFields(stackalloc int[] { Fields.Think, Fields.Predraw, Fields.DrawMask });
+
+        Vm.RecordTouches = _options.PrefetchFrameMemory;
 
         presentation.Attach(this);
         console.Host = this;
@@ -492,7 +522,8 @@ public sealed partial class CsqcHost : IDisposable
     public bool UpdateView(float width, float height, double frameTime = 0, bool gameHasFocus = true)
     {
         if (!CanRun) return false;
-        _frameStart = System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
+        if (_options.PrefetchFrameMemory) Vm.PrefetchRecorded();
+        _frameStart = _options.DirtyTime?.Invoke() ?? System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
         EnterAsPlayer();
         SetFrameGlobals(frameTime);
         Builtins.BeginFrame();

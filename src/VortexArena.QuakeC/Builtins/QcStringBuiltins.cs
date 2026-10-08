@@ -166,6 +166,22 @@ public sealed partial class QcStringBuiltins
         int count = _vm.ArgCount;
         if (first >= count) return "";
         if (first == count - 1) return _vm.ArgString(first);
+        // Short results - nearly all of them: labels, numbers with a unit, a name and a colour code -
+        // are put together on the stack and looked up in the VM's cache of strings made before.
+        int total = 0;
+        for (int i = first; i < count; i++) total += _vm.ArgString(i).Length;
+        if (total <= 96)
+        {
+            Span<char> joined = stackalloc char[96];
+            int at = 0;
+            for (int i = first; i < count; i++)
+            {
+                string part = _vm.ArgString(i);
+                part.CopyTo(joined[at..]);
+                at += part.Length;
+            }
+            return _vm.CachedString(joined[..at]);
+        }
         StringBuilder text = new();
         // Like the C loop, stop once the buffer is certainly full: nothing after that could be kept.
         for (int i = first; i < count && text.Length < _size; i++) text.Append(_vm.ArgString(i));
@@ -189,8 +205,17 @@ public sealed partial class QcStringBuiltins
         float v = vm.ArgFloat(0);
         // A whole number prints without a fraction ("%.0f"); anything else is "%f", six decimals and
         // never an exponent - so 0.0000001 is "0.000000" and 1e30 is thirty-one digits long.
-        vm.ReturnString(QcSprintfNumbers.Fixed(v, QcVm.FloatToInt(v) == v ? 0 : 6));
+        // The same few numbers every frame (health, ammunition, a clock): keep what was formatted.
+        int bits = BitConverter.SingleToInt32Bits(v);
+        if (!_ftos.TryGetValue(bits, out string? text))
+        {
+            if (_ftos.Count >= 4096) _ftos.Clear();
+            _ftos[bits] = text = QcSprintfNumbers.Fixed(v, QcVm.FloatToInt(v) == v ? 0 : 6);
+        }
+        vm.ReturnString(text);
     }
+
+    private readonly Dictionary<int, string> _ftos = new();
 
     // string(vector v) vtos = #27
     private void Vtos(QcVm vm)
@@ -299,7 +324,7 @@ public sealed partial class QcStringBuiltins
             int take = length < 0 ? total - start : Math.Min(length, total - start);
             // The program walks strings one character at a time (substring(s, i, 1) in a loop), so the
             // one-character result is the common case and need not allocate.
-            vm.ReturnString(take == 1 ? s_oneCharacter[text[start]] : text.Substring(start, Math.Min(take, _size - 1)));
+            vm.ReturnString(take == 1 ? s_oneCharacter[text[start]] : vm.CachedString(text.AsSpan(start, Math.Min(take, _size - 1))));
             return;
         }
 

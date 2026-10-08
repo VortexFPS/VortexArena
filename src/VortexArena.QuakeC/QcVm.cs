@@ -25,7 +25,7 @@ public sealed class QcRuntimeException : Exception
 ///
 /// Not thread-safe. Re-entrant: a builtin may call <see cref="Execute"/>.
 /// </summary>
-public sealed class QcVm
+public sealed partial class QcVm
 {
     // prvm limits (progsvm.h).
     public const int MaxStackDepth = 1024;
@@ -52,6 +52,18 @@ public sealed class QcVm
     private int _entityFields;
     private int _numEdicts;
     private int _maxEdicts;
+
+    // The watched-field index (WatchFields): which field cells are watched, and per entity one bit that
+    // is set when a watched cell of it may be non-zero. Null / empty when nothing is watched.
+    private bool[]? _watchedCells;
+    private ulong[] _watchedEdicts = Array.Empty<ulong>();
+    private int[] _watchedOffsets = Array.Empty<int>();
+
+    // Mirrored fields (MirrorField): per field cell 0, or 1 + the index of the array that holds a copy
+    // of that cell for every entity.
+    private byte[]? _mirrorOf;
+    private int[][] _mirrors = Array.Empty<int[]>();
+    private int[] _mirrorOffsets = Array.Empty<int>();
 
     private readonly int[] _stackFunction = new int[MaxStackDepth];
     private readonly int[] _stackStatement = new int[MaxStackDepth];
@@ -115,6 +127,9 @@ public sealed class QcVm
         _edictFree = new bool[_maxEdicts];
         _edictFreeTime = new double[_maxEdicts];
         _numEdicts = 1; // edict 0 is the world and always exists
+
+        BuildFunctionInfo();
+        BuildExecStream();
     }
 
     // ---- names -------------------------------------------------------------------------------------
@@ -136,6 +151,7 @@ public sealed class QcVm
     {
         if (_fieldsByName.TryGetValue(name, out QcDef? existing)) return existing.Offset;
         if (_numEdicts > 1) throw new InvalidOperationException("fields cannot be added once entities exist");
+        if (_watchedCells is not null || _mirrorOf is not null) throw new InvalidOperationException("fields cannot be added once fields are watched or mirrored");
         QcDef def = new(type, false, _entityFields, name);
         _entityFields += type == QcType.Vector ? 3 : 1;
         _fieldsByName[name] = def;
@@ -208,14 +224,72 @@ public sealed class QcVm
 
     public bool IsFree(int edict) => (uint)edict < (uint)_maxEdicts && _edictFree[edict];
 
-    public ref int FieldInt(int edict, int offset) => ref _fields[FieldIndex(edict, offset, 1)];
-    public ref float FieldFloat(int edict, int offset) => ref Unsafe.As<int, float>(ref _fields[FieldIndex(edict, offset, 1)]);
-    public ref QcVector FieldVector(int edict, int offset) => ref Unsafe.As<int, QcVector>(ref _fields[FieldIndex(edict, offset, 3)]);
+    public ref int FieldInt(int edict, int offset) => ref _fields[RefIndex(edict, offset, 1)];
+    public ref float FieldFloat(int edict, int offset) => ref Unsafe.As<int, float>(ref _fields[RefIndex(edict, offset, 1)]);
+    public ref QcVector FieldVector(int edict, int offset) => ref Unsafe.As<int, QcVector>(ref _fields[RefIndex(edict, offset, 3)]);
+
+    // The three accessors above hand out a reference, and the VM cannot see whether the caller reads
+    // through it or writes. So for a cell that is watched or mirrored it assumes a write: the entity is
+    // marked in the watch index (which only ever errs towards "may be non-zero"), and a mirrored cell
+    // is queued to be read back before the mirror is next consulted. Engine code therefore needs no
+    // discipline to keep either true - the first version of this relied on callers reporting their
+    // writes, and a caller that did not (a test setting .think directly) had its entity skipped.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int RefIndex(int edict, int offset, int cells)
+    {
+        int index = FieldIndex(edict, offset, cells);
+        if (_refRoles is { } roles) NoteRefAccess(roles, edict, offset, cells);
+        return index;
+    }
+
+    private void NoteRefAccess(byte[] roles, int edict, int offset, int cells)
+    {
+        for (int c = offset; c < offset + cells; c++)
+        {
+            int role = roles[c];
+            if (role == 0) continue;
+            if ((role & 1) != 0) _watchedEdicts[edict >> 6] |= 1UL << edict;
+            if ((role & 2) != 0)
+            {
+                if (_staleCount == _stale.Length) Array.Resize(ref _stale, Math.Max(64, _stale.Length * 2));
+                _stale[_staleCount++] = (edict, c);
+            }
+        }
+    }
+
+    // 1: watched, 2: mirrored - per field cell, for the reference accessors. Null while neither exists.
+    private byte[]? _refRoles;
+    private (int Edict, int Cell)[] _stale = Array.Empty<(int, int)>();
+    private int _staleCount;
+
+    private void BuildRefRoles()
+    {
+        byte[] roles = new byte[_entityFields];
+        if (_watchedCells is { } watched) for (int c = 0; c < roles.Length; c++) if (watched[c]) roles[c] |= 1;
+        if (_mirrorOf is { } mirrorOf) for (int c = 0; c < roles.Length; c++) if (mirrorOf[c] != 0) roles[c] |= 2;
+        _refRoles = roles;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void SyncMirrors()
+    {
+        byte[] mirrorOf = _mirrorOf!;
+        for (int i = 0; i < _staleCount; i++)
+        {
+            (int edict, int cell) = _stale[i];
+            if ((uint)edict < (uint)_maxEdicts) _mirrors[mirrorOf[cell] - 1][edict] = _fields[edict * _entityFields + cell];
+        }
+        _staleCount = 0;
+    }
 
     private int FieldIndex(int edict, int offset, int cells)
     {
         if ((uint)edict >= (uint)_maxEdicts) throw new QcRuntimeException($"entity {edict} is out of range");
         if ((uint)offset > (uint)(_entityFields - cells)) throw new QcRuntimeException($"field offset {offset} is out of range");
+#if QC_OPSTATS
+        TouchField(edict * _entityFields + offset);
+#endif
+        TouchFieldLine(edict * _entityFields + offset);
         return edict * _entityFields + offset;
     }
 
@@ -251,7 +325,197 @@ public sealed class QcVm
         _edictFreeTime[edict] = freeTime;
     }
 
-    public void ClearEdict(int edict) => Array.Clear(_fields, edict * _entityFields, _entityFields);
+    /// <summary>The raw cell at <paramref name="offset"/> of <paramref name="edict"/>, read only: for code that
+    /// walks every field of every entity (a dump, a checksum) and must not look like the program using them.</summary>
+    public int PeekField(int edict, int offset)
+    {
+        if ((uint)edict >= (uint)_maxEdicts || (uint)offset >= (uint)_entityFields) throw new QcRuntimeException($"entity {edict} field {offset} is out of range");
+        return _fields[edict * _entityFields + offset];
+    }
+
+    /// <summary>Copies every field of <paramref name="from"/> to <paramref name="to"/> (the copyentity builtin).</summary>
+    public void CopyEdict(int from, int to)
+    {
+        if ((uint)from >= (uint)_maxEdicts || (uint)to >= (uint)_maxEdicts) throw new QcRuntimeException($"entity {((uint)from >= (uint)_maxEdicts ? from : to)} is out of range");
+        Array.Copy(_fields, from * _entityFields, _fields, to * _entityFields, _entityFields);
+        foreach (int[] column in _mirrors) column[to] = column[from];
+        if (_watchedCells is not null && (_watchedEdicts[from >> 6] & (1UL << from)) != 0) _watchedEdicts[to >> 6] |= 1UL << to;
+    }
+
+    public void ClearEdict(int edict)
+    {
+        Array.Clear(_fields, edict * _entityFields, _entityFields);
+        if (_watchedCells is not null) _watchedEdicts[edict >> 6] &= ~(1UL << edict);
+        foreach (int[] column in _mirrors) column[edict] = 0;
+    }
+
+    // ---- mirrored fields ------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Keeps a copy of one field cell of every entity in an array of its own, and returns the number to
+    /// read it by (<see cref="Mirrored"/>). For an engine loop that needs one field of many entities -
+    /// a trace asking each entity near its path whether it is solid: the field itself lies in the
+    /// entity's ten kilobytes, a cache miss for each entity asked, where the copies of all of them fit
+    /// in a few kilobytes.
+    ///
+    /// The copy is exact, not a hint. It is updated by every write the program makes (the STOREP
+    /// instructions), when an entity is cleared or copied, and after any use of <see cref="FieldInt"/>,
+    /// <see cref="FieldFloat"/> or <see cref="FieldVector"/> on the cell (the field is read back before
+    /// the mirror is next consulted, so a reference must not be kept and written later).
+    /// <see cref="VerifyMirrors"/> checks it.
+    /// </summary>
+    public int MirrorField(int cellOffset)
+    {
+        if ((uint)cellOffset >= (uint)_entityFields) throw new ArgumentOutOfRangeException(nameof(cellOffset));
+        byte[] of = _mirrorOf ??= new byte[_entityFields];
+        if (of[cellOffset] != 0) return of[cellOffset] - 1;
+        if (_mirrors.Length >= 250) throw new InvalidOperationException("too many mirrored fields");
+        int[] column = new int[_maxEdicts];
+        for (int e = 0; e < _numEdicts; e++) column[e] = _fields[e * _entityFields + cellOffset];
+        int id = _mirrors.Length;
+        Array.Resize(ref _mirrors, id + 1);
+        Array.Resize(ref _mirrorOffsets, id + 1);
+        _mirrors[id] = column;
+        _mirrorOffsets[id] = cellOffset;
+        of[cellOffset] = (byte)(id + 1);
+        BuildRefRoles();
+        return id;
+    }
+
+    /// <summary>The mirrored cell <paramref name="mirror"/> (from <see cref="MirrorField"/>) of <paramref name="edict"/>.</summary>
+    public int Mirrored(int mirror, int edict)
+    {
+        if (_staleCount != 0) SyncMirrors();
+        return _mirrors[mirror][edict];
+    }
+    public float MirroredFloat(int mirror, int edict) => BitConverter.Int32BitsToSingle(Mirrored(mirror, edict));
+
+    /// <summary>Compares every mirrored cell with the field it copies; the first difference, or null.</summary>
+    public string? VerifyMirrors()
+    {
+        if (_staleCount != 0) SyncMirrors();
+        for (int m = 0; m < _mirrors.Length; m++)
+            for (int e = 0; e < _numEdicts; e++)
+                if (_mirrors[m][e] != _fields[e * _entityFields + _mirrorOffsets[m]])
+                    return $"mirror of field cell {_mirrorOffsets[m]}: entity {e} has {_fields[e * _entityFields + _mirrorOffsets[m]]:X8}, the copy {_mirrors[m][e]:X8}";
+        return null;
+    }
+
+    // A write through a pointer to field cell `field` (validated), for the mirrors.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void NoteMirrorWrite(byte[] mirrorOf, int field, int value)
+    {
+        if (field < 0) return;
+        int edict = (int)((uint)field / (uint)_entityFields);
+        int mirror = mirrorOf[field - edict * _entityFields];
+        if (mirror != 0) _mirrors[mirror - 1][edict] = value;
+    }
+
+    // ---- the watched-field index --------------------------------------------------------------------
+
+    /// <summary>
+    /// Asks the VM to keep, for every entity, whether any of the given field cells may be non-zero.
+    /// An engine loop that visits every entity only to find that almost none of them has, say, a think
+    /// function or a draw mask can then visit just the ones that might (<see cref="NextWatched"/>):
+    /// with ten kilobytes of fields per entity and thousands of entities, reading one field of each
+    /// is thousands of cache misses a frame.
+    ///
+    /// The bit is conservative: set by any non-zero write the program makes to a watched cell (the
+    /// STOREP instructions, OP_STATE) and by <see cref="NoteFieldWrite"/> for writes the engine makes;
+    /// cleared when the entity's fields are cleared (allocation, freeing) and by
+    /// <see cref="ClearWatched"/>, which a reader calls after finding every watched cell zero. An entity
+    /// whose bit is clear has all watched cells zero; one whose bit is set may or may not.
+    ///
+    /// Engine code needs to do nothing: taking a reference to a watched cell through
+    /// <see cref="FieldInt"/>, <see cref="FieldFloat"/> or <see cref="FieldVector"/> marks the entity,
+    /// read or write. Code that only reads, and walks many entities, uses <see cref="PeekField"/>.
+    /// </summary>
+    public void WatchFields(ReadOnlySpan<int> cellOffsets)
+    {
+        bool[] watched = new bool[_entityFields];
+        foreach (int offset in cellOffsets)
+            if ((uint)offset < (uint)_entityFields) watched[offset] = true;
+        List<int> offsets = new();
+        for (int c = 0; c < watched.Length; c++) if (watched[c]) offsets.Add(c);
+        _watchedOffsets = offsets.ToArray();
+        _watchedEdicts = new ulong[(_maxEdicts + 63) >> 6];
+        _watchedCells = watched;
+        BuildRefRoles();
+        // Whatever exists already is examined once.
+        for (int e = 0; e < _numEdicts; e++)
+        {
+            if (_edictFree[e]) continue;
+            int row = e * _entityFields;
+            for (int c = 0; c < watched.Length; c++)
+                if (watched[c] && _fields[row + c] != 0) { _watchedEdicts[e >> 6] |= 1UL << e; break; }
+        }
+    }
+
+    /// <summary>True when <see cref="WatchFields"/> has been called.</summary>
+    public bool HasWatchedFields => _watchedCells is not null;
+
+    /// <summary>Whether a watched cell of <paramref name="edict"/> may be non-zero.</summary>
+    public bool IsWatched(int edict) => (uint)edict < (uint)_maxEdicts && _watchedCells is not null && (_watchedEdicts[edict >> 6] & (1UL << edict)) != 0;
+
+    /// <summary>The lowest entity number at or above <paramref name="from"/> whose bit is set and that is
+    /// below <see cref="NumEdicts"/>, or -1. Reads the index as it is now, so an entity marked while a
+    /// loop is running is found when the loop reaches its number.</summary>
+    public int NextWatched(int from)
+    {
+        if (from < 0) from = 0;
+        ulong[] bits = _watchedEdicts;
+        int limit = _numEdicts;
+        int word = from >> 6;
+        if (from >= limit || word >= bits.Length) return -1;
+        ulong w = bits[word] & (~0UL << from);
+        while (true)
+        {
+            if (w != 0)
+            {
+                int edict = (word << 6) + System.Numerics.BitOperations.TrailingZeroCount(w);
+                return edict < limit ? edict : -1;
+            }
+            if (++word >= bits.Length || (word << 6) >= limit) return -1;
+            w = bits[word];
+        }
+    }
+
+    /// <summary>Drops <paramref name="edict"/> from the index if every watched cell of it is zero (it is
+    /// checked here, so a caller cannot break the index's promise). Returns whether it was dropped.</summary>
+    public bool ClearWatched(int edict)
+    {
+        bool[]? watched = _watchedCells;
+        if (watched is null || (uint)edict >= (uint)_maxEdicts) return false;
+        int row = edict * _entityFields;
+        foreach (int offset in _watchedOffsets)
+            if (_fields[row + offset] != 0) return false;
+        _watchedEdicts[edict >> 6] &= ~(1UL << edict);
+        return true;
+    }
+
+    /// <summary>The engine wrote <paramref name="cells"/> field cells of <paramref name="edict"/> starting at <paramref name="offset"/>.</summary>
+    public void NoteFieldWrite(int edict, int offset, int cells = 1)
+    {
+        if ((uint)edict >= (uint)_maxEdicts) return;
+        if (_mirrorOf is { } mirrorOf)
+        {
+            for (int c = Math.Max(offset, 0); c < offset + cells && c < mirrorOf.Length; c++)
+                if (mirrorOf[c] != 0) _mirrors[mirrorOf[c] - 1][edict] = _fields[edict * _entityFields + c];
+        }
+        bool[]? watched = _watchedCells;
+        if (watched is null) return;
+        for (int c = offset; c < offset + cells; c++)
+            if ((uint)c < (uint)watched.Length && watched[c]) { _watchedEdicts[edict >> 6] |= 1UL << edict; return; }
+    }
+
+    // A write through a pointer: `field` is the index into the entity fields, already validated.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void NotePointerWrite(bool[] watched, int field)
+    {
+        if (field < 0) return;
+        int edict = (int)((uint)field / (uint)_entityFields);
+        if (watched[field - edict * _entityFields]) _watchedEdicts[edict >> 6] |= 1UL << edict;
+    }
 
     /// <summary>
     /// Makes entities 1..<paramref name="count"/> exist (allocated, zeroed, not free) without going
@@ -289,6 +553,9 @@ public sealed class QcVm
         Array.Resize(ref _fields, newMax * _entityFields);
         Array.Resize(ref _edictFree, newMax);
         Array.Resize(ref _edictFreeTime, newMax);
+        if (_watchedCells is not null) Array.Resize(ref _watchedEdicts, (newMax + 63) >> 6);
+        for (int m = 0; m < _mirrors.Length; m++) Array.Resize(ref _mirrors[m], newMax);
+        if (_fieldLines is not null) Array.Resize(ref _fieldLines, FieldLineWords(newMax));
         _maxEdicts = newMax;
     }
 
@@ -320,6 +587,31 @@ public sealed class QcVm
         if (_tempStringCount < _tempStrings.Count) _tempStrings[_tempStringCount] = text;
         else _tempStrings.Add(text);
         return TempStringTag | _tempStringCount++;
+    }
+
+    // Short strings a builtin has produced before, by content. A frame of a client program makes
+    // thousands of temporary strings (substring, strcat and ftos calls in the HUD's text code) and
+    // almost all of them are the strings it made the frame before; handing back the same object costs
+    // a hash and a compare where a new string costs an allocation, and a steady frame then allocates
+    // none. Direct-mapped and never grown: a slot is simply overwritten.
+    private string?[]? _stringCache;
+    private const int StringCacheSlots = 4096, StringCacheMaxLength = 96;
+
+    /// <summary>
+    /// A string with the given text: the one made for the same text last time, if it is still in the
+    /// cache, else a new one. For builtins that build short strings; the result is an ordinary string.
+    /// </summary>
+    public string CachedString(ReadOnlySpan<char> text)
+    {
+        if (text.Length == 0) return "";
+        if (text.Length > StringCacheMaxLength) return new string(text);
+        string?[] cache = _stringCache ??= new string?[StringCacheSlots];
+        int slot = string.GetHashCode(text) & (StringCacheSlots - 1);
+        string? cached = cache[slot];
+        if (cached is not null && cached.AsSpan().SequenceEqual(text)) return cached;
+        string made = new(text);
+        cache[slot] = made;
+        return made;
     }
 
     /// <summary>
@@ -406,15 +698,17 @@ public sealed class QcVm
 
         int savedDepth = _depth, savedLocals = _localStackUsed, savedFunction = _currentFunction, savedStatement = _currentStatement;
         int savedTemps = _tempStringCount;
+#if QC_OPSTATS
+        ExecuteCalls++;
+#endif
         long profileStart = Profile is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         if (_executeDepth++ == 0) _jumpCount = 0;
         try
         {
-            QcFunction target = _functions[function];
             ArgCount = argCount;
-            if (target.IsBuiltin)
+            if (_functionInfo[function].FirstStatement < 0)
             {
-                CallBuiltin(target);
+                CallBuiltin(function);
                 return;
             }
             // The frame pushed here returns to a statement index of -1; Run stops when it pops it.
@@ -493,46 +787,13 @@ public sealed class QcVm
         }
     }
 
-    private int EnterFunction(int function)
+    private void CallBuiltin(int functionIndex)
     {
-        QcFunction f = _functions[function];
-        int locals = f.Locals;
-        // Both checks come before any state changes, so a fault here leaves nothing half-entered to unwind.
-        if (_depth >= MaxStackDepth - 1) throw new QcRuntimeException($"{Name}: stack overflow");
-        if (_localStackUsed + locals > LocalStackSize) throw new QcRuntimeException($"{Name}: locals stack overflow");
-        _stackStatement[_depth] = _currentStatement;
-        _stackFunction[_depth] = _currentFunction;
-        _depth++;
-
-        // Functions share global cells for their locals (gmqcc -Ooverlap-locals), so whatever is in this
-        // function's range belongs to a caller: save it, and put it back on return.
-        Array.Copy(_globals, f.ParmStart, _localStack, _localStackUsed, locals);
-        _localStackUsed += locals;
-
-        int o = f.ParmStart;
-        for (int i = 0; i < f.NumParms; i++)
-            for (int j = 0; j < f.ParmSize[i]; j++)
-                _globals[o++] = _globals[ProgsFile.OfsParm0 + i * 3 + j];
-
-        _currentFunction = function;
-        return f.FirstStatement;
-    }
-
-    /// <summary>Pops a frame and returns the statement index of the call that created it.</summary>
-    private int LeaveFunction()
-    {
-        QcFunction f = _functions[_currentFunction];
-        _localStackUsed -= f.Locals;
-        Array.Copy(_localStack, _localStackUsed, _globals, f.ParmStart, f.Locals);
-        _depth--;
-        _currentFunction = _stackFunction[_depth];
-        return _stackStatement[_depth];
-    }
-
-    private void CallBuiltin(QcFunction function)
-    {
-        int number = function.BuiltinNumber;
+        int number = -_functionInfo[functionIndex].FirstStatement;
         QcBuiltin? builtin = number < _builtins.Length ? _builtins[number] : null;
+#if QC_OPSTATS
+        BuiltinCallsCounted++;
+#endif
         if (builtin is not null)
         {
             if (Profile is null) builtin(this);
@@ -540,11 +801,11 @@ public sealed class QcVm
             return;
         }
         if (UnknownBuiltin is null)
-            throw new QcRuntimeException($"{Name}: no such builtin #{number} ({function.Name})");
+            throw new QcRuntimeException($"{Name}: no such builtin #{number} ({_functions[functionIndex].Name})");
         _globals[ProgsFile.OfsReturn] = 0;
         _globals[ProgsFile.OfsReturn + 1] = 0;
         _globals[ProgsFile.OfsReturn + 2] = 0;
-        UnknownBuiltin(this, number, function.Name);
+        UnknownBuiltin(this, number, _functions[functionIndex].Name);
     }
 
     /// <summary>
@@ -556,17 +817,32 @@ public sealed class QcVm
 
     private long _nestedExecuteTicks;
 
+#if QC_OPSTATS
+    // Measuring builds only (msbuild -p:QcOpStats=1): how often each instruction, each pair of
+    // consecutive instructions and each function's statements ran. Compiled out otherwise.
+    public readonly long[] OpCounts = new long[128];
+    public readonly long[] OpPairCounts = new long[128 * 128];
+    public long[] FunctionStatements => _functionStatements ??= new long[_functions.Length];
+    private long[]? _functionStatements;
+    private int _previousOp;
+    public long ExecuteCalls, EnterCalls, LocalsCopied, BuiltinCallsCounted;
+#endif
+
     [MethodImpl(MethodImplOptions.NoInlining)]
     private void CallBuiltinProfiled(QcBuiltin builtin, int number, QcProfile profile)
     {
         long outerNested = _nestedExecuteTicks;
         _nestedExecuteTicks = 0;
+        long allocated = profile.MeasureAllocation ? GC.GetAllocatedBytesForCurrentThread() : 0;
         long start = System.Diagnostics.Stopwatch.GetTimestamp();
         try { builtin(this); }
         finally
         {
             long elapsed = System.Diagnostics.Stopwatch.GetTimestamp() - start;
             profile.Record(number, elapsed - _nestedExecuteTicks);
+            // Inclusive of whatever program code the builtin called back into (addentities runs every
+            // entity's draw function): read it as "under this builtin", not "by this builtin".
+            if (profile.MeasureAllocation) profile.RecordAllocation(number, GC.GetAllocatedBytesForCurrentThread() - allocated);
             _nestedExecuteTicks = outerNested;
         }
     }
@@ -587,202 +863,6 @@ public sealed class QcVm
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static ref int I(ref int g, int index) => ref Unsafe.Add(ref g, index);
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private void Run(int pc, int exitDepth)
-    {
-        // Unchecked access to the globals is sound because ProgsFile.Load proved every operand of every
-        // statement in range, and the array (with its two cells of padding) is never reallocated.
-        ref int g = ref MemoryMarshal.GetArrayDataReference(_globals);
-        QcStatement[] statements = _statements;
-
-        while (true)
-        {
-            // By reference: no 16-byte copy per instruction. Unchecked, because every way pc can change
-            // was proven in range by ProgsFile.Load (jump targets, function entry points, and a final
-            // statement that cannot fall off the end).
-            ref readonly QcStatement st = ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(statements), pc);
-            switch ((QcOp)st.Op)
-            {
-                case QcOp.AddF: F(ref g, st.C) = F(ref g, st.A) + F(ref g, st.B); break;
-                case QcOp.SubF: F(ref g, st.C) = F(ref g, st.A) - F(ref g, st.B); break;
-                case QcOp.MulF: F(ref g, st.C) = F(ref g, st.A) * F(ref g, st.B); break;
-                // Division by zero is the IEEE result (prvm_gameplayfix_div0is0 defaults to off).
-                case QcOp.DivF: F(ref g, st.C) = F(ref g, st.A) / F(ref g, st.B); break;
-
-                case QcOp.AddV:
-                {
-                    float x = F(ref g, st.A) + F(ref g, st.B), y = F(ref g, st.A + 1) + F(ref g, st.B + 1), z = F(ref g, st.A + 2) + F(ref g, st.B + 2);
-                    F(ref g, st.C) = x; F(ref g, st.C + 1) = y; F(ref g, st.C + 2) = z;
-                    break;
-                }
-                case QcOp.SubV:
-                {
-                    float x = F(ref g, st.A) - F(ref g, st.B), y = F(ref g, st.A + 1) - F(ref g, st.B + 1), z = F(ref g, st.A + 2) - F(ref g, st.B + 2);
-                    F(ref g, st.C) = x; F(ref g, st.C + 1) = y; F(ref g, st.C + 2) = z;
-                    break;
-                }
-                case QcOp.MulV:
-                    F(ref g, st.C) = F(ref g, st.A) * F(ref g, st.B) + F(ref g, st.A + 1) * F(ref g, st.B + 1) + F(ref g, st.A + 2) * F(ref g, st.B + 2);
-                    break;
-                case QcOp.MulFV:
-                {
-                    float s = F(ref g, st.A);
-                    float x = s * F(ref g, st.B), y = s * F(ref g, st.B + 1), z = s * F(ref g, st.B + 2);
-                    F(ref g, st.C) = x; F(ref g, st.C + 1) = y; F(ref g, st.C + 2) = z;
-                    break;
-                }
-                case QcOp.MulVF:
-                {
-                    float s = F(ref g, st.B);
-                    float x = s * F(ref g, st.A), y = s * F(ref g, st.A + 1), z = s * F(ref g, st.A + 2);
-                    F(ref g, st.C) = x; F(ref g, st.C + 1) = y; F(ref g, st.C + 2) = z;
-                    break;
-                }
-
-                case QcOp.BitAndF: F(ref g, st.C) = FloatToInt(F(ref g, st.A)) & FloatToInt(F(ref g, st.B)); break;
-                case QcOp.BitOrF: F(ref g, st.C) = FloatToInt(F(ref g, st.A)) | FloatToInt(F(ref g, st.B)); break;
-
-                case QcOp.GeF: F(ref g, st.C) = F(ref g, st.A) >= F(ref g, st.B) ? 1f : 0f; break;
-                case QcOp.LeF: F(ref g, st.C) = F(ref g, st.A) <= F(ref g, st.B) ? 1f : 0f; break;
-                case QcOp.GtF: F(ref g, st.C) = F(ref g, st.A) > F(ref g, st.B) ? 1f : 0f; break;
-                case QcOp.LtF: F(ref g, st.C) = F(ref g, st.A) < F(ref g, st.B) ? 1f : 0f; break;
-                case QcOp.AndF: F(ref g, st.C) = IsTrue(I(ref g, st.A)) && IsTrue(I(ref g, st.B)) ? 1f : 0f; break;
-                case QcOp.OrF: F(ref g, st.C) = IsTrue(I(ref g, st.A)) || IsTrue(I(ref g, st.B)) ? 1f : 0f; break;
-
-                case QcOp.NotF: F(ref g, st.C) = IsTrue(I(ref g, st.A)) ? 0f : 1f; break;
-                case QcOp.NotV: F(ref g, st.C) = F(ref g, st.A) == 0f && F(ref g, st.A + 1) == 0f && F(ref g, st.A + 2) == 0f ? 1f : 0f; break;
-                case QcOp.NotS: F(ref g, st.C) = I(ref g, st.A) == 0 || GetString(I(ref g, st.A)).Length == 0 ? 1f : 0f; break;
-                case QcOp.NotFnc:
-                case QcOp.NotEnt: F(ref g, st.C) = I(ref g, st.A) == 0 ? 1f : 0f; break;
-
-                case QcOp.EqF: F(ref g, st.C) = F(ref g, st.A) == F(ref g, st.B) ? 1f : 0f; break;
-                case QcOp.NeF: F(ref g, st.C) = F(ref g, st.A) != F(ref g, st.B) ? 1f : 0f; break;
-                case QcOp.EqV:
-                    F(ref g, st.C) = F(ref g, st.A) == F(ref g, st.B) && F(ref g, st.A + 1) == F(ref g, st.B + 1) && F(ref g, st.A + 2) == F(ref g, st.B + 2) ? 1f : 0f;
-                    break;
-                case QcOp.NeV:
-                    F(ref g, st.C) = F(ref g, st.A) != F(ref g, st.B) || F(ref g, st.A + 1) != F(ref g, st.B + 1) || F(ref g, st.A + 2) != F(ref g, st.B + 2) ? 1f : 0f;
-                    break;
-                case QcOp.EqS: F(ref g, st.C) = StringsEqual(I(ref g, st.A), I(ref g, st.B)) ? 1f : 0f; break;
-                case QcOp.NeS: F(ref g, st.C) = StringsEqual(I(ref g, st.A), I(ref g, st.B)) ? 0f : 1f; break;
-                case QcOp.EqE:
-                case QcOp.EqFnc: F(ref g, st.C) = I(ref g, st.A) == I(ref g, st.B) ? 1f : 0f; break;
-                case QcOp.NeE:
-                case QcOp.NeFnc: F(ref g, st.C) = I(ref g, st.A) != I(ref g, st.B) ? 1f : 0f; break;
-
-                case QcOp.StoreF:
-                case QcOp.StoreEnt:
-                case QcOp.StoreFld:
-                case QcOp.StoreFnc:
-                case QcOp.StoreS:
-                    I(ref g, st.B) = I(ref g, st.A);
-                    break;
-                case QcOp.StoreV:
-                {
-                    int x = I(ref g, st.A), y = I(ref g, st.A + 1), z = I(ref g, st.A + 2);
-                    I(ref g, st.B) = x; I(ref g, st.B + 1) = y; I(ref g, st.B + 2) = z;
-                    break;
-                }
-
-                case QcOp.StorepF:
-                case QcOp.StorepEnt:
-                case QcOp.StorepFld:
-                case QcOp.StorepFnc:
-                case QcOp.StorepS:
-                    _currentStatement = pc;
-                    Pointer(I(ref g, st.B) + I(ref g, st.C), 1) = I(ref g, st.A);
-                    break;
-                case QcOp.StorepV:
-                {
-                    _currentStatement = pc;
-                    ref int target = ref Pointer(I(ref g, st.B) + I(ref g, st.C), 3);
-                    int x = I(ref g, st.A), y = I(ref g, st.A + 1), z = I(ref g, st.A + 2);
-                    target = x; Unsafe.Add(ref target, 1) = y; Unsafe.Add(ref target, 2) = z;
-                    break;
-                }
-
-                case QcOp.Address:
-                    _currentStatement = pc;
-                    I(ref g, st.C) = _numGlobals + FieldIndex(I(ref g, st.A), I(ref g, st.B), 1);
-                    break;
-
-                case QcOp.LoadF:
-                case QcOp.LoadFld:
-                case QcOp.LoadEnt:
-                case QcOp.LoadFnc:
-                case QcOp.LoadS:
-                    _currentStatement = pc;
-                    I(ref g, st.C) = _fields[FieldIndex(I(ref g, st.A), I(ref g, st.B), 1)];
-                    break;
-                case QcOp.LoadV:
-                {
-                    _currentStatement = pc;
-                    int at = FieldIndex(I(ref g, st.A), I(ref g, st.B), 3);
-                    int[] fields = _fields;
-                    int x = fields[at], y = fields[at + 1], z = fields[at + 2];
-                    I(ref g, st.C) = x; I(ref g, st.C + 1) = y; I(ref g, st.C + 2) = z;
-                    break;
-                }
-
-                case QcOp.IfNot:
-                    if (!IsTrue(I(ref g, st.A))) { pc = Jump(pc, st.B); continue; }
-                    break;
-                case QcOp.If:
-                    if (IsTrue(I(ref g, st.A))) { pc = Jump(pc, st.B); continue; }
-                    break;
-                case QcOp.Goto:
-                    pc = Jump(pc, st.A);
-                    continue;
-
-                case QcOp.Call0:
-                case QcOp.Call1:
-                case QcOp.Call2:
-                case QcOp.Call3:
-                case QcOp.Call4:
-                case QcOp.Call5:
-                case QcOp.Call6:
-                case QcOp.Call7:
-                case QcOp.Call8:
-                {
-                    _currentStatement = pc;
-                    int function = I(ref g, st.A);
-                    if (function <= 0 || function >= _functions.Length)
-                        throw new QcRuntimeException(function == 0 ? $"{Name}: NULL function" : $"{Name}: attempted CALL outside the program");
-                    QcFunction target = _functions[function];
-                    ArgCount = st.Op - (int)QcOp.Call0;
-                    if (target.IsBuiltin)
-                    {
-                        CallBuiltin(target);
-                        break;
-                    }
-                    pc = EnterFunction(function);
-                    continue;
-                }
-
-                case QcOp.Done:
-                case QcOp.Return:
-                {
-                    int x = I(ref g, st.A), y = I(ref g, st.A + 1), z = I(ref g, st.A + 2);
-                    I(ref g, ProgsFile.OfsReturn) = x; I(ref g, ProgsFile.OfsReturn + 1) = y; I(ref g, ProgsFile.OfsReturn + 2) = z;
-                    _currentStatement = pc;
-                    pc = LeaveFunction();
-                    if (_depth <= exitDepth) return;
-                    break; // resume after the CALL statement
-                }
-
-                case QcOp.State:
-                    _currentStatement = pc;
-                    State(F(ref g, st.A), I(ref g, st.B));
-                    break;
-
-                default:
-                    _currentStatement = pc;
-                    throw new QcRuntimeException($"{Name}: bad opcode {st.Op}");
-            }
-            pc++;
-        }
-    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int Jump(int pc, int offset)
@@ -805,7 +885,11 @@ public sealed class QcVm
     private ref int Pointer(int address, int cells)
     {
         int field = address - _numGlobals;
-        if (field >= 0 && (long)field + cells <= (long)_maxEdicts * _entityFields) return ref _fields[field];
+        if (field >= 0 && (long)field + cells <= (long)_maxEdicts * _entityFields)
+        {
+            TouchFieldLine(field);
+            return ref _fields[field];
+        }
         if (address >= 0 && (long)address + cells <= _numGlobals) return ref _globals[address];
         throw new QcRuntimeException($"{Name}: attempted to write to an out of bounds address {address}");
     }
@@ -831,6 +915,9 @@ public sealed class QcVm
         FieldFloat(self, _fldNextThink) = GlobalFloat(_ofsTime) + 0.1f;
         FieldFloat(self, _fldFrame) = frame;
         FieldInt(self, _fldThink) = think;
+        NoteFieldWrite(self, _fldNextThink);
+        NoteFieldWrite(self, _fldFrame);
+        NoteFieldWrite(self, _fldThink);
     }
 }
 
@@ -848,6 +935,19 @@ public sealed class QcProfile
 {
     private long[] _ticks = new long[700];
     private long[] _calls = new long[700];
+    private long[] _allocated = new long[700];
+
+    /// <summary>Also record the managed bytes allocated under each builtin (two more clock-like reads per call).</summary>
+    public bool MeasureAllocation { get; set; }
+
+    internal void RecordAllocation(int number, long bytes)
+    {
+        if (number >= _allocated.Length) System.Array.Resize(ref _allocated, number + 64);
+        _allocated[number] += bytes;
+    }
+
+    /// <summary>Managed bytes allocated under builtin <paramref name="number"/> (see <see cref="MeasureAllocation"/>).</summary>
+    public long AllocatedBytes(int number) => (uint)number < (uint)_allocated.Length ? _allocated[number] : 0;
 
     /// <summary>Wall time of all outermost calls into the program.</summary>
     public long TotalTicks;

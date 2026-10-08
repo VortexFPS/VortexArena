@@ -21,6 +21,8 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <TieredPGO>true</TieredPGO>
+    <!-- "perf" mode's opcode statistics: build with -p:QcOpStats=1 (the VM project reads the same property). -->
+    <DefineConstants Condition="'$(QcOpStats)' == '1'">$(DefineConstants);QC_OPSTATS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

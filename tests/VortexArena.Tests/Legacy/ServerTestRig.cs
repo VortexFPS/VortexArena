@@ -60,7 +60,10 @@ internal sealed class ServerTestRig : IDisposable
     /// <summary>A new client, already connecting.</summary>
     public SvLoopbackClient AddClient(string name)
     {
-        LegacyClientOptions options = new() { Host = new CsqcHostOptions { KeepRunningAfterFault = true } };
+        // VerifyEntityIndex: every test that plays through this rig also checks, on each frame a client
+        // draws, that the addentities index and the field mirrors agree with the entities themselves.
+        // A disagreement faults the client program, which every such test already treats as a failure.
+        LegacyClientOptions options = new() { Host = new CsqcHostOptions { KeepRunningAfterFault = true, VerifyEntityIndex = true } };
         options.Client.Signon.Name = name;
         List<string> prints = new();
         StringBuilder line = new();

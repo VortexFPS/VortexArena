@@ -45,6 +45,10 @@ public sealed class LegacyClientOptions
     /// <summary>Called once with a client program that was downloaded and verified (name, size, CRC-16,
     /// bytes): where an owner writes it to its download cache.</summary>
     public Action<string, int, int, byte[]>? ProgramDownloaded { get; set; }
+    /// <summary>The package downloads a server may start with "curl" commands (libcurl.c), or null: the
+    /// commands are then ignored, and a level whose map the client lacks is entered without it or refused
+    /// (<see cref="DpSignonConfig.RequireWorld"/>). The session drives it and disposes of it.</summary>
+    public VortexArena.Legacy.Downloads.LegacyPackageDownloads? Packages { get; set; }
 }
 
 /// <summary>
@@ -97,7 +101,30 @@ public sealed class LegacyClientSession : IDisposable
         Client = new DpClient(Handler, _options.Client);
         Client.MessageStarting += Handler.BeginMessage;
         Client.MessageFinished += OnMessageFinished;
+        Client.Signon.Note += text =>
+        {
+            Note(text);
+            services.Print(text + "\n");
+        };
+        if (_options.Packages is { } packages)
+        {
+            Client.Signon.Packages = packages;
+            // DarkPlaces loads the world when its curl downloads are done; a level that announces some waits for them.
+            Handler.DeferLevelLoad = () => Client.StuffedCommandPending("curl");
+            Client.Signon.FileDownloaded += result =>
+            {
+                string? error = packages.AcceptInBand(result.Name, result.Data, result.Crc);
+                Note(error is null
+                    ? $"{result.Name} ({result.Data.Length} bytes, CRC {result.Crc}) arrived through the game connection and was added to the search path"
+                    : $"{result.Name} arrived through the game connection but was not used: {error}");
+                if (error is not null) Client.Signon.FallbackLog.Add($"{result.Name} was not used: {error}");
+            };
+        }
     }
+
+    /// <summary>The package downloads, or null (<see cref="LegacyClientOptions.Packages"/>).</summary>
+    public VortexArena.Legacy.Downloads.LegacyPackageDownloads? Packages => _options.Packages;
+    private int _mountsAtLevelStart;
 
     public DpClient Client { get; }
     public CsqcClientState State { get; } = new();
@@ -247,6 +274,15 @@ public sealed class LegacyClientSession : IDisposable
     {
         if (Client.State != DpClientState.Connected) return Client.Update(now);
 
+        // Curl_Frame: finished package downloads are mounted; when the last one the level waits for has
+        // ended, its loading goes on ("cl_begindownloads").
+        if (_options.Packages is { } packages && packages.Update())
+        {
+            if (packages.Failures.Count > 0) Note("package downloads for this level failed: " + string.Join("; ", packages.Failures));
+            Client.ContinueDownloads();
+            TryStartProgram();
+        }
+
         bool signedOn = State.Signon >= DpProtocol.Signons;
         UpdateMoveVars();
 
@@ -332,6 +368,7 @@ public sealed class LegacyClientSession : IDisposable
         _demo = null;
         UnloadProgram();
         Console.Detach();
+        _options.Packages?.Dispose();
     }
 
     // CL_UpdateMoveVars: Xonotic publishes its physics settings as stats; the two that matter to the
@@ -379,10 +416,26 @@ public sealed class LegacyClientSession : IDisposable
             ProgramError = null;
             Clock.Reset();
             _lastSentMoveTime = 0;
+            _mountsAtLevelStart = _options.Packages?.MountedCount ?? 0;
             Note($"level {State.WorldModel} (\"{State.WorldMessage}\"), {State.MaxClients} player slots");
         }
-        if (_programPending && Client.Signon.Stage >= 1 && !Client.Download.Active && Client.State == DpClientState.Connected)
-            StartProgram();
+        TryStartProgram();
+    }
+
+    // The program is started when the level's loading is finished as far as downloads go ("prespawn" is
+    // queued): after the packages, after the program's own download, after the map check.
+    private void TryStartProgram()
+    {
+        if (!_programPending || Client.Signon.Stage < 1 || !Client.Signon.LoadFinished || Client.Download.Active || Client.State != DpClientState.Connected) return;
+        if (State.LevelLoadDeferred || (_options.Packages?.MountedCount ?? 0) != _mountsAtLevelStart)
+        {
+            State.LevelLoadDeferred = false;
+            _mountsAtLevelStart = _options.Packages?.MountedCount ?? 0;
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            Presentation.LevelFilesArrived(State);
+            Note($"the level's files were loaded after its downloads ({System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} s)");
+        }
+        StartProgram();
     }
 
     // The game data's own copy of the program the server names, if it is the same file.

@@ -276,6 +276,31 @@ public sealed class DpClient
         Signon.Commands.Clear();
     }
 
+    /// <summary>
+    /// The package downloads the level's loading waited for have ended (libcurl.c Curl_CheckCommandWhenDone
+    /// running "cl_begindownloads"): the signon goes on - to the client program's download, the map check,
+    /// "prespawn" - and what it wants sent is queued.
+    /// </summary>
+    public void ContinueDownloads()
+    {
+        if (State != DpClientState.Connected) return;
+        Signon.PackagesFinished();
+        FlushSignonCommands();
+    }
+
+    /// <summary>Whether a command of that name is among the stuffed commands of the message being parsed
+    /// that have not run yet. (They run after the message; a handler of svc_serverinfo can ask whether
+    /// "curl" downloads were announced ahead of it.)</summary>
+    public bool StuffedCommandPending(string name)
+    {
+        foreach (string line in _stuffLines)
+        {
+            ReadOnlySpan<char> text = line.AsSpan().TrimStart();
+            if (text.StartsWith(name, StringComparison.OrdinalIgnoreCase) && (text.Length == name.Length || text[name.Length] is ' ' or '\t')) return true;
+        }
+        return false;
+    }
+
     /// <summary>Raised with each console command queued for the server, the signon's own included.</summary>
     public event Action<string>? CommandSent;
 
@@ -580,7 +605,7 @@ public sealed class DpClient
 
         public void OnServerInfo(DpServerInfo info)
         {
-            _c.Signon.OnServerInfo();
+            _c.Signon.OnServerInfo(info.WorldModel);
             H.OnServerInfo(info);
         }
 

@@ -56,6 +56,9 @@ public sealed class CsqcMessageHandler : IDpClientHandler
     /// <summary>Set when svc_serverinfo arrived in the current message: a new level, for which the
     /// owner must unload the old program and load the new one.</summary>
     public bool ServerInfoReceived { get; private set; }
+    /// <summary>Asked as svc_serverinfo is handled: true if the level's files are still on their way
+    /// (see <see cref="CsqcClientState.LevelLoadDeferred"/>).</summary>
+    public Func<bool>? DeferLevelLoad { get; set; }
 
     /// <summary>Whether svc_time arrived in the current message: the cue for one frame.</summary>
     public bool TimeReceived { get; private set; }
@@ -105,6 +108,7 @@ public sealed class CsqcMessageHandler : IDpClientHandler
     public void OnServerInfo(DpServerInfo info)
     {
         State.ApplyServerInfo(info);
+        State.LevelLoadDeferred = DeferLevelLoad?.Invoke() ?? false;
         // CL_ParseServerInfo goes on to queue cl_begindownloads, which loads the world model first.
         Presentation.BeginLevel(State);
         ServerInfoReceived = true;

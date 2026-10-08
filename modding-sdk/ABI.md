@@ -26,7 +26,7 @@ The host side lives in `src/VortexArena.Modding/` (`ModAbi.cs`, `WasmModSandbox.
 | `mod_frame` | `(dt: f32)` | **yes** | Once per rendered frame. Draw here. |
 | `_initialize` | `()` | no | First, once. C# modules have it automatically (it starts the .NET runtime). |
 | `mod_init` | `()` | no | Once, after `_initialize`. |
-| `mod_event` | `(id: i32, ptr: i32, len: i32)` | no | A message from the server half of the mod, or a console command. |
+| `mod_event` | `(id: i32, ptr: i32, len: i32)` | no | A message from the server half of the mod (`id` is the number the server half chose, zero or above; at most 4,096 bytes), or an event from the client itself (`id` below zero; none are defined yet). Needs the `net` capability to receive server messages. |
 | `mod_alloc` | `(size: i32) -> i32` | if `mod_event` takes payloads | The host asks you for a buffer, copies a payload in, then calls `mod_event`. You own the buffer afterwards. |
 | `mod_shutdown` | `()` | no | Best effort, on disconnect or map change. |
 
@@ -46,13 +46,26 @@ Namespace `vortex_1`:
 | `asset_id` | `(kind: i32, ptr: i32, len: i32) -> i32` | Resolves a path inside **your mod's own packs**. Kinds: 1 picture, 2 sound, 3 font. Returns 0 if absent. Resolve once in `mod_init`, not per frame. |
 | `text_width` | `(font: i32, size: f32, ptr: i32, len: i32) -> f32` | |
 | `time_now` | `() -> f64` | Game time, seconds. |
-| `send_to_server` | `(ptr: i32, len: i32) -> i32` | 1 if queued, 0 if dropped (rate limit). |
+| `send_to_server` | `(ptr: i32, len: i32) -> i32` | 1 if queued, 0 if dropped. Dropped when the mod did not declare the `net` capability, was not offered by the server the player is on, the message is over 1,024 bytes, or you are over the rate (20 messages and 8 KiB a second, with a burst of twice that). A 0 is never fatal - try again later. |
 
 A module may also import functions from `wasi_snapshot_preview1`. They are **answered, not granted**:
 writes to standard output and standard error go to the mod log, the clock is game time, there are no
 files, arguments or environment variables, `proc_exit` disables the mod, and everything else reports
 "not supported". This exists so that a language runtime inside the module (the .NET runtime in a C# mod)
 can start; do not build on it.
+
+## Capabilities
+
+Drawing rectangles, pictures and text and reading state need nothing. Two things have to be declared in
+the mod's manifest (the server operator's `sv_mod_capabilities`), and the player is told about them before
+agreeing to the mod:
+
+| Capability | Without it |
+|---|---|
+| `net` | `send_to_server` returns 0 and no server message reaches `mod_event`. |
+| `sound` | `asset_id` returns 0 for sounds and `PlaySound` commands are ignored. |
+
+Neither failure disables the mod.
 
 ## The command buffer
 
@@ -70,6 +83,10 @@ bytes and must be a multiple of 4.
 | 4 | SetClip | `f32 x, y, w, h` | 20 |
 | 5 | ResetClip | — | 4 |
 | 6 | PlaySound | `i32 assetId; i32 channel; f32 volume; f32 pitch` | 20 |
+
+`PlaySound`: `channel` 0 to 7 names one of eight voices, so playing on a channel replaces what that channel
+was playing; any other value takes the next voice in turn. Volume is clamped to 0..1 and pitch to 0.5..2. At
+most four sounds start per frame; the rest are dropped.
 
 The buffer is checked strictly. A truncated header, a size that is not a multiple of 4 or runs past the
 buffer, an unknown opcode, a payload of the wrong length, a text length that does not fit its record, or

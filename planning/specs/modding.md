@@ -3,8 +3,9 @@
 Implements [ADR-0020](../decisions/ADR-0020-wasm-sandbox-csharp-guests.md) (which supersedes ADR-0013) and
 evolves [ADR-0011](../decisions/ADR-0011-protocol-ecosystem-boundary.md)'s build-parity gate.
 
-Rewritten 2026-10-07. The previous version of this spec described a design that was never built; this
-one describes what is built, what was measured, and what remains. Section 12 says which is which.
+Rewritten 2026-10-07; section 9 (how a server offers a mod) rewritten 2026-10-08 when that flow was
+built. The previous version of this spec described a design that was never built; this one describes
+what is built, what was measured, and what remains. Section 12 says which is which.
 
 Sibling document: [`legacy-compat.md`](legacy-compat.md) covers the *other* way the client runs
 downloaded code — Xonotic's QuakeC `csprogs.dat`, for joining stock Xonotic servers. The two share a
@@ -65,10 +66,10 @@ and reaches the client as networked state the mod merely presents.
 ```
    modded Vortex SERVER (compiled C#)
      custom gameplay + ModManifest { client.wasm, assetPacks[], consent, … }
-          │ handshake: base protocol hash, then ManifestOffer        │ HTTP / in-band content
+          │ handshake: base protocol hash, then Offer                │ in-band content (§9)  
    ┌──────▼───────────────────────────────────────────────────────────▼───────────────────┐
    │ CLIENT                                                                               │
-   │  game/net ──► ContentDownloader ──► sha256 verify ──► ModCache (by hash)             │
+   │  game/net ──► ModClientSession ───► sha256 verify ──► ModCache (by hash)             │
    │                     ├─ asset packs ──► VirtualFileSystem.Mount()                     │
    │                     └─ client.wasm ──► WasmModSandbox ──(IModHost)──► game/modding   │
    │                                         src/VortexArena.Modding      draw list,      │
@@ -80,8 +81,9 @@ and reaches the client as networked state the mod merely presents.
 |---|---|---|
 | Sandbox host, interface constants, limits, command decoder, WASI stand-ins | `src/VortexArena.Modding/` | yes |
 | Mod manifest, content cache, content diff | `src/VortexArena.Modding/` | yes |
-| Host bridge (`IModHost` over HUD draw list, audio, networked state), consent and download UI | `game/modding/` | no |
-| Handshake frames and the reconcile flow | `game/net/NetProtocol.cs`, `ClientNet.cs`, `ServerNet.cs` | no |
+| Offer protocol, both ends: frames (`ModWire`), client flow (`ModOfferClient`), server flow (`ModOffer`, `ModOfferPeer`, `ModOfferHub`), consent store, rate limits, and the session that joins the client flow to the sandbox (`ModClientSession`) | `src/VortexArena.Modding/` | yes |
+| Host bridge (`IModHost` over HUD draw list, audio, networked state), consent prompt, the server's `sv_mod_*` cvars | `game/modding/` | no |
+| The one envelope message that carries offer frames, and the calls into the two rows above (§9.6) | `game/net/NetProtocol.cs`, `ClientNet.cs`, `ServerNet.cs` | no — **not written yet** |
 | Guest SDK: interface reference, C# library and template, Rust reference guest | `modding-sdk/` | n/a |
 | Tests, including the hostile-module set | `tests/VortexArena.Tests/Modding/` | yes |
 
@@ -169,7 +171,7 @@ with the client offering both for as long as mods built against the old one exis
 | `asset_id` | `(kind, ptr, len) → i32` | Resolve a path *inside the mod's own packs* to an id; 0 if absent. Kinds: 1 picture, 2 sound, 3 font. |
 | `text_width` | `(font, size: f32, ptr, len) → f32` | Measure a string. |
 | `time_now` | `() → f64` | Game time in seconds. The only clock. |
-| `send_to_server` | `(ptr, len) → i32` | Queue a message to the server half of the mod; 0 if dropped. |
+| `send_to_server` | `(ptr, len) → i32` | Queue a message to the server half of the mod; 0 if dropped (not running under a server's offer, no `net` capability, over 1,024 bytes, or over the rate limit - §9.5). |
 
 There is no filesystem, socket, process, environment or wall-clock import, and none can be added without
 changing `IModHost` — the interface *is* the capability list.
@@ -306,45 +308,203 @@ Per-frame allocation is the thing to avoid, exactly as in the engine's own hot p
 and is what the interface conformance tests should be written against once a Rust wasm target is
 installed.
 
-## 9. Manifest and the reject-to-reconcile handshake
+## 9. How a server offers a mod: manifest, offer protocol, download, consent
 
-Carried forward from the previous design; not yet built.
+**State (2026-10-08):** the whole flow below is built and tested as a Godot-free library in
+`src/VortexArena.Modding` — both ends, with adversarial tests for each. It is **not yet connected to the
+game's network layer** (`game/net`); §9.6 lists the few calls that connection needs. Until it is made, no
+Vortex server sends a mod frame and no client expects one.
 
-Today `NetProtocol.BuildParity()` (`game/net/NetProtocol.cs:172-182`) folds the protocol version and the
-content registry hashes into one value, and the server rejects a mismatch. Split it:
+### 9.1 The manifest
 
-- **`BaseProtocolHash`** — protocol version, wire framing, the message-id enum. Stays a hard gate: a
-  mismatch means the two programs cannot talk.
-- **The mod manifest** — what the server advertises about its content. A vanilla server advertises the
-  canonical "no mod" manifest.
+What a server states about its mod (`ModManifest`; JSON, at most 64 KiB, parsed strictly — an unknown
+field, an over-long string, a control character, a file name that is not a plain name, or a size above a
+cap rejects the whole manifest):
 
 ```
 ModManifest {
   modId, modVersion            // "overkill", "1.4.0"
-  baseProtocol : uint          // must equal the client's BaseProtocolHash
+  baseProtocol : uint          // must equal the client's base protocol hash for this connection
   clientModule : Artifact?     // the client.wasm; null for an assets-only mod
-  assetPacks   : Artifact[]    // .pk3 files to mount
-  abi          : string        // "vortex_1"
-  limits       : { maxMemoryBytes, frameBudgetMs }   // requests; the client clamps them (ModLimits.ClampTo)
-  consent      : { title, description, author, url } // shown to the player before any download
+  assetPacks   : Artifact[]    // .pk3 files to mount (at most 64)
+  abi          : string        // "vortex_1" - the guest interface the module was built against
+  limits       : { maxMemoryBytes?, frameBudgetMs? }   // requests; the client clamps them (ModLimits.ClampTo)
+  consent      : { title, description, author, url? }  // shown to the player before any download
+  required     : bool          // true = the server will not let a client play without the mod
+  capabilities : string[]      // what the mod uses beyond drawing: "net", "sound"
 }
-Artifact { name, sizeBytes, sha256, url?, inbandId? }
+Artifact { name, sizeBytes, sha256, url? }
 ```
 
-New `NetControl` frames: `ManifestOffer` (20, server→client), `ManifestNeed` (21), `ContentChunk` (22),
-`ManifestReady` (23), `ManifestDecline` (24).
+- **The manifest's own SHA-256 identifies the mod.** It covers every file's hash, the limits asked for and
+  the text shown to the player, so "this exact mod" is one value. Remembered consent is bound to it.
+- **Capabilities are a closed set, enforced by the client.** `net` lets the mod exchange messages with
+  the server half of the mod (§9.5); `sound` lets it resolve and play sounds. A capability that is not
+  declared is not available: `send_to_server` answers 0, sound ids resolve to 0, `PlaySound` commands are
+  dropped. A manifest naming a capability this client does not know is refused, because the client could
+  not show the player what they would be agreeing to. The capabilities never add anything to `IModHost`
+  — they can only switch members of it off.
+- **`required`** is acted on by the server, not the client (§9.4).
+- A server builds its manifest from the files themselves (`ModOffer.FromFiles`): it hashes each one and
+  then runs the result through the same strict parser clients use, so a mod no client would accept is
+  reported when the server starts rather than by every player who connects.
 
-Flow: handshake with `BaseProtocolHash` → accept plus `ManifestOffer` → the client diffs the manifest
-against its cache by SHA-256 → if anything is missing, or the mod has never been consented to, show the
-consent dialog (author, description, total download size) → download each missing artifact over HTTPS
-from `Artifact.url`, or in-band → verify SHA-256 → mount packs, load and initialise the module →
-`ManifestReady`. A decline, a verification failure, a size cap or a timeout sends `ManifestDecline` and
-disconnects with a reason.
+### 9.2 The offer protocol
 
-The manifest arrives over the authenticated game connection and carries the hashes, so a compromised
-mirror cannot substitute content. The virtual filesystem needs two additions for this: a per-mod scope
-(so `asset_id` resolves only inside the mod's packs) and unmounting a single pack
-(`VirtualFileSystem` today can only `Rescan`).
+Eight frame kinds (`ModWire`, `ModFrameKind`), each `u8 kind, u8 offerSequence, body`, all on the
+reliable ordered channel. They are designed to travel inside **one** new game-protocol message
+(a `NetControl` id whose payload is the frame), so the hot file `game/net/NetProtocol.cs` gains one
+line. The frame ids this spec used to reserve (`NetControl` 20-24) were taken by other features in the
+meantime; the sub-kind byte makes the question moot.
+
+| Kind | Direction | Body | Meaning |
+|---|---|---|---|
+| 1 `Offer` | server → client | `u8 transferVersion; manifest JSON` | "This server has a mod." |
+| 2 `Need` | client → server | `u8 count; count × 32-byte SHA-256` | The files the client lacks. |
+| 3 `Chunk` | server → client | `u8 slot; u32 offset; 1..16,384 bytes` | The next piece of file `slot` of the `Need` list. |
+| 4 `Ready` | client → server | — | The mod is verified, loaded and running. |
+| 5 `Decline` | client → server | `u8 reason; u8 clientTransferVersion; ≤200 bytes of text` | The client will not run the mod, and why. |
+| 6 `Abort` | server → client | `≤200 bytes of text` | The offer is withdrawn. |
+| 7 `ToServer` | client → server | `≤1,024 bytes` | Mod → server half of the mod. |
+| 8 `ToClient` | server → client | `i32 eventId; ≤4,096 bytes` | Server half → mod (`mod_event`). |
+
+- **`offerSequence`** numbers the offer a frame belongs to. A server re-offers on every level change
+  (clients start a fresh sandbox per match, §4), and a frame still in flight from the previous offer is
+  recognised and ignored by both ends rather than mistaken for a violation or written into the wrong
+  download.
+- **Version negotiation is two independent numbers.** `transferVersion` (1) versions these frames; it is
+  the first byte of an offer so that a client that does not speak it can decline
+  (`UnsupportedTransferVersion`, carrying the version it does speak) without reading the rest. The
+  manifest's `abi` versions the guest interface; a client that does not provide it declines with
+  `UnsupportedAbi`. Either way the server learns exactly which half is too new.
+- **Decline reasons** (`ModDeclineReason`): `ModsDisabled`, `Unsupported` (no WebAssembly runtime on this
+  platform), `UnsupportedTransferVersion`, `BadManifest`, `UnsupportedAbi`, `ProtocolMismatch`,
+  `ConsentDenied`, `TooLarge`, `DownloadFailed`, `Timeout`, `LoadFailed`, `Faulted`, `Cancelled`, `Busy`.
+
+### 9.3 What the client does with an offer (`ModOfferClient`, `ModClientSession`)
+
+In this order, each step looking at more of the server's input than the one before:
+
+1. `cl_allow_mods 0` → `Decline(ModsDisabled)`. **The manifest is not parsed.** Nothing is remembered,
+   asked, requested or written.
+2. No WebAssembly runtime → `Decline(Unsupported)`.
+3. More than one offer every two seconds (burst of four) → `Decline(Busy)`, unread.
+4. Wrong transfer version, a manifest that fails the strict parser, another `abi`, another
+   `baseProtocol` → the matching decline.
+5. The player already refused something on this connection → `Decline(ConsentDenied)`, no new prompt.
+6. The files not already in the cache total more than `cl_mod_download_max_mb` (256 MB by default,
+   well below the manifest format's own caps) → `Decline(TooLarge)`.
+7. Consent (§9.4). Until the answer is yes, nothing is requested from the server and nothing is written
+   to disk. Chunks pushed by a server before that are ignored.
+8. `Need` for the missing files; then chunks are accepted **only** as the next piece of the file being
+   received — right slot, right offset, never past the declared size — and streamed to a temporary file
+   beside the cache address (`ModCacheWriter`). A file enters the cache only if its size and SHA-256
+   match the manifest. Anything else — a gap, a repeat, a wrong file, one byte too many, a wrong hash —
+   ends the download with `Decline(DownloadFailed)` and deletes the temporary file. A download that
+   receives nothing for 30 s, or is not finished after 10 minutes, ends with `Decline(Timeout)`.
+9. With every file cached, the module is read back, **hashed again**, and loaded into a
+   `WasmModSandbox` under the manifest's limits clamped to the client's ceiling. A module the sandbox
+   refuses, or that fails or overruns its budget while starting, → `Decline(LoadFailed)`. A cached file
+   that no longer matches its hash is deleted.
+10. `Ready`. From here the mod channel is open (§9.5).
+
+**The mod stops** — sandbox shut down and disposed, the host told to clear what it drew — when it traps
+or overruns a budget (`Decline(Faulted)` tells the server), on a level change, when the server sends a
+new offer or `Abort`, when `cl_allow_mods` is switched off, when the player runs `mod_unload`, and when
+the connection ends. Nothing a server or a guest does throws at the caller; every failure is a state
+(`Declined` with a reason) and a game that carries on with stock presentation.
+
+### 9.4 Consent, and whether a refusal costs the player the server
+
+`ModConsentStore` keeps the player's answers in `mod-consent.json` in the user directory. The prompt
+(`game/modding/ModConsentPrompt.cs`, or the console commands `mod_allow` / `mod_deny`) offers:
+
+| Answer | Remembered as | Lasts |
+|---|---|---|
+| Allow once | — | this connection (survives level changes) |
+| Always allow this mod on this server | server address + manifest hash | until forgotten |
+| Always allow this mod everywhere (console only) | manifest hash | until forgotten |
+| Not now | — | this connection: later offers are declined without a prompt |
+| Never this mod | manifest hash | until forgotten |
+| Never for this server | server address | until forgotten |
+
+Rules: an allowance is **always bound to the manifest hash**, so a server that changes one byte of its
+mod or one word of the text it shows is a new question; there is no "always trust this server"; a denial
+outranks an allowance when both match; and anything doubtful — an unreadable file, a hand-edited entry
+that would match more than it says, an entry dropped to keep the file bounded — resolves to *ask*.
+With `cl_allow_mods 0` none of this is consulted: the answer is no.
+
+**A refused, undownloadable or broken mod never blocks joining — unless the server marked it
+`required`.** For an optional mod the client declines and plays with stock presentation; the server's
+`ModOfferPeer` records the reason and does nothing else. For a required mod the **server** closes the
+connection, with a reason naming the mod and the client's stated reason
+(`ModOfferPeer.ShouldDisconnect` / `DisconnectReason`), also when the client never answers within the
+time allowed. `ModOfferPeer.MayPlay` is false for a required mod until `Ready`, so the server can keep
+such a client out of the match while it downloads. The prompt tells the player which case they are in.
+
+*This amends the earlier text of this section*, which had every decline end in a disconnect. That would
+make running with `cl_allow_mods 0` — the default — a reason to be thrown off any server that offers a
+cosmetic mod.
+
+### 9.5 The mod channel
+
+`send_to_server` → `ToServer` → the server half of the mod; the server half → `ToClient` →
+`mod_event(eventId, ptr, len)`. Available only to a mod whose manifest declares `net`, and only between
+`Ready` and the mod stopping.
+
+| | Size | Rate | Enforced |
+|---|---|---|---|
+| Mod → server | ≤ 1,024 bytes | 20 messages/s (burst 40), 8 KiB/s (burst 16 KiB) | by the client before sending (`send_to_server` returns 0); again by the server at twice those rates, dropping the excess |
+| Server → mod | ≤ 4,096 bytes | 60 messages/s (burst 120); at most 64 queued (256 KiB); 4 delivered per rendered frame | by the client; the excess is dropped |
+
+A message from a client that is not running the mod, or whose mod did not declare `net`, or that exceeds
+the size limit, is a protocol violation and the server disconnects that client. Exceeding the *rate* is
+not: honest clients throttle themselves, so the server just drops and counts.
+Event ids below zero are reserved for the client's own events and are refused in both directions.
+
+### 9.6 Connecting it to the game (not done)
+
+The library ends at byte arrays in and out. What `game/net` has to add, all of it small:
+
+| Where | What |
+|---|---|
+| `game/net/NetProtocol.cs` | One `NetControl` id for the envelope (`ModFrame`), sent on the reliable channel; bump `ProtocolVersion`. `BuildParity()` can keep serving as the `baseProtocol` value until it is split into a base hash and content hashes. |
+| `game/net/ServerNet.cs` | Build a `ModServerBridge` (`game/modding/ModServerBridge.cs`) from the `sv_mod_*` cvars at start-up — it is null when no mod is configured, and then nothing below runs. After `HandshakeAccept`: `PeerAccepted(peerId, now)`. On the envelope id: `HandleFrame(peerId, payload, now)`. Each tick: `Tick(now, send, disconnect)`. On disconnect: `PeerDisconnected`. On map change: `LevelChanged(now)`. For a required mod, hold a peer out of the match while `MayPlay(peerId)` is false. |
+| `game/net/ClientNet.cs` | After `HandshakeAccept`: `ModLayer.BeginServerSession(address, baseProtocol, send)`. On the envelope id: `ModLayer.HandleServerFrame(payload)`. On map change: `ModLayer.OnLevelChanged()`. On disconnect: `ModLayer.EndServerSession()`. |
+| `game/Shell.cs` | `ModLayer.SoundLoader = assets.LoadSound`; call `ModServerBridge.RegisterCvars`. |
+
+A server that offers no mod creates no bridge and sends no frame, and both ends already ignore a
+`NetControl` id they do not know — so traffic between a server with no mod and any client is byte for
+byte what it is today.
+
+### 9.7 Decisions taken where this spec was silent (2026-10-08)
+
+Each is the conservative choice; each has a test.
+
+1. **Files come in-band only; manifest URLs are not fetched.** A URL chosen by a stranger's server would
+   make the client issue requests to whatever it names — the player's own router included. The `url`
+   fields are still parsed and validated so a later, deliberate HTTP path (allow-listed hosts, public
+   addresses only) can use them. A test pins that the library references no networking assembly.
+2. **Optional by default; `required` is opt-in and enforced by the server** (§9.4).
+3. **Consent is bound to the manifest hash; no blanket per-server trust** (§9.4).
+4. **Any refusal silences the rest of the connection**, and offers are rate-limited, so a server cannot
+   nag with re-offers or a stream of slightly different manifests.
+5. **A new offer replaces the current one**, stopping the running mod; a level change is modelled as the
+   server re-offering. Answers given during the connection carry over; guest state does not.
+6. **Unknown capability → the manifest is refused**, rather than the capability being ignored.
+7. **A client that breaks the offer protocol is disconnected by the server; one that floods the mod
+   channel is only throttled.** Late answers to an offer that has lapsed are neither.
+8. **An optional offer that is never answered simply lapses** (180 s to answer, 900 s to finish); only a
+   required one turns silence into a disconnect.
+9. **The server paces uploads** (512 KiB/s per client by default) so a download cannot crowd gameplay off
+   the reliable channel, and serves each requested file once per offer.
+10. **Negative `mod_event` ids are the client's own** (console commands and the like); a server cannot
+    send one.
+11. **The whole module is re-hashed when it is loaded**, not only when it was stored.
+12. **Asset packs are downloaded and verified but not yet mounted.** Mounting needs the per-mod
+    virtual-filesystem scope (TODO `MS-6`): without it a pack's files would shadow the base game's. A
+    server-offered mod can therefore use only pictures and sounds the base game already has, until then.
+    Archive-bomb limits (entry count, expanded size) belong to that mounting step and are not built.
 
 ## 10. Threat table
 
@@ -363,10 +523,19 @@ mirror cannot substitute content. The virtual filesystem needs two additions for
 | Guest calls `proc_exit` | Trap | yes |
 | Re-entrancy: an import calling back into the sandbox | Guarded; throws at the host caller | no test yet |
 | Compiler bug in Wasmtime (sandbox escape) | Long-term-support line, prompt patching; arm64 is the higher-risk backend | n/a |
-| Zip bomb or oversized download | Per-artifact and total size caps, streaming, SHA-256 pin | not built |
-| Malicious mirror | SHA-256 from the manifest | not built |
-| State bleed between matches | Fresh sandbox per match | by construction |
-| Non-consensual mods | Explicit consent before any download | not built |
+| Oversized or endless download | Per-file size from the manifest, a client cap on the total (`cl_mod_download_max_mb`), streaming to disk, stall and overall time limits | yes |
+| Substituted or corrupted content | SHA-256 from the manifest checked before a file enters the cache, and again when the module is loaded | yes |
+| Chunks out of order, repeated, for another file, or unrequested | Only the next piece of the file being received is accepted; anything else ends the download | yes |
+| Path traversal through a file name | Names are validated and never used as paths: cache files are named by their own hash | yes |
+| Malicious mirror; server-directed requests from the client | URLs in a manifest are not fetched at all (§9.7) | yes |
+| Hostile or oversized manifest | Strict parser with caps on every count, length and size; unknown fields and capabilities refused | yes |
+| Non-consensual mods | Nothing parsed with `cl_allow_mods 0`; nothing requested or written before consent bound to the manifest hash | yes |
+| Consent prompt used to nag | Offer rate limit; one refusal covers the connection | yes |
+| Server floods the mod with messages | Client-side rate limit, bounded queue, four deliveries per frame | yes |
+| Mod (or a forged client) floods the server | Size and rate limits at the client, again at the server; protocol violations disconnect | yes |
+| Client requests files to exhaust the server | Only the manifest's files, each once per offer, at a capped upload rate | yes |
+| Archive bomb inside an asset pack | Entry-count and expanded-size limits at mount time | **not built** (packs are not mounted yet, MS-6) |
+| State bleed between matches | Fresh sandbox per match; a level change stops the mod | yes |
 | Signal-handler conflict between Wasmtime, .NET and Godot | Mach ports off on macOS | **not tested inside Godot** |
 
 ## 11. Before mods are enabled by default
@@ -379,22 +548,33 @@ mirror cannot substitute content. The virtual filesystem needs two additions for
 - [ ] A real exported build loads the Wasmtime native library on all six supported platform/CPU pairs.
 - [ ] macOS: the bundled Wasmtime library is signed and notarised with the app.
 - [ ] The native library is at or above the first 48.x patch release carrying all published advisories.
-- [ ] Download size and time caps, cancellation and SHA-256 verification are built and tested.
-- [ ] Consent UI is built; a declined mod never downloads.
+- [x] Download size and time caps, cancellation and SHA-256 verification are built and tested. Done
+      2026-10-08 (`ModOfferFlowTests`).
+- [ ] Consent UI is built; a declined mod never downloads. *The rule is built and tested in the library
+      (2026-10-08); the prompt itself is written but has never been built into the Godot host or seen.*
+- [ ] The offer flow is connected to `game/net` (§9.6) and a mod has been offered by a real server to a
+      real client.
+- [ ] Asset packs are mounted in a per-mod scope with archive-bomb limits (MS-6).
 - [ ] The `IModHost` implementation in `game/modding/` has been reviewed member by member.
 
-## 12. Status (2026-10-07)
+## 12. Status (2026-10-08)
 
 | Part | State |
 |---|---|
-| Sandbox host, limits, import/export checks, command decoder, WASI stand-ins (`src/VortexArena.Modding`) | **Built and tested** — 33 tests in `tests/VortexArena.Tests/Modding/`, on Windows x64 |
+| Sandbox host, limits, import/export checks, command decoder, WASI stand-ins (`src/VortexArena.Modding`) | **Built and tested**, on Windows x64 |
 | Interface reference (`modding-sdk/ABI.md`) | Written |
 | C# guest SDK and template (`modding-sdk/csharp/`) | **Built and run under the sandbox** - 2.15 MB module, 25 ms start-up, about 6 microseconds a frame, 50.5 MiB after start-up (`CSharpGuestTests`). Not yet drawn in the game window. |
-| Rust reference guest | Not started |
-| Manifest, cache, content diff | Not started |
-| Handshake split and reconcile flow | Not started |
-| Godot bridge (`game/modding/`), consent and download UI | Not started |
+| Rust reference guest | Not started (no Rust WebAssembly target installed on the development machine) |
+| Manifest, cache, content diff | **Built and tested** |
+| Offer protocol, download, verification, consent rules, mod channel, lifecycle — both ends (§9) | **Built and tested** as a Godot-free library, including the real C# guest travelling the whole path from a server's file to draw commands. **Not connected to `game/net`** (§9.6) |
+| Godot bridge (`game/modding/ModLayer.cs`): draw replay, `mod_load` | Builds in the host; **never run in a game window** |
+| Godot bridge additions of 2026-10-08: server sessions, consent prompt, exact clip rectangles, sounds, `sv_mod_*` | Written; type-checks against the engine's C# API in a scratch project; **never built into the host and never run** |
+| Per-mod asset scope and pack mounting | Not started (MS-6) |
+| HTTP download of mod files | Deliberately not built (§9.7) |
 | Platforms other than Windows x64 | Not exercised |
+
+Tests: 181 in `tests/VortexArena.Tests/Modding/` (sandbox and command decoder 34, manifest and cache 25, C# guest 2,
+offer protocol, consent store, cache writer and rate limits 101, client session with a real sandbox 19).
 
 Task IDs are in [`TODO.md`](../TODO.md) (`MS-1` onwards).
 

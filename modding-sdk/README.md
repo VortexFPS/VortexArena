@@ -28,9 +28,32 @@ template, compiler `10.0.0-rc.1.26357.1`, WASI SDK 29.0, on Windows x64):
 `tests/VortexArena.Tests/Modding/CSharpGuestTests.cs` runs these checks wherever the template has been
 built; the module itself is a build output and is not committed.
 
-Not yet done: a mod drawing in the real game window, and everything about how a server offers a mod to a
-client. The sandbox stays off in the client (`cl_allow_mods 0`) until the checklist in the modding spec
-is complete.
+**How a server offers a mod to a client is built and tested** (2026-10-08) as a library with both ends in
+it - manifest, consent, download with SHA-256 verification, loading, the message channel, and stopping the
+mod again - and the `hello-hud` module has travelled that whole path in a test, from a file on a "server" to
+draw commands on a "client". It is **not connected to the game's network code yet**, so no real server can
+offer a mod today. Section 9 of the modding spec has the protocol and the list of what is left.
+
+Not yet done: that connection, a mod drawing in the real game window, and mounting a mod's own asset packs
+(until then a mod can only use pictures and sounds the base game already has). The sandbox stays off in the
+client (`cl_allow_mods 0`) until the checklist in the modding spec is complete.
+
+## Offering a mod from a server (once it is connected)
+
+The server operator sets cvars; the server hashes the files and writes the manifest itself:
+
+| Cvar | Meaning |
+|---|---|
+| `sv_mod_module` | Path of the mod's `.wasm`. Empty (the default) and no packs = the server offers nothing. |
+| `sv_mod_packs` | Semicolon-separated paths of `.pk3` asset packs. |
+| `sv_mod_id`, `sv_mod_version` | Short id (letters, digits, `.`, `-`, `_`) and version. |
+| `sv_mod_title`, `sv_mod_description`, `sv_mod_author` | What the player is shown before agreeing. |
+| `sv_mod_capabilities` | `net` and/or `sound` (see `ABI.md`). |
+| `sv_mod_required` | 1 = players who do not end up running the mod are disconnected. 0 (default) = they play without it. |
+
+Players are asked before anything is downloaded, unless they already said yes to *exactly this mod* (any
+change to a file or to the text above is a new question). With `cl_allow_mods 0` - the default - the offer
+is refused without being read.
 
 ## Building a C# mod
 
@@ -79,4 +102,5 @@ section of [`ABI.md`](ABI.md). In practice, for C#:
 
 The interface is plain WebAssembly, so anything that can produce a module with the exports in `ABI.md`
 works. Rust (`wasm32-unknown-unknown`) is the intended reference guest — tiny modules, no runtime, builds
-on macOS — and is not written yet.
+on macOS — and is not written yet (as of 2026-10-08 the development machine has Rust but no WebAssembly
+target installed).

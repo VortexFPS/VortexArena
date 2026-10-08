@@ -46,45 +46,61 @@ public sealed class ModCache
     /// <exception cref="ModManifestException">The content's size or SHA-256 does not match the artifact.</exception>
     public string Store(ModArtifact artifact, Stream content)
     {
+        using ModCacheWriter writer = BeginStore(artifact);
+        byte[] buffer = new byte[81920];
+        int read;
+        while ((read = content.Read(buffer, 0, buffer.Length)) > 0)
+            writer.Append(buffer.AsSpan(0, read));
+        return writer.Commit();
+    }
+
+    /// <summary>
+    /// Starts receiving <paramref name="artifact"/> piece by piece (the in-band download). Bytes go to a
+    /// temporary file beside the final address; <see cref="ModCacheWriter.Commit"/> moves it into place
+    /// only when the size and SHA-256 both match, and disposing without committing deletes it.
+    /// </summary>
+    /// <exception cref="ModManifestException">The artifact has no usable size or hash.</exception>
+    public ModCacheWriter BeginStore(ModArtifact artifact)
+    {
         if (!ModManifest.IsSha256(artifact.Sha256) || artifact.SizeBytes <= 0)
             throw new ModManifestException($"'{artifact.Name}' has no valid size or SHA-256");
-
         string finalPath = PathFor(artifact.Sha256);
         Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
-        // Written under a temporary name and renamed only after the hash checks out, so a crash or a
-        // failed verification never leaves a file at the address of a hash it does not have.
-        string tempPath = finalPath + "." + Guid.NewGuid().ToString("N") + ".part";
-        try
+        return new ModCacheWriter(artifact, finalPath);
+    }
+
+    /// <summary>Deletes the cached file for <paramref name="artifact"/> (used when it fails a re-check at load).</summary>
+    public void Remove(ModArtifact artifact)
+    {
+        if (!ModManifest.IsSha256(artifact.Sha256)) return;
+        try { File.Delete(PathFor(artifact.Sha256)); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    /// <summary>
+    /// Deletes temporary download files older than <paramref name="olderThan"/>: what a crash or a killed
+    /// process leaves behind. Age-limited so a second running client's download in progress is left alone.
+    /// Returns the bytes freed.
+    /// </summary>
+    public long CleanPartials(TimeSpan olderThan)
+    {
+        if (!Directory.Exists(_root)) return 0;
+        long freed = 0;
+        DateTime cutoff = DateTime.UtcNow - olderThan;
+        foreach (FileInfo file in new DirectoryInfo(_root).EnumerateFiles("*" + ModCacheWriter.PartialSuffix, SearchOption.AllDirectories))
         {
-            using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            long total = 0;
-            using (FileStream output = new(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            try
             {
-                byte[] buffer = new byte[81920];
-                int read;
-                while ((read = content.Read(buffer, 0, buffer.Length)) > 0)
-                {
-                    total += read;
-                    if (total > artifact.SizeBytes)
-                        throw new ModManifestException($"'{artifact.Name}' is larger than the {artifact.SizeBytes} bytes its manifest declares");
-                    hash.AppendData(buffer, 0, read);
-                    output.Write(buffer, 0, read);
-                }
+                if (file.LastWriteTimeUtc > cutoff) continue;
+                long length = file.Length;
+                file.Delete();
+                freed += length;
             }
-
-            if (total != artifact.SizeBytes)
-                throw new ModManifestException($"'{artifact.Name}' is {total} bytes; its manifest declares {artifact.SizeBytes}");
-            string actual = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
-            if (actual != artifact.Sha256)
-                throw new ModManifestException($"'{artifact.Name}' does not match its SHA-256 (got {actual})");
-
-            File.Move(tempPath, finalPath, overwrite: true);
-            return finalPath;
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
-        finally
-        {
-            if (File.Exists(tempPath)) File.Delete(tempPath);
-        }
+        return freed;
     }
 
     /// <summary>The artifacts of <paramref name="manifest"/> that still have to be downloaded.</summary>
@@ -128,4 +144,83 @@ public sealed class ModCache
     }
 
     private string PathFor(string sha256) => Path.Combine(_root, sha256[..2], sha256);
+}
+
+/// <summary>
+/// One file on its way into the <see cref="ModCache"/>. Never holds more than the caller's current piece
+/// in memory, never writes past the size the manifest declared, and never leaves anything at the final
+/// address unless the whole file hashed to the expected value.
+/// </summary>
+public sealed class ModCacheWriter : IDisposable
+{
+    internal const string PartialSuffix = ".part";
+
+    private readonly ModArtifact _artifact;
+    private readonly string _finalPath, _tempPath;
+    private readonly IncrementalHash _hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+    private FileStream? _output;
+    private bool _finished;
+
+    public long BytesWritten { get; private set; }
+    public long BytesExpected => _artifact.SizeBytes;
+    public bool IsComplete => BytesWritten == _artifact.SizeBytes;
+
+    internal ModCacheWriter(ModArtifact artifact, string finalPath)
+    {
+        _artifact = artifact;
+        _finalPath = finalPath;
+        _tempPath = finalPath + "." + Guid.NewGuid().ToString("N") + PartialSuffix;
+        _output = new FileStream(_tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+    }
+
+    /// <exception cref="ModManifestException">The piece would take the file past its declared size.</exception>
+    public void Append(ReadOnlySpan<byte> piece)
+    {
+        if (_finished || _output is null) throw new InvalidOperationException("the download has already finished");
+        if (piece.Length > _artifact.SizeBytes - BytesWritten)
+            throw new ModManifestException($"'{_artifact.Name}' is larger than the {_artifact.SizeBytes} bytes its manifest declares");
+        _hash.AppendData(piece);
+        _output.Write(piece);
+        BytesWritten += piece.Length;
+    }
+
+    /// <summary>Verifies size and SHA-256 and moves the file to its address. Returns the cached path.</summary>
+    /// <exception cref="ModManifestException">The content is not the file the artifact describes; nothing was stored.</exception>
+    public string Commit()
+    {
+        if (_finished) throw new InvalidOperationException("the download has already finished");
+        _finished = true;
+        _output?.Dispose();
+        _output = null;
+        try
+        {
+            if (BytesWritten != _artifact.SizeBytes)
+                throw new ModManifestException($"'{_artifact.Name}' is {BytesWritten} bytes; its manifest declares {_artifact.SizeBytes}");
+            string actual = Convert.ToHexString(_hash.GetHashAndReset()).ToLowerInvariant();
+            if (actual != _artifact.Sha256)
+                throw new ModManifestException($"'{_artifact.Name}' does not match its SHA-256 (got {actual})");
+            File.Move(_tempPath, _finalPath, overwrite: true);
+            return _finalPath;
+        }
+        finally
+        {
+            DeleteTemp();
+        }
+    }
+
+    public void Dispose()
+    {
+        _finished = true;
+        _output?.Dispose();
+        _output = null;
+        _hash.Dispose();
+        DeleteTemp();
+    }
+
+    private void DeleteTemp()
+    {
+        try { if (File.Exists(_tempPath)) File.Delete(_tempPath); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
 }

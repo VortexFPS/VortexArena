@@ -116,7 +116,26 @@ public partial class FrameProfiler : CanvasLayer
           // The two session-lifetime overlays that tick outside a match as well as inside it: the engine screen
           // overlay (showfps — DP draws it from SCR_DrawScreen, so it exists at the menu too) and the drop-down
           // console (which early-outs while closed, but animates its scrolling conback layers while open).
-          "engineoverlay", "console" };
+          "engineoverlay", "console",
+          // The mod sandbox: one call into the guest per frame (specs/modding.md). No-op with no mod loaded,
+          // but a loaded mod may legitimately spend its whole frame budget here, and that must show as its
+          // own line rather than as proc:other.
+          "mods",
+          // Legacy compatibility mode: the whole client frame of a session on a stock Xonotic server -
+          // the DarkPlaces protocol pump plus the server's own client program on the QuakeC VM
+          // (specs/legacy-compat.md). Measured at ~4 ms a frame in the interpreter before anything is
+          // drawn, so it has to be its own line. Absent outside a legacy session.
+          "legacy",
+          // Xonotic's own menu program (menu.dat on the QuakeC VM, game/legacy/LegacyMenu.cs): m_draw runs
+          // every frame while that menu exists, over a session or on its own. Absent unless --legacy-menu
+          // or the legacy_menu command started it.
+          "legacy-menu",
+          // The server half of a LOCAL Xonotic game (Xonotic's progs.dat on the QuakeC VM,
+          // src/VortexArena.Legacy/Local/LegacyLocalServer.cs). By default the server runs on its own thread,
+          // so this line is then a WORKER's time - ticks of about 2 ms at 60 Hz, more with many bots - plus,
+          // on the main thread, draining what the server queued (console lines, level changes). With
+          // legacy_server_thread 0 the whole server frame is main-thread time under this name.
+          "legacy-server" };
           // NOTE (2026-07-31): there is deliberately no "menu.warm" entry. MenuAssetWarmer briefly had one while
           // it still drained work on the main thread; it now owns none (everything runs on the streamer lane, so
           // its whole main-thread cost is the drain already counted as stream.build) and has no _Process at all.

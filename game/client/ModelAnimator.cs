@@ -283,6 +283,19 @@ public partial class ModelAnimator : Node3D
         ApplyFrame(f, f, 0f);
     }
 
+    /// <summary>
+    /// Hold a blend of two raw MD3 frames (DarkPlaces' frame / frame2 / lerpfrac): <paramref name="lerp"/> 0
+    /// shows <paramref name="frameA"/>, 1 shows <paramref name="frameB"/>. No playback. Additive accessor for
+    /// the legacy-compatibility scene (game/legacy), whose client program supplies the blend each frame.
+    /// </summary>
+    public void SetRawFrameBlend(int frameA, int frameB, float lerp)
+    {
+        _hasClip = false;
+        _playing = false;
+        int last = Math.Max(0, _md3.FrameCount - 1);
+        ApplyFrame(Math.Clamp(frameA, 0, last), Math.Clamp(frameB, 0, last), Math.Clamp(float.IsFinite(lerp) ? lerp : 0f, 0f, 1f));
+    }
+
     // =================================================================================================
     //  Per-frame advance
     // =================================================================================================

@@ -22,7 +22,7 @@ public static class Ui
         var l = new Label { Text = text, HorizontalAlignment = HorizontalAlignment.Center };
         l.AddThemeFontSizeOverride("font_size", MenuSkin.TitleSize);
         l.AddThemeColorOverride("font_color", MenuSkin.Bright);
-        if (MenuSkin.BoldFont is { } bold) l.AddThemeFontOverride("font", bold);
+        if (MenuSkin.TitleFont is { } bold) l.AddThemeFontOverride("font", bold);
         return l;
     }
 

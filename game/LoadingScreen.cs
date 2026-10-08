@@ -132,6 +132,22 @@ public sealed partial class LoadingScreen : Control
         AddThemeColorOverride(_mapLabel, "font_color", new Color(0.7f, 0.7f, 0.7f));
         AddChild(_mapLabel);
 
+        // DP cl_screen.c SCR_DrawLoadingScreen / SCR_InfoBar draw their text in FONT_INFOBAR (font-xolonium.cfg:
+        // Xolonium regular, maps for 8, 12, $scr_loadingscreen_barheight and $scr_infobar_height virtual units)
+        // at scr_loadingscreen_barheight - with the baked outline, like all of Xonotic's text.
+        if (VortexArena.Game.Text.DpText.Faces(VortexArena.Game.Text.DpText.Infobar).Count > 0)
+        {
+            float barHeight = VortexArena.Game.Menu.MenuState.Cvars.GetFloat("scr_loadingscreen_barheight");
+            if (!(barHeight > 0f)) barHeight = 12f;
+            int key = Mathf.Max(6, Mathf.RoundToInt(barHeight * VortexArena.Game.Text.DpText.PixelsPerUnit));
+            FontFile infobar = VortexArena.Game.Text.DpBitmapFont.Screen(VortexArena.Game.Text.DpText.Infobar, barHeight, key);
+            foreach (Label label in new[] { _statusLabel, _mapLabel })
+            {
+                label.AddThemeFontOverride("font", infobar);
+                label.AddThemeFontSizeOverride("font_size", key);
+            }
+        }
+
         ApplyProgress();
     }
 

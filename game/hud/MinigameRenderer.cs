@@ -1,5 +1,6 @@
 using System;
 using Godot;
+using VortexArena.Game.Text;   // DpText: DarkPlaces-accurate text (font slots, baked outline, colour lift)
 using VortexArena.Common.Gameplay;
 
 namespace VortexArena.Game.Hud;
@@ -225,7 +226,7 @@ public partial class MinigameRenderer : Control
                 3 => new Vector2(board.Position.X + board.Size.X * 0.5f, board.Position.Y + board.Size.Y - 26f),
                 _ => new Vector2(board.Position.X + board.Size.X * 0.5f, board.Position.Y + 6f),
             };
-            DrawString(ThemeDB.FallbackFont, at, txt, HorizontalAlignment.Left, -1f, 20, TeamColor(t));
+            DpText.Draw(this, DpText.Hud, at - new Vector2(0f, 15f), txt, 20, TeamColor(t));
         }
     }
 
@@ -253,8 +254,8 @@ public partial class MinigameRenderer : Control
         }
 
         // score.
-        DrawString(ThemeDB.FallbackFont, new Vector2(board.Position.X + 6f, board.Position.Y + 20f),
-            $"Score: {st.Score}", HorizontalAlignment.Left, -1f, 18, new Color(1f, 1f, 1f, 0.9f));
+        DpText.Draw(this, DpText.Hud, new Vector2(board.Position.X + 6f, board.Position.Y + 6.5f),
+            $"Score: {st.Score}", 18, new Color(1f, 1f, 1f, 0.9f));
     }
 
     private void DrawStatus(MinigameSession s, Rect2 board)
@@ -275,8 +276,7 @@ public partial class MinigameRenderer : Control
             c.A = 0.6f + 0.4f * Mathf.Sin((float)_time * 4f); // pulse on the active turn
 
         var pos = new Vector2(board.Position.X, board.Position.Y - 30f);
-        DrawString(ThemeDB.FallbackFont, pos + new Vector2(0f, 22f), status,
-            HorizontalAlignment.Center, board.Size.X, 22, c);
+        DpText.Draw(this, DpText.Hud, pos + new Vector2((board.Size.X - DpText.Measure(DpText.Hud, status, 22)) * 0.5f, 5.5f), status, 22, c);
     }
 
     // =====================================================================================

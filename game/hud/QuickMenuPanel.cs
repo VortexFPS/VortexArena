@@ -737,19 +737,14 @@ public partial class QuickMenuPanel : HudPanel
 
         // Clip the text to its row column [pos.X, pos.X+descW) so a long row title / player name (QC
         // textShortenToWidth) never bleeds off the panel rect or under the checkbox. Stop once we run out.
-        // DrawString with HorizontalAlignment.Left + a positive width clips the glyphs to that width.
         float rightEdge = pos.X + descW;
-        float y = pos.Y + (RowHeight - fontPx) * 0.5f + fontPx;
+        float y = pos.Y + (RowHeight - fontPx) * 0.5f;
         float x = pos.X + offset;
         foreach (HudText.Run r in runs)
         {
             if (string.IsNullOrEmpty(r.Text)) continue;
             if (x >= rightEdge) break;
-            float avail = rightEdge - x;
-            var at = new Vector2(x, y);
-            var shadow = new Color(0f, 0f, 0f, r.Color.A * 0.7f);
-            DrawString(Font, at + new Vector2(1f, 1f), r.Text, HorizontalAlignment.Left, avail, fontPx, shadow);
-            DrawString(Font, at, r.Text, HorizontalAlignment.Left, avail, fontPx, r.Color);
+            DrawText(new Vector2(x, y), r.Text, r.Color, fontPx);
             x += MeasureText(r.Text, fontPx);
         }
     }

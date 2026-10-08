@@ -110,6 +110,13 @@ public partial class MenuRoot : Control
     /// </summary>
     private void OnNodeAdded(Node node)
     {
+        // Text-drawing controls anywhere under the menu draw DarkPlaces font-map glyphs, which have to land on
+        // whole window pixels (MenuTextSnap). Cheap type test first; the ancestor walk only for those.
+        if (node is Label or BaseButton or LineEdit or RichTextLabel or ItemList or Tree or TabBar or TextEdit or MenuListBox or PickerGrid)
+        {
+            for (Node? p = node.GetParent(); p is not null; p = p.GetParent())
+                if (ReferenceEquals(p, this)) { MenuTextSnap.Apply(node); break; }
+        }
         if (node is not (ItemList or Tree or ScrollContainer))
             return;
         for (Node? p = node.GetParent(); p is not null; p = p.GetParent())

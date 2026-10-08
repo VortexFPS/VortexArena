@@ -101,6 +101,9 @@ public partial class HealthArmorPanel : HudPanel
     // which would then taint every blinking color/alpha this frame.
     private float Time => Now >= 0.0 && double.IsFinite(Now) ? (float)Now : (float)_localClock;
 
+    // QC healtharmor.qc:135-324: draw_beginBoldFont() ... draw_endBoldFont() around everything the panel draws.
+    protected override bool BoldPanel => true;
+
     protected override void DrawPanel()
     {
         if (Player is null) return;
@@ -560,7 +563,8 @@ public partial class HealthArmorPanel : HudPanel
         DrawRect(rect, new Color(box.R, box.G, box.B, modulate.A * 0.85f));
     }
 
-    private int NumberSize(float cellH) => (int)Mathf.Clamp(cellH * 0.95f, 9f, 40f);
+    // drawstring_aspect draws at '1 1 0' * sz.y: the CELL height (DrawQ_String's size), not an em size.
+    private int NumberSize(float cellH) => Mathf.Clamp(Mathf.RoundToInt(cellH), 9, 256);
 
     // =================================================================================================
     //  Color helpers (QC HUD_Get_Num_Color — full 5-stop ramp + blink, replacing the base 2-stop NumColor)

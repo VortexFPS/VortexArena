@@ -358,6 +358,9 @@ public partial class TimerPanel : HudPanel
         return FgColor;                                                          // white '1 1 1'
     }
 
+    // QC timer.qc:76-200: draw_beginBoldFont() ... draw_endBoldFont() around everything the panel draws.
+    protected override bool BoldPanel => true;
+
     protected override void DrawPanel()
     {
         // Self-blank: draw NOTHING (not even the skin frame) until the match/net layer feeds state. Prevents a
@@ -371,7 +374,10 @@ public partial class TimerPanel : HudPanel
         if (!(float.IsFinite(Size2.X) && float.IsFinite(Size2.Y)) || Size2.X <= 0f || Size2.Y <= 0f) return;
 
         // QC HUD_Panel_DrawBg paints the skin frame (border_plain_north under luma); no-op when bg "0".
-        DrawBackground();
+        // QC timer.qc:181-182: "panel_size.y -= subtext_size.y; HUD_Panel_DrawBg();" - the frame covers the time's
+        // cell only. (The HUD editor still shows the whole panel rectangle.)
+        if (IsConfiguring) DrawBackground();
+        else DrawBackgroundRect(new Rect2(Vector2.Zero, new Vector2(Size2.X, Size2.Y - Size2.Y / 3f)), LiveBgAlpha);
 
         double current = CurrentTime();
         bool intermission = IntermissionTime > 0.0;
@@ -421,7 +427,10 @@ public partial class TimerPanel : HudPanel
         bool hasSub = !string.IsNullOrEmpty(subtext);
 
         // ----- layout (QC: subtext is a third of the height; subtimer is a third of the width) -----
-        float subtextH = hasSub ? Size2.Y / 3f : 0f;
+        // QC timer.qc:176-177: "subtext_size = vec2(mySize.x, mySize.y / 3); timer_size = vec2(mySize.x, mySize.y -
+        // subtext_size.y)" - the bottom third is reserved for the subtext whether or not there is one, so the
+        // time is drawn in a cell two thirds of the panel high (24 of 36 pixels at 1280x720), not the whole panel.
+        float subtextH = Size2.Y / 3f;
         float timerAreaH = Size2.Y - subtextH;
 
         float timerAreaW = Size2.X;
@@ -500,7 +509,8 @@ public partial class TimerPanel : HudPanel
         if (minSize < 1) minSize = 1;
         if (maxSize < minSize) maxSize = minSize;
 
-        int size = (int)Mathf.Clamp(cell.Size.Y * 0.75f, minSize, maxSize);
+        // drawstring_aspect draws at '1 1 0' * sz.y: the CELL height (DrawQ_String's size), not an em size.
+        int size = (int)Mathf.Clamp(cell.Size.Y, minSize, System.Math.Max(maxSize, (int)cell.Size.Y));
         if (size < 1) size = 1;
         // Shrink to fit the cell width (aspect behavior) so long strings like "Overtime #12" don't clip.
         float w = MeasureText(text, size);

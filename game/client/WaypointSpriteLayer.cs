@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using VortexArena.Game.Text;   // DpText: DarkPlaces-accurate text (font slots, baked outline, colour lift)
 using VortexArena.Common.Gameplay.Waypoints;
 using VortexArena.Common.Services;
 using VortexArena.Game.Hud;   // HudSkin, TextureCache, HudPanel.HudFont
@@ -93,8 +94,8 @@ public partial class WaypointSpriteLayer : Control
         float l = vp.X * edgeL, t = vp.Y * edgeT, r = vp.X - vp.X * edgeR, b = vp.Y - vp.Y * edgeB;
         NVec3 camQ = Coords.ToQuake(Camera.GlobalPosition);
         float now = NowSec();
-        Font font = HudPanel.HudFont ?? ThemeDB.FallbackFont;
-        Font bold = HudSkin.BoldFont ?? font;
+        // QC waypointsprites.qc Draw_WaypointSprite: "draw_beginBoldFont();" around the sprite's name.
+        const int bold = DpText.HudBold;
 
         foreach (WaypointNet wp in list)
         {
@@ -227,13 +228,12 @@ public partial class WaypointSpriteLayer : Control
         DrawColoredPolygon(pts, col);
     }
 
-    private void DrawCenteredText(Font fnt, Vector2 p, string txt, Color col, int size)
+    private void DrawCenteredText(int fnt, Vector2 p, string txt, Color col, int size)
     {
         if (string.IsNullOrEmpty(txt)) return;
-        float w = fnt.GetStringSize(txt, HorizontalAlignment.Left, -1f, size).X;
-        Vector2 at = new(p.X - w * 0.5f, p.Y);
-        DrawString(fnt, at + new Vector2(1f, 1f), txt, HorizontalAlignment.Left, -1f, size, new Color(0f, 0f, 0f, col.A * 0.7f));
-        DrawString(fnt, at, txt, HorizontalAlignment.Left, -1f, size, col);
+        float w = DpText.Measure(fnt, txt, size);
+        // p.Y was the BASELINE of the old DrawString; DrawQ_String's y is the top of the cell (4.5/6 above it).
+        DpText.Draw(this, fnt, new Vector2(p.X - w * 0.5f, p.Y - size * 0.75f), txt, size, col);
     }
 
     private void DrawHealthBar(Vector2 p, float frac, Color col, float a, float scale = 1f)

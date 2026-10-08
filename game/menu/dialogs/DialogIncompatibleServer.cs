@@ -65,9 +65,13 @@ public partial class DialogIncompatibleServer : MenuScreen, ISelfFramedDialog
         }
 
         var body = MakeLabel(
-            "This is a Xonotic server, and Vortex Arena is not compatible with Xonotic yet.\n\n"
+            "This is a Xonotic server. Vortex Arena can join it in legacy compatibility mode, which is "
+            + "experimental and needs Xonotic's own game data.\n\n"
+            + "To turn it on, open the console and set legacy_xonotic_data to the \"data\" folder of a "
+            + "Xonotic install, for example:\n"
+            + "legacy_xonotic_data \"C:/Games/Xonotic/data\"\n\n"
             + "The server list comes from the shared Xonotic master servers, so most of what it shows are "
-            + "Xonotic servers rather than Vortex Arena ones. Backwards-compatible support is coming.");
+            + "Xonotic servers rather than Vortex Arena ones.");
         body.HorizontalAlignment = HorizontalAlignment.Center;
         body.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         column.AddChild(body);

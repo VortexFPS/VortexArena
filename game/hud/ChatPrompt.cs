@@ -6,6 +6,7 @@
 // but mouse-look stays captured — and the input layer raises PHYS_INPUT_BUTTON_CHAT so the server shows
 // the chat bubble (playtest #46/#48).
 using Godot;
+using VortexArena.Game.Text;   // DpText: DarkPlaces-accurate text (font slots, baked outline, colour lift)
 
 namespace VortexArena.Game.Hud;
 
@@ -155,15 +156,18 @@ public partial class ChatPrompt : Control
     public override void _Draw()
     {
         if (!Visible) return;
-        Font font = HudPanel.HudFont ?? ThemeDB.FallbackFont;
-        int fs = Mathf.Clamp((int)(GetViewportRect().Size.Y / 40f), 14, 26);
+        // console.c Con_DrawInput / Con_DrawNotify: the chat input line is drawn in FONT_CHAT at con_chatsize
+        // virtual units ("inputsize = (numChatlines ? con_chatsize : con_notifysize).value").
+        float chatSize = VortexArena.Game.Menu.MenuState.Cvars.GetFloat("con_chatsize");
+        if (!(chatSize > 0f)) chatSize = 10f;
+        int fs = Mathf.Max(6, Mathf.RoundToInt(chatSize * DpText.PixelsPerUnit));
         string prompt = _commandMode ? "]" : _team ? "say_team:" : "say:";
         // DP draws the prompt at the top-left of the screen over the game view.
-        var pos = new Vector2(8f, 8f + fs);
+        var pos = new Vector2(8f, 8f);
         string caret = (int)(_caretPhase * 2f) % 2 == 0 ? "_" : " ";
         // Faint backdrop band so the line reads over a bright sky.
         DrawRect(new Rect2(4f, 6f, GetViewportRect().Size.X * 0.6f, fs * 1.5f), new Color(0f, 0f, 0f, 0.35f));
-        DrawString(font, pos, $"{prompt} {_text}{caret}", HorizontalAlignment.Left, -1f, fs,
+        DpText.Draw(this, DpText.Chat, pos, $"{prompt} {_text}{caret}", fs,
             _commandMode ? new Color(1f, 0.9f, 0.5f) : _team ? new Color(0.55f, 1f, 0.55f) : Colors.White);
     }
 }

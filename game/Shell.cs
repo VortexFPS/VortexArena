@@ -51,6 +51,22 @@ public partial class Shell : Node
     /// <summary>If set at boot (CLI <c>--connect &lt;addr&gt;</c>), skip the menu and join this server.</summary>
     public string? ConnectAddress { get; set; }
 
+    /// <summary>If set at boot (CLI <c>--legacy-connect &lt;addr&gt;</c>), skip the menu and join this stock
+    /// Xonotic server in legacy compatibility mode (<see cref="ConnectToLegacyServer"/>).</summary>
+    public string? LegacyConnectAddress { get; set; }
+
+    /// <summary>If true at boot (CLI <c>--legacy-menu</c>), start Xonotic's own menu program in place of the
+    /// native front end (<see cref="StartLegacyMenu"/>). Needs the same Xonotic game data as a legacy join.</summary>
+    public bool BootLegacyMenu { get; set; }
+
+    /// <summary>If set at boot (CLI <c>--legacy-map &lt;map&gt;</c>), skip the menu and start a LOCAL Xonotic game
+    /// on that map: Xonotic's own server program in this process, joined by its own client program
+    /// (<see cref="StartLegacyLocalGame"/>). <see cref="BootLegacyGametype"/> (<c>--legacy-gametype</c>) and
+    /// <see cref="BootLegacyBots"/> (<c>--legacy-bots</c>) are optional.</summary>
+    public string? BootLegacyMap { get; set; }
+    public string? BootLegacyGametype { get; set; }
+    public int? BootLegacyBots { get; set; }
+
     /// <summary>If true at boot (CLI <c>--host [map]</c>), skip the menu and start a listen server on
     /// <see cref="BootMap"/> (a flat floor when empty) then self-connect a networked client.</summary>
     public bool BootHost { get; set; }
@@ -108,6 +124,12 @@ public partial class Shell : Node
     private MenuRoot _menu = null!;
     private ModelViewer? _viewer;
     private VortexArena.Game.Net.NetGame? _netGame;
+    // A session on a stock Xonotic server (legacy compatibility mode): the sibling of _netGame. At most one
+    // of the two exists at a time; TeardownGame clears both.
+    private VortexArena.Game.Legacy.LegacyGame? _legacyGame;
+    // Xonotic's own menu program (menu.dat), when --legacy-menu or the legacy_menu command started it. While
+    // it exists the native menu stays hidden, a legacy session runs on ITS console, and Escape is its key.
+    private VortexArena.Game.Legacy.LegacyMenu? _legacyMenu;
     private ConsoleOverlay _console = null!;
     private bool _paused;                    // the in-game (pause) menu is open
     private bool _windowFocused = true;      // OS window focus, tracked from _Notification (drives auto-pause)
@@ -272,6 +294,36 @@ public partial class Shell : Node
             RouteRemoteCommand,                      // pure-client fallback: DP clc_stringcmd to the remote server (or print a hint at the menu)
             () => MatchRunning && !_paused);         // recapture the mouse on close only inside a live match
 
+        // --- the mod sandbox's draw layer (planning/specs/modding.md). Above the match HUD (layer 5), below
+        //     the menu (10): a mod draws over the game, never over the menu or the console. Inert until a mod
+        //     is loaded, which cl_allow_mods 0 (the default) prevents. ---
+        // Legacy compatibility mode: the cvars that live in the player's own store (where Xonotic's game
+        // data is; the status line) and the console command that joins a stock Xonotic server by address.
+        Game.Legacy.LegacyData.RegisterCvars(MenuState.Cvars);
+        MenuState.Interp!.RegisterCommand("legacy_connect", a =>
+        {
+            if (a.Count < 2) _console.Print("usage: legacy_connect <host[:port]>   (join a stock Xonotic server)");
+            else ConnectToLegacyServer(a[1]);
+        }, "join a stock Xonotic (DarkPlaces) server in legacy compatibility mode; needs legacy_xonotic_data");
+        MenuState.Interp!.RegisterCommand("legacy_menu", a =>
+        {
+            if (a.Count >= 2 && a[1] == "0") StopLegacyMenu(null);
+            else StartLegacyMenu();
+        }, "start Xonotic's own menu program (menu.dat) in place of this menu; \"legacy_menu 0\" returns to it. Needs legacy_xonotic_data");
+        MenuState.Interp!.RegisterCommand("legacy_map", a =>
+        {
+            if (a.Count < 2 || !VortexArena.Legacy.Local.LegacyLocalCommands.IsMapName(a[1]))
+                _console.Print("usage: legacy_map <map> [gametype] [bots]   (start a local Xonotic game: its own server and client programs)");
+            else
+                StartLegacyLocalGame(a[1], a.Count > 2 ? a[2] : null, a.Count > 3 && int.TryParse(a[3], out int bots) ? bots : null);
+        }, "start a local Xonotic game (Xonotic's own server program in this process) on a map; needs legacy_xonotic_data");
+
+        var modCanvas = new CanvasLayer { Name = "ModLayer", Layer = 6 };
+        AddChild(modCanvas);
+        var modLayer = new Game.Modding.ModLayer { Name = "Mods" };
+        modCanvas.AddChild(modLayer);
+        modLayer.Initialize(MenuState.Interp!, MenuState.Cvars, _console.Print);
+
         // Keybind system: the runtime key→command table is already seeded by MenuState.Boot (above) from the
         // canonical binds-xonotic.cfg via the bind sink (BindInput.RegisterBindCommands), with the user's saved
         // `bind` lines layered on top — one source of truth shared by `bind`/gameplay input. Here we only wire
@@ -384,6 +436,18 @@ public partial class Shell : Node
 
         if (!string.IsNullOrWhiteSpace(ConnectAddress))
             ConnectToServer(ConnectAddress!);               // --connect <addr>: join a real server
+        else if (!string.IsNullOrWhiteSpace(LegacyConnectAddress))
+        {
+            if (BootLegacyMenu) StartLegacyMenu();          // --legacy-menu too: the join runs on the Xonotic menu's console
+            ConnectToLegacyServer(LegacyConnectAddress!);   // --legacy-connect <addr>: join a stock Xonotic server
+        }
+        else if (!string.IsNullOrWhiteSpace(BootLegacyMap))
+        {
+            if (BootLegacyMenu) StartLegacyMenu();          // --legacy-menu too: the game runs on the Xonotic menu's console
+            StartLegacyLocalGame(BootLegacyMap!, BootLegacyGametype, BootLegacyBots);   // --legacy-map <map>: a local Xonotic game
+        }
+        else if (BootLegacyMenu)
+            StartLegacyMenu();                              // --legacy-menu: Xonotic's own menu program
         else if (BootHost)
             StartListenServer(new MatchConfig { Map = BootMap ?? "", Gametype = BootGametype, BotCount = BootBots }); // --host [map]
         else if (!string.IsNullOrWhiteSpace(BootMap))
@@ -504,6 +568,8 @@ public partial class Shell : Node
     {
         CreateGameScreen.StartGameRequested += OnStartGame;
         MultiplayerScreen.Browser.ConnectRequested += OnConnect;
+        // The browser's route for a server it has identified as stock Xonotic (legacy compatibility mode).
+        MultiplayerScreen.LegacyConnectRequested = ConnectToLegacyServer;
 
         MenuCommand.Quit = () => GetTree().Quit();
         MenuCommand.Disconnect = ReturnToMainMenu;
@@ -516,7 +582,13 @@ public partial class Shell : Node
         ClientSettings.InstallLiveVideoCvars(MenuState.Cvars);
         // QC `map`/`devmap`: in a running match this is a changelevel (keep mode + bots); at the menu it starts a
         // fresh listen server on the map then self-connects (the real "start a game" path).
-        MenuCommand.StartMap = ChangeLevel;
+        // ...unless Xonotic's own menu or a local Xonotic game is what is running: then "map" is that console's
+        // command (a new local game on Xonotic's server program), not a native listen server.
+        MenuCommand.StartMap = map =>
+        {
+            if (_legacyMenu is not null || _legacyGame is { IsLocal: true }) HandleLegacyMapCommand("map " + map);
+            else ChangeLevel(map);
+        };
         MenuCommand.StartEditor = EditorMap;
         MenuCommand.Connect = OnConnect;
 
@@ -528,7 +600,12 @@ public partial class Shell : Node
         MenuCommand.SendGameCommand = line =>
         {
             if (LocalRouteCommand(line) is null)
+            {
                 _netGame?.SendStringCommand(line);
+                // On a Xonotic server the same buttons (Join, Spectate, team select) are console commands
+                // for the legacy session, which forwards what it does not know to the server.
+                _legacyGame?.ConsoleCommand(line);
+            }
         };
         // QC gamestatus & (GAME_ISSERVER|GAME_CONNECTED): drives the Leave-match button's disabled state.
         MenuCommand.InMatch = () => MatchRunning;
@@ -582,6 +659,7 @@ public partial class Shell : Node
         // Detach the static menu callbacks so a re-created shell (or test) doesn't double-fire.
         CreateGameScreen.StartGameRequested -= OnStartGame;
         MultiplayerScreen.Browser.ConnectRequested -= OnConnect;
+        MultiplayerScreen.LegacyConnectRequested = null;
     }
 
     /// <summary>
@@ -652,6 +730,10 @@ public partial class Shell : Node
             _chatPrompt.Close();
             return;
         }
+        // With Xonotic's own menu running, Escape is that menu's (LegacyMenu._Input has it first); the native
+        // pause menu is never opened over it.
+        if (_legacyMenu is not null)
+            return;
         //   1b. the interactive scoreboard: Escape closes it, and Escape WHILE the scoreboard key is held opens
         //       it (QC main.qc:545-551 checks S_TAB before falling through to the menu). Must be claimed here —
         //       Godot runs _UnhandledKeyInput before _UnhandledInput, and this method marks both Escape edges
@@ -684,6 +766,11 @@ public partial class Shell : Node
     /// path is only reached by an explicit <c>togglemenu</c> command, never by the Escape bind.</summary>
     private void HandleToggleMenu(int mode)
     {
+        if (_legacyMenu is not null)
+        {
+            _legacyMenu.ToggleMenu(mode);   // MR_ToggleMenu: Xonotic's menu opens over the game, as in DarkPlaces
+            return;
+        }
         if (!MatchRunning)
             return;
         if (mode == 0)
@@ -819,7 +906,7 @@ public partial class Shell : Node
 
     /// <summary>True while a networked match (<see cref="VortexArena.Game.Net.NetGame"/> — listen server or
     /// remote client) is live. The no-net <see cref="ModelViewer"/> is intentionally NOT a "match" (no pause menu).</summary>
-    private bool MatchRunning => _netGame is not null;
+    private bool MatchRunning => _netGame is not null || _legacyGame is not null;
 
     /// <summary>
     /// A live match's connection failed before the player spawned (server reject, dropped link, or connect
@@ -855,6 +942,16 @@ public partial class Shell : Node
     {
         TeardownGame();
         DismissLoadingScreen();
+        if (_legacyMenu is not null)
+        {
+            // Xonotic's menu is the front end: it notices by itself that the client is disconnected and shows
+            // its main menu again. The native menu stays hidden and its configuration is not involved.
+            _menu.Visible = false;
+            _paused = false;
+            GetTree().Paused = false;
+            MouseCapture.SetWantCapture(false);
+            return;
+        }
         MenuState.SaveUserConfig();
 
         // Reinstall a clean menu-time facade (empty world) so no stale match entities linger behind the menu;
@@ -892,6 +989,14 @@ public partial class Shell : Node
             // TeardownGame that runs before the first session exists), so a later menu-created game
             // auto-joins normally and doesn't inherit a camera pinned at the previous map's coordinates.
             Net.ObserverCamera.Disarm();
+        }
+        if (_legacyGame is not null)
+        {
+            // Says goodbye to the server and closes the socket now, before the deferred free (the same
+            // order as the NetGame branch above, for the same reason).
+            _legacyGame.Shutdown();
+            _legacyGame.QueueFree();
+            _legacyGame = null;
         }
     }
 
@@ -943,6 +1048,194 @@ public partial class Shell : Node
         if (_netGame != net) return; // abandoned: TeardownGame was called while we awaited
 
         AddChild(net);
+    }
+
+    /// <summary>
+    /// Join a stock Xonotic server in legacy compatibility mode (planning/specs/legacy-compat.md): the
+    /// legacy-mode counterpart of <see cref="ConnectToServer"/>, with the same lifecycle - tear down what is
+    /// running, show the loading screen, hide the menu, build the match node, and add it to the tree once
+    /// the loading screen has been painted. The node is a <see cref="VortexArena.Game.Legacy.LegacyGame"/>
+    /// rather than a NetGame: a second client stack (the DarkPlaces protocol and the server's own client
+    /// program on a QuakeC VM) that shares none of the native one's state.
+    ///
+    /// <para>It needs Xonotic's game data, named by the <c>legacy_xonotic_data</c> cvar (or
+    /// <c>--legacy-data</c>). Without it the join fails here, immediately, with a message that names the
+    /// setting - the same failure path a refused connection takes.</para>
+    /// </summary>
+    public void ConnectToLegacyServer(string address) => StartLegacySession(address, null);
+
+    /// <summary>
+    /// Start a LOCAL Xonotic game (planning/specs/legacy-compat.md LC-12): Xonotic's server program
+    /// (progs.dat) hosted in this process - on its own thread unless <c>legacy_server_thread 0</c> - with its
+    /// client program joining it through two in-process queues, as DarkPlaces connects a listen server's own
+    /// player through its loopback driver. <c>--legacy-map</c>, the <c>legacy_map</c> console command, and
+    /// Xonotic's own menu (Singleplayer, Multiplayer - Create) all end here. No socket is opened unless
+    /// <c>legacy_listen</c> asks for one, and nothing is ever announced to a master server.
+    /// </summary>
+    public void StartLegacyLocalGame(string map, string? gametype = null, int? bots = null)
+    {
+        // SV_Map_f: whatever is running ends first. Before the request is built, because a session on the
+        // Xonotic menu's console puts that console's cvars back to the player's values when it ends, and the
+        // new server is to get the player's settings, not what the last server's client program had set.
+        VortexArena.Legacy.Local.LegacyLocalGameRequest? running = _legacyGame?.LocalGame;
+        TeardownGame();
+        // A local Xonotic game in DarkPlaces is three programs: the menu program is what shows the Join /
+        // Spectate dialog when the level is entered, the team selection, and the menu Escape opens. So it is
+        // started too (legacy_local_menu 0 leaves it out: the game then runs with the native pause menu).
+        if (_legacyMenu is null && MenuState.Cvars.GetFloat(Game.Legacy.LegacyLocalGames.MenuCvar) != 0)
+            StartLegacyMenu();
+        if (Game.Legacy.LegacyLocalGames.BuildRequest(map, gametype, bots, _legacyMenu, running, MenuState.Cvars, out string problem) is { } request)
+            StartLegacySession("local game on " + map, request);
+        else
+            HandleLegacyConnectionFailed(null, problem, "local game on " + map);
+    }
+
+    /// <summary>"map x", "changelevel x", "restart", "maps" as a listen server's console reads them
+    /// (<see cref="VortexArena.Game.Legacy.LegacyLocalGames.HandleMapCommand"/>). True if the line was one of them.</summary>
+    private bool HandleLegacyMapCommand(string line) =>
+        Game.Legacy.LegacyLocalGames.HandleMapCommand(line, _legacyMenu, _legacyGame, MenuState.Cvars,
+            map => StartLegacyLocalGame(map), _console.Print);
+
+    private async void StartLegacySession(string address, VortexArena.Legacy.Local.LegacyLocalGameRequest? local)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            Log.Warn("[Shell] legacy_connect: empty address.");
+            return;
+        }
+        if (!Game.Legacy.LegacyData.TryResolve(MenuState.Cvars, out string dataDir, out string problem))
+        {
+            HandleLegacyConnectionFailed(null, problem, address);
+            return;
+        }
+        Log.Info(local is null
+            ? $"[Shell] connecting to {address} (Xonotic server, legacy compatibility mode; data {dataDir})."
+            : $"[Shell] starting a {address} (Xonotic's own server and client programs; data {dataDir}).");
+        TeardownGame();
+        ShowLoadingScreen(local?.Map ?? address);
+        EnterMatchView();
+
+        var legacy = new Game.Legacy.LegacyGame
+        {
+            Name = "LegacyClient",
+            // Like NetGame: the connection has to keep pumping while the pause menu has the tree paused.
+            ProcessMode = ProcessModeEnum.Always,
+            Address = address,
+            DataDirectory = dataDir,
+            // Read-only: the session copies the player's name, colours, sensitivity and fov out of it and
+            // keeps its own store for everything the server and its program set.
+            PlayerCvars = MenuState.Cvars,
+            LoadingScreen = _loadingScreen,
+            DismissLoadingScreen = DismissLoadingScreen,
+            UiHasFocus = () => _paused || _menu.Visible || Game.Hud.ChatPrompt.IsOpen || _legacyMenu is { HasKeys: true },
+            ToggleMenu = HandleToggleMenu,
+            // Started from Xonotic's own menu: the session runs on that menu's console (null otherwise).
+            Menu = _legacyMenu,
+            // messagemode / messagemode2 are engine commands in DarkPlaces: the chat line is the shell's.
+            OpenChat = team => OpenChatPrompt(team),
+            // A local game: the session hosts the server too. Null for a join.
+            LocalGame = local,
+            MapCommand = HandleLegacyMapCommand,
+            // A level change (match end, vote, changelevel) puts the loading screen back up.
+            ShowLoadingScreen = map => { ShowLoadingScreen(map); return _loadingScreen; },
+        };
+        legacy.ConnectionFailed = reason => HandleLegacyConnectionFailed(legacy, reason, address);
+        legacy.Disconnected = () => { if (legacy == _legacyGame) ReturnToMainMenu(); };
+        legacy.ConsolePrint += _console.Print;
+        _legacyGame = legacy;
+
+        await WaitForFramePainted();
+        if (_legacyGame != legacy) return; // abandoned: TeardownGame was called while we awaited
+
+        AddChild(legacy);
+    }
+
+    /// <summary>The legacy-mode twin of <see cref="HandleConnectionFailed"/>: same rules, same dialog.
+    /// <paramref name="legacy"/> is null for a failure before any session existed (no game data configured).</summary>
+    private void HandleLegacyConnectionFailed(VortexArena.Game.Legacy.LegacyGame? legacy, string reason, string target)
+    {
+        if (legacy is not null && legacy != _legacyGame)
+            return; // superseded by a newer match
+
+        if (IsUnattended)
+        {
+            Log.Severe($"[Shell] legacy connection to '{target}' failed: {reason}; exiting (nothing here can prompt).");
+            // Close the socket before the tree goes down, so the server sees a disconnect rather than a timeout.
+            TeardownGame();
+            GetTree().Quit(1);
+            return;
+        }
+
+        Log.Warn($"[Shell] legacy connection to '{target}' failed: {reason}");
+        ReturnToMainMenu();
+        if (_legacyMenu is not null)
+            _legacyMenu.ShowNotice($"The connection to {target} failed: {reason}");
+        else
+            _menu.Push(new DialogConnectionFailed(target, reason));
+    }
+
+    /// <summary>
+    /// Start Xonotic's own menu program (menu.dat hosted on the QuakeC VM, planning/specs/legacy-compat.md
+    /// LC-12) in place of the native front end: <c>--legacy-menu</c>, or the <c>legacy_menu</c> console
+    /// command. The native menu is hidden, not torn down, and comes back when the Xonotic menu is closed
+    /// (<c>legacy_menu 0</c>) or cannot run. Nothing of the native configuration is read or written by it.
+    /// </summary>
+    public void StartLegacyMenu()
+    {
+        if (_legacyMenu is not null)
+            return;
+        if (!Game.Legacy.LegacyData.TryResolve(MenuState.Cvars, out string dataDir, out string problem))
+        {
+            Log.Warn($"[Shell] legacy_menu: {problem}");
+            _console.Print(problem);
+            if (IsUnattended && BootLegacyMenu)
+                GetTree().Quit(1);
+            return;
+        }
+        Log.Info($"[Shell] starting the Xonotic menu program (data {dataDir}).");
+        TeardownGame();
+        DismissLoadingScreen();
+        _menu.Visible = false;
+        _paused = false;
+        GetTree().Paused = false;
+        MouseCapture.SetWantCapture(false);
+
+        var menu = new Game.Legacy.LegacyMenu
+        {
+            Name = "LegacyMenu",
+            DataDirectory = dataDir,
+            ConsolePrint = _console.Print,
+            ConnectRequested = ConnectToLegacyServer,
+            DisconnectRequested = () => { if (_legacyGame is not null) ReturnToMainMenu(); },
+            QuitRequested = () => GetTree().Quit(),
+            ToggleConsole = () => _console.Toggle(),
+            // "map x" from Singleplayer or Multiplayer - Create, and changelevel / restart for a running one.
+            StartLocalGame = HandleLegacyMapCommand,
+        };
+        menu.Failed = reason => StopLegacyMenu(reason);
+        _legacyMenu = menu;
+        AddChild(menu);
+    }
+
+    /// <summary>Close Xonotic's menu program and show the native menu again. <paramref name="reason"/> is why
+    /// it could not go on (shown to the player), or null when it was simply asked to close.</summary>
+    private void StopLegacyMenu(string? reason)
+    {
+        if (_legacyMenu is not { } menu)
+            return;
+        TeardownGame();              // a session on its console goes first: it shares that console
+        _legacyMenu = null;
+        menu.Shutdown();
+        menu.QueueFree();
+        if (reason is not null && IsUnattended)
+        {
+            Log.Severe($"[Shell] the Xonotic menu stopped: {reason}; exiting (nothing here can prompt).");
+            GetTree().Quit(1);
+            return;
+        }
+        ReturnToMainMenu();
+        if (reason is not null)
+            _menu.Push(new DialogConnectionFailed("Xonotic menu", reason));
     }
 
     /// <summary>
@@ -1226,6 +1519,14 @@ public partial class Shell : Node
         // so kill/say/team still act on the host's player; the remote-client path (ServerNet.cs) stays gated.
         // WS1: routed through NetGame so the execute takes the sim gate when sv_threaded is on — a bare
         // Commands.Execute here mutated the worker-owned world from the main thread (`kill` mid-bot-combat).
+        if (_netGame is null && _legacyGame is { IsLocal: true, Ended: false } legacyLocal)
+        {
+            // A local Xonotic game: the line is for Xonotic's console, where server commands (sv_cmd, kick,
+            // changelevel, restart; endmatch and the rest through Xonotic's own aliases) go to the local server
+            // and anything else unknown goes to it as the player's own command, as on a DarkPlaces listen server.
+            legacyLocal.ConsoleCommand(line);
+            return "";
+        }
         return _netGame?.ExecuteHostConsoleCommand(line);
     }
 
@@ -1239,6 +1540,15 @@ public partial class Shell : Node
     {
         if (_netGame is not null)
             _netGame.SendStringCommand(line);
+        // A legacy session has a console of its own (its own cvars and aliases, Xonotic's): a typed line the
+        // shared interpreter did not claim runs there, and what THAT does not know goes to the server, as
+        // DarkPlaces forwards it. `cmd <text>` is a command of that console and sends the text as it stands.
+        else if (_legacyGame is not null)
+            _legacyGame.ConsoleCommand(line);
+        // Xonotic's own menu has a console too (Xonotic's cvars, aliases and binds): a line the shared
+        // interpreter did not claim runs there.
+        else if (_legacyMenu is not null)
+            _legacyMenu.ConsoleCommand(line);
         else
             VortexArena.Common.Diagnostics.Log.Help($"\"{line}\": no server — start a match (`map <name>`) or `connect <addr>` first.");
     }

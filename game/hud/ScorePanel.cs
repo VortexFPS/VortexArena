@@ -247,17 +247,29 @@ public partial class ScorePanel : HudPanel
         switch (_mode)
         {
             case ScoreMode.Race:
+                BeginBoldFont();   // QC score.qc:184 draw_beginBoldFont() (race timer + distribution)
                 DrawRaceDistribution(pos, size);
+                EndBoldFont();
                 break;
 
             case ScoreMode.Team:
                 if (rankings) DrawRankings(pos, size);
-                else DrawTeamScores(pos, size);
+                else
+                {
+                    BeginBoldFont();   // QC score.qc:292 draw_beginBoldFont() (team scores)
+                    DrawTeamScores(pos, size);
+                    EndBoldFont();
+                }
                 break;
 
             default: // FreeForAll
                 if (rankings) DrawRankings(pos, size);
-                else DrawFreeForAll(pos, size);
+                else
+                {
+                    BeginBoldFont();   // QC score.qc:244 draw_beginBoldFont() (own score + distribution)
+                    DrawFreeForAll(pos, size);
+                    EndBoldFont();
+                }
                 break;
         }
     }
@@ -463,7 +475,8 @@ public partial class ScorePanel : HudPanel
             cell.Size.X <= 0f || cell.Size.Y <= 0f) return;
         if (!float.IsFinite(cell.Position.X) || !float.IsFinite(cell.Position.Y)) return;
 
-        int fontPx = Mathf.Max(8, Mathf.RoundToInt(cell.Size.Y * 0.85f));
+        // drawstring_aspect draws at '1 1 0' * sz.y: the CELL height (DrawQ_String's size), not an em size.
+        int fontPx = Mathf.Max(8, Mathf.RoundToInt(cell.Size.Y));
         // shrink to fit the cell width if needed (QC's aspect fit clamps the size to the box)
         float w = MeasureText(text, fontPx);
         if (w > cell.Size.X && w > 0f)

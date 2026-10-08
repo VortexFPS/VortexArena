@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using VortexArena.Game.Text;   // DpText: DarkPlaces-accurate text (font slots, baked outline, colour lift)
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Services;     // CvarFlags
 using VortexArena.Engine.Simulation;   // CvarService (RegisterDefaults)
@@ -545,7 +546,8 @@ public partial class CenterPrintPanel : HudPanel
         if (a <= 0.5f / 255f) return;
         int size = Mathf.Max(8, Mathf.RoundToInt(font));
         var baseColor = new Color(1f, 1f, 1f, Mathf.Clamp(a, 0f, 1f));
-        Font drawFont = bold ? (HudSkin.BoldFont ?? Font) : Font;
+        // QC centerprint.qc: "if (is_bold) draw_beginBoldFont();" around the line's drawcolorcodedstring.
+        int drawFont = bold ? DpText.HudBold : DpText.Hud;
 
         List<HudText.Run> runs = HudText.Parse(line, baseColor);
         if (runs.Count == 0) return;
@@ -701,20 +703,18 @@ public partial class CenterPrintPanel : HudPanel
 
     private static bool IsHex(char c) => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 
-    /// <summary>Draw left-aligned text with an arbitrary font + drop shadow (mirrors the base <c>DrawText</c>
-    /// but lets us swap to the bold font). Panel-local top-left origin.</summary>
-    private void DrawWith(Font font, Vector2 pos, string text, Color color, int size)
+    /// <summary>Draw left-aligned text in a given font slot (<see cref="DpText.Hud"/> or
+    /// <see cref="DpText.HudBold"/>) - the base <c>DrawText</c> with the slot chosen per line. Panel-local
+    /// top-left origin.</summary>
+    private void DrawWith(int font, Vector2 pos, string text, Color color, int size)
     {
         if (string.IsNullOrEmpty(text)) return;
-        Vector2 at = pos + new Vector2(0f, size);
-        var shadow = new Color(0f, 0f, 0f, color.A * 0.7f);
-        DrawString(font, at + new Vector2(1f, 1f), text, HorizontalAlignment.Left, -1f, size, shadow);
-        DrawString(font, at, text, HorizontalAlignment.Left, -1f, size, color);
+        DpText.Draw(this, font, pos, text, size, color, PanelRect.Position);
     }
 
-    /// <summary>Measure a plain string with an arbitrary font.</summary>
-    private static float MeasureWith(Font font, string text, int size)
-        => string.IsNullOrEmpty(text) ? 0f : font.GetStringSize(text, HorizontalAlignment.Left, -1f, size).X;
+    /// <summary>Measure a plain string in a given font slot.</summary>
+    private static float MeasureWith(int font, string text, int size)
+        => string.IsNullOrEmpty(text) ? 0f : DpText.Measure(font, text, size);
 
     /// <summary>Draw a single (color-coded) run at a point with the default font, laid out left-to-right.</summary>
     private void DrawColoredRun(Vector2 pos, string text, Color baseColor, int size)

@@ -475,6 +475,10 @@ public partial class MultiplayerScreen : MenuScreen
     private string TargetAddress()
         => !string.IsNullOrWhiteSpace(_addressEdit.Text) ? _addressEdit.Text : SelectedRowAddress() ?? "";
 
+    /// <summary>Joins a stock Xonotic server through the legacy client (Shell.ConnectToLegacyServer). Set by the
+    /// shell; null means the legacy path does not exist in this process and such a row is refused as before.</summary>
+    public static System.Action<string>? LegacyConnectRequested { get; set; }
+
     private void OnConnect()
     {
         string address = TargetAddress();
@@ -486,6 +490,16 @@ public partial class MultiplayerScreen : MenuScreen
         // bookmark that hasn't answered yet, still goes through.
         if (Browser.FindByAddress(ServerBrowser.NormalizeAddress(address)) is { IsIncompatibleXonotic: true } server)
         {
+            // Legacy compatibility mode (planning/specs/legacy-compat.md) can join it, given Xonotic's own
+            // game data to run it with. Where that data comes from is still an open decision, so it is a
+            // setting: with legacy_xonotic_data pointing at a Xonotic install the row connects through the
+            // legacy client; without it the notice below says what to set.
+            if (LegacyConnectRequested is { } legacyConnect && VortexArena.Game.Legacy.LegacyData.IsConfigured(MenuState.Cvars))
+            {
+                GD.Print($"[Menu] Connecting to {server.Address} (Xonotic server, legacy compatibility mode).");
+                legacyConnect(server.Address);
+                return;
+            }
             GD.Print($"[Menu] Join refused: {server.Address} is a Xonotic server (no VortexArena protocol tag).");
             Menu?.Push(new DialogIncompatibleServer(server.Name, server.Address));
             return;

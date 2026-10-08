@@ -281,6 +281,9 @@ public partial class PowerupsPanel : HudPanel
         return s.Length == 0 ? defName : char.ToUpperInvariant(s[0]) + s.Substring(1);
     }
 
+    // QC powerups.qc:166-214: draw_beginBoldFont() ... draw_endBoldFont() around everything the panel draws.
+    protected override bool BoldPanel => true;
+
     protected override void DrawPanel()
     {
         List<PowerupEntry> items = BuildRows();

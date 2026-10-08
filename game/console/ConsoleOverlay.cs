@@ -312,6 +312,33 @@ public partial class ConsoleOverlay : CanvasLayer
         interp.RegisterCommand("editor", a => MenuCommand.StartEditor?.Invoke(a.Count >= 2 ? a[1] : string.Empty),
             "open the in-game map editor, optionally on a named map: editor [name]");
 
+        // DP Cbuf_Defer_f (cmd.c): "defer <seconds> <command>" runs a command after a delay. The cfg tree and
+        // Xonotic's own aliases use it, and it is what lets a scripted run (`+"defer 20 screenshot"`) act on a
+        // match that is already up. A deferred +button / -button (DP's "+forward", "-showscores") latches or
+        // releases that button exactly as its key would.
+        interp.RegisterCommand("defer", a =>
+        {
+            if (a.Count < 3 || !float.TryParse(a[1], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out float seconds) || !(seconds >= 0f))
+            {
+                Print("usage: defer <seconds> <command>");
+                return;
+            }
+            string line = string.Join(' ', a.Skip(2));
+            SceneTreeTimer timer = GetTree().CreateTimer(seconds, processAlways: true, processInPhysics: false, ignoreTimeScale: true);
+            timer.Timeout += () =>
+            {
+                if (line.Length > 1 && line[0] is '+' or '-' && !line.Contains(' '))
+                {
+                    const string key = "__defer";
+                    VortexArena.Engine.Console.BindTable.Bind(key, "+" + line[1..]);
+                    VortexArena.Engine.Console.BindTable.HandleBind(key, line[0] == '+', c => interp.ExecuteLine(c));
+                    VortexArena.Engine.Console.BindTable.Unbind(key);
+                }
+                else interp.ExecuteLine(line);
+            };
+        }, "run a command after a delay: defer <seconds> <command>");
+
         // DP Con_ToggleConsole_f — the command the `toggleconsole` bind (and the stock ESCAPE handling) calls.
         // It existed as a key but not as a command, so `bind F1 toggleconsole` reached the router as an unknown
         // gameplay command.
@@ -611,12 +638,16 @@ public partial class ConsoleOverlay : CanvasLayer
 
         _panel.OffsetBottom = height;
 
-        FontFile? mono = ConsoleFont;
+        // DP Con_DrawConsole draws every console line with FONT_CONSOLE at con_textsize: the slot font-xolonium.cfg
+        // loads as "fonts/unifont,fonts/xolonium-regular.otf" - GNU Unifont FIRST - with the outline and blur of
+        // r_font_postprocess_* baked into each glyph. DpBitmapFont hands the stock controls that font map.
+        FontFile? mono = VortexArena.Game.Text.DpBitmapFont.Screen(VortexArena.Game.Text.DpText.Console, textSize, fontPx);
         ApplyFont(_output, "normal_font", "normal_font_size", mono, fontPx);
         ApplyFont(_input, "font", "font_size", mono, fontPx);
         ApplyFont(_prompt, "font", "font_size", mono, fontPx);
         // The version line is deliberately smaller — it is a watermark, not content.
-        ApplyFont(_version, "font", "font_size", mono, Math.Max(8, fontPx - 2));
+        // (DP draws engineversion with the console's own font and size: DrawQ_String(..., con_textsize, FONT_CONSOLE).)
+        ApplyFont(_version, "font", "font_size", mono, fontPx);
 
         // Tell the completion engine how wide the console is in characters, so its packed columns (DP
         // Con_DisplayList) wrap where the text actually wraps.
@@ -846,11 +877,46 @@ public partial class ConsoleOverlay : CanvasLayer
     }
 
     /// <summary>Append one already-BBCode-formatted line, trimming the oldest paragraphs past the cap.</summary>
+    /// <summary>
+    /// gl_draw.c DrawQ_GetTextColor: every text colour is "colour * r_textcontrast + r_textbrightness" (0.8 and
+    /// 0.2 in Xonotic), so ^0 black reads as a fifth grey and ^4 blue is not lost on the dark console. The
+    /// scrollback is BBCode, so the rule is applied to each <c>[color=#rrggbb]</c> as the line is appended.
+    /// </summary>
+    private static string LiftColors(string bbcode)
+    {
+        const string tag = "[color=#";
+        int at = bbcode.IndexOf(tag, StringComparison.Ordinal);
+        if (at < 0) return bbcode;
+        VortexArena.Legacy.Presentation.LegacyTextLook look = VortexArena.Game.Text.DpText.Look;
+        if (look.Contrast == 1f && look.Brightness == 0f) return bbcode;
+        var sb = new System.Text.StringBuilder(bbcode.Length);
+        int from = 0;
+        while (at >= 0)
+        {
+            int hex = at + tag.Length;
+            sb.Append(bbcode, from, hex - from);
+            from = hex;
+            if (hex + 6 < bbcode.Length && bbcode[hex + 6] == ']'
+                && int.TryParse(bbcode.AsSpan(hex, 6), System.Globalization.NumberStyles.HexNumber, null, out int rgb))
+            {
+                for (int shift = 16; shift >= 0; shift -= 8)
+                {
+                    float channel = ((rgb >> shift) & 0xFF) / 255f * look.Contrast + look.Brightness;
+                    sb.Append(((int)MathF.Round(Math.Clamp(channel, 0f, 1f) * 255f)).ToString("x2"));
+                }
+                from = hex + 6;
+            }
+            at = bbcode.IndexOf(tag, from, StringComparison.Ordinal);
+        }
+        sb.Append(bbcode, from, bbcode.Length - from);
+        return sb.ToString();
+    }
+
     private void AppendBuffer(string bbcode)
     {
         if (_output == null || !GodotObject.IsInstanceValid(_output))
             return; // a deferred log line raced node teardown
-        _output.AppendText(bbcode + "\n");
+        _output.AppendText(LiftColors(bbcode) + "\n");
         while (_output.GetParagraphCount() > MaxParagraphs)
             _output.RemoveParagraph(0);
     }

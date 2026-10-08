@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using VortexArena.Game.Text;   // DpText: DarkPlaces-accurate text (font slots, baked outline, colour lift)
 using VortexArena.Common.Gameplay;
 
 namespace VortexArena.Game.Hud;
@@ -235,8 +236,7 @@ public partial class MinigameMenu : Control
         DrawRect(panel, new Color(1f, 1f, 1f, 0.35f), filled: false, width: 2f);
 
         // QC HUD_MinigameMenu draws the "Minigames" title.
-        DrawString(ThemeDB.FallbackFont, new Vector2(8f, 22f), "Minigames",
-            HorizontalAlignment.Left, -1f, 20, new Color(0.25f, 0.47f, 0.72f));
+        DpText.Draw(this, DpText.Hud, new Vector2(8f, 7f), "Minigames", 20, new Color(0.25f, 0.47f, 0.72f));
 
         for (int i = 0; i < _rows.Count; i++)
         {
@@ -250,8 +250,7 @@ public partial class MinigameMenu : Control
             Color c = r.Expandable ? new Color(0.7f, 0.84f, 1f)
                     : r.Click is null ? new Color(0.6f, 0.6f, 0.6f)
                     : new Color(0.9f, 0.9f, 0.9f);
-            DrawString(ThemeDB.FallbackFont, new Vector2(x, y + 18f), prefix + r.Label,
-                HorizontalAlignment.Left, PanelWidth - x - 4f, FontSize, c);
+            DpText.Draw(this, DpText.Hud, new Vector2(x, y + 18f - FontSize * 0.75f), prefix + r.Label, FontSize, c);
         }
     }
 

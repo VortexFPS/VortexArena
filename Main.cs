@@ -148,6 +148,32 @@ public partial class Main : Node
             int c = Array.IndexOf(args, "--connect");
             if (c >= 0 && c + 1 < args.Length)
                 shell.ConnectAddress = args[c + 1];
+            // Legacy compatibility mode (planning/specs/legacy-compat.md): `--legacy-connect <addr>` joins a
+            //   stock Xonotic (DarkPlaces) server, host[:port], default port 26000; `--legacy-data <dir>` names
+            //   the Xonotic "data" folder that supplies its game data for this run, in place of the
+            //   legacy_xonotic_data cvar and without being saved into the player's configuration.
+            int ld = Array.IndexOf(args, "--legacy-data");
+            if (ld >= 0 && ld + 1 < args.Length)
+                VortexArena.Game.Legacy.LegacyData.CommandLineDataDir = args[ld + 1];
+            int lc = Array.IndexOf(args, "--legacy-connect");
+            if (lc >= 0 && lc + 1 < args.Length)
+                shell.LegacyConnectAddress = args[lc + 1];
+            //   `--legacy-menu` starts Xonotic's own menu program (menu.dat) in place of the native front end;
+            //   it needs the same `--legacy-data <dir>` (or the legacy_xonotic_data cvar).
+            if (Array.IndexOf(args, "--legacy-menu") >= 0)
+                shell.BootLegacyMenu = true;
+            //   `--legacy-map <map> [--legacy-gametype <type>] [--legacy-bots <n>]` starts a LOCAL Xonotic game:
+            //   Xonotic's own server program hosted in this process and joined by its own client program. It
+            //   needs the same `--legacy-data <dir>`. No socket is opened unless the legacy_listen cvar asks.
+            int lm = Array.IndexOf(args, "--legacy-map");
+            if (lm >= 0 && lm + 1 < args.Length)
+                shell.BootLegacyMap = args[lm + 1];
+            int lgt = Array.IndexOf(args, "--legacy-gametype");
+            if (lgt >= 0 && lgt + 1 < args.Length)
+                shell.BootLegacyGametype = args[lgt + 1];
+            int lb = Array.IndexOf(args, "--legacy-bots");
+            if (lb >= 0 && lb + 1 < args.Length && int.TryParse(args[lb + 1], out int legacyBots))
+                shell.BootLegacyBots = legacyBots;
             if (Array.IndexOf(args, "--host") >= 0)
             {
                 shell.BootHost = true;

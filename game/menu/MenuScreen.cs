@@ -52,7 +52,7 @@ public abstract partial class MenuScreen : Control, IMenuScreen
         };
         label.AddThemeFontSizeOverride("font_size", MenuSkin.TitleSize);
         label.AddThemeColorOverride("font_color", MenuSkin.Bright);
-        if (MenuSkin.BoldFont is { } bold) label.AddThemeFontOverride("font", bold);
+        if (MenuSkin.TitleFont is { } bold) label.AddThemeFontOverride("font", bold);
         return label;
     }
 

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using VortexArena.Game.Text;   // DpText: DarkPlaces-accurate text (font slots, baked outline, colour lift)
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Gameplay.Scoring;
@@ -2538,29 +2539,26 @@ public partial class ScoreboardPanel : HudPanel
     /// </summary>
     private void DrawTextCentered2Bold(Vector2 pos, float width, string text, Color baseColor, int size)
     {
-        Font face = HudSkin.BoldFont ?? Font;
+        BeginBoldFont();   // QC draw_beginBoldFont()
         var runs = new List<HudText.Run>(HudText.Parse(text, baseColor));
         float total = 0f;
         foreach (HudText.Run run in runs)
-            total += face.GetStringSize(run.Text, HorizontalAlignment.Left, -1f, size).X;
+            total += MeasureText(run.Text, size);
 
         float cx = pos.X + (width - total) * 0.5f;
-        float baseline = pos.Y + face.GetAscent(size);
         foreach (HudText.Run run in runs)
         {
-            var shadow = new Color(0f, 0f, 0f, run.Color.A * 0.6f);
-            DrawString(face, new Vector2(cx + 1f, baseline + 1f), run.Text, HorizontalAlignment.Left, -1f, size, shadow);
-            DrawString(face, new Vector2(cx, baseline), run.Text, HorizontalAlignment.Left, -1f, size, run.Color);
-            cx += face.GetStringSize(run.Text, HorizontalAlignment.Left, -1f, size).X;
+            DrawText(new Vector2(cx, pos.Y), run.Text, run.Color, size);
+            cx += MeasureText(run.Text, size);
         }
+        EndBoldFont();     // QC draw_endBoldFont()
     }
 
     /// <summary>
     /// Draw a column title right-aligned at <paramref name="rightX"/>, horizontally SQUEEZED by
     /// <paramref name="condense"/> — QC's <c>drawfontscale.x *= sbt_field_title_condense_factor[i]</c> around the
-    /// header <c>drawstring</c> (scoreboard.qc:1336-1343 / 1365-1374). Godot has no per-axis font scale, so the
-    /// equivalent is a canvas transform anchored at the text's left edge for the duration of the draw.
-    /// <paramref name="condense"/> &gt;= 1 draws normally (no transform, no cost).
+    /// header <c>drawstring</c> (scoreboard.qc:1336-1343 / 1365-1374), passed to the text path as its
+    /// horizontal font scale. <paramref name="condense"/> &gt;= 1 draws normally.
     /// </summary>
     private void DrawTextRightCondensed(float rightX, float topY, string text, Color color, int size, float condense)
     {
@@ -2572,10 +2570,9 @@ public partial class ScoreboardPanel : HudPanel
             return;
         }
         // Anchor the squeeze at the title's LEFT edge so it still ends flush with the column's right edge.
+        // DrawQ_String_Scale's sw: the glyphs and their advances are scaled after the font map is chosen.
         float left = rightX - full * condense;
-        DrawSetTransform(new Vector2(left, 0f), 0f, new Vector2(condense, 1f));
-        DrawText(new Vector2(0f, topY), text, color, size);
-        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+        DpText.Draw(this, DrawFont, new Vector2(left, topY), text, size, color, PanelRect.Position, condense);
     }
 
     /// <summary>QC <c>draw_beginBoldFont()</c> … <c>draw_endBoldFont()</c> around a left-aligned plain string
@@ -2583,11 +2580,9 @@ public partial class ScoreboardPanel : HudPanel
     private void DrawTextBold(Vector2 pos, string text, Color color, int size)
     {
         if (string.IsNullOrEmpty(text)) return;
-        Font face = HudSkin.BoldFont ?? Font;
-        float baseline = pos.Y + face.GetAscent(size);
-        DrawString(face, new Vector2(pos.X + 1f, baseline + 1f), text, HorizontalAlignment.Left, -1f, size,
-            new Color(0f, 0f, 0f, color.A * 0.6f));
-        DrawString(face, new Vector2(pos.X, baseline), text, HorizontalAlignment.Left, -1f, size, color);
+        BeginBoldFont();
+        DrawText(pos, text, color, size);
+        EndBoldFont();
     }
 
     /// <summary>Bold text ending at <paramref name="rightX"/> (QC's team score is placed by subtracting its own
@@ -2597,11 +2592,7 @@ public partial class ScoreboardPanel : HudPanel
 
     /// <summary>Width of <paramref name="text"/> in the bold HUD face (QC stringwidth under draw_beginBoldFont).</summary>
     private static float MeasureBold(string text, int size)
-    {
-        Font face = HudSkin.BoldFont ?? Font;
-        return string.IsNullOrEmpty(text) ? 0f
-            : face.GetStringSize(text, HorizontalAlignment.Left, -1f, size).X;
-    }
+        => string.IsNullOrEmpty(text) ? 0f : DpText.Measure(DpText.HudBold, text, size);
 
     /// <summary>Draw a color-coded string horizontally centered within <paramref name="width"/>.</summary>
     private void DrawTextCentered2(Vector2 pos, float width, string text, Color baseColor, int size)

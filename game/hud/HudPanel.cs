@@ -1,5 +1,6 @@
 using System.Globalization;
 using Godot;
+using VortexArena.Game.Text;   // DpText — DarkPlaces-accurate text (font slots, baked outline, colour lift)
 using VortexArena.Game.Menu;   // MenuState.Cvars — the shared menu/console store (live console `set` reaches it)
 using NVec3 = System.Numerics.Vector3;
 
@@ -484,7 +485,12 @@ public abstract partial class HudPanel : Control
             DrawBackgroundRect(new Rect2(Vector2.Zero, Size2), LiveBgAlpha);
             _configureBgDrawn = true;
         }
+        // QC drawfont: hud_font, or hud_bigfont for a panel whose whole HUD_<Name> body sits between
+        // draw_beginBoldFont() and draw_endBoldFont() (BoldPanel). Reset afterwards so a panel that
+        // returned early from a bold scope cannot leave the next one bold.
+        DrawFont = BoldPanel ? DpText.HudBold : DefaultFont;
         DrawPanel();
+        DrawFont = DpText.Hud;
         _configureBgDrawn = false;
     }
 
@@ -686,48 +692,64 @@ public abstract partial class HudPanel : Control
         DrawRect(area, new Color(1f, 1f, 1f, 0.15f), filled: false, width: 1f);
     }
 
-    /// <summary>Godot <c>DrawString</c>'s Y is the BASELINE. These helpers take a TOP-of-text Y (QC drawstring
-    /// semantics: pos = the char box's top-left), so the baseline offset must be the font's ASCENT for the size —
-    /// NOT the full font size. Xolonium's ascent is ~0.75-0.8 × size, so the old <c>pos.Y + size</c> rendered all
-    /// HUD text ~20% of the font size too LOW in its box (playtest #26: health/armor numbers visibly below
-    /// center; systemic to every panel using these helpers).</summary>
-    private float TextBaseline(int size) => Font.GetAscent(size);
+    // ---- text (QC drawstring / stringwidth with drawfont = hud_font, or hud_bigfont between
+    //      draw_beginBoldFont and draw_endBoldFont) ----
 
-    /// <summary>Draw left-aligned text at a panel-local top-left position (with a subtle drop shadow so it
-    /// reads over the world the way Xonotic's outlined HUD font does).</summary>
+    /// <summary>QC <c>drawfont</c>: the font slot the text helpers draw and measure with. <c>hud_font</c>
+    /// (FONT_USER + 1, Xolonium regular) except between <see cref="BeginBoldFont"/> and <see cref="EndBoldFont"/>.
+    /// Static, as the QC global is: <see cref="MeasureText"/> has to agree with what the next draw uses.</summary>
+    public static int DrawFont { get; private set; } = DpText.Hud;
+
+    /// <summary>True for a panel whose QC draw function wraps everything it draws in
+    /// <c>draw_beginBoldFont()</c> ... <c>draw_endBoldFont()</c> (ammo, healtharmor, modicons, physics, powerups,
+    /// timer): the panel is drawn and measured in <see cref="DpText.HudBold"/>.</summary>
+    protected virtual bool BoldPanel => false;
+
+    /// <summary>The font slot a non-bold panel draws with: <c>hud_font</c>, except the chat panel, whose lines
+    /// DarkPlaces itself draws in FONT_CHAT.</summary>
+    protected virtual int DefaultFont => DpText.Hud;
+
+    /// <summary>QC <c>draw_beginBoldFont()</c> (client/draw.qh: <c>drawfont = FONT_USER + 2</c>) - Xolonium bold.</summary>
+    public static void BeginBoldFont() => DrawFont = DpText.HudBold;
+
+    /// <summary>QC <c>draw_endBoldFont()</c> (<c>drawfont = FONT_USER + 1</c>).</summary>
+    public static void EndBoldFont() => DrawFont = DpText.Hud;
+
+    /// <summary>Draw and measure in an engine font slot (<see cref="DpText.Chat"/>, <see cref="DpText.Notify"/>...)
+    /// until <see cref="EndBoldFont"/> or the end of the panel's draw.</summary>
+    public static void SetDrawFont(int slot) => DrawFont = slot;
+
+    /// <summary>Draw left-aligned text with the top-left of its character cell at a panel-local position, as
+    /// DarkPlaces' DrawQ_String does (<see cref="DpText"/>): <paramref name="size"/> is the CELL height in
+    /// pixels (QC's drawstring size times the pixels per virtual unit), the glyphs carry Xonotic's baked
+    /// outline, the colour gets r_textcontrast / r_textbrightness, and there is no drop shadow unless the
+    /// player sets r_textshadow.</summary>
     protected void DrawText(Vector2 pos, string text, Color color, int size = FontSize)
     {
         if (string.IsNullOrEmpty(text)) return;
-        Vector2 at = pos + new Vector2(0f, TextBaseline(size));
-        DrawString(Font, at + new Vector2(1f, 1f), text, HorizontalAlignment.Left, -1f, size, ShadowOf(color));
-        DrawString(Font, at, text, HorizontalAlignment.Left, -1f, size, color);
+        DpText.Draw(this, DrawFont, pos, text, size, color, PanelRect.Position);
     }
 
     /// <summary>Draw text horizontally centered within <paramref name="width"/> (QC align 0.5).</summary>
     protected void DrawTextCentered(Vector2 pos, float width, string text, Color color, int size = FontSize)
     {
         if (string.IsNullOrEmpty(text)) return;
-        Vector2 at = pos + new Vector2(0f, TextBaseline(size));
-        DrawString(Font, at + new Vector2(1f, 1f), text, HorizontalAlignment.Center, width, size, ShadowOf(color));
-        DrawString(Font, at, text, HorizontalAlignment.Center, width, size, color);
+        float w = DpText.Measure(DrawFont, text, size);
+        DpText.Draw(this, DrawFont, new Vector2(pos.X + (width - w) * 0.5f, pos.Y), text, size, color, PanelRect.Position);
     }
 
     /// <summary>Draw text right-aligned to end at <paramref name="rightX"/> (panel-local).</summary>
     protected void DrawTextRight(float rightX, float topY, float width, string text, Color color, int size = FontSize)
     {
         if (string.IsNullOrEmpty(text)) return;
-        Vector2 at = new(rightX - width, topY + TextBaseline(size));
-        DrawString(Font, at + new Vector2(1f, 1f), text, HorizontalAlignment.Right, width, size, ShadowOf(color));
-        DrawString(Font, at, text, HorizontalAlignment.Right, width, size, color);
+        float w = DpText.Measure(DrawFont, text, size);
+        DpText.Draw(this, DrawFont, new Vector2(rightX - w, topY), text, size, color, PanelRect.Position);
     }
 
-    private static Color ShadowOf(Color c) => new(0f, 0f, 0f, c.A * 0.7f);
-
-    /// <summary>Measure a string's pixel width at the given size (QC <c>stringwidth</c>).</summary>
+    /// <summary>Measure a string's pixel width at the given cell size (QC <c>stringwidth</c>) in the current
+    /// <see cref="DrawFont"/> - the same font map and hinted advances <see cref="DrawText"/> uses.</summary>
     protected static float MeasureText(string text, int size = FontSize)
-        => string.IsNullOrEmpty(text)
-            ? 0f
-            : Font.GetStringSize(text, HorizontalAlignment.Left, -1f, size).X;
+        => string.IsNullOrEmpty(text) ? 0f : DpText.Measure(DrawFont, text, size);
 
     // ---- color helpers (QC HUD_Get_Num_Color: tint a value by how low it is) ----
 

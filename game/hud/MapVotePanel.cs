@@ -321,14 +321,18 @@ public partial class MapVotePanel : HudPanel
         if (Winner == 0)
         {
             string title = GametypeVote ? "Decide the gametype" : "Vote for a map";
+            BeginBoldFont();   // QC cl_mapvoting.qc:419 draw_beginBoldFont() (title and chosen map)
             DrawTextCentered(new Vector2(0f, y), Size2.X, title, FgColor, titleSize);
+            EndBoldFont();
             y += titleSize + Size2.Y * 0.012f;
 
             // QC: in a gametype vote that already chose a map, show it as a subtitle (hud_fontsize*1.5).
             if (!string.IsNullOrEmpty(ChosenMap))
             {
                 int chosenSize = (int)Mathf.Clamp(titleSize * 0.75f, 12f, 26f);
+                BeginBoldFont();
                 DrawTextCentered(new Vector2(0f, y), Size2.X, ChosenMap, FgColor, chosenSize);
+                EndBoldFont();
                 y += chosenSize + Size2.Y * 0.008f;
             }
         }
@@ -540,10 +544,15 @@ public partial class MapVotePanel : HudPanel
                     descSize, a);
         }
 
+        // QC cl_mapvoting.qc:164 / :248: the leading candidate's label is bold -
+        // "is_bold = (mv_flags[id] & GTV_AVAILABLE) && (mv_tie_winner == id || (mv_tie_winner == -2 && _count == most_votes))".
+        bool labelBold = c.Available && (TieWinner == id || (TieWinner == -2 && c.Votes == mostVotes));
+        if (labelBold) BeginBoldFont();
         string label = FormatMapItem(id, c.Data, c.Votes, c.Available, mostVotes);
         Color labelColor = new(rgb.R, rgb.G, rgb.B, a);
         DrawColorCoded(new Vector2(inner.Position.X, inner.Position.Y + inner.Size.Y - labelH),
             inner.Size.X, label, labelColor, labelSize);
+        if (labelBold) EndBoldFont();
     }
 
     // -------------------------------------------------------------------------------------------------

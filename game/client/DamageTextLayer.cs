@@ -3,6 +3,7 @@
 
 using System.Collections.Generic;
 using Godot;
+using VortexArena.Game.Text;   // DpText: DarkPlaces-accurate text (font slots, baked outline, colour lift)
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Services;
 using VortexArena.Game.Hud;   // HudText (drawcolorcodedstring2) + HudPanel.HudFont (Xonotic HUD font)
@@ -319,7 +320,6 @@ public partial class DamageTextLayer : Control
             // a draw transform. This keeps the shrink animation smooth (the prior direct (int)size draw stair-stepped
             // the font size by whole pixels and never had a real size_max cell). The cell-top anchor is converted to
             // Godot's DrawString baseline anchor by adding the cell ascent (same as the ShowNamesLayer sibling).
-            Font font = HudPanel.HudFont ?? ThemeDB.FallbackFont;
             float sizeMax = cfg.SizeMax > 0f ? cfg.SizeMax : 1f;
             int cell = Mathf.Max(1, Mathf.RoundToInt(sizeMax)); // QC size_max font cell (constant rasterization size)
             float scale = size / sizeMax;                       // QC drawfontscale.x (continuous)
@@ -328,21 +328,18 @@ public partial class DamageTextLayer : Control
             // QC centers by the rendered (scaled) width: stringwidth at the cell, times drawfontscale.
             float cellWidth = 0f;
             foreach (HudText.Run run in runs)
-                cellWidth += font.GetStringSize(run.Text, HorizontalAlignment.Left, -1f, cell).X;
+                cellWidth += DpText.Measure(DpText.Hud, run.Text, cell);
             float anchorX = pos.X - (cellWidth * scale) * 0.5f; // QC screen_pos.x -= stringwidth*0.5 (scaled)
             // Scale the size_max cell about (anchorX, topY) so the visible glyphs are `size` px (= cell*scale) and the
             // shrink is continuous — the QC drawfontscale path, not a per-frame integer re-rasterize.
-            DrawSetTransformMatrix(new Transform2D(
-                new Vector2(scale, 0f), new Vector2(0f, scale), new Vector2(anchorX, topY)));
-            float rx = 0f;                          // local cell-space x (anchorX is in the transform origin)
-            float baselineY = font.GetAscent(cell); // QC cell-top -> Godot baseline, in cell space
+            // DrawQ_String_Scale: the font map is chosen for the size_max cell and the glyphs are then scaled by
+            // drawfontscale (sw, sh) - which is what DpText's font scale is.
+            float rx = anchorX;
             foreach (HudText.Run run in runs)
             {
                 var rc = new Color(run.Color.R, run.Color.G, run.Color.B, alpha);
-                DrawString(font, new Vector2(rx, baselineY), run.Text, HorizontalAlignment.Left, -1f, cell, rc);
-                rx += font.GetStringSize(run.Text, HorizontalAlignment.Left, -1f, cell).X;
+                rx += DpText.Draw(this, DpText.Hud, new Vector2(rx, topY), run.Text, cell, rc, default, scale, scale);
             }
-            DrawSetTransform(Vector2.Zero, 0f, Vector2.One); // reset (QC drawfontscale = drawfontscale_save)
         }
     }
 

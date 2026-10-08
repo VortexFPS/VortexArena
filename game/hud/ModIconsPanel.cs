@@ -215,6 +215,9 @@ public partial class ModIconsPanel : HudPanel
         QueueRedraw();
     }
 
+    // QC modicons.qc:52-72: draw_beginBoldFont() ... draw_endBoldFont() around everything the panel draws.
+    protected override bool BoldPanel => true;
+
     protected override void DrawPanel()
     {
         switch (Mode)

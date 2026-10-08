@@ -400,8 +400,10 @@ public partial class RaceTimerPanel : HudPanel
             int sz = (int)Mathf.Clamp(h * 0.6f, 12f, 56f);
             // expanding = grow from ~0.7x to 1.0x while fading in (approximation of drawstring_expanding).
             int sz2 = (int)(sz * Mathf.Lerp(0.7f, 1f, forceFade));
+            BeginBoldFont();   // QC racetimer.qc:318 draw_beginBoldFont() (the big time)
             DrawTextCentered(new Vector2(x, y + (h - sz2) * 0.5f), w, forcetime,
                 new Color(1f, 1f, 1f, FgColor.A * forceFade), sz2);
+            EndBoldFont();
         }
         // --- running lap time, big and bold (QC: TIME from time + accumulator - race_laptime) ---
         else if (RaceLapTime > 0.0 && RaceCheckpoint != 255)
@@ -409,7 +411,9 @@ public partial class RaceTimerPanel : HudPanel
             float lap = (float)((now + RacePenaltyAccumulator * 0.1) - RaceLapTime);
             if (lap < 0f) lap = 0f;
             int big = (int)Mathf.Clamp(h * 0.6f, 14f, 56f);
+            BeginBoldFont();   // QC racetimer.qc:318 draw_beginBoldFont() (the big time)
             DrawTextCentered(new Vector2(x, y + (h - big) * 0.5f), w, FormatRaceTime(lap), FgColor, big);
+            EndBoldFont();
         }
 
         // --- race-award medal flash (race_new* art): the contract §6 "checkpoint flash" ---

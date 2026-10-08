@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using VortexArena.Game.Text;   // DpText: DarkPlaces-accurate text (font slots, baked outline, colour lift)
 using VortexArena.Common.Framework;          // MoveFilter, Entity
 using VortexArena.Common.Gameplay;          // Teams
 using VortexArena.Common.Services;           // Api, ITraceService, TraceResult
@@ -509,14 +510,15 @@ public partial class ShowNamesLayer : Control
         runs = ShortenRunsToWidth(font, runs, size, maxWidth);
         float total = 0f;
         foreach (HudText.Run run in runs)
-            total += font.GetStringSize(run.Text, HorizontalAlignment.Left, -1f, size).X;
+            total += DpText.Measure(DpText.Hud, run.Text, size);
         float x = o.X - total * 0.5f;
         float y = o.Y - size;
         foreach (HudText.Run run in runs)
         {
             var rc = new Color(run.Color.R, run.Color.G, run.Color.B, alpha);
-            DrawString(font, new Vector2(x, y), run.Text, HorizontalAlignment.Left, -1f, size, rc);
-            x += font.GetStringSize(run.Text, HorizontalAlignment.Left, -1f, size).X;
+            // The old call's y was the BASELINE; DrawQ_String's is the top of the cell, 4.5/6 of it above.
+            DpText.Draw(this, DpText.Hud, new Vector2(x, y - size * 0.75f), run.Text, size, rc);
+            x += DpText.Measure(DpText.Hud, run.Text, size);
         }
     }
 
@@ -530,12 +532,12 @@ public partial class ShowNamesLayer : Control
             return runs;
         float total = 0f;
         foreach (HudText.Run r in runs)
-            total += font.GetStringSize(r.Text, HorizontalAlignment.Left, -1f, size).X;
+            total += DpText.Measure(DpText.Hud, r.Text, size);
         if (total <= maxWidth)
             return runs;
 
         const string ellipsis = "...";
-        float budget = maxWidth - font.GetStringSize(ellipsis, HorizontalAlignment.Left, -1f, size).X;
+        float budget = maxWidth - DpText.Measure(DpText.Hud, ellipsis, size);
         var result = new List<HudText.Run>(runs.Count);
         float used = 0f;
         Color lastColor = runs[runs.Count - 1].Color;
@@ -545,14 +547,14 @@ public partial class ShowNamesLayer : Control
             int take = run.Text.Length;
             while (take > 0)
             {
-                float w = font.GetStringSize(run.Text.Substring(0, take), HorizontalAlignment.Left, -1f, size).X;
+                float w = DpText.Measure(DpText.Hud, run.Text.Substring(0, take), size);
                 if (used + w <= budget) break;
                 take--;
             }
             if (take > 0)
             {
                 result.Add(new HudText.Run(run.Text.Substring(0, take), run.Color));
-                used += font.GetStringSize(run.Text.Substring(0, take), HorizontalAlignment.Left, -1f, size).X;
+                used += DpText.Measure(DpText.Hud, run.Text.Substring(0, take), size);
                 lastColor = run.Color;
             }
             if (take < run.Text.Length)

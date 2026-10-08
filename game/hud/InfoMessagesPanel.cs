@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 using Godot;
+using VortexArena.Game.Text;   // DpText: DarkPlaces-accurate text (font slots, baked outline, colour lift)
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Services;     // CvarFlags
 using VortexArena.Engine.Simulation;   // CvarService (RegisterDefaults)
@@ -444,7 +445,8 @@ public partial class InfoMessagesPanel : HudPanel
         {
             // QC: the unbalanced line bumps fontsize *= 1.125 and switches to the bold font.
             int sz = line.IsBold ? Mathf.RoundToInt(fontsize * 1.125f) : fontsize;
-            Font font = line.IsBold ? (HudSkin.BoldFont ?? Font) : Font;
+            // QC infomessages.qc: "draw_beginBoldFont();" around the unbalanced-teams line.
+            int font = line.IsBold ? DpText.HudBold : DpText.Hud;
             Color baseCol = new(1f, 1f, 1f, LiveFgAlpha * line.Alpha);
 
             y = DrawWrappedLine(inner, y, line.Text, baseCol, sz, font, flip);
@@ -473,7 +475,7 @@ public partial class InfoMessagesPanel : HudPanel
     /// <paramref name="flip"/> is set every wrapped piece is right-aligned to the inner right edge. Adds the QC
     /// 0.25-line gap after the wrapped block.
     /// </summary>
-    private float DrawWrappedLine(Rect2 area, float y, string text, Color baseColor, int size, Font font, bool flip)
+    private float DrawWrappedLine(Rect2 area, float y, string text, Color baseColor, int size, int font, bool flip)
     {
         float lineH = size;
         float maxW = area.Size.X;
@@ -548,20 +550,15 @@ public partial class InfoMessagesPanel : HudPanel
 
     /// <summary>
     /// Lay out the <c>^N</c> color runs of <paramref name="line"/> left-to-right from <paramref name="origin"/>,
-    /// drawing with <paramref name="font"/> (regular or bold). Godot can't color a multi-run string in one call,
-    /// so we draw each run with a manual drop shadow (matching the base <see cref="DrawText"/> look).
+    /// drawing in the font slot <paramref name="font"/> (regular or bold), one run per colour.
     /// </summary>
-    private void DrawColoredRuns(Vector2 origin, string line, Color baseColor, int size, Font font)
+    private void DrawColoredRuns(Vector2 origin, string line, Color baseColor, int size, int font)
     {
         float cx = origin.X;
         foreach (HudText.Run run in HudText.Parse(line, baseColor))
         {
             if (string.IsNullOrEmpty(run.Text)) continue;
-            Vector2 at = new(cx, origin.Y + size);
-            var shadow = new Color(0f, 0f, 0f, run.Color.A * 0.7f);
-            DrawString(font, at + new Vector2(1f, 1f), run.Text, HorizontalAlignment.Left, -1f, size, shadow);
-            DrawString(font, at, run.Text, HorizontalAlignment.Left, -1f, size, run.Color);
-            cx += font.GetStringSize(run.Text, HorizontalAlignment.Left, -1f, size).X;
+            cx += DpText.Draw(this, font, new Vector2(cx, origin.Y), run.Text, size, run.Color, PanelRect.Position);
         }
     }
 
@@ -717,7 +714,7 @@ public partial class InfoMessagesPanel : HudPanel
         Color baseCol = new(1f, 1f, 1f, LiveFgAlpha);
         foreach (string s in help)
         {
-            y = DrawWrappedLine(inner, y, s, baseCol, fontsize, Font, flip);
+            y = DrawWrappedLine(inner, y, s, baseCol, fontsize, DpText.Hud, flip);
             if (y > inner.Position.Y + inner.Size.Y) break;
         }
     }

@@ -802,9 +802,11 @@ public partial class StrafeHudPanel : HudPanel
 
         // ===== text indicators =====
         DrawVerticalAngle(viewAngles, textOffsetTop, textOffsetBottom);
+        BeginBoldFont();   // QC strafehud.qc:795 draw_beginBoldFont() (not the vertical angle above)
         DrawStartSpeed(textOffsetTop, textOffsetBottom);
         DrawStrafeEfficiency(strafeRatio, textOffsetTop, textOffsetBottom);
         DrawJumpHeight(realOnGround, false, textOffsetTop, textOffsetBottom);
+        EndBoldFont();
 
         _lastTime = time;
     }

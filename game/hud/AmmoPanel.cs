@@ -161,6 +161,9 @@ public partial class AmmoPanel : HudPanel
         return float.IsFinite(raw) ? Mathf.RoundToInt(raw) : 0;
     }
 
+    // QC ammo.qc:124-242: draw_beginBoldFont() ... draw_endBoldFont() around everything the panel draws.
+    protected override bool BoldPanel => true;
+
     protected override void DrawPanel()
     {
         if (Player is null) return;
@@ -355,7 +358,8 @@ public partial class AmmoPanel : HudPanel
             textColor.A = alpha;
             // QC drawstring_aspect: draw as large as possible (height = sz.y = cell height) inside the box,
             // scaling DOWN only when the text is wider than the box (DRAWSTRING_ASPECT_SCALE), centered.
-            int fontPx = Mathf.Max(8, Mathf.RoundToInt(textRect.Size.Y * 0.85f));
+            // drawstring_aspect draws at '1 1 0' * sz.y: the CELL height (DrawQ_String's size), not an em size.
+            int fontPx = Mathf.Max(8, Mathf.RoundToInt(textRect.Size.Y));
             float textW = MeasureText(text, fontPx);
             if (textW > textRect.Size.X && textW > 0.001f) // shrink to fit width (QC aspect downscale)
                 fontPx = Mathf.Max(8, Mathf.RoundToInt(fontPx * textRect.Size.X / textW));
@@ -447,7 +451,8 @@ public partial class AmmoPanel : HudPanel
             string text = NadeBonusCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var textColor = new Color(1f, 1f, 1f, LiveFgAlpha);
             // drawstring_aspect: height = cell height, shrink to fit width (same as DrawAmmoItem).
-            int fontPx = Mathf.Max(8, Mathf.RoundToInt(textRect.Size.Y * 0.85f));
+            // drawstring_aspect draws at '1 1 0' * sz.y: the CELL height (DrawQ_String's size), not an em size.
+            int fontPx = Mathf.Max(8, Mathf.RoundToInt(textRect.Size.Y));
             float textW = MeasureText(text, fontPx);
             if (textW > textRect.Size.X && textW > 0.001f)
                 fontPx = Mathf.Max(8, Mathf.RoundToInt(fontPx * textRect.Size.X / textW));

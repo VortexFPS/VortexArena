@@ -222,6 +222,9 @@ public partial class PhysicsPanel : HudPanel
     private static Color GlobalColor(string name, Color fallback)
         => TryParseRgb(GlobalStr(name), out Color c) ? c : fallback;
 
+    // QC physics.qc:74-437: draw_beginBoldFont() ... draw_endBoldFont() around everything the panel draws.
+    protected override bool BoldPanel => true;
+
     protected override void DrawPanel()
     {
         if (Player is null) return;

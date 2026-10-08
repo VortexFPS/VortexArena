@@ -93,7 +93,7 @@ public partial class MainMenu : MenuScreen
             var wordmark = new Label { Text = "XONOTIC", MouseFilter = MouseFilterEnum.Ignore };
             wordmark.AddThemeFontSizeOverride("font_size", MenuSkin.BrandSize);
             wordmark.AddThemeColorOverride("font_color", MenuSkin.Accent);
-            if (MenuSkin.BoldFont is { } bold) wordmark.AddThemeFontOverride("font", bold);
+            if (MenuSkin.RawBoldFont is { } bold) wordmark.AddThemeFontOverride("font", bold);
             brand.AddChild(wordmark);
         }
         var sub = new Label { Text = "VortexArena", HorizontalAlignment = HorizontalAlignment.Right, MouseFilter = MouseFilterEnum.Ignore };
@@ -144,7 +144,8 @@ public partial class MainMenu : MenuScreen
             MouseFilter = MouseFilterEnum.Ignore,
         };
         titleLabel.AddThemeColorOverride("font_color", MenuSkin.Bright);
-        if (MenuSkin.BoldFont is { } tb) titleLabel.AddThemeFontOverride("font", tb);
+        // QC item/borderimage.qh: a window's title is bold, at SKINFONTSIZE_TITLE.
+        if (MenuSkin.TitleFont is { } tb) titleLabel.AddThemeFontOverride("font", tb);
         slot.AddChild(titleLabel);
 
         // Close (X) button, top-right corner of the title bar.

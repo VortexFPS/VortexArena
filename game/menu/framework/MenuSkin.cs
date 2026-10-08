@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Godot;
+using VortexArena.Game.Text;   // DpText / DpBitmapFont: the menu draws DarkPlaces font maps
 using VortexArena.Formats.Vfs;
 using VortexArena.Common.Localization;
 using VortexArena.Game.Loaders;
@@ -58,11 +59,11 @@ public static class MenuSkin
     // the bare Generic '1 1 1' schema default). See TableRgb/TableRgba/TableNum.
 
     /// <summary>Body text — cool blue-white (COLOR_TEXT @ ALPHA_TEXT).</summary>
-    public static Color Text => TableRgba("COLOR_TEXT", "ALPHA_TEXT", 0.96f, 0.99f, 1f, 0.875f);
+    public static Color Text => TextLift(TableRgba("COLOR_TEXT", "ALPHA_TEXT", 0.96f, 0.99f, 1f, 0.875f));
     /// <summary>Section headers — the same blue-white, dimmer (COLOR_HEADER @ ALPHA_HEADER).</summary>
-    public static Color Header => TableRgba("COLOR_HEADER", "ALPHA_HEADER", 0.96f, 0.99f, 1f, 0.5f);
+    public static Color Header => TextLift(TableRgba("COLOR_HEADER", "ALPHA_HEADER", 0.96f, 0.99f, 1f, 0.5f));
     /// <summary>A bright, fully-opaque blue-white for dialog titles / focused text.</summary>
-    public static Color Bright => new(0.97f, 0.99f, 1f, 1f);
+    public static Color Bright => TextLift(new Color(0.97f, 0.99f, 1f, 1f));
     /// <summary>The Xonotic accent orange — brand wordmark, active tab, list selection (COLOR_CREDITS_TITLE).</summary>
     public static Color Accent => TableRgb("COLOR_CREDITS_TITLE", 0.94f, 0.45f, 0.11f);
     /// <summary>The slightly warmer list-selection orange (COLOR_LISTBOX_SELECTED).</summary>
@@ -498,7 +499,6 @@ public static class MenuSkin
             t.SetColor("font_color", type, Text);
             t.SetColor("font_selected_color", type, Bright);
             t.SetColor("font_hovered_color", type, Bright);
-            t.SetColor("font_outline_color", type, new Color(0, 0, 0, 0.6f));
             t.SetFontSize("font_size", type, BodySize);
         }
         // Tree-specific selection keys.
@@ -704,7 +704,7 @@ public static class MenuSkin
         _theme = null;
         _skin = null;
         _valuesLoaded = false;
-        _font = _fontBold = null;
+        _font = _fontBold = _fontTitle = _fontRawBold = null;
         _texCache.Clear();
     }
 
@@ -805,12 +805,62 @@ public static class MenuSkin
         }
     }
 
+    /// <summary>
+    /// The menu's fonts are DarkPlaces font maps (<see cref="DpBitmapFont"/>): the menu program draws every label
+    /// with <c>FONT_USER + 0</c> (Xolonium regular, loadfont size 12) and every window title and bold label with
+    /// <c>FONT_USER + 3</c> (Xolonium bold, sizes 12 and 16) - qcsrc/menu/draw.qc draw_beginBoldFont, item/label.qc
+    /// "if (me.isBold) draw_beginBoldFont()", item/borderimage.qh "isBold true" - each glyph carrying the outline
+    /// and blur of r_font_postprocess_*. Stock Godot controls are handed those maps as fixed-size fonts, so a
+    /// Label or Button lays its text out with DarkPlaces' hinted advances and draws DarkPlaces' glyph pictures;
+    /// no Godot outline, no shaping. The body map is keyed at <see cref="BodySize"/> and the title map at
+    /// <see cref="TitleSize"/> (the sizes the controls ask for); neither scales, which is what
+    /// r_font_size_snapping 4 does to every size near a map's.
+    /// </summary>
     private static FontFile? Font(bool bold)
     {
         ref FontFile? slot = ref bold ? ref _fontBold : ref _font;
         if (slot != null)
             return slot;
+        int dpSlot = bold ? DpText.MenuBold : DpText.Menu;
+        if (MenuState.Vfs != null && DpText.Faces(dpSlot).Count > 0)
+        {
+            slot = DpBitmapFont.Menu(dpSlot, TableNum("FONTSIZE_NORMAL", MenuMetrics.FontNormal), BodySize);
+            return slot;
+        }
+        return slot = RawFont(bold);
+    }
 
+    /// <summary>The window-title font: Xolonium bold at SKINFONTSIZE_TITLE (FONT_USER + 3's second map), asked
+    /// for at <see cref="TitleSize"/>. Falls back to <see cref="BoldFont"/> without game data.</summary>
+    public static FontFile? TitleFont
+    {
+        get
+        {
+            if (_fontTitle != null) return _fontTitle;
+            if (MenuState.Vfs != null && DpText.Faces(DpText.MenuBold).Count > 0)
+                return _fontTitle = DpBitmapFont.Menu(DpText.MenuBold, TableNum("FONTSIZE_TITLE", MenuMetrics.FontTitle), TitleSize);
+            return BoldFont;
+        }
+    }
+
+    /// <summary>Xolonium bold as a plain scalable font, for text that is not Xonotic menu text and is drawn at
+    /// sizes no font map exists for (the fallback "XONOTIC" wordmark).</summary>
+    public static FontFile? RawBoldFont => _fontRawBold ??= RawFont(bold: true);
+
+    private static FontFile? _fontTitle, _fontRawBold;
+
+    /// <summary>gl_draw.c DrawQ_GetTextColor: "colour * r_textcontrast + r_textbrightness" on every text colour
+    /// (0.8 and 0.2 in Xonotic), alpha untouched.</summary>
+    public static Color TextLift(Color c)
+    {
+        VortexArena.Legacy.Presentation.LegacyTextLook look = DpText.Look;
+        return new Color(Mathf.Clamp(c.R * look.Contrast + look.Brightness, 0f, 1f),
+            Mathf.Clamp(c.G * look.Contrast + look.Brightness, 0f, 1f),
+            Mathf.Clamp(c.B * look.Contrast + look.Brightness, 0f, 1f), c.A);
+    }
+
+    private static FontFile? RawFont(bool bold)
+    {
         VirtualFileSystem? vfs = MenuState.Vfs;
         if (vfs == null)
             return null;
@@ -823,9 +873,7 @@ public static class MenuSkin
             {
                 if (!vfs.Exists(path))
                     continue;
-                var f = new FontFile { Data = vfs.ReadBytes(path) };
-                slot = f;
-                return slot;
+                return new FontFile { Data = vfs.ReadBytes(path) };
             }
             catch (Exception ex)
             {

@@ -151,6 +151,9 @@ public partial class ChatPanel : HudPanel
         }
     }
 
+    // console.c Con_DrawNotifyRect(CON_MASK_CHAT, ...): the engine draws chat in FONT_CHAT, not the HUD's font.
+    protected override int DefaultFont => VortexArena.Game.Text.DpText.Chat;
+
     protected override void DrawPanel()
     {
         if (_lines.Count == 0) return; // self-blank when empty
@@ -267,7 +270,9 @@ public partial class ChatPanel : HudPanel
         if (!(vpW > 0f)) vpW = 800f;
         float size = ChatSize;
         if (!(size > 0f)) size = DefaultChatSize;  // guard con_chatsize 0 / negative / NaN before scaling
-        float scaled = size * vpW / refW;
+        // console.c Con_DrawNotifyRect: chat lines are drawn at con_chatsize VIRTUAL units, i.e. times the
+        // window's pixels per unit (height / vid_conheight) - not times width / 800.
+        float scaled = size * VortexArena.Game.Text.DpText.PixelsPerUnit;
         if (!float.IsFinite(scaled)) scaled = DefaultChatSize;
         int px = Mathf.RoundToInt(scaled);
         return Mathf.Clamp(px, 8, 64);

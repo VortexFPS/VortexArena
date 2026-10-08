@@ -29,19 +29,22 @@ public static class HudText
         public Run(string text, Color color) { Text = text; Color = color; }
     }
 
-    // The Quake/Xonotic ^0..^9 palette (engine "qfont" color table). Alpha applied by the caller.
+    // gl_draw.c string_colors[]: the ^0..^9 palette as DarkPlaces holds it. These are the RAW values; every
+    // text draw then applies "colour * r_textcontrast + r_textbrightness" (DrawQ_GetTextColor, in DpText), which
+    // with Xonotic's 0.8 / 0.2 turns black into a fifth grey and pure red into (1, 0.2, 0.2). ^8 is white at
+    // half alpha ("[515]'s BX_COLOREDTEXT extension"), which Parse applies to the run's alpha.
     private static readonly Color[] Palette =
     {
-        new(0.20f, 0.20f, 0.20f), // ^0 black-ish
-        new(1.00f, 0.20f, 0.20f), // ^1 red
-        new(0.20f, 1.00f, 0.20f), // ^2 green
-        new(1.00f, 1.00f, 0.20f), // ^3 yellow
-        new(0.20f, 0.40f, 1.00f), // ^4 blue
-        new(0.20f, 1.00f, 1.00f), // ^5 cyan
-        new(1.00f, 0.20f, 1.00f), // ^6 magenta
+        new(0.00f, 0.00f, 0.00f), // ^0 black
+        new(1.00f, 0.00f, 0.00f), // ^1 red
+        new(0.00f, 1.00f, 0.00f), // ^2 green
+        new(1.00f, 1.00f, 0.00f), // ^3 yellow
+        new(0.05f, 0.15f, 1.00f), // ^4 "lighter blue, readable unlike the above"
+        new(0.00f, 1.00f, 1.00f), // ^5 cyan
+        new(1.00f, 0.00f, 1.00f), // ^6 magenta
         new(1.00f, 1.00f, 1.00f), // ^7 white
-        new(0.60f, 0.60f, 0.60f), // ^8 grey
-        new(0.50f, 0.50f, 0.50f), // ^9 dark grey
+        new(1.00f, 1.00f, 1.00f), // ^8 half transparent white
+        new(0.50f, 0.50f, 0.50f), // ^9 half brightness
     };
 
     /// <summary>
@@ -107,7 +110,7 @@ public static class HudText
                 {
                     Flush();
                     cur = Palette[n - '0'];
-                    cur.A = baseColor.A;
+                    cur.A = n == '8' ? baseColor.A * 0.5f : baseColor.A;
                     i++;
                     continue;
                 }

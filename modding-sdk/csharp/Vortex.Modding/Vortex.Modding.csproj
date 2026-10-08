@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The C# guest library. An ordinary class library: a mod references it and the MOD is what gets
+       compiled to WebAssembly (see ../templates/hello-hud). net10.0 because that is what the
+       NativeAOT-LLVM compiler packages target; the game itself stays on .NET 8. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Vortex.Modding</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+</Project>

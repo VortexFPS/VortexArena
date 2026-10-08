@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The QuakeC virtual machine for legacy compatibility (ADR-0019, planning/specs/legacy-compat.md):
+       loads a progs file compiled by gmqcc and runs it with DarkPlaces semantics, so a stock Xonotic
+       server's csprogs.dat can drive this client. Port of Base/darkplaces prvm_*.c + pr_comp.h.
+       Godot-free and dependency-free: builtins that need the renderer are supplied by the host. -->
+  <PropertyGroup>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.QuakeC</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+</Project>

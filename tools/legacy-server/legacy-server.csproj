@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    legacy-server: runs Xonotic's server QuakeC program (progs.dat) on this engine's QuakeC VM, in
+    place of a DarkPlaces dedicated server (src/VortexArena.Legacy/Server). Modes, listed by
+    Program.cs when given one it does not know: "probe" (what the program is and which builtins it
+    needs), "run" (boot a level with bots and simulate it headless), "serve" (the same, on a UDP
+    port with a stdin console).
+
+    Standalone like tools/dp-probe: NOT in VortexArena.sln (the host csproj excludes tools/** from
+    its own compilation), built and run on demand with "dotnet run" on this project.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.Tools.LegacyServer</RootNamespace>
+    <AssemblyName>legacy-server</AssemblyName>
+    <!-- Run on whatever .NET the machine has; see tools/vx/Vx.csproj for why this matters. -->
+    <RollForward>LatestMajor</RollForward>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\VortexArena.Legacy\VortexArena.Legacy.csproj" />
+  </ItemGroup>
+
+</Project>

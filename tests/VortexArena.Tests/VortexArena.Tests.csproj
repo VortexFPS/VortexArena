@@ -23,5 +23,8 @@
     <ProjectReference Include="..\..\src\VortexArena.Server\VortexArena.Server.csproj" />
     <!-- Normal (non-analyzer) reference: SourceGenTests instantiate RegistryGenerator directly. -->
     <ProjectReference Include="..\..\src\VortexArena.SourceGen\VortexArena.SourceGen.csproj" />
+    <ProjectReference Include="..\..\src\VortexArena.Modding\VortexArena.Modding.csproj" />
+    <ProjectReference Include="..\..\src\VortexArena.QuakeC\VortexArena.QuakeC.csproj" />
+    <ProjectReference Include="..\..\src\VortexArena.Legacy\VortexArena.Legacy.csproj" />
   </ItemGroup>
 </Project>

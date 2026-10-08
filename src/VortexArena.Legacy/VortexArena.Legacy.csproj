@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Legacy compatibility (ADR-0019, planning/specs/legacy-compat.md): what lets this client join a
+       stock Xonotic server in place of the DarkPlaces engine. Protocol/ is the DarkPlaces wire format
+       (connection handshake, the reliable/unreliable channel, DP7 message parsing); the rest hosts the
+       server-supplied client QuakeC on VortexArena.QuakeC. Godot-free so the suite can drive it with
+       recorded demos and a headless server; the Godot bridges live under game/legacy/. -->
+  <PropertyGroup>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.Legacy</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\VortexArena.QuakeC\VortexArena.QuakeC.csproj" />
+    <ProjectReference Include="..\VortexArena.Formats\VortexArena.Formats.csproj" />
+    <ProjectReference Include="..\VortexArena.Net\VortexArena.Net.csproj" />
+    <ProjectReference Include="..\VortexArena.Engine\VortexArena.Engine.csproj" />
+  </ItemGroup>
+</Project>

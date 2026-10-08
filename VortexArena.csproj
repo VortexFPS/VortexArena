@@ -52,6 +52,9 @@
          globs **/*.cs from the project directory, so without this its Program.cs would be compiled INTO the
          game host — a second Main, and tooling code shipped in the game assembly. -->
     <Compile Remove="tools/**/*.cs" />
+    <!-- The mod SDK (modding-sdk/) is GUEST code: it targets net10.0 and is compiled to WebAssembly by
+         its own projects. Compiled into the host it would be dead code that does not even build here. -->
+    <Compile Remove="modding-sdk/**/*.cs" />
     <Compile Remove=".godot/**/*.cs" />
     <Compile Remove="obj/**/*.cs" />
     <Compile Remove="bin/**/*.cs" />
@@ -62,6 +65,12 @@
     <ProjectReference Include="src\VortexArena.Net\VortexArena.Net.csproj" />
     <ProjectReference Include="src\VortexArena.Formats\VortexArena.Formats.csproj" />
     <ProjectReference Include="src\VortexArena.Server\VortexArena.Server.csproj" />
+    <!-- The mod sandbox host (ADR-0020). Brings the Wasmtime NuGet package and its per-RID native library. -->
+    <ProjectReference Include="src\VortexArena.Modding\VortexArena.Modding.csproj" />
+    <!-- Legacy compatibility mode (ADR-0019): the DarkPlaces protocol client and the QuakeC VM that runs a
+         stock Xonotic server's client program. Both are Godot-free; game/legacy/ is their Godot side. -->
+    <ProjectReference Include="src\VortexArena.Legacy\VortexArena.Legacy.csproj" />
+    <ProjectReference Include="src\VortexArena.QuakeC\VortexArena.QuakeC.csproj" />
   </ItemGroup>
   <!-- C3: run the StringApiAnalyzer over game/ (where all the Godot interop lives). The analyzer is also an
        Analyzer reference from VortexArena.Common; analyzers don't flow transitively through ProjectReference,

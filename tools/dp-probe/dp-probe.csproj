@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    dp-probe: a console client that connects to a real DarkPlaces/Xonotic server with the DP7 protocol
+    library (src/VortexArena.Legacy/Protocol), signs on, downloads csprogs.dat in band, checks it, and
+    disconnects. It exists to prove the library against the real engine, which the unit tests cannot.
+
+    Standalone like tools/vx: NOT in VortexArena.sln (the host csproj excludes tools/** from its own
+    compilation), built and run on demand with "dotnet run" on this project. Its options (host, port,
+    csprogs, out, timeout, linger, name) are listed by Program.cs when given one it does not know.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.Tools.DpProbe</RootNamespace>
+    <AssemblyName>dp-probe</AssemblyName>
+    <!-- Run on whatever .NET the machine has; see tools/vx/Vx.csproj for why this matters. -->
+    <RollForward>LatestMajor</RollForward>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\VortexArena.Legacy\VortexArena.Legacy.csproj" />
+  </ItemGroup>
+
+</Project>

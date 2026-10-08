@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Build:  dotnet publish -c Release      (with WASI_SDK_PATH pointing at WASI SDK 29.0)
+       Output: bin/Release/net10.0/wasi-wasm/publish/hello-hud.wasm  - the file a server lists in its manifest.
+       See ../../README.md for the toolchain. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier>wasi-wasm</RuntimeIdentifier>
+    <OutputType>Library</OutputType>
+    <NativeLib>Shared</NativeLib>
+    <PublishTrimmed>true</PublishTrimmed>
+    <SelfContained>true</SelfContained>
+    <!-- The NativeAOT-LLVM packages replace the SDK's own workload resolution for this RID. -->
+    <MSBuildEnableWorkloadResolver>false</MSBuildEnableWorkloadResolver>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Smaller module: no culture data, no exception message resources, size over speed. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <IlcOptimizationPreference>Size</IlcOptimizationPreference>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Pinned: this is a prerelease compiler, and a mod must rebuild the same way next month.
+         The second package is per BUILD host; linux-x64 is the other one that exists. -->
+    <PackageReference Include="Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-rc.1.26357.1" />
+    <PackageReference Include="runtime.win-x64.Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-rc.1.26357.1" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+    <PackageReference Include="runtime.linux-x64.Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-rc.1.26357.1" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+    <ProjectReference Include="..\..\Vortex.Modding\Vortex.Modding.csproj" />
+  </ItemGroup>
+</Project>

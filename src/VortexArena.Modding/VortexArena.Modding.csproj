@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The sandbox for downloadable client code (ADR-0020, planning/specs/modding.md): the mod manifest,
+       the content-addressed cache, the guest ABI ("vortex_1") and the Wasmtime-backed sandbox host.
+       Godot-free ON PURPOSE, Wasmtime included: the test suite cannot see game/, and the hostile-module
+       corpus is the part of this subsystem that most needs tests. The Godot side (drawing the decoded
+       commands, feeding state) implements IModHost under game/modding/. -->
+  <PropertyGroup>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RootNamespace>VortexArena.Modding</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The 48.x line is a Wasmtime long-term-support release (24 months of security backports). The
+         package bundles natives for win/linux/osx on x64 and arm64 only: on any other RID (linux-ppc64le)
+         the managed assembly loads and WasmModSandbox.IsAvailable reports false - see the spec, section 6. -->
+    <PackageReference Include="Wasmtime" Version="48.0.2" />
+  </ItemGroup>
+</Project>

@@ -62,7 +62,10 @@ public static class SkyboxLoader
             return null;
         }
 
-        var mat = new ShaderMaterial { Shader = new Shader { Code = ShaderCode } };
+        // A legacy session on display values (DisplayFramebuffer) writes the faces' stored texels, as
+        // DarkPlaces' R_SkyBox does; otherwise they are decoded to linear light.
+        string code = VortexArena.Game.Client.DisplayFramebuffer.Active ? ShaderCode.Replace(" : source_color, filter_linear_mipmap", " : filter_linear_mipmap") : ShaderCode;
+        var mat = new ShaderMaterial { Shader = new Shader { Code = code } };
         for (int i = 0; i < 6; i++)
         {
             faces[i].GenerateMipmaps();

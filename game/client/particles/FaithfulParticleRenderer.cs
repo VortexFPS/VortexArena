@@ -427,7 +427,11 @@ public sealed partial class FaithfulParticleRenderer : Node3D
                 // Depth TEST on (walls occlude), depth WRITE off for transparency (matches the growth
                 // shader, EffectSystem.cs:1455-1458). Unshaded emissive sprites, two-sided.
                 "render_mode " + blendMode + ", unshaded, cull_disabled, shadows_disabled, depth_draw_opaque;\n" +
-                "uniform sampler2D albedo_tex : source_color, filter_linear;\n" +
+                // A legacy session on display values (DisplayFramebuffer) composes the stored texel and the
+                // stored colour, as DarkPlaces does; otherwise the atlas is decoded to linear light.
+                (DisplayFramebuffer.Active
+                    ? "uniform sampler2D albedo_tex : filter_linear;\n"
+                    : "uniform sampler2D albedo_tex : source_color, filter_linear;\n") +
                 "uniform vec4 cell_rects[256];\n" +   // slot -> (u0, v0, du, dv); covers 0-95 + 200-205
                 "uniform int cell_count = 0;\n" +
                 "varying flat int v_slot;\n" +
@@ -598,9 +602,11 @@ public sealed partial class FaithfulParticleRenderer : Node3D
             }
             if (alphaNorm > 1f) alphaNorm = 1f;
 
-            float lr = SrgbToLinear(p.ColorR * (1f / 256f));
-            float lg = SrgbToLinear(p.ColorG * (1f / 256f));
-            float lb = SrgbToLinear(p.ColorB * (1f / 256f));
+            // (A legacy session on display values takes the bytes as they are: DisplayFramebuffer.)
+            bool display = DisplayFramebuffer.Active;
+            float lr = display ? p.ColorR * (1f / 256f) : SrgbToLinear(p.ColorR * (1f / 256f));
+            float lg = display ? p.ColorG * (1f / 256f) : SrgbToLinear(p.ColorG * (1f / 256f));
+            float lb = display ? p.ColorB * (1f / 256f) : SrgbToLinear(p.ColorB * (1f / 256f));
 
             // Premultiply (DP :2683 ADD, :2727 ALPHA, :2680 INVMOD). Additive carries vertex alpha 0 so
             // the premultiplied blend leaves the destination intact (pure add); invmod's COLOR is the

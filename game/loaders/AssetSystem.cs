@@ -76,6 +76,13 @@ public sealed class AssetSystem
         _shaders = LoadShaders(vfs);
     }
 
+    /// <summary>
+    /// Set by a legacy session on its own asset system: Quake 3 shaders are turned into materials by
+    /// DarkPlaces' rules and arithmetic (<see cref="DpSurfaceShader"/>) instead of the native compiler's, and
+    /// the level's unlightmapped surfaces keep their vertex colours. False for the native game.
+    /// </summary>
+    public bool DarkPlacesRules { get; set; }
+
     /// <summary>The virtual filesystem this facade reads assets from.</summary>
     public VirtualFileSystem Vfs => _vfs;
 
@@ -380,11 +387,13 @@ public sealed class AssetSystem
             // Compile OUTSIDE the lock so a slow shader build never blocks another material's lookup.
             if (_shaders.TryGetValue(key, out ShaderDef? def))
             {
-                result = ShaderCompiler.Compile(def, this) ?? BuildPlainMaterial(key, forModel);
+                result = ShaderCompiler.Compile(def, this, forModel) ?? BuildPlainMaterial(key, forModel || DarkPlacesRules);
             }
             else
             {
-                result = BuildPlainMaterial(key, forModel);
+                // (A legacy session has no use for the sunlit standard material: whatever reaches this with a
+                // plain texture is drawn by the skin shader, which lights it as DarkPlaces does.)
+                result = BuildPlainMaterial(key, forModel || DarkPlacesRules);
             }
         }
         catch (Exception ex)

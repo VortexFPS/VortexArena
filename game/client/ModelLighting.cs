@@ -137,7 +137,21 @@ public static class ModelLighting
         float zmax = (nz + 0.5f) / _current.Depth;
         RenderingServer.GlobalShaderParameterSet(
             PlayerSkinShader.LightGridParamsUniform,
-            new Vector4(zmin, zmax, DpByteScale * UserScale(), 1f));
+            new Vector4(zmin, zmax, s_darkPlacesScale ? 2f : DpByteScale * UserScale(), 1f));
+    }
+
+    private static bool s_darkPlacesScale;
+
+    /// <summary>
+    /// A legacy session: the grid sample is scaled by exactly two, as DarkPlaces' MODE_LIGHTGRID does
+    /// (render_lightmap_diffuse = colormod * 2 on a texture of the lump's bytes), and the native game's
+    /// <c>r_model_light_scale</c> is left out of it.
+    /// </summary>
+    public static void SetDarkPlacesScale(bool on)
+    {
+        if (s_darkPlacesScale == on) return;
+        s_darkPlacesScale = on;
+        PushParams();
     }
 
     /// <summary>The user's <c>r_model_light_scale</c> brightness multiplier (unset/&lt;=0 → 1).</summary>

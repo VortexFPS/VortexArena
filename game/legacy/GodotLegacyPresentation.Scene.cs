@@ -87,7 +87,7 @@ public sealed partial class GodotLegacyPresentation
     private readonly List<OmniLight3D> _lightPool = new();
     private readonly List<EntityState> _staticEntities = new();
     private readonly Dictionary<(ulong Material, int Bits), Material> _materialVariants = new();
-    private readonly Dictionary<(string Texture, int Flags), StandardMaterial3D> _polygonMaterials = new();
+    private readonly Dictionary<(string Texture, int Flags), ShaderMaterial> _polygonMaterials = new();
     private readonly string?[] _lightStyles = new string?[DpProtocol.MaxLightStyles];
     private readonly LegacyRefdef _refdef = new();
     private ImmediateMesh _polygonMesh = null!;
@@ -935,6 +935,11 @@ public sealed partial class GodotLegacyPresentation
                 for (int s = 0; s < surfaces; s++) proxy.Surfaces.Add((instance, s, instance.GetSurfaceOverrideMaterial(s)));
             }
         }
+        // EF_FULLBRIGHT / RF_FULLBRIGHT on a surface drawn by one of the model shaders: MODE_FLATCOLOR, asked
+        // for per instance (3), where 1 is the light grid.
+        float gridLit = (bits & BitFullBright) != 0 ? 3f : 1f;
+        foreach (GeometryInstance3D geometry in proxy.Geometry)
+            if (geometry is MeshInstance3D lit && GodotObject.IsInstanceValid(lit)) lit.SetInstanceShaderParameter(PlayerSkinShader.GridLitUniform, gridLit);
         foreach ((MeshInstance3D instance, int surface, Material? original) in proxy.Surfaces)
         {
             if (!GodotObject.IsInstanceValid(instance) || instance.Mesh is not { } mesh || surface >= mesh.GetSurfaceCount()) continue;
@@ -1091,8 +1096,11 @@ public sealed partial class GodotLegacyPresentation
             float brightest = MathF.Max(light.Color.X, MathF.Max(light.Color.Y, light.Color.Z));
             node.Position = G(light.Origin);
             node.OmniRange = light.Radius;
-            node.LightColor = brightest > 0 ? new Color(light.Color.X / brightest, light.Color.Y / brightest, light.Color.Z / brightest) : Colors.Black;
+            node.LightColor = brightest > 0 ? DisplayFramebuffer.ForEngine(new Color(light.Color.X / brightest, light.Color.Y / brightest, light.Color.Z / brightest)) : Colors.Black;
             node.LightEnergy = Math.Clamp(brightest, 0f, 16f);
+            // On display values the session's shaders apply DarkPlaces' own falloff (LightmapShader.light):
+            // the engine's is left at its range window alone.
+            node.OmniAttenuation = DisplayFramebuffer.Active ? 0f : 1f;
             node.Visible = true;
         }
         for (int i = _lights.Count; i < _lightPool.Count; i++) _lightPool[i].Visible = false;
@@ -1115,7 +1123,7 @@ public sealed partial class GodotLegacyPresentation
             {
                 _programFog = false;
                 env.FogEnabled = _levelFog.On;
-                env.FogLightColor = _levelFog.Color;
+                env.FogLightColor = _levelFog.Color;   // already as the engine wants it
                 env.FogDensity = _levelFog.Density;
             }
             return;
@@ -1139,7 +1147,7 @@ public sealed partial class GodotLegacyPresentation
             return;
         }
         env.FogEnabled = true;
-        env.FogLightColor = new Color(Math.Clamp(View.FogColor.X, 0f, 1f), Math.Clamp(View.FogColor.Y, 0f, 1f), Math.Clamp(View.FogColor.Z, 0f, 1f));
+        env.FogLightColor = DisplayFramebuffer.ForEngine(new Color(Math.Clamp(View.FogColor.X, 0f, 1f), Math.Clamp(View.FogColor.Y, 0f, 1f), Math.Clamp(View.FogColor.Z, 0f, 1f)));
         env.FogDensity = -MathF.Log(1f - MathF.Min(maxFog, 0.98f)) / range;
     }
 
@@ -1190,19 +1198,12 @@ public sealed partial class GodotLegacyPresentation
     }
 
     // One unlit, vertex-coloured, two-sided material per texture and draw flag.
-    private StandardMaterial3D PolygonMaterial(string texture, int drawFlags)
+    private ShaderMaterial PolygonMaterial(string texture, int drawFlags)
     {
         (string, int) key = (texture, drawFlags);
-        if (_polygonMaterials.TryGetValue(key, out StandardMaterial3D? material)) return material;
-        material = new StandardMaterial3D
-        {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            VertexColorUseAsAlbedo = true,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            BlendMode = drawFlags == 1 ? BaseMaterial3D.BlendModeEnum.Add : BaseMaterial3D.BlendModeEnum.Mix,
-            AlbedoTexture = texture == "$whiteimage" ? null : LoadPictureTexture(texture),
-        };
+        if (_polygonMaterials.TryGetValue(key, out ShaderMaterial? material)) return material;
+        material = new ShaderMaterial { Shader = PolygonShader(drawFlags == 1) };
+        if (texture != "$whiteimage" && LoadPictureTexture(texture) is { } picture) material.SetShaderParameter("picture", picture);
         // Past the bound the material is made but not kept: correct, just not shared.
         if (_polygonMaterials.Count < 256) _polygonMaterials[key] = material;
         return material;

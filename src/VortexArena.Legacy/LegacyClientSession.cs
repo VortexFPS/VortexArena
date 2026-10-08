@@ -156,6 +156,13 @@ public sealed class LegacyClientSession : IDisposable
     public bool DemoPlaying => _demo is not null;
     /// <summary>Recorded messages handed to the parser so far.</summary>
     public int DemoMessages { get; private set; }
+    /// <summary>cls.demopaused (the "pausedemo" command): no message is read and the clock stands still, so
+    /// every frame drawn is the same instant of the recording.</summary>
+    public bool DemoPaused { get; set; }
+    /// <summary>Developer aid for comparing a frame with DarkPlaces: the playback pauses itself after the first
+    /// message whose server time is at least this (the message a "pausedemo" was written into for DarkPlaces),
+    /// with the clock on that message's time. Negative: never.</summary>
+    public double DemoPauseAt { get; set; } = -1;
 
     /// <summary>
     /// CL_PlayDemo_f: play a DarkPlaces recording in place of a connection. The stream is the session's from
@@ -185,6 +192,7 @@ public sealed class LegacyClientSession : IDisposable
     public bool ReadDemo()
     {
         if (_demo is not { } demo) return false;
+        if (DemoPaused) return true;   // "LadyHavoc: pausedemo"
         while (Client.State == DpClientState.Connected)
         {
             bool signedOn = State.Signon >= DpProtocol.Signons;
@@ -202,6 +210,13 @@ public sealed class LegacyClientSession : IDisposable
             _demoAngles1 = _demoAngles0;
             _demoAngles0 = message.ViewAngles;
             Client.ReceiveDemoMessage(message.Data);
+            if (signedOn && DemoPauseAt >= 0 && Clock.ServerTime >= DemoPauseAt)
+            {
+                DemoPauseAt = -1;
+                DemoPaused = true;
+                Clock.HoldAtServerTime();
+                break;
+            }
             if (signedOn && Clock.TimeDemo) break;
         }
         // CL_LerpPoint, then "interpolate the angles if playing a demo".
@@ -231,7 +246,7 @@ public sealed class LegacyClientSession : IDisposable
         _clockStarted = true;
         _lastFrame = now;
         if (Client.State != DpClientState.Connected) return;
-        Clock.Advance(frameTime, State.Paused);
+        Clock.Advance(frameTime, State.Paused || DemoPaused);
         if (State.Signon >= DpProtocol.Signons) State.Time = Clock.Time;
     }
 

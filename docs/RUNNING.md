@@ -949,6 +949,11 @@ server, plays, and disconnects with no faults, but no frame has been seen and no
 what is isolated from your own configuration, and the 11-point checklist for a first windowed run are in
 `planning/specs/legacy-compat.md` §12.
 
+A legacy session computes its picture the way DarkPlaces does (stored texel values, one stage per Quake 3
+shader, display values in the 3D buffer) while the native game keeps its own look:
+`planning/specs/legacy-compat.md` §15, which also says how the two engines are compared frame for frame
+(`_scratch/colour/tools/`).
+
 To test without a public server, run the reference dedicated server in WSL (no window). UDP from Windows to
 `127.0.0.1` inside WSL2 is not forwarded, so bind it to the WSL address (`wsl hostname -I`) and keep it off
 the public master list with `sv_public 0`; `_scratch/legacy-live-join.txt` records a working command line.

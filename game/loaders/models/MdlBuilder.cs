@@ -81,6 +81,14 @@ public static class MdlBuilder
 
         var img = Image.CreateFromData(mdl.SkinWidth, mdl.SkinHeight, false, Image.Format.Rgba8, mdl.SkinRgba);
         var tex = ImageTexture.CreateFromImage(img);
+        if (VortexArena.Game.Client.DisplayFramebuffer.Active)
+        {
+            // A legacy session: lit from the level's light grid by the skin shader, as DarkPlaces lights every
+            // model, instead of by the engine's sun (which such a session does not have).
+            var skin = new ShaderMaterial { Shader = PlayerSkinShader.Shader };
+            skin.SetShaderParameter(PlayerSkinShader.AlbedoUniform, tex);
+            return skin;
+        }
         return new StandardMaterial3D
         {
             AlbedoTexture = tex,

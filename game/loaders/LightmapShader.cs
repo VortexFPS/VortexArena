@@ -62,6 +62,14 @@ public static class LightmapShader
     /// <summary>Uniform name for the sRGB color-space flag (Xonotic <c>vid_sRGB</c>/<c>mod_q3bsp_sRGBlightmaps</c>).</summary>
     public static readonly StringName SrgbColorUniform = "srgb_color";
 
+    /// <summary>Global shader parameter: 0 (the native game) leaves every material on its own
+    /// <c>srgb_color</c> setting; 1 (a legacy session) makes every world surface combine as DarkPlaces does with
+    /// Xonotic's default <c>vid_sRGB 0</c> - texel times lightmap texel times two on the stored 8-bit values, the
+    /// product shown as it is - with DarkPlaces' own specular term (see <c>dp_exact</c> in the source).
+    /// 2 and 3 are a developer aid: 2 is DarkPlaces' <c>gl_lightmaps 1</c> (the lighting on a mid-grey texture,
+    /// no glow, no gloss), 3 is <c>r_shadow_gloss 0</c>.</summary>
+    public static readonly StringName GammaSpaceUniform = "world_gamma_space";
+
     /// <summary>Uniform name for a scalar lightmap brightness multiplier (Q3 overbright ≈ 2).</summary>
     public static readonly StringName LightmapScaleUniform = "lightmap_scale";
 
@@ -89,6 +97,11 @@ public static class LightmapShader
 
     /// <summary>Uniform name for the specular (<c>_gloss</c>) companion texture.</summary>
     public static readonly StringName GlossUniform = "gloss_tex";
+
+    /// <summary>Uniform names for a shader's <c>dpglossexponentmod</c> / <c>dpglossintensitymod</c> (a legacy
+    /// session's gloss; the native highlight does not read them).</summary>
+    public static readonly StringName DpGlossExponentModUniform = "dp_gloss_exponent_mod";
+    public static readonly StringName DpGlossIntensityModUniform = "dp_gloss_intensity_mod";
 
     /// <summary>Uniform name for the flag that enables the <c>_gloss</c> deluxe specular highlight.</summary>
     public static readonly StringName UseGlossUniform = "use_gloss";
@@ -147,6 +160,11 @@ uniform sampler2D gloss_tex : hint_default_black;               // _gloss specul
 uniform bool use_gloss = false;         // a _gloss page was found for this surface.
 uniform float specular_power = 32.0;    // DP r_shadow_glossexponent (× glosstex.a per-texel in the shader).
 uniform float specular_scale = 0.15;    // DP Color_Specular (gloss intensity) — a subtle glint; 0 disables.
+// A legacy session's gloss (dp_exact below): the shader's dpglossexponentmod and dpglossintensitymod, which
+// DarkPlaces multiplies into r_shadow_glossexponent and r_shadow_glossintensity (gl_rmain.c: specularpower *=
+// specularpowermod, specularscale *= specularscalemod). Most of Xonotic's wall shaders say 4 and 1.5.
+uniform float dp_gloss_exponent_mod = 1.0;
+uniform float dp_gloss_intensity_mod = 1.0;
 
 // Dynamic whole-map colour tint (VortexArena.Game.WorldTint). A GLOBAL shader parameter so one
 // RenderingServer.GlobalShaderParameterSet re-tints every world surface at once; the strength is folded into the
@@ -170,6 +188,15 @@ global uniform float deluxe_enabled;
 // lightmap term collapses to 1 after all scaling, which displays the plain albedo). The menu's
 // ""Use lightmaps"" checkbox is this cvar INVERTED - see the dialog polarity note.
 global uniform float world_nolightmaps;
+// 0 = the native game (each material's own srgb_color). 1 = a legacy session: DarkPlaces' arithmetic with
+// Xonotic's default vid_sRGB 0 - nothing is converted, the stored values are multiplied and the product is the
+// pixel (gl_rmain.c R_UpdateCurrentTexture: render_lightmap_diffuse = colormod * lightmapintensity * 2;
+// shader_glsl.h MODE_LIGHTMAP / MODE_LIGHTDIRECTIONMAP_MODELSPACE). 2, 3: developer aid, see GammaSpaceUniform.
+global uniform float world_gamma_space;
+// 1 while a legacy session keeps DISPLAY values in the 3D buffer (VortexArena.Game.Client.DisplayFramebuffer):
+// the combine below is then written as it is, and blending, fog and the dynamic lights act on it as they do
+// in DarkPlaces' frame buffer. 0 = linear light, the native game.
+global uniform float dp_framebuffer;
 
 // Per-surface tangent frame (DP VectorS/T/R = tangent/binormal/normal), captured in modelspace so the
 // modelspace deluxe light direction can be rotated into it without a view-space mismatch.
@@ -205,7 +232,14 @@ void fragment() {
     // Self-illumination map (aligned with the diffuse UV); black/zero when this surface has no _glow page.
     vec3 glow = use_glow ? texture(glow_tex, UV * albedo_uv_scale).rgb : vec3(0.0);
 
-    if (srgb_color) {
+    bool dp_exact = world_gamma_space > 0.5;
+    bool linear_combine = srgb_color && !dp_exact;
+    if (world_gamma_space > 1.5 && world_gamma_space < 2.5) {
+        // gl_lightmaps 1 (gl_rmain.c: basetexture = r_texture_grey128, no glow, no gloss, a flat normal map).
+        albedo = vec3(0.5);
+        glow = vec3(0.0);
+    }
+    if (linear_combine) {
         // sRGB-enable mode: decode diffuse + lightmap (and vertex colors) + glow to linear before combining.
         albedo = srgb_to_linear(albedo);
         lm = srgb_to_linear(lm);
@@ -221,6 +255,12 @@ void fragment() {
         vec3 lightnormal_modelspace = vec3(d.x, d.z, -d.y);   // Coords.ToGodot
         vec3 vs = normalize(v_tangent);
         vec3 vt = normalize(v_binormal);
+        // DarkPlaces' tangent frame has T along DECREASING v (model_shared.c
+        // Mod_BuildTextureVectorsFromNormals: sdir = +dP/du and tdir = -dP/dv for every winding), which is the
+        // frame Xonotic's normal maps are drawn in; this mesh's BINORMAL runs along increasing v. A legacy
+        // session takes DarkPlaces' sign, so a bump is lit from the side the light is on. (Only a surface with
+        // a normal map can tell: without one the term below is the same for either sign.)
+        if (dp_exact) { vt = -vt; }
         vec3 vr = normalize(v_normal);
         vec3 lightnormal;
         lightnormal.x = dot(lightnormal_modelspace, vs);
@@ -233,7 +273,7 @@ void fragment() {
         // BC5/RGTC normals carry only X/Y (industry-standard normal compression — blue samples as 0);
         // reconstruct Z on the unit hemisphere. Full-channel textures keep the direct decode.
         vec3 sn = vec3(0.0, 0.0, 1.0);
-        if (use_normal) {
+        if (use_normal && !(world_gamma_space > 1.5 && world_gamma_space < 2.5)) {
             vec3 nt = texture(normal_tex, UV * albedo_uv_scale).xyz * 2.0 - 1.0;
             if (norm_rg) { nt.z = sqrt(max(0.0, 1.0 - dot(nt.xy, nt.xy))); }
             sn = normalize(nt);
@@ -245,7 +285,20 @@ void fragment() {
         // specular = pow(dot(N,H), SpecularPower * glosstex.a); added as glosstex.rgb * Color_Specular * specular
         // * lightcolor). The per-texel ALPHA modulates the exponent (highlight tightness) and Color_Specular
         // (specular_scale, low) keeps it a subtle glint rather than the broad sheen a fixed low exponent gives.
-        if (use_gloss) {
+        if (use_gloss && dp_exact) {
+            // DarkPlaces as Xonotic configures it (r_shadow_gloss 1, r_shadow_glossintensity 1,
+            // r_shadow_glossexponent 32, r_shadow_glossexact 1): SHADESPECULAR with USEEXACTSPECULARMATH,
+            //   specular = pow(sat(dot(reflect(lightnormal, surfacenormal), -eyenormal)), 1 + SpecularPower * gloss.a)
+            // where SpecularPower = 32 * dpglossexponentmod * 0.25 - 1 (gl_rmain.c:1930), added as gloss.rgb *
+            // Color_Specular * specular * lightcolor with Color_Specular = 2 * dpglossintensitymod (the same
+            // overbright two as the diffuse).
+            if (world_gamma_space < 1.5) {
+                vec3 eye_ts = normalize(vec3(dot(v_eye_model, vs), dot(v_eye_model, vt), dot(v_eye_model, vr)));
+                vec4 gtex = texture(gloss_tex, UV * albedo_uv_scale);
+                float spec = pow(clamp(dot(reflect(lightnormal, sn), -eye_ts), 0.0, 1.0), 1.0 + (32.0 * dp_gloss_exponent_mod * 0.25 - 1.0) * gtex.a);
+                spec_accum = lm * spec * gtex.rgb * dp_gloss_intensity_mod;
+            }
+        } else if (use_gloss) {
             vec3 eye_ts = normalize(vec3(dot(v_eye_model, vs), dot(v_eye_model, vt), dot(v_eye_model, vr)));
             vec3 halfdir = normalize(lightnormal + eye_ts);
             vec4 gtex = texture(gloss_tex, UV * albedo_uv_scale);
@@ -258,6 +311,7 @@ void fragment() {
     lm *= lightmap_scale * world_lightmap_scale;
     // mod_q3bsp_nolightmaps: collapse the whole lighting term to 1 -> the surface displays its raw albedo.
     lm = mix(lm, vec3(1.0), world_nolightmaps);
+    if (dp_exact) { spec_accum *= 1.0 - world_nolightmaps; }   // DarkPlaces' fullbright has no specular term
     // Self-illumination (DP shader_glsl.h: color.rgb += Texture_Glow * Color_Glow): added on top of the lit
     // diffuse and NOT modulated by the lightmap, so light fixtures glow at full intensity regardless of how
     // lit their own luxels are. Without this, lightmapped lights render as a dim diffuse×lightmap and look dark.
@@ -267,10 +321,11 @@ void fragment() {
     // display-ready value, so pre-encode it to linear to cancel Godot's linear->sRGB output transform.
     // The baked result goes to EMISSION, not ALBEDO: emission is not affected by lighting, so the static
     // lightmap look survives exactly as-is and dynamic lights ADD to it rather than replacing it.
-    EMISSION = srgb_color ? combined : srgb_to_linear(combined);
+    EMISSION = linear_combine ? combined
+        : (dp_framebuffer > 0.5 ? clamp(combined, vec3(0.0), vec3(1.0)) : srgb_to_linear(combined));
     // Linear diffuse for the dynamic-light term below. Tinted to match, so a dlight on a tinted map picks up
     // the tint too.
-    ALBEDO = (srgb_color ? albedo : srgb_to_linear(albedo)) * map_tint;
+    ALBEDO = (linear_combine || dp_framebuffer > 0.5 ? albedo : srgb_to_linear(albedo)) * map_tint;
     // World surfaces are OPAQUE: do NOT write ALPHA. Writing it pushes the material into Godot's transparent
     // pass, which is depth-sorted per-object and doesn't occlude — i.e. you'd see through walls. Masked
     // surfaces (grates/foliage) instead alpha-TEST via discard below, which stays in the opaque pass.
@@ -287,7 +342,20 @@ void light() {
     // Guarded rather than early-returned: Godot rejects `return` inside light().
     if (!LIGHT_IS_DIRECTIONAL) {
         float ndotl = clamp(dot(normalize(NORMAL), normalize(LIGHT)), 0.0, 1.0);
-        DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndotl * world_dlight;
+        if (dp_framebuffer > 0.5) {
+            // DarkPlaces' dynamic light pass (shader_glsl.h MODE_LIGHTSOURCE, drawn GL_ONE GL_ONE):
+            //   fb += diffusetex * lightcolor * attenuation * sat(dot(N, L))
+            // The engine multiplies what is gathered here by ALBEDO (the texel) and adds it to the buffer,
+            // which holds display values - so this is that sum. A legacy session's lights have no distance
+            // falloff of the engine's own beyond its range window (1 - (d/r)^4)^2, from which d/r is taken
+            // back and DarkPlaces' table is evaluated: (1 - d/r) * 2 / (1 + (d/r)^2), at most 1
+            // (r_shadow.c R_Shadow_MakeTextures_SamplePoint). LIGHT_COLOR carries the engine's factor of pi.
+            float q = pow(max(1.0 - sqrt(clamp(ATTENUATION, 0.0, 1.0)), 0.0), 0.25);
+            float att = clamp((1.0 - q) * 2.0 / (1.0 + q * q), 0.0, 1.0);
+            DIFFUSE_LIGHT += LIGHT_COLOR * (att * ndotl * world_dlight * 0.31830989);
+        } else {
+            DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndotl * world_dlight;
+        }
     }
 }
 ";

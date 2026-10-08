@@ -127,8 +127,30 @@ public static class WorldTint
             "deluxe_enabled", RenderingServer.GlobalShaderParameterType.Float, 1.0f);
         RenderingServer.GlobalShaderParameterAdd(
             "world_nolightmaps", RenderingServer.GlobalShaderParameterType.Float, 0.0f);
+        // A legacy session's frame buffer convention (DisplayFramebuffer); 0 everywhere else.
+        RenderingServer.GlobalShaderParameterAdd(
+            Client.DisplayFramebuffer.Uniform, RenderingServer.GlobalShaderParameterType.Float, 0.0f);
+        // A legacy session's clock for its surface shaders (DpSurfaceShader: cl.time).
+        RenderingServer.GlobalShaderParameterAdd(
+            Loaders.DpSurfaceShader.TimeUniform, RenderingServer.GlobalShaderParameterType.Float, 0.0f);
+        // A legacy session's world arithmetic (LightmapShader.GammaSpaceUniform); 0 everywhere else.
+        RenderingServer.GlobalShaderParameterAdd(
+            Loaders.LightmapShader.GammaSpaceUniform, RenderingServer.GlobalShaderParameterType.Float, 0.0f);
         _mapApplied = _entityApplied = Vector3.One;
         _gammaApplied = 0f;
+    }
+
+    /// <summary>
+    /// A legacy session's model lighting: 2 on the model-light global is DarkPlaces' own arithmetic on the stored
+    /// texel values (PlayerSkinShader, "model_light_gamma > 1.5"); leaving puts back what
+    /// <c>r_model_light_gamma</c> last asked for. <paramref name="fullbright"/> is a developer aid (3: every model
+    /// at full light, DarkPlaces' r_fullbright).
+    /// </summary>
+    public static void SetLegacyModelLight(bool legacy, bool fullbright = false)
+    {
+        EnsureRegistered();
+        RenderingServer.GlobalShaderParameterSet(
+            Loaders.PlayerSkinShader.ModelLightGammaUniform, legacy ? (fullbright ? 3f : 2f) : _gammaApplied);
     }
 
     /// <summary>

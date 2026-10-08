@@ -138,12 +138,17 @@ uniform bool has_gloss = false;
 uniform bool has_glow = false;
 uniform bool has_reflect = false;
 uniform bool has_reflect_cube = false;
+// A legacy session's gloss: the shader's dpglossexponentmod / dpglossintensitymod (see LightmapShader).
+uniform float dp_gloss_exponent_mod = 1.0;
+uniform float dp_gloss_intensity_mod = 1.0;
 // Per-entity tints are instance uniforms so the shared (cached) skin material can still be reused while
 // each model instance carries its own colors (set via MeshInstance3D.set_instance_shader_parameter).
-instance uniform vec3 shirt_color : source_color = vec3(0.0);
-instance uniform vec3 pants_color : source_color = vec3(0.0);
-instance uniform vec3 colormod : source_color = vec3(1.0);
-instance uniform vec3 glowmod : source_color = vec3(1.0);
+// (The indices are the ones the declaration order gave these before they were written out: a mesh that also
+// carries a DpSurfaceShader surface shares the instance's slots with it by index.)
+instance uniform vec3 shirt_color : source_color, instance_index(0) = vec3(0.0);
+instance uniform vec3 pants_color : source_color, instance_index(1) = vec3(0.0);
+instance uniform vec3 colormod : source_color, instance_index(2) = vec3(1.0);
+instance uniform vec3 glowmod : source_color, instance_index(3) = vec3(1.0);
 // Lightgrid model lighting: DP lights every model from the BSP lightgrid -> MODE_LIGHTDIRECTION. When
 // grid_lit is on, this branch reproduces that formula and bypasses Godot's scene lights entirely
 // (EMISSION-only output):
@@ -165,20 +170,20 @@ instance uniform vec3 glowmod : source_color = vec3(1.0);
 // players, items and props, which are attached before the map binds its grid and can have it dropped under
 // them by r_model_lightgrid, so ""grid-lit"" has to be a request rather than an assertion. 2 = grid-lit
 // unconditionally, for the one caller that always supplies its own lobe-2 terms (the viewmodel CPU sample).
-instance uniform float grid_lit = 0.0;
+instance uniform float grid_lit : instance_index(4) = 0.0;
 // Lobe 2 defaults to NOTHING, not to white. It is additive on top of lobe 1 now, so a grid-lit instance that
 // nobody pushes per-entity values to is lit purely by the map's grid — which is the common case after F1-B
 // (players, items, gibs). A white default here would flood every such model with full ambient.
-instance uniform vec3 grid_ambient = vec3(0.0);
-instance uniform vec3 grid_diffuse = vec3(0.0);
-instance uniform vec3 grid_dir = vec3(0.0, 1.0, 0.0); // Godot WORLD axes, points AT the light
+instance uniform vec3 grid_ambient : instance_index(5) = vec3(0.0);
+instance uniform vec3 grid_diffuse : instance_index(6) = vec3(0.0);
+instance uniform vec3 grid_dir : instance_index(7) = vec3(0.0, 1.0, 0.0); // Godot WORLD axes, points AT the light
 // (N8) Gameplay rim light: a thin band along the silhouette, coloured by something the player needs to know
 // at a glance - a teammate is teal, a powerup carrier pulses. Delivering that through the LIGHTING rather
 // than through more HUD is the whole argument for it in a game where target identification happens in a
 // fraction of a second. Black (the default) is off, and every driver of it is a cvar, because this is a
 // competitive-information change and not a cosmetic one.
-instance uniform vec3 rim_color = vec3(0.0);
-instance uniform float rim_power = 2.5;
+instance uniform vec3 rim_color : instance_index(8) = vec3(0.0);
+instance uniform float rim_power : instance_index(9) = 2.5;
 
 // ---- F1-B: the map's baked lightgrid as a 3-D texture, sampled PER PIXEL --------------------------------
 // The port of DP's MODE_LIGHTGRID (shader_glsl.h:1567-1590). Layout, matrix and encoding are built by
@@ -220,7 +225,24 @@ global uniform vec3 entity_tint;
 // (~L^0.45). 1 = emulate DP: redo the multiply on gamma-encoded values and pre-decode the result so
 // Linear tonemap + sRGB encode displays it verbatim. 0 (default — preferred in the r15 playtest A/B)
 // = plain linear multiply; the grid shading structure is identical either way.
+// 2 = a legacy session (LegacyColour): DarkPlaces' own arithmetic, exactly, on the STORED texel values -
+// what vid_sRGB 0 does. Every input that reaches this shader decoded (source_color) is encoded again with the
+// exact sRGB curve, the sum is formed as shader_glsl.h MODE_LIGHTGRID forms it, and the result is decoded
+// once more so that the output transform shows it unchanged. 3 = the same with every model at full light
+// (developer aid: DarkPlaces' r_fullbright).
 global uniform float model_light_gamma;
+// 1 while a legacy session keeps display values in the 3D buffer (DisplayFramebuffer); 0 = linear light.
+global uniform float dp_framebuffer;
+// The lightmap intensity of the level (LightmapShader's global); read by the legacy arithmetic only.
+global uniform float world_lightmap_scale;
+
+// The exact sRGB curve and its inverse (the pair the output transform uses), valid above 1 as well.
+vec3 skin_to_linear(vec3 c) {
+    return mix(c * (1.0 / 12.92), pow((max(c, vec3(0.0)) + 0.055) * (1.0 / 1.055), vec3(2.4)), step(vec3(0.04045), c));
+}
+vec3 skin_to_display(vec3 c) {
+    return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+}
 
 void vertex() {
     // GPU MD3 vertex-morph (see morph_amount above): frameA is the mesh's own streams, frameB rides
@@ -261,7 +283,9 @@ void fragment() {
 
     // grid_lit is a REQUEST, not an assertion (see the uniform above): 1 asks for grid lighting and settles
     // for the PBR path when no grid texture is bound, 2 insists because the caller supplies lobe 2 itself.
-    bool grid_on = grid_lit > 1.5 || (grid_lit > 0.5 && lightgrid_params.w > 0.5);
+    // (A legacy session - model_light_gamma above 1.5 - lights every surface of this shader as DarkPlaces
+    // does, asked or not: from the level's grid, or at full light on a level that has none.)
+    bool grid_on = model_light_gamma > 1.5 || grid_lit > 1.5 || (grid_lit > 0.5 && lightgrid_params.w > 0.5);
     if (grid_on) {
         // ---- DP lightgrid model lighting (playtest r14 B/C/A) ----
         // Normal-mapping applied manually: NORMAL_MAP feeds Godot's scene-light path, which this branch
@@ -314,7 +338,59 @@ void fragment() {
         float spec = pow(max(dot(nrm, normalize(ldir + VIEW)), 0.0), spec_pow);
 
         vec3 lit;
-        if (model_light_gamma > 0.5) {
+        vec3 light_albedo = vec3(0.0);   // what the engine's lights multiply; nothing unless set below
+        if (model_light_gamma > 1.5) {
+            // DarkPlaces, vid_sRGB 0 (shader_glsl.h, MODE_LIGHTGRID; gl_rmain.c R_UpdateCurrentTexture):
+            //   diffusetex = texel + pants * Color_Pants + shirt * Color_Shirt  [+ reflectmask * reflectcube]
+            //   color = diffusetex * Color_Diffuse * (ambientcolor + diffuse * lightcolor)
+            //         + glosstex.rgb * Color_Specular * specular * lightcolor + glowtex * Color_Glow
+            // with Color_Diffuse = colormod * 2, Color_Specular = 2 (both twos are in lightgrid_params.z),
+            // Color_Glow = glowmod, diffuse = sat(dot(N, L)), and - r_shadow_glossexact 1 -
+            //   specular = pow(sat(dot(reflect(L, N), -eye)), 1 + (32 * dpglossexponentmod * 0.25 - 1) * glosstex.a),
+            // Color_Specular also times dpglossintensitymod.
+            vec3 d_tex = skin_to_display(base.rgb) + shirt * skin_to_display(shirt_color) + pants * skin_to_display(pants_color);
+            if (has_reflect && has_reflect_cube) {
+                vec3 rdir = reflect(-VIEW, nrm);
+                vec3 rworld = normalize((INV_VIEW_MATRIX * vec4(rdir, 0.0)).xyz);
+                d_tex += texture(reflect_mask, UV).rgb * skin_to_display(texture(reflect_cube, vec3(rworld.x, -rworld.z, rworld.y)).rgb);
+            }
+            vec3 d_mod = skin_to_display(colormod) * entity_tint;
+            vec3 d_glow = has_glow ? texture(glow_tex, UV).rgb * skin_to_display(glowmod) : vec3(0.0);
+            vec3 res;
+            // A level without a light grid is drawn at full light (r_shadow.c R_CompleteLightPoint, the unlit-map case).
+            bool no_grid = lightgrid_params.w < 0.5 && grid_lit < 1.5;
+            if (model_light_gamma > 2.5 || grid_lit > 2.5 || no_grid) {
+                // EF_FULLBRIGHT / RF_FULLBRIGHT / r_fullbright: MODE_FLATCOLOR, Color_Ambient = colormod.
+                res = d_tex * d_mod + d_glow;
+            } else {
+                float e_pow = 1.0 + (32.0 * dp_gloss_exponent_mod * 0.25 - 1.0) * gloss_px.a;
+                float s1 = 0.0;
+                if (lightgrid_params.w > 0.5) {
+                    vec3 dq2 = texture(lightgrid_tex, vec3(lightgrid_tc.xy, clamp(lightgrid_tc.z, lightgrid_params.x, lightgrid_params.y)) + vec3(0.0, 0.0, 0.6666667)).rgb * 2.0 - 1.0;
+                    vec3 dw2 = vec3(dq2.x, dq2.z, -dq2.y);
+                    if (dot(dw2, dw2) > 1e-6) {
+                        vec3 l2 = normalize((VIEW_MATRIX * vec4(dw2, 0.0)).xyz);
+                        s1 = pow(clamp(dot(reflect(l2, nrm), -VIEW), 0.0, 1.0), e_pow);
+                    }
+                }
+                float s2 = pow(clamp(dot(reflect(ldir, nrm), -VIEW), 0.0, 1.0), e_pow);
+                // world_lightmap_scale: r_refdef.scene.lightmapintensity, which DarkPlaces multiplies by the
+                // value of light style 0 (1.03125 for the usual m) - it scales the grid light of a model
+                // exactly as it scales a wall's lightmap (render_lightmap_diffuse / _specular).
+                res = (d_tex * d_mod * (amb1 + grid_ambient + dif1 * ndl1 + grid_diffuse * ndl)
+                    + gloss_px.rgb * dp_gloss_intensity_mod * (dif1 * s1 + grid_diffuse * s2)) * world_lightmap_scale + d_glow;
+            }
+            res = clamp(res, vec3(0.0), vec3(1.0));
+            if (dp_framebuffer > 0.5) {
+                // The buffer holds display values: the result is written as it is, and a dynamic light adds
+                // diffusetex * colormod * light to it there, as DarkPlaces' light pass does. A full-bright
+                // entity takes no light (render_rtlight_disabled).
+                lit = res;
+                if (!(model_light_gamma > 2.5 || grid_lit > 2.5 || no_grid)) { light_albedo = d_tex * d_mod; }
+            } else {
+                lit = skin_to_linear(res);
+            }
+        } else if (model_light_gamma > 0.5) {
             // Gamma-faithful (A): rebuild the authored gamma texels ((a*b)^(1/g) == a^(1/g)*b^(1/g), so the
             // tint factors survive re-encoding), run DP's multiply there, clamp to displayable range (DP's
             // framebuffer saturates — overbright clips to white, no bloom), then pre-decode so the Linear
@@ -336,8 +412,9 @@ void fragment() {
         // survives a dark room - the entire point is that it is readable when the model is not.
         lit += rim_color * pow(1.0 - max(dot(nrm, VIEW), 0.0), rim_power);
 
-        // EMISSION-only output: scene lights must not double-light the grid-lit surface.
-        ALBEDO = vec3(0.0);
+        // EMISSION-only output: scene lights must not double-light the grid-lit surface. (In a legacy
+        // session on display values the dynamic lights are DarkPlaces' own additive pass: light_albedo.)
+        ALBEDO = light_albedo;
         ROUGHNESS = 1.0;
         METALLIC = 0.0;
         SPECULAR = 0.0;

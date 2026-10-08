@@ -324,7 +324,9 @@ public static class MapLoader
                 // shader's TANGENT/BINORMAL inputs are always backed by real mesh data; on a non-deluxemapped map
                 // they go unused (use_deluxemap is off) for only a little load-time work. Vertex-lit surfaces carry
                 // a COLOR array instead (their modulation source); lightmapped surfaces carry UV2.
-                PackSurface(cellMesh, sb, lightmapped, withTangents: lightmapped, withColor: vertexLit);
+                // A legacy session's shaders read the vertex colour of every unlightmapped surface (rgbGen vertex
+                // lighting, alphaGen vertex, the terrain blend): DpSurfaceShader.
+                PackSurface(cellMesh, sb, lightmapped, withTangents: lightmapped, withColor: vertexLit || (assets.DarkPlacesRules && !lightmapped));
 
                 // One material per MERGED key, shared across every cell (same instance → shared GPU state).
                 if (!materialCache.TryGetValue(kv.Key, out Material? mat))
@@ -806,6 +808,14 @@ public static class MapLoader
             // the per-vertex COLOR, unshaded (DP MODE_VERTEXCOLOR). No shader exists for this name — that is
             // what classified it vertex-lit — so the albedo is the texture of that name; a null albedo falls
             // back to white (pure vertex lighting, the same as a missing diffuse on the lightmap path).
+            if (assets.DarkPlacesRules)
+            {
+                // DarkPlaces adds the texture's _glow companion to a vertex-lit surface as to any other.
+                AssetSystem.LightmapDiffuse plain = assets.ResolveLightmapDiffuse(shaderName);
+                ShaderMaterial lit = LightmapShader.MakeMaterial(plain.Texture, null, glow: plain.Glow);
+                lit.SetShaderParameter(LightmapShader.UseVertexColorUniform, true);
+                return lit;
+            }
             return LightmapShader.MakeVertexLitMaterial(assets.LoadTexture(shaderName));
         }
 
@@ -819,6 +829,9 @@ public static class MapLoader
                 // (untextured). This also carries the diffuse stage's alpha-test cutoff (masked grates/foliage)
                 // and static tcMod scale (DP Q3TCMOD_SCALE). A pure-shader/$lightmap surface yields a null
                 // texture → the lightmap shader falls back to white (lighting only, no diffuse).
+                if (assets.DarkPlacesRules && assets.GetShader(shaderName) is { } def
+                    && DpSurfaceShader.CompileLightmapped(def, assets, lightmapTex) is { } faithful)
+                    return faithful;   // a blended, animated or terrain-blended lit surface, by DarkPlaces' rules
                 AssetSystem.LightmapDiffuse diffuse = assets.ResolveLightmapDiffuse(shaderName);
 
                 // Deluxemapped maps: bind the matching light-direction page so the lightmap shader applies
@@ -829,9 +842,9 @@ public static class MapLoader
                 // Built directly (not via the AssetSystem facade) so the deluxe page / UV scale / alpha cutoff
                 // / glow page / translucency reach the lightmap shader without widening the facade signature.
                 // A blendFunc-blend diffuse (glass) routes to the translucent variant so it renders see-through.
-                return LightmapShader.MakeMaterial(diffuse.Texture, lightmapTex, deluxemap: deluxeTex,
+                return WithDarkPlacesGloss(assets, shaderName, LightmapShader.MakeMaterial(diffuse.Texture, lightmapTex, deluxemap: deluxeTex,
                     albedoUvScale: diffuse.UvScale, alphaCutoff: diffuse.AlphaCutoff, glow: diffuse.Glow,
-                    translucent: diffuse.Translucent, normal: diffuse.Normal, gloss: diffuse.Gloss);
+                    translucent: diffuse.Translucent, normal: diffuse.Normal, gloss: diffuse.Gloss));
             }
             // No lightmap available — degrade to the plain material rather than dropping the surface.
         }
@@ -1137,6 +1150,16 @@ public static class MapLoader
         return n;
     }
 
+    /// <summary>A legacy session's gloss takes the shader's dpglossexponentmod and dpglossintensitymod, as
+    /// DarkPlaces does (LightmapShader "dp_exact"); the native highlight is its own and is left alone.</summary>
+    private static ShaderMaterial WithDarkPlacesGloss(AssetSystem assets, string shaderName, ShaderMaterial material)
+    {
+        if (!assets.DarkPlacesRules || assets.GetShader(shaderName) is not { } def) return material;
+        if (def.Dp.GlossExponentMod is { } exponent) material.SetShaderParameter(LightmapShader.DpGlossExponentModUniform, exponent);
+        if (def.Dp.GlossIntensityMod is { } intensity) material.SetShaderParameter(LightmapShader.DpGlossIntensityModUniform, intensity);
+        return material;
+    }
+
     /// <summary>The shared material for an atlas-merged lightmapped surface family (one per texture): the
     /// regular lightmap-shader build, but bound to the ATLAS textures instead of a single page.</summary>
     private static Material ResolveAtlasSurfaceMaterial(BspData bsp, AssetSystem assets, int textureIndex,
@@ -1145,10 +1168,13 @@ public static class MapLoader
         string shaderName = (textureIndex >= 0 && textureIndex < bsp.Textures.Length)
             ? bsp.Textures[textureIndex].ShaderName
             : string.Empty;
+        if (assets.DarkPlacesRules && assets.GetShader(shaderName) is { } def
+            && DpSurfaceShader.CompileLightmapped(def, assets, atlas.Lightmap) is { } faithful)
+            return faithful;   // a blended, animated or terrain-blended lit surface, by DarkPlaces' rules
         AssetSystem.LightmapDiffuse diffuse = assets.ResolveLightmapDiffuse(shaderName);
-        return LightmapShader.MakeMaterial(diffuse.Texture, atlas.Lightmap, deluxemap: atlas.Deluxe,
+        return WithDarkPlacesGloss(assets, shaderName, LightmapShader.MakeMaterial(diffuse.Texture, atlas.Lightmap, deluxemap: atlas.Deluxe,
             albedoUvScale: diffuse.UvScale, alphaCutoff: diffuse.AlphaCutoff, glow: diffuse.Glow,
-            translucent: diffuse.Translucent, normal: diffuse.Normal, gloss: diffuse.Gloss);
+            translucent: diffuse.Translucent, normal: diffuse.Normal, gloss: diffuse.Gloss));
     }
 
     /// <summary>
@@ -1449,6 +1475,11 @@ public static class MapLoader
         {
             SurfaceFlags.SurfaceInfo info = assets.GetSurfaceInfo(bsp.Textures[face.TextureIndex].ShaderName);
             if (info.NoLightmap)
+                return -1;
+            // A legacy session: a shader DarkPlaces draws full-bright (no stage asks for light, or a blend it
+            // cannot light) ignores the page its faces were given (MATERIALFLAG_FULLBRIGHT, MODE_FLATCOLOR).
+            if (assets.DarkPlacesRules && assets.GetShader(bsp.Textures[face.TextureIndex].ShaderName) is { } def
+                && VortexArena.Formats.Materials.DpMaterialRules.Plan(def).FullBright)
                 return -1;
         }
         return bsp.RealLightmapIndex(face.LightmapIndex);

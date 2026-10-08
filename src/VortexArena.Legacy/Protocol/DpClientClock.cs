@@ -55,6 +55,9 @@ public sealed class DpClientClock
         _errorIndex = 0;
     }
 
+    /// <summary>The clock put on the newest server stamp, with nothing left to interpolate (a paused recording).</summary>
+    public void HoldAtServerTime() => Time = OldTime = ServerTime;
+
     /// <summary>CL_Frame: the clock runs on by one frame. <paramref name="frameTime"/> is wall time,
     /// which the C limits to 0.1 s ("networking assumes at least 10fps") and scales by slowmo.</summary>
     public void Advance(double frameTime, bool paused = false)

@@ -64,7 +64,7 @@ public static class ShaderCompiler
     /// Compile <paramref name="def"/> into a never-null Godot material, resolving textures through
     /// <paramref name="ctx"/>.
     /// </summary>
-    public static Material Compile(ShaderDef def, AssetSystem ctx)
+    public static Material Compile(ShaderDef def, AssetSystem ctx, bool forModel = false)
     {
         ArgumentNullException.ThrowIfNull(def);
         ArgumentNullException.ThrowIfNull(ctx);
@@ -81,6 +81,19 @@ public static class ShaderCompiler
         // Hero-material override: water / portal-mirror-camera / force-field shaders whose visual intent the
         // generic stage path can't reproduce (they would degrade to a plain/white surface). Recognized up
         // front so the purpose-built material wins over the fallback chain below.
+        // A legacy session draws a Quake 3 shader as DarkPlaces does - one material stage, the first stage's
+        // blend, lit or full-bright as a whole - not as the pass chain below, and not as the native game's own
+        // water or force field (DpSurfaceShader). A camera surface stays with the portal code.
+        if (ctx.DarkPlacesRules && !HeroMaterials.IsPortal(def))
+        {
+            Material? faithful = DpSurfaceShader.Compile(def, ctx, forModel);
+            if (faithful != null)
+            {
+                if (def.UsesLightmap)
+                    faithful.ResourceName = Combine(faithful.ResourceName, LightmapMarker);
+                return faithful;
+            }
+        }
         Material? hero = HeroMaterials.TryOverride(def, ctx);
         if (hero != null)
             return hero;

@@ -2129,6 +2129,8 @@ public partial class EffectSystem : Node3D
         public float Age;
         public float Duration;
         public float Energy0;
+        public float Radius0;
+        public bool Shrinks;
     }
 
     /// <summary>Hard cap on simultaneously-live effect flashes (the oldest is recycled past this).</summary>
@@ -2169,13 +2171,21 @@ public partial class EffectSystem : Node3D
         FxLight l = AcquireFxLight();
         l.Node.Position = Coords.ToGodot(atQuake);
         l.Node.OmniRange = Math.Clamp(info.LightRadius, 1f, 2000f);
-        l.Node.LightColor = new Color(lcol.R / maxc, lcol.G / maxc, lcol.B / maxc);
-        l.Energy0 = MathF.Min(8f, maxc);
+        // (A legacy session on display values: the colour as the engine must be given it, and DarkPlaces'
+        // falloff from the session's shaders in place of the engine's - DisplayFramebuffer.)
+        l.Node.LightColor = DisplayFramebuffer.ForEngine(new Color(lcol.R / maxc, lcol.G / maxc, lcol.B / maxc));
+        l.Node.OmniAttenuation = DisplayFramebuffer.Active ? 0f : 1f;
+        // In a legacy session the flash is DarkPlaces' own (cl_main.c CL_AllocLightFlash / CL_DecayLightFlashes
+        // with cl_dlights_decayradius 1 and cl_dlights_decaybrightness 1): one intensity runs from 1 to 0 in
+        // radius / lightradiusfade seconds and scales BOTH the colour and the radius; the colour is not limited.
+        l.Shrinks = DisplayFramebuffer.Active;
+        l.Radius0 = l.Node.OmniRange;
+        l.Energy0 = l.Shrinks ? maxc : MathF.Min(8f, maxc);
         l.Node.LightEnergy = l.Energy0;
         LightBudget.SetOwnerVisible(l.Node, true);
         // Fade the flash: lightradiusfade is radius-units/sec, so the flash lasts ~radius/fade seconds.
         l.Duration = info.LightRadiusFade > 0f
-            ? Math.Clamp(info.LightRadius / info.LightRadiusFade, 0.05f, 1.5f)
+            ? (l.Shrinks ? MathF.Max(0.01f, info.LightRadius / info.LightRadiusFade) : Math.Clamp(info.LightRadius / info.LightRadiusFade, 0.05f, 1.5f))
             : 0.15f;
         l.Age = 0f;
         _liveFxLights.Add(l);
@@ -2204,6 +2214,7 @@ public partial class EffectSystem : Node3D
                 continue;
             }
             l.Node.LightEnergy = l.Energy0 * frac;
+            if (l.Shrinks) l.Node.OmniRange = MathF.Max(1f, l.Radius0 * frac);
         }
     }
 

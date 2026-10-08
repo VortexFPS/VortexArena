@@ -596,3 +596,89 @@ sight so that its pipelines exist. Measured then: 1.4 GB less memory in play and
   on the main thread when its files arrive: 16 to 19 ms. A second instance of a multi-frame MD3 (2.2 ms for a muzzle
   flash, 10 ms for a weapon): `ModelAnimator` uploads a mesh per instance. A burst of `bloodshower` effects: 0.3 to
   0.6 ms a call, fifteen calls when a player is gibbed.
+
+## 15. Colour: the picture is computed the way DarkPlaces computes it (added 2026-10-08)
+
+**What was wrong.** Legacy compatibility mode drew Xonotic's data with the native game's shaders, and the picture
+was darker and redder than DarkPlaces' picture of the same frame: 55 to 65 % of its brightness on stormkeep, with
+more saturation. Seven causes, each measured on the same recorded frame held in both engines:
+
+1. **Light was multiplied in linear light.** DarkPlaces with Xonotic's default configuration (`vid_sRGB 0`,
+   `mod_q3bsp_sRGBlightmaps 0`: `sRGB-disable.cfg`, executed by `xonotic-client.cfg`) converts nothing: texel times
+   lightmap texel times two, on the stored 8-bit values, is the pixel (`shader_glsl.h` MODE_LIGHTMAP,
+   `gl_rmain.c` "2x diffuse and specular brightness because bsp files have 0-2 colors as 0-1"). The native world
+   and model shaders decode both to linear light, multiply, and encode. For a texel of 0.5 under a lightmap of
+   0.4 that is 0.27 on screen where DarkPlaces shows 0.40, and because a weak channel loses more than a strong
+   one, brown brick turns red.
+2. **Quake 3 shaders were drawn as a chain of passes, lit by a sun.** DarkPlaces draws ONE stage of a shader
+   (`model_shared.c` Mod_LoadTextureFromQ3Shader), with the first stage's blend function, full-bright unless a stage
+   asks for light; it keeps a texture's alpha channel only when that stage tests or blends by alpha; it never
+   evaluates `rgbGen`. The native compiler turned stormkeep's lava (one additive full-bright stage) into an
+   alpha-blended surface lit by the scene's sun, an additive environment sheen on solarium's windows into an opaque
+   blue wall, and left solarium's water invisible.
+3. **Blending happened in linear light.** DarkPlaces blends the values the screen shows. Adding in linear light is
+   weaker wherever the background is not black, mixing is stronger.
+4. **Dynamic lights** multiplied the texture in twice and used the engine's own falloff.
+5. **The lightmap intensity is not one.** DarkPlaces multiplies the lightmap intensity of a Quake 3 level by the
+   value of light style 0 (`gl_rmain.c` R_UpdateVariables), and the usual style "m" is worth 12 * 22 / 256 =
+   1.03125 (`cl_main.c` CL_RelinkLightFlashes): every lit wall and every grid-lit model is 3 % brighter than
+   texel times lightmap times two. With DarkPlaces' `gl_lightmaps 1` a plain floor read 97.9 there and 94.5 here.
+6. **Gloss ignored `dpglossexponentmod` and `dpglossintensitymod`.** Most of Xonotic's wall shaders say 4 and 1.5;
+   DarkPlaces multiplies them into the exponent and the intensity. Without them the highlight was broad: a
+   ceiling of stormkeep read 78.7 45.0 36.1 where DarkPlaces shows 68.4 39.1 31.5; with DarkPlaces'
+   `r_shadow_gloss 0` the two agreed to 0.2.
+7. **The level's tangent frame has the other sign.** DarkPlaces' T axis runs along decreasing v
+   (`model_shared.c` Mod_BuildTextureVectorsFromNormals), the level mesh's binormal along increasing v, so a
+   normal map was lit from the opposite side. (The native game has 4, 6 and 7 as well; it is not changed.)
+
+**What a legacy session does now** (the native game is not changed; every switch below is off outside a session):
+
+- `LegacyColour` (`game/legacy/GodotLegacyPresentation.Colour.cs`) sets three global shader parameters when a
+  session's scene is made and puts them back when it ends: `world_gamma_space` (the lightmap shader combines the
+  stored values, with DarkPlaces' specular term), `model_light_gamma = 2` (the skin shader forms DarkPlaces'
+  MODE_LIGHTGRID sum on the stored values; every model is lit from the level's light grid, or at full light on a
+  level without one), and `dp_framebuffer`.
+- **The 3D buffer holds display values** (`game/client/DisplayFramebuffer.cs`). The session's shaders write what
+  they computed, unconverted, so the buffer's own blending, the fog and the dynamic lights act on display values
+  as in DarkPlaces' frame buffer. The environment's colour-correction table then undoes the output transform's
+  sRGB encoding (the engine applies `linear_to_srgb` and then the table; the table is `srgb_to_linear`), so the
+  screen shows the buffer. No engine change, no project setting.
+  `VORTEX_LEGACY_LINEARFB=1` leaves the buffer in linear light (opaque surfaces still match; blends do not).
+- **The session's asset system has `DarkPlacesRules`**: a Quake 3 shader becomes the one material DarkPlaces would
+  draw (`DpMaterialRules.Plan`, `DpSurfaceShaderGen`, `game/loaders/DpSurfaceShader.cs`), on the session's clock
+  (`dp_time` = cl.time) rather than the engine's; a face whose shader DarkPlaces draws full-bright gets no lightmap
+  page; unlightmapped faces keep their vertex colours.
+- Particles, decals, the sky box, CSQC polygons and `.mdl` models take the stored values when the buffer holds
+  display values; dynamic lights use DarkPlaces' falloff `(1 - d/r) * 2 / (1 + (d/r)^2)` and its flash decay.
+
+**How it was measured, and how to measure it again.** `_scratch/colour/tools/run.py` plays one recording in both
+engines and holds both on the same recorded message: `demotool.py inject` appends `pausedemo` to the first server
+message at or after a time, DarkPlaces plays that as a `timedemo` (its clock is then exactly the message's time)
+and takes `screenshot <name>.tga`; the legacy client pauses on the same message (`demopause <time>` and
+`sync pause` in a review script; `LegacyClientSession.DemoPauseAt`) and saves its own frame buffer.
+`compare.py` gives mean R/G/B, luminance, saturation, hue, a grid of patches, histograms and a side-by-side
+sheet. `colourdbg` in a review script switches parts of the picture (`fullbright`, `lightmaponly`, `dump` lists the
+materials in view) beside DarkPlaces' `r_fullbright` and `gl_lightmaps`.
+
+**Result** (whole 1280x720 frame, legacy minus DarkPlaces, 8-bit units; static observer views):
+
+| Scene | Before: R G B, luminance ratio | After: R G B, luminance ratio |
+|---|---|---|
+| stormkeep (indoor, lava) | -26.3 -19.8 -17.2, x0.58 | -0.3 0.0 +0.1, x0.999 |
+| darkzone (dark indoor) | -17.4 -15.7 -13.5, x0.63 | +0.2 +0.1 +0.2, x1.003 |
+| solarium (bright outdoor, water) | -26.4 -31.5 -33.9, x0.72 | -0.1 -0.2 -0.3, x0.998 |
+| Xonotic menu (2D) | not captured before | 0.0 0.0 -0.1, x0.999 |
+
+With `r_fullbright 1` in DarkPlaces and the same switch here the frames differ by 0.0 to 0.1 per channel on
+stormkeep and darkzone (mean absolute difference 2 to 3): the texture path, including the block-compressed texture
+cache, is not a cause.
+
+**What still differs.** The mean absolute difference of a matched static frame is 2 to 5 units: texture filtering
+(DarkPlaces uses 8x anisotropy and no multisampling, this client its own filter and 2x multisampling), particles
+(their random numbers are not shared), the first-person weapon's sway, and the 8-bit dither. DarkPlaces' water
+shader (`dp_water`, used when `r_water` is on - Xonotic forces it on for levels with warpzones) is not ported:
+such a surface is drawn by the ordinary rules. Warpzone surfaces are the native portal placeholder. Normal and
+gloss maps are not applied to blended or animated lightmapped surfaces. Coronas of dynamic lights are not drawn.
+`dpreflectcube` (a reflection mask times a cube map, added to the texel) is not applied; solarium's pool is 6 to 9
+units darker than DarkPlaces' (its shader names one). A dead player's view is placed differently (not a colour
+matter, but it makes such frames incomparable).

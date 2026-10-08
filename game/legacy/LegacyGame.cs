@@ -949,6 +949,8 @@ public partial class LegacyGame : Node
         {
             // CL_ReadDemoMessage: the recorded messages whose time has come.
             session.ReadDemo();
+            // "pausedemo": DarkPlaces' particles and lights run on cl.time and stand still with it.
+            presentation.FreezeEffects(session.DemoPaused);
             if (_traceInstalled) CloseTracedCommand(-1);
             if (_shutDown || _failed) return;
         }
@@ -1075,6 +1077,8 @@ public partial class LegacyGame : Node
     private bool _scriptLoaded;
     private double _scriptBase = -1;
     private int _scriptWaitLevel;
+    private bool _scriptWaitPause;
+    private double _scriptPauseLineAt;
 
     private double _trackUntil, _watchUntil;
     private string[] _watched = Array.Empty<string>();
@@ -1132,6 +1136,17 @@ public partial class LegacyGame : Node
         }
         if (_script is null || _session is not { } session) return;
         if (_scriptBase < 0) _scriptBase = _inGameAt;
+        if (_scriptWaitPause)
+        {
+            // "sync pause": hold the script until the recording has paused itself (demopause), and time what
+            // follows from there.
+            if (!session.DemoPaused) return;
+            Log(string.Create(CultureInfo.InvariantCulture, $"script: sync pause reached at t+{now - _inGameAt:0.00}, demo time {session.State.Time:0.000000}, message {session.DemoMessages}"));
+            _scriptWaitPause = false;
+            // The lines that follow are timed from the pause, on the script's own running clock: a line written
+            // two seconds after the "sync pause" line runs two seconds after the pause.
+            _scriptBase = now - _scriptPauseLineAt;
+        }
         if (_scriptWaitLevel > 0)
         {
             // "sync level": hold the script until the NEXT level has been entered, and time what follows from there.
@@ -1148,6 +1163,31 @@ public partial class LegacyGame : Node
             {
                 _scriptWaitLevel = _levelsEntered + 1;
                 return;
+            }
+            if (command.StartsWith("demopause ", StringComparison.Ordinal))
+            {
+                // "demopause <server time>": the recording pauses itself on the first message at or after that
+                // time - the frame DarkPlaces holds when a "pausedemo" was written into that message.
+                if (double.TryParse(command.AsSpan(10), NumberStyles.Float, CultureInfo.InvariantCulture, out double pauseAt)) session.DemoPauseAt = pauseAt;
+                continue;
+            }
+            if (command.StartsWith("colourdbg ", StringComparison.Ordinal))
+            {
+                // "colourdbg <switch> [value]": one part of the picture's colour path on or off, or "dump"
+                // (GodotLegacyPresentation.ColourDebug) - for taking a frame apart beside DarkPlaces.
+                _presentation?.ColourDebug(command[10..]);
+                continue;
+            }
+            if (command == "sync pause")
+            {
+                _scriptWaitPause = true;
+                _scriptPauseLineAt = _script[_scriptNext - 1].At;
+                return;
+            }
+            if (command == "resume")
+            {
+                session.DemoPaused = false;
+                continue;
             }
             if (command.StartsWith("sv ", StringComparison.Ordinal))
             {

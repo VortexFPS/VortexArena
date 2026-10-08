@@ -69,10 +69,14 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         _assets = assets ?? throw new ArgumentNullException(nameof(assets));
         _cvars = cvars ?? throw new ArgumentNullException(nameof(cvars));
         _note = note ?? (_ => { });
+        // First: what is built below (the particle renderer's shader among it) is built for the session's colour.
+        ApplyLegacyColour();
 
         // The client program poses every skeleton itself: the clip library a model's builder would make (a
         // hundred milliseconds and tens of megabytes for a player model) would never be played.
         assets.SkipModelAnimations = true;
+        // Xonotic's shaders are drawn by DarkPlaces' rules, not the native compiler's (DpSurfaceShader).
+        assets.Assets.DarkPlacesRules = true;
         Map = new BspLegacyWorld(files);
         ModelData = new FormatLegacyModels(files, Map) { View = () => (View.Origin, View.Angles) };
         Canvas = canvas ?? new LegacyCanvas(files, assets);
@@ -324,6 +328,7 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
             TonemapMode = Godot.Environment.ToneMapper.Linear,
         };
         MapLoader.ApplyFog(env, bsp);
+        ApplyDisplayBuffer(env, bsp.LightGrid is not null);
         _environment.Environment = env;
     }
 
@@ -337,6 +342,9 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
     {
         _oldTime = _time;
         _time = time;
+        // rsurface.shadertime for the world: the surface shaders of the session animate on its clock.
+        RenderingServer.GlobalShaderParameterSet(DpSurfaceShader.TimeUniform, (float)time);
+        ApplyLightStyle(time);
         View.ConWidth = Math.Max(1, _cvars.GetFloat("vid_conwidth"));
         View.ConHeight = Math.Max(1, _cvars.GetFloat("vid_conheight"));
         View.EngineDrawWorld = !_cvars.Has("r_drawworld") || _cvars.GetFloat("r_drawworld") != 0;
@@ -387,6 +395,7 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         DrawList.Clear();
         _drawLayer.Present(Canvas);
         ModelLighting.Clear();
+        RestoreNativeColour();
         _host = null;
         if (_memoryLine is not null && LegacyData.LevelReport == _memoryLine) LegacyData.LevelReport = null;
         _memoryLine = null;

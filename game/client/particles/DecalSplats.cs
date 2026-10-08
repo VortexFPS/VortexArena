@@ -556,7 +556,7 @@ public sealed partial class DecalSplats : Node3D
         _mergedMesh = new ArrayMesh();
         // Draw BEFORE the particle batches (priority 0/1): DP renders decals during the per-surface pass,
         // ahead of the sorted transparent particles — smoke and fire composite OVER the marks, never under.
-        _mergedMat = new ShaderMaterial { Shader = _shader ??= SplatShader(), RenderPriority = -1 };
+        _mergedMat = new ShaderMaterial { Shader = SharedSplatShader(), RenderPriority = -1 };
         _mergedMat.SetShaderParameter(HoldParam, DecalTime);
         _mergedMat.SetShaderParameter(FadeDurParam, MathF.Max(FadeTime, 0.001f));
         _mergedNode = new MeshInstance3D
@@ -702,7 +702,7 @@ public sealed partial class DecalSplats : Node3D
         arrays[(int)Mesh.ArrayType.TexUV2] = new Vector2[] { new(0, 1), new(0, 1), new(0, 1) };
         arrays[(int)Mesh.ArrayType.Color] = new Color[] { new(1, 1, 1), new(1, 1, 1), new(1, 1, 1) };
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        var mat = new ShaderMaterial { Shader = _shader ??= SplatShader(), RenderPriority = -1 };
+        var mat = new ShaderMaterial { Shader = SharedSplatShader(), RenderPriority = -1 };
         return new MeshInstance3D
         {
             Name = "splat_warm",
@@ -717,12 +717,18 @@ public sealed partial class DecalSplats : Node3D
     /// per-vertex spawn stamp (UV2.x) against the `now` uniform, so a fading screenful of marks costs zero
     /// CPU. UV2.y selects atlas sampling vs the radial fallback. The small +z nudge is the polygon-offset
     /// stand-in (Godot 4 reversed-Z: nearer = larger depth); splat triangles lie exactly on the surface.</summary>
+    // (A legacy session on display values - DisplayFramebuffer - takes the stored texel as the darkening
+    // factor, as DarkPlaces does; the program is this renderer's own, so the two never meet.)
+    private Shader SharedSplatShader() => _shader ??= SplatShader();
+
     private static Shader SplatShader() => new()
     {
         Code =
             "shader_type spatial;\n" +
             "render_mode blend_mul, unshaded, cull_disabled, shadows_disabled, depth_draw_opaque;\n" +
-            "uniform sampler2D atlas_tex : source_color, filter_linear;\n" +
+            (DisplayFramebuffer.Active
+                ? "uniform sampler2D atlas_tex : filter_linear;\n"
+                : "uniform sampler2D atlas_tex : source_color, filter_linear;\n") +
             "uniform float now = 0.0;\n" +
             "uniform float hold = 12.0;\n" +
             "uniform float fade_dur = 2.0;\n" +

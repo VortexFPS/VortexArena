@@ -57,6 +57,9 @@ internal static class HeroMaterials
         };
     }
 
+    /// <summary>True for a camera / portal / mirror shader (the kind a legacy session leaves to this table).</summary>
+    public static bool IsPortal(ShaderDef def) => def is not null && Classify(def) == HeroKind.Portal;
+
     private enum HeroKind { None, Water, Portal, ForceField }
 
     /// <summary>

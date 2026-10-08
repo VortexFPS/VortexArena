@@ -27,7 +27,12 @@ public sealed partial class GodotLegacyPresentation
     // thread builds the map and starts the client program.
     private static int PrecacheWorkers => Math.Clamp(System.Environment.ProcessorCount / 2, 2, 8);
 
-    private static bool Headless => DisplayServer.GetName() == "headless";
+    // Developer aid, as the other VORTEX_LEGACY_* variables: VORTEX_LEGACY_NOPRECACHE turns the worker threads,
+    // the nodes built ahead and the pipeline pass off, so that everything loads on first use as it did before
+    // them - the other arm of a memory or hitch comparison. An environment variable, so no server can set it.
+    private static readonly bool s_noPrecache = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_NOPRECACHE"));
+
+    private static bool Headless => s_noPrecache || DisplayServer.GetName() == "headless";
 
     /// <summary>
     /// One level's file work. Its threads are its own, not the thread pool's: the texture and model readers
@@ -158,8 +163,15 @@ public sealed partial class GodotLegacyPresentation
             if (run.Sounds.Count < MaxPrecachedSounds && run.Sounds.Add(sound)) run.Work.Add((true, sound));
     }
 
+    private static int s_liveWorkers;
+
+    /// <summary>Precache worker threads alive in this process right now, over every session. A diagnostic, as
+    /// <see cref="VortexArena.Legacy.Local.LegacyLocalServer.LiveThreads"/>: back at the menu it has to read 0.</summary>
+    public static int LivePrecacheWorkers => Volatile.Read(ref s_liveWorkers);
+
     private static void PrecacheWorker(PrecacheRun run)
     {
+        Interlocked.Increment(ref s_liveWorkers);
         try
         {
             foreach ((bool sound, string name) in run.Work.GetConsumingEnumerable(run.Cancel.Token))
@@ -180,6 +192,7 @@ public sealed partial class GodotLegacyPresentation
         }
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) { }
+        finally { Interlocked.Decrement(ref s_liveWorkers); }
     }
 
     // One model's files, off the main thread: the parse its node will be built from, each texture its

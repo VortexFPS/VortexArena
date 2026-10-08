@@ -494,4 +494,12 @@ All of them need `--legacy-data <Xonotic data dir>` (or the cvar `legacy_xonotic
 - **Verified in a window** (`_scratch/legacy-local-review/`): a deathmatch with bots; menu → Create → play → leave → a second game;
   a match played to its end, the map vote, and the next level; a real `darkplaces-sdl` client joining and playing; kick, restart,
   level change and quitting mid-load.
-- **Not yet seen:** the local player dealing damage, a CTF capture, movers carrying the player, campaign play past its first dialog.
+- **Seen in a window since** (2026-10-08, `_scratch/legacy-verify/`): the local player dealing damage (hit sound, damage numbers,
+  kill messages, score); a CTF pickup and capture; a Clan Arena round to the next round; a campaign level won and the next one
+  entered without the menu (the server's "map" drops everyone and the local client connects again: `LegacyLocalReconnect`);
+  sliding doors opening for a player who walks into their trigger.
+- **Not yet seen:** a mover carrying the player. None of the stock maps has a lift or platform to ride (their `func_door`s are
+  gates, their `func_bobbing` and `func_train` entities decorations); it needs a map that has one.
+- **Review script aids** (only under `VORTEX_LEGACY_SCRIPT`, private local game): `warp <classname>[#n] [x y z]`, `warp top <classname>[#n]`,
+  `warp at <x> <y> <z>`, `watch <seconds> <classname>...`, `track <seconds>`. `VORTEX_LEGACY_NOPRECACHE=1` turns the precache
+  workers off (the other arm of a memory comparison).

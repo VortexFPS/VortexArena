@@ -165,6 +165,14 @@ public sealed class LegacyLocalServer : IDisposable
     /// <summary>The level (its map's base name) is about to be shut down for a level change or a restart;
     /// the next one is being loaded and no datagram will come until it is up.</summary>
     public event Action<string>? LevelChanging;
+    /// <summary>
+    /// Raised just before <see cref="LevelChanging"/> when the level ends by the "map" command (the campaign's
+    /// way to its next level, server/campaign.qc CampaignSetup; also "map x" at the server console): SV_Map_f
+    /// drops every client, the local player included, and DarkPlaces then has the local client connect again
+    /// ("connect local"). The owner's client is about to be told svc_disconnect, and that is not the end of
+    /// the game: see <see cref="LegacyLocalReconnect"/>.
+    /// </summary>
+    public event Action<string>? GameRestarting;
     /// <summary>A level change has completed: (map it was, map it is now). Equal for a restart.</summary>
     public event Action<string, string>? LevelChanged;
     /// <summary>
@@ -254,7 +262,10 @@ public sealed class LegacyLocalServer : IDisposable
             {
                 case EventKind.Print: Print?.Invoke(item.A); break;
                 case EventKind.Note: Note?.Invoke(item.A); break;
-                case EventKind.LevelChanging: LevelChanging?.Invoke(item.A); break;
+                case EventKind.LevelChanging:
+                    if (item.B.Length > 0) GameRestarting?.Invoke(item.A);
+                    LevelChanging?.Invoke(item.A);
+                    break;
                 case EventKind.LevelChanged: LevelChanged?.Invoke(item.A, item.B); break;
                 case EventKind.PlayerCvar: PlayerCvar?.Invoke(item.A, item.B); break;
             }
@@ -401,7 +412,7 @@ public sealed class LegacyLocalServer : IDisposable
         game.Server.LevelEnding += host =>
         {
             PostPlayerCvars(game);
-            if (!_ending) Post(EventKind.LevelChanging, host.WorldBaseName, "");
+            if (!_ending) Post(EventKind.LevelChanging, host.WorldBaseName, game.Server.LevelChangeKind == SvMapRequest.Map ? "map" : "");
         };
         game.LevelChanged += (from, to) =>
         {

@@ -410,4 +410,150 @@ public class LocalGameTests
         server.Update();            // a disposed server is inert
         server.Command("status");
     }
+
+    // ---- "map" on a listen server: everyone is dropped, the local client connects again ------------------
+
+    [Fact]
+    public void A_dropped_local_client_connects_again_only_for_a_new_game_and_only_once_its_level_is_up()
+    {
+        // A goodbye nobody announced (a kick, the server's own end) is the end of the game.
+        LegacyLocalReconnect plain = new();
+        Assert.False(plain.ClientDisconnected());
+        Assert.False(plain.Waiting);
+        Assert.False(plain.TakeConnect());
+        // "changelevel" keeps its clients: a level coming up means nothing by itself.
+        plain.LevelChanged();
+        Assert.False(plain.ClientDisconnected());
+        Assert.False(plain.TakeConnect());
+
+        // "map": announced, then the goodbye, then the level - connect when both have happened, once.
+        LegacyLocalReconnect goodbyeFirst = new();
+        goodbyeFirst.GameRestarting();
+        Assert.False(goodbyeFirst.TakeConnect());
+        Assert.True(goodbyeFirst.ClientDisconnected());
+        Assert.True(goodbyeFirst.Waiting);
+        Assert.False(goodbyeFirst.TakeConnect());          // the level is still loading
+        goodbyeFirst.LevelChanged();
+        Assert.True(goodbyeFirst.TakeConnect());
+        Assert.False(goodbyeFirst.Waiting);
+        Assert.False(goodbyeFirst.TakeConnect());
+        Assert.Equal(1, goodbyeFirst.Reconnects);
+        Assert.False(goodbyeFirst.ClientDisconnected());   // a later goodbye is an end again
+
+        // The level can be up before the goodbye has been read (it is sent after the new level has spawned).
+        LegacyLocalReconnect levelFirst = new();
+        levelFirst.GameRestarting();
+        levelFirst.LevelChanged();
+        Assert.False(levelFirst.TakeConnect());            // not while the client still believes it is connected
+        Assert.True(levelFirst.ClientDisconnected());
+        Assert.True(levelFirst.TakeConnect());
+
+        // A level from before the announcement does not count, and a second new game works as the first.
+        LegacyLocalReconnect twice = new();
+        twice.LevelChanged();
+        twice.GameRestarting();
+        Assert.True(twice.ClientDisconnected());
+        Assert.False(twice.TakeConnect());
+        twice.LevelChanged();
+        Assert.True(twice.TakeConnect());
+        twice.GameRestarting();
+        twice.LevelChanged();
+        Assert.True(twice.ClientDisconnected());
+        Assert.True(twice.TakeConnect());
+        Assert.Equal(2, twice.Reconnects);
+
+        // The server stopped while the client waited: nothing to connect to.
+        LegacyLocalReconnect stopped = new();
+        stopped.GameRestarting();
+        Assert.True(stopped.ClientDisconnected());
+        stopped.Cancel();
+        stopped.LevelChanged();
+        Assert.False(stopped.Waiting);
+        Assert.False(stopped.TakeConnect());
+    }
+
+    /// <summary>
+    /// What ends a campaign level (common/campaign_setup.qc CampaignSetup: "disconnect", "maxplayers 16", then
+    /// MapInfo_LoadMap's "map"): the local player has to arrive in the next level without anyone connecting by hand.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_map_command_drops_the_local_player_who_then_follows_the_server_into_the_new_game(bool threaded)
+    {
+        if (!ServerTestRig.HaveData) return;
+        List<string> restarting = new(), changing = new();
+        List<(string From, string To)> changed = new();
+        LegacyLocalReconnect reconnect = new();
+        int goodbyes = 0, ends = 0;
+        System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+        LegacyLocalServer server = new(new LegacyLocalGameRequest { Map = "stormkeep", GameType = "dm", Bots = 1, MaxPlayers = 8 }.ToOptions(TestPaths.BaseData, null), threaded);
+        using Client client = new("host player");
+        try
+        {
+            server.GameRestarting += map => { restarting.Add(map); reconnect.GameRestarting(); };
+            server.LevelChanging += map => changing.Add(map);
+            server.LevelChanged += (from, to) => { changed.Add((from, to)); reconnect.LevelChanged(); };
+            Assert.True(server.WaitUntilStarted(TimeSpan.FromSeconds(60)), server.Error);
+            client.Wire = server.Transport;
+            client.Session.Connect(clock.Elapsed.TotalSeconds);
+            DpClientState last = DpClientState.Connecting;
+            // LegacyGame's frame: the server's events, the client's frame, then what the connection became.
+            bool Until(Func<bool> condition, double seconds)
+            {
+                double end = clock.Elapsed.TotalSeconds + seconds;
+                while (clock.Elapsed.TotalSeconds < end)
+                {
+                    if (condition()) return true;
+                    server.Update();
+                    if (reconnect.TakeConnect()) client.Session.Connect(clock.Elapsed.TotalSeconds);
+                    client.Frame(clock.Elapsed.TotalSeconds);
+                    DpClientState state = client.Session.Client.State;
+                    if (state != last)
+                    {
+                        last = state;
+                        if (state == DpClientState.Disconnected)
+                        {
+                            goodbyes++;
+                            if (!reconnect.ClientDisconnected()) ends++;
+                        }
+                    }
+                    Thread.Sleep(1);
+                }
+                return condition();
+            }
+            Assert.True(Until(() => client.InGame, 120), $"{client.Session.Client.State}, signon {client.Session.Client.Signon.Stage}, {client.Session.Client.LastError}");
+            Assert.True(Until(() => server.ActiveClients == 2, 20), $"players {server.ActiveClients}");
+
+            // The lines CampaignSetup puts on the server console.
+            server.Command("disconnect\nmaxplayers 16\nmap boil");
+            Assert.True(Until(() => changed.Count == 1 && goodbyes == 1 && client.InGame && client.Session.State.WorldModel == "maps/boil.bsp", 120),
+                $"changed {changed.Count}, goodbyes {goodbyes}, client {client.Session.Client.State} signon {client.Session.Client.Signon.Stage} on {client.Session.State.WorldModel}, waiting {reconnect.Waiting}");
+            Assert.Equal(new[] { "stormkeep" }, restarting);
+            Assert.Equal(new[] { "stormkeep" }, changing);
+            Assert.Equal(("stormkeep", "boil"), changed[0]);
+            Assert.Equal(0, ends);                                    // the goodbye was not taken for the end of the game
+            Assert.Equal(1, reconnect.Reconnects);
+            Assert.Equal(2, client.Session.ProgramsStarted);          // a fresh client program for the new game
+            Assert.Equal(0, client.Session.MessagesNotDecoded);
+            Assert.True(Until(() => server.ActiveClients == 2, 30), $"players {server.ActiveClients} in the new game");   // the player is back, with the bot
+            Assert.Equal(0, server.Faults);
+
+            // "changelevel" still takes the player along without a goodbye.
+            server.Command("changelevel stormkeep");
+            Assert.True(Until(() => changed.Count == 2 && client.InGame && client.Session.State.WorldModel == "maps/stormkeep.bsp", 120),
+                $"changed {changed.Count}, client {client.Session.Client.State} on {client.Session.State.WorldModel}");
+            Assert.Equal(1, goodbyes);
+            Assert.Single(restarting);
+            Assert.Equal(1, reconnect.Reconnects);
+        }
+        finally
+        {
+            server.Dispose();
+        }
+        // The server's own end is an end: nobody announced a new game.
+        for (int i = 0; i < 200 && client.Session.Client.State == DpClientState.Connected; i++) client.Frame(clock.Elapsed.TotalSeconds);
+        Assert.Equal(DpClientState.Disconnected, client.Session.Client.State);
+        Assert.False(reconnect.ClientDisconnected());
+    }
 }

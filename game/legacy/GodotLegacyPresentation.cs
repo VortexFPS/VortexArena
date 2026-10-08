@@ -49,6 +49,8 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
     private Node3D? _mapRoot;
     private WorldEnvironment? _environment;
     private readonly Camera3D _camera;
+    /// <summary>Where the camera was put for the last view drawn, in Godot space (a developer aid: the review script's "track").</summary>
+    public Vector3 CameraPosition => GodotObject.IsInstanceValid(_camera) ? _camera.Position : default;
     private readonly EffectSystem _effects;
     private double _time, _oldTime;
 

@@ -76,6 +76,73 @@ public class ServerCollisionTests
         Assert.Equal(1.5f, shortOfIt.EndPos.Z, 4);
     }
 
+    /// <summary>
+    /// Collision_CombineTraces: "if (trace->startsolid) { ... if (cliptrace->fraction == 1) cliptrace->ent = touch; }".
+    /// Xonotic's brush triggers decide whether a player is really inside them with a box trace at rest against
+    /// the trigger made solid for a moment (WarpZoneLib_BoxTouchesBrush: "if (trace_ent == e) return 1"). A
+    /// player standing on the floor starts that trace in the world too - its linked box (absmin, a unit lower
+    /// than its feet) reaches into the floor - and the trace still has to name the trigger.
+    /// </summary>
+    [Fact]
+    public void A_box_at_rest_inside_a_brush_entity_names_it_also_when_it_touches_the_floor()
+    {
+        if (!ServerTestRig.HaveData) return;
+        StringBuilder line = new();
+        List<string> prints = new();
+        using SvEnvironment env = Environment(line, prints);
+        SvqcHost host = Boot(env, line, prints, "space-elevator").Host;
+        using SvqcHost disposeHost = host;
+        Assert.Equal(0, host.FaultCount);
+
+        // The trigger_multiple in front of the red base's door: a brush from '-288 -3616 -128' to '0 -3424 32',
+        // over a floor whose top is at z = -128.
+        int trigger = 0;
+        for (int e = 1; e < host.Vm.NumEdicts && trigger == 0; e++)
+            if (!host.Vm.IsFree(e) && host.Vm.GetString(host.Vm.FieldInt(e, host.F.ClassName)) == "trigger_multiple"
+                && Math.Abs(host.Vm.FieldVector(e, host.F.AbsMin).X + 289) < 2 && Math.Abs(host.Vm.FieldVector(e, host.F.AbsMin).Y + 3617) < 2)
+                trigger = e;
+        Assert.True(trigger > 0, "the door's trigger was not found");
+
+        // What WarpZoneLib_BoxTouchesBrush does: the trigger is a solid brush for the length of one trace.
+        ref float solid = ref host.Vm.FieldFloat(trigger, host.F.Solid);
+        float was = solid;
+        solid = SvqcHost.SolidBsp;
+        host.LinkEdict(trigger);
+        try
+        {
+            int mask = SvWorld.ContentsSolid | SvWorld.ContentsBody;
+            // A player's linked box: mins and maxs a unit larger all round (SV_LinkEdict), at rest at '0 0 0'.
+            QcVector zero = default;
+            QcVector Lo(QcVector origin) => new(origin.X - 17, origin.Y - 17, origin.Z - 25);
+            QcVector Hi(QcVector origin) => new(origin.X + 17, origin.Y + 17, origin.Z + 46);
+
+            // In the air inside the trigger: only the trigger is there.
+            QcVector air = new(-250, -3520, -60);
+            SvTrace inAir = host.World.Trace(zero, Lo(air), Hi(air), zero, SvWorld.MoveNoMonsters, 0, mask);
+            Assert.True(inAir.StartSolid);
+            Assert.Equal(trigger, inAir.Ent);
+            Assert.False(inAir.WorldStartSolid);
+
+            // Standing on the floor inside it (origin 24 above the floor): in the world and in the trigger.
+            QcVector ground = new(-250, -3520, -104);
+            SvTrace onGround = host.World.Trace(zero, Lo(ground), Hi(ground), zero, SvWorld.MoveNoMonsters, 0, mask);
+            Assert.True(onGround.StartSolid);
+            Assert.True(onGround.WorldStartSolid, "the linked box of a standing player reaches into the floor");
+            Assert.Equal(trigger, onGround.Ent);
+
+            // Standing on the same floor outside the trigger: the world alone, and the world is named.
+            QcVector outside = new(-360, -3520, -104);
+            SvTrace beside = host.World.Trace(zero, Lo(outside), Hi(outside), zero, SvWorld.MoveNoMonsters, 0, mask);
+            Assert.True(beside.StartSolid);
+            Assert.Equal(0, beside.Ent);
+        }
+        finally
+        {
+            solid = was;
+            host.LinkEdict(trigger);
+        }
+    }
+
     private static (SvqcHost Host, List<string> Prints) Boot(SvEnvironment env, StringBuilder line, List<string> prints, string map)
     {
         env.SetCvar("bot_number", "0");

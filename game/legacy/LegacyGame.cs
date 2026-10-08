@@ -110,6 +110,9 @@ public partial class LegacyGame : Node
     private LegacyLocalServer? _server;
     private double _serverAskedAt;
     private bool _levelChangePending;
+    // SV_Map_f's "connect local": the server of this game started a new game and dropped everyone (the campaign's
+    // next level). The session stays and connects again when the level is up.
+    private readonly LegacyLocalReconnect _reconnect = new();
     private int _levelsEntered;
     private readonly StringBuilder _serverPrintLine = new();
     private int _serverPrintsLogged;
@@ -378,10 +381,18 @@ public partial class LegacyGame : Node
         _server = new LegacyLocalServer(options, request.Threaded);
         _server.Print += OnServerPrint;
         _server.Note += text => Log("server: " + Printable(text, 400));
+        _server.GameRestarting += from =>
+        {
+            _reconnect.GameRestarting();
+            Log($"server: a new game is starting after {Printable(from)} (\"map\"): every client is dropped, and this one connects again when the level is up");
+        };
         _server.LevelChanging += OnLevelChanging;
         _server.PlayerCvar += OnServerPlayerCvar;
-        _server.LevelChanged += (from, to) => Log(string.Create(CultureInfo.InvariantCulture,
-            $"server: level change {from} -> {to} took {_server?.LastLevelChangeSeconds:0.00} s"));
+        _server.LevelChanged += (from, to) =>
+        {
+            _reconnect.LevelChanged();
+            Log(string.Create(CultureInfo.InvariantCulture, $"server: level change {from} -> {to} took {_server?.LastLevelChangeSeconds:0.00} s"));
+        };
         // One store in DarkPlaces; two here. What the PLAYER changes while the game runs is sent on (see
         // LegacyLocalGameRequest for the whole rule); what the session itself sets is not.
         if (_shared is not null) _shared.Cvars.Changed += OnSharedCvarChanged;
@@ -418,12 +429,22 @@ public partial class LegacyGame : Node
                 finally { _shared?.LeaveSession(); }
                 LoadingScreen?.UpdateProgress(0.1f, "Connecting...");
                 break;
+            case LegacyLocalServerState.Running when _session is { } dropped && _reconnect.TakeConnect():
+                // "connect local": the new game's level is up and the old game's goodbye has been read.
+                Log("local game: the new game is up; connecting again through the loopback");
+                _shared?.EnterSession();
+                try { dropped.Connect(Now); }
+                finally { _shared?.LeaveSession(); }
+                LoadingScreen?.UpdateProgress(0.1f, "Connecting...");
+                break;
             case LegacyLocalServerState.Failed:
+                _reconnect.Cancel();
                 Fail(_transport is null
                     ? "The local game could not be started: " + Printable(server.Error ?? "unknown reason", 300)
                     : "The local server stopped: " + Printable(server.Error ?? "unknown reason", 300));
                 break;
             case LegacyLocalServerState.Stopped:
+                _reconnect.Cancel();
                 Log("the local server ended: " + Printable(server.Error ?? "shut down", 200));
                 Callable.From(() => { if (!_shutDown) Disconnected?.Invoke(); }).CallDeferred();
                 _failed = true;   // nothing more to pump; the shell tears the node down
@@ -877,8 +898,42 @@ public partial class LegacyGame : Node
     private double _scriptBase = -1;
     private int _scriptWaitLevel;
 
+    private double _trackUntil, _watchUntil;
+    private string[] _watched = Array.Empty<string>();
+    private int _watchFrame;
+
+    private void Watch(int playerEntity)
+    {
+        if (_server is not { } server || (_watchFrame++ % 3) != 0) return;
+        string[] names = _watched;
+        server.Post(game =>
+        {
+            if (game.Server.Host is not { } host || playerEntity <= 0 || playerEntity >= host.Vm.NumEdicts) return;
+            StringBuilder line = new();
+            QcVector p = host.Vm.FieldVector(playerEntity, host.F.Origin);
+            line.Append(CultureInfo.InvariantCulture, $"watch: player {p.X:0.0} {p.Y:0.0} {p.Z:0.0} ground {host.Vm.FieldInt(playerEntity, host.F.GroundEntity)}");
+            foreach (string name in names)
+            {
+                string className = name;
+                int nth = 1, hash = name.IndexOf('#');
+                if (hash > 0 && int.TryParse(name.AsSpan(hash + 1), out int parsed) && parsed > 0) { nth = parsed; className = name[..hash]; }
+                for (int e = 1, seen = 0; e < host.Vm.NumEdicts; e++)
+                    if (!host.Vm.IsFree(e) && host.Vm.GetString(host.Vm.FieldInt(e, host.F.ClassName)) == className && ++seen == nth)
+                    {
+                        QcVector o = host.Vm.FieldVector(e, host.F.Origin), hi = host.Vm.FieldVector(e, host.F.AbsMax);
+                        line.Append(CultureInfo.InvariantCulture, $" | {name} e{e} origin z {o.Z:0.0} top {hi.Z:0.0}");
+                        break;
+                    }
+            }
+            game.Command("echo " + line);
+        });
+    }
+
     private void RunReviewScript(double now)
     {
+        if (now < _watchUntil && _session is { } watchedSession) Watch(watchedSession.State.PlayerEntity);
+        if (now < _trackUntil && _presentation is { } tracked && _session is { } trackedSession)
+            Log(string.Create(CultureInfo.InvariantCulture, $"track t {trackedSession.State.Time:0.0000} camera {tracked.CameraPosition.X:0.0000} {tracked.CameraPosition.Y:0.0000} {tracked.CameraPosition.Z:0.0000}"));
         if (!_scriptLoaded)
         {
             _scriptLoaded = true;
@@ -921,6 +976,29 @@ public partial class LegacyGame : Node
                 ServerCommand(command[3..]);
                 continue;
             }
+            if (command.StartsWith("track ", StringComparison.Ordinal))
+            {
+                // "track <seconds>": the camera's position in the log every frame for that long (a lift ride).
+                if (double.TryParse(command.AsSpan(6), NumberStyles.Float, CultureInfo.InvariantCulture, out double trackFor)) _trackUntil = now + Math.Clamp(trackFor, 0, 60);
+                continue;
+            }
+            if (command.StartsWith("watch ", StringComparison.Ordinal))
+            {
+                // "watch <seconds> <classname>[#n] ...": the server's own positions of those entities and of the
+                // player, in the log every few frames for that long (who carried whom on a lift).
+                string[] watch = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (watch.Length >= 3 && double.TryParse(watch[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double watchFor))
+                {
+                    _watchUntil = now + Math.Clamp(watchFor, 0, 30);
+                    _watched = watch[2..];
+                }
+                continue;
+            }
+            if (command.StartsWith("warp ", StringComparison.Ordinal))
+            {
+                Warp(session.State.PlayerEntity, command[5..].Trim());
+                continue;
+            }
             if (command.StartsWith("shot ", StringComparison.Ordinal))
             {
                 SaveShot(command[5..].Trim());
@@ -936,6 +1014,63 @@ public partial class LegacyGame : Node
             else if (command.StartsWith("server ", StringComparison.Ordinal)) session.Client.SendStringCommand(command[7..]);
             else ConsoleCommand(command);   // as if typed
         }
+    }
+
+    // "warp <classname>[#n] [x y z]" or "warp at <x> <y> <z>" in a review script of a LOCAL game: puts the local
+    // player at the first server entity of that class (plus an offset), or at a point - setorigin from outside
+    // the program, for reaching a flag or a lift without steering there. The touch that follows is the
+    // program's own. Part of the review script, so it exists only under VORTEX_LEGACY_SCRIPT.
+    private void Warp(int playerEntity, string arguments)
+    {
+        if (_server is not { } server) return;
+        string[] parts = arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return;
+        bool point = parts[0] == "at";
+        // "warp top <classname>[#n] [dz]": onto a brush entity (a lift, a door) - the middle of its box, dz above its top.
+        bool top = parts[0] == "top" && parts.Length >= 2;
+        if (top) parts = parts[1..];
+        float[] v = new float[3];
+        for (int i = 0; i < 3; i++)
+            if (parts.Length > 1 + i) float.TryParse(parts[1 + i], NumberStyles.Float, CultureInfo.InvariantCulture, out v[i]);
+        // "item_flag_team#2": the second entity of that class, in edict order.
+        string className = parts[0];
+        int nth = 1;
+        int hash = className.IndexOf('#');
+        if (hash > 0 && int.TryParse(className.AsSpan(hash + 1), out int parsedNth) && parsedNth > 0)
+        {
+            nth = parsedNth;
+            className = className[..hash];
+        }
+        server.Post(game =>
+        {
+            if (game.Server.Host is not { } host || playerEntity <= 0 || playerEntity >= host.Vm.NumEdicts || host.Vm.IsFree(playerEntity)) return;
+            QcVector target = new(v[0], v[1], v[2]);
+            if (!point)
+            {
+                int found = 0;
+                for (int e = 1, seen = 0; e < host.Vm.NumEdicts && found == 0; e++)
+                    if (!host.Vm.IsFree(e) && host.Vm.GetString(host.Vm.FieldInt(e, host.F.ClassName)) == className && ++seen == nth) found = e;
+                if (found == 0) { game.Command("echo warp: no entity of that class"); return; }
+                QcVector at = host.Vm.FieldVector(found, host.F.Origin);
+                target = new QcVector(at.X + v[0], at.Y + v[1], at.Z + v[2]);
+                if (top)
+                {
+                    QcVector lo = host.Vm.FieldVector(found, host.F.AbsMin), hi = host.Vm.FieldVector(found, host.F.AbsMax);
+                    target = new QcVector((lo.X + hi.X) * 0.5f, (lo.Y + hi.Y) * 0.5f, hi.Z + (v[0] != 0 ? v[0] : 30));
+                    game.Command(string.Create(CultureInfo.InvariantCulture, $"echo warp: entity {found} box {lo.X:0} {lo.Y:0} {lo.Z:0} to {hi.X:0} {hi.Y:0} {hi.Z:0}"));
+                }
+            }
+            host.Vm.FieldVector(playerEntity, host.F.Origin) = target;
+            host.Vm.FieldVector(playerEntity, host.F.OldOrigin) = target;
+            host.Vm.FieldVector(playerEntity, host.F.Velocity) = default;
+            // Not on the ground any more (FL_ONGROUND, 512): with sv_gameplayfix_nogravityonground a player who is
+            // told it stands on something does not fall, and would hang where it was put until it moved.
+            ref float flags = ref host.Vm.FieldFloat(playerEntity, host.F.Flags);
+            flags = (int)flags & ~512;
+            host.Vm.FieldInt(playerEntity, host.F.GroundEntity) = 0;
+            host.LinkEdict(playerEntity);
+            game.Command(string.Create(CultureInfo.InvariantCulture, $"echo warp: player {playerEntity} to {target.X:0} {target.Y:0} {target.Z:0}"));
+        });
     }
 
     // The window size as the program is told it, and the 2D space derived from it. Xonotic's menu program
@@ -977,6 +1112,14 @@ public partial class LegacyGame : Node
                     Fail("The server sent something this client could not read: " + Printable(client.LastError ?? "protocol error", 200));
                     return false;
                 case DpClientState.Disconnected:
+                    if (_server is { State: LegacyLocalServerState.Running } && _reconnect.ClientDisconnected())
+                    {
+                        // The goodbye of a game that "map" replaced. No held key is carried into the next one.
+                        Log("the server ended the connection to start a new game; the session waits for its level");
+                        _scriptHeld = default;
+                        _pendingImpulse = 0;
+                        break;
+                    }
                     Log("the server ended the connection");
                     Callable.From(() => { if (!_shutDown) Disconnected?.Invoke(); }).CallDeferred();
                     return false;

@@ -122,6 +122,13 @@ public sealed partial class SvServer : IDisposable, ISvConnectionlessHost<IPEndP
     /// <summary>The running level is about to be shut down for a level change or the server's end;
     /// its counters (faults, warnings, unimplemented builtins) are still readable.</summary>
     public event Action<SvqcHost>? LevelEnding;
+    /// <summary>
+    /// While <see cref="LevelEnding"/> is raised for a level change: which command asked for it. Null at
+    /// any other time, and when the level ends because the server does. <see cref="SvMapRequest.Map"/> is
+    /// the one that matters to a client: SV_Map_f drops everyone, and whoever wants to play the new level
+    /// has to connect again (the local player of a listen server does - "connect local").
+    /// </summary>
+    public SvMapRequest? LevelChangeKind { get; private set; }
     /// <summary>QuakeC faults of every level this server has run, the current one included.</summary>
     public long TotalFaults => _faultsOfEndedLevels + (Host?.FaultCount ?? 0);
     private long _faultsOfEndedLevels;
@@ -224,7 +231,9 @@ public sealed partial class SvServer : IDisposable, ISvConnectionlessHost<IPEndP
         }
         if (old is not null)
         {
-            LevelEnding?.Invoke(old);
+            LevelChangeKind = kind;
+            try { LevelEnding?.Invoke(old); }
+            finally { LevelChangeKind = null; }
             _faultsOfEndedLevels += old.FaultCount;
             if (dropEveryone)
             {

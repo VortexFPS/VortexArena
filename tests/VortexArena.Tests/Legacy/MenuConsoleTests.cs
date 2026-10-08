@@ -198,6 +198,18 @@ public class MenuConsoleTests
         rig.Console.Execute(13.1);
         Assert.Equal("1", rig.Console.Cvars.GetString("late"));
 
+        // Several that come due in the same frame are separate commands, in order (the menu's Leave button:
+        // "defer 0.4 disconnect; defer 0.4 wait; defer 0.4 \"g_campaign 0\"; defer 0.4 menu_sync").
+        rig.Console.AddText("defer 0.4 \"set due_a 1\"; defer 0.4 wait; defer 0.4 \"set due_b 2\"; defer 0.4 \"set due_c 3\"\n");
+        rig.Console.Execute(14);
+        rig.Console.Execute(14.2);
+        Assert.False(rig.Console.Cvars.Has("due_a"));
+        rig.Console.Execute(14.5);
+        Assert.Equal("1", rig.Console.Cvars.GetString("due_a"));
+        Assert.False(rig.Console.Cvars.Has("due_b"));                             // the deferred "wait" held the rest for a frame
+        rig.Console.Execute(14.6);
+        Assert.Equal("2", rig.Console.Cvars.GetString("due_b"));
+        Assert.Equal("3", rig.Console.Cvars.GetString("due_c"));
         rig.Console.ExecuteNow("toggle menu_sounds");
         Assert.Equal("1", rig.Console.Cvars.GetString("menu_sounds"));
         rig.Console.ExecuteNow("toggle menu_sounds 2");                           // not 0 and not 2: back to 0

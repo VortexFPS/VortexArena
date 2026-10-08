@@ -103,19 +103,22 @@ public static class LegacyData
     {
         const double mb = 1024.0 * 1024.0;
         long workingSet;
+        int threads;
         using (System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess())
         {
             process.Refresh();
             workingSet = process.WorkingSet64;
+            threads = process.Threads.Count;
         }
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"working set {workingSet / mb:0} MB, private {PrivateBytes() / mb:0} MB, managed {GC.GetTotalMemory(false) / mb:0} MB, " +
+            $"working set {workingSet / mb:0} MB, private {PrivateBytes() / mb:0} MB, managed {GC.GetTotalMemory(false) / mb:0} MB (committed {GC.GetGCMemoryInfo().TotalCommittedBytes / mb:0} MB), " +
             $"static {Godot.Performance.GetMonitor(Godot.Performance.Monitor.MemoryStatic) / mb:0} MB, " +
             $"textures {Godot.Performance.GetMonitor(Godot.Performance.Monitor.RenderTextureMemUsed) / mb:0} MB, " +
             $"buffers {Godot.Performance.GetMonitor(Godot.Performance.Monitor.RenderBufferMemUsed) / mb:0} MB, " +
             $"video {Godot.Performance.GetMonitor(Godot.Performance.Monitor.RenderVideoMemUsed) / mb:0} MB, " +
             $"objects {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectCount):0}, nodes {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectNodeCount):0}, " +
-            $"resources {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectResourceCount):0}, orphan nodes {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectOrphanNodeCount):0}");
+            $"resources {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectResourceCount):0}, orphan nodes {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectOrphanNodeCount):0}, " +
+            $"threads {threads} (legacy server {VortexArena.Legacy.Local.LegacyLocalServer.LiveThreads}, legacy precache {GodotLegacyPresentation.LivePrecacheWorkers})");
     }
 
     private static long PrivateBytes()

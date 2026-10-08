@@ -63,7 +63,10 @@ public sealed partial class GodotLegacyPresentation
     /// the two corners are equal and it is one burst. The palette colour of the old particle() builtin is
     /// not used.
     /// </summary>
-    void ILegacyEffects.ParticleEffect(int effect, float count, QcVector originMin, QcVector originMax, QcVector velocityMin, QcVector velocityMax, int paletteColor)
+    void ILegacyEffects.ParticleEffect(int effect, float count, QcVector originMin, QcVector originMax, QcVector velocityMin, QcVector velocityMax, int paletteColor) =>
+        SpawnParticles(effect, count, originMin, originMax, velocityMin, velocityMax, null);
+
+    private void SpawnParticles(int effect, float count, QcVector originMin, QcVector originMax, QcVector velocityMin, QcVector velocityMax, Color? tint)
     {
         if (!Finite(originMin) || !Finite(originMax) || !Finite(velocityMin) || !Finite(velocityMax) || !float.IsFinite(count)) return;
         if (EffectName(effect) is not { } name)
@@ -78,10 +81,10 @@ public sealed partial class GodotLegacyPresentation
         bool box = originMin.X != originMax.X || originMin.Y != originMax.Y || originMin.Z != originMax.Z
             || velocityMin.X != velocityMax.X || velocityMin.Y != velocityMax.Y || velocityMin.Z != velocityMax.Z;
         int points = box ? Math.Clamp((int)MathF.Ceiling(count), 1, MaxBoxPoints) : 1;
-        if (points == 1) _effects.Spawn(name, Middle(originMin, originMax), Middle(velocityMin, velocityMax), count);
+        if (points == 1) _effects.Spawn(name, Middle(originMin, originMax), Middle(velocityMin, velocityMax), count, tint);
         else
             for (int i = 0; i < points; i++)
-                _effects.Spawn(name, Within(originMin, originMax), Within(velocityMin, velocityMax), count / points);
+                _effects.Spawn(name, Within(originMin, originMax), Within(velocityMin, velocityMax), count / points, tint);
         EffectsSpawned++;
         if (s_debugEntities) _debugEffects[name] = _debugEffects.GetValueOrDefault(name) + 1;
     }
@@ -105,9 +108,22 @@ public sealed partial class GodotLegacyPresentation
         if (s_debugEntities) _debugEffects["trail:" + name] = _debugEffects.GetValueOrDefault("trail:" + name) + 1;
     }
 
-    /// <summary>CL_ParticleBox: as <see cref="ILegacyEffects.ParticleEffect"/>, the tint not applied.</summary>
-    void ILegacyEffects.ParticleBox(int effect, float count, QcVector originMin, QcVector originMax, QcVector velocityMin, QcVector velocityMax, in LegacyParticleTint tint) =>
-        ((ILegacyEffects)this).ParticleEffect(effect, count, originMin, originMax, velocityMin, velocityMax, 0);
+    /// <summary>
+    /// CL_ParticleBox: as <see cref="ILegacyEffects.ParticleEffect"/>, with the tint the program asked for
+    /// (PARTICLES_USECOLOR / PARTICLES_USEALPHA: particles_colormin..max and particles_alphamin..max multiply
+    /// each particle's colour and alpha). One tint for the call - the middle of the range, which is exact for
+    /// Xonotic's own calls (they set min and max alike: a team's colour on its spawn points, its spawn flash).
+    /// Without it every team-coloured effect was drawn white. The fade (a count multiplier) is not applied.
+    /// </summary>
+    void ILegacyEffects.ParticleBox(int effect, float count, QcVector originMin, QcVector originMax, QcVector velocityMin, QcVector velocityMax, in LegacyParticleTint tint)
+    {
+        Color? colour = null;
+        float r = (tint.ColorMin.X + tint.ColorMax.X) * 0.5f, g = (tint.ColorMin.Y + tint.ColorMax.Y) * 0.5f, b = (tint.ColorMin.Z + tint.ColorMax.Z) * 0.5f;
+        float a = (tint.AlphaMin + tint.AlphaMax) * 0.5f;
+        if (float.IsFinite(r) && float.IsFinite(g) && float.IsFinite(b) && float.IsFinite(a) && (r != 1 || g != 1 || b != 1 || a != 1))
+            colour = new Color(Math.Clamp(r, 0f, 1f), Math.Clamp(g, 0f, 1f), Math.Clamp(b, 0f, 1f), Math.Clamp(a, 0f, 1f));
+        SpawnParticles(effect, count, originMin, originMax, velocityMin, velocityMax, colour);
+    }
 
     /// <summary>
     /// CL_ParseTempEntity: each engine temp entity is "CL_ParticleEffect(EFFECT_TE_x, ...)" plus, for

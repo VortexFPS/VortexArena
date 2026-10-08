@@ -384,7 +384,14 @@ public sealed class SvWorld : TraceService.IEntityProvider
                 result.WorldStartSolid = result.BModelStartSolid = world.StartSolid;
                 int stuck = StuckEntity(vm, vStart, vMins, vMaxs, type, out bool isBsp);
                 if (isBsp) result.BModelStartSolid = true;
-                if (hitEdict < 0) hitEdict = world.StartSolid ? 0 : stuck;
+                // "if (cliptrace->fraction == 1) cliptrace->ent = touch": a trace that hit nothing names the
+                // ENTITY it started in, also when it started in the world as well - the world's clip comes
+                // first and an entity's start overwrites it. A player on the ground always starts in the
+                // world (its linked box reaches a unit into the floor), and Xonotic's brush triggers ask
+                // exactly this (WarpZoneLib_BoxTouchesBrush: tracebox at rest, "if (trace_ent == e)"):
+                // with the world named instead, a door's trigger fired for a player in the air and never
+                // for one walking through it.
+                if (hitEdict < 0) hitEdict = stuck > 0 && fraction >= 1 ? stuck : world.StartSolid ? 0 : stuck;
             }
 
             result.Fraction = fraction;

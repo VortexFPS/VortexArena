@@ -467,7 +467,12 @@ public sealed class LegacyConsole
                 delay -= eat;
                 if (delay <= 0)
                 {
-                    AddText(text);
+                    // "parse deferred string and append its cmdstring(s)", with "pending = false": a deferred
+                    // string is whole commands of its own. Appended as bare text, four that came due in one
+                    // frame ran together into one unknown word - the menu's Leave button is
+                    // "defer 0.4 disconnect; defer 0.4 wait; defer 0.4 "g_campaign 0"; defer 0.4 menu_sync",
+                    // and it closed the menu and left nothing.
+                    AddText("\n" + text + "\n");
                     _deferred.RemoveAt(i--);
                 }
                 else _deferred[i] = (delay, text);

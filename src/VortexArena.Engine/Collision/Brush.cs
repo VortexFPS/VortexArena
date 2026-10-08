@@ -179,6 +179,25 @@ public sealed class Brush
     /// <summary>True when the brush is axis-aligned and its planes already cover AABB separation (DP hasaabbplanes).</summary>
     public bool IsAabb;
 
+    /// <summary>
+    /// DP <c>hasaabbplanes</c> on a brush that is not itself a box: its planes include the bevels that
+    /// separate it from any axis-aligned box, so a box is swept against its own planes and nothing else
+    /// ("fast case for AABB vs compiled brushes (which begin with AABB planes and also have precomputed
+    /// bevels for AABB collisions)"). DarkPlaces says this of every brush of a compiled Q3 map. Only set
+    /// when the builder is asked to (<see cref="BspCollisionOptions.CompiledBrushesHaveAabbPlanes"/>) and
+    /// only read by a <see cref="TraceService"/> with <see cref="TraceService.DarkPlacesArithmetic"/> on.
+    /// </summary>
+    public bool HasAabbPlanes;
+
+    /// <summary>
+    /// True for a DarkPlaces collision triangle (<see cref="DarkPlacesPatchCollision"/>): three points, no
+    /// thickness. A box is swept against it as against any brush; a line is stopped by it from its front side
+    /// only (Collision_TraceLineTriangleFloat) and a point is never inside it ("skipped because they have no
+    /// volume"), which is what <see cref="TraceService"/> does on seeing this. Never set by the default
+    /// builder, whose patch slabs are ordinary brushes.
+    /// </summary>
+    public bool IsTriangle;
+
     public Brush(BrushPlane[] sides, Vector3[] points, Vector3[] edgeDirs, int contents, int surfaceFlags = 0, bool isAabb = false, string? texture = null)
     {
         Sides = sides;
@@ -374,6 +393,12 @@ public sealed class CollisionWorld
     private float _biasX, _biasY;
     private bool _gridBuilt;
 
+    // The optional DarkPlaces broadphase (see UseBih). Null = the grid above, as always before.
+    private CollisionBih? _bih;
+    private bool _useBih;
+    private readonly CollisionBih.Walker _bihWalker = new();
+    private readonly List<int> _bihLeaves = new();
+
     // Epoch dedup for queries (DP areagrid_marknumber).
     private int[]? _mark;
     private int _markNumber;
@@ -387,18 +412,72 @@ public sealed class CollisionWorld
     {
         _brushes.Add(b);
         _gridBuilt = false;
+        _bih = null;
     }
 
     public void AddBrushes(IEnumerable<Brush> brushes)
     {
         _brushes.AddRange(brushes);
         _gridBuilt = false;
+        _bih = null;
     }
 
     public void Clear()
     {
         _brushes.Clear();
         _gridBuilt = false;
+        _bih = null;
+    }
+
+    /// <summary>
+    /// Find candidates the way DarkPlaces does - by walking a bounding interval hierarchy over the brushes
+    /// (<see cref="CollisionBih"/>, Mod_MakeCollisionBIH / Mod_CollisionBIH_TraceBrush) - instead of through
+    /// the 2D grid. Off by default; the grid is what the native game runs and was validated on.
+    ///
+    /// What changes: the candidates of a sweep are the leaves along the path of the box rather than every
+    /// brush under the cells it crosses (a long line costs what it crosses, at any height), and they come in
+    /// DarkPlaces' order, which decides the outcome of exact ties (two impacts at one fraction, two brushes a
+    /// box is equally deep in). The brushes must be in the order Mod_MakeCollisionBIH adds leaves - a model's
+    /// brushes, then its collision triangles - which is the order <see cref="BspCollisionBuilder"/> adds them.
+    /// </summary>
+    public bool UseBih
+    {
+        get => _useBih;
+        set
+        {
+            _useBih = value;
+            if (!value) _bih = null;
+        }
+    }
+
+    /// <summary>The hierarchy <see cref="UseBih"/> walks, built on first use. Null while the option is off.</summary>
+    public CollisionBih? Bih => _useBih ? _bih ??= BuildBih() : null;
+
+    private CollisionBih BuildBih()
+    {
+        int n = _brushes.Count;
+        Vector3[] mins = new Vector3[n], maxs = new Vector3[n];
+        for (int i = 0; i < n; i++)
+        {
+            // A leaf's box is the brush's bounds grown by one unit (Collision_NewBrushFromPlanes'
+            // "brush->mins[0] -= 1", Mod_MakeCollisionBIH's "- 1" / "+ 1" for a triangle, whose
+            // Brush carries its bounds already grown).
+            Vector3 grow = _brushes[i].IsTriangle ? Vector3.Zero : Vector3.One;
+            mins[i] = _brushes[i].Mins - grow;
+            maxs[i] = _brushes[i].Maxs + grow;
+        }
+        return CollisionBih.Build(mins, maxs);
+    }
+
+    // The leaves of a walk, as brushes, in the order walked.
+    private void QueryBih(CollisionBih bih, Vector3 start, Vector3 end, Vector3 boxMins, Vector3 boxMaxs, List<Brush> result)
+    {
+        // "calculate tracebox-like parameters for efficient culling": the walk follows the centre of
+        // the box's bounds.
+        Vector3 centre = (boxMins + boxMaxs) * 0.5f;
+        _bihLeaves.Clear();
+        bih.QuerySwept(_bihWalker, start + centre, end + centre, boxMins - centre, boxMaxs - centre, _bihLeaves);
+        for (int i = 0; i < _bihLeaves.Count; i++) result.Add(_brushes[_bihLeaves[i]]);
     }
 
     /// <summary>
@@ -488,6 +567,13 @@ public sealed class CollisionWorld
     /// </summary>
     public void Query(Vector3 mins, Vector3 maxs, List<Brush> result)
     {
+        if (Bih is { } bih)
+        {
+            // A box at rest, walked as a move of no length. (DarkPlaces' walk pads the box by a unit;
+            // the candidates are a superset of the grid's.)
+            QueryBih(bih, Vector3.Zero, Vector3.Zero, mins, maxs, result);
+            return;
+        }
         if (!_gridBuilt) BuildGrid();
 
         if (_cells == null)
@@ -567,6 +653,11 @@ public sealed class CollisionWorld
     /// </summary>
     public void QuerySwept(Vector3 start, Vector3 end, Vector3 boxMins, Vector3 boxMaxs, List<Brush> result)
     {
+        if (Bih is { } bih)
+        {
+            QueryBih(bih, start, end, boxMins, boxMaxs, result);
+            return;
+        }
         if (!_gridBuilt) BuildGrid();
 
         // DP's world gather pads the sweep box by ±1 (see TraceService.SweptBounds, which the entity

@@ -2,12 +2,12 @@
 // the client program's traces go through) and cl_collision.h CL_PointSuperContents; world.c
 // World_LinkEdict / World_UnlinkEdict / World_EntitiesInBox (the area grid); clvm_cmds.c CL_movestep,
 // CL_CheckBottom and the body of VM_CL_checkpvs; model_brush.c Mod_BSP_GetPVS / Mod_BSP_BoxTouchingPVS.
-// collision.c Collision_ClipExtendPrepare / Collision_ClipExtendFinish (the lengthened trace).
-// The sweep itself (collision.c Collision_TraceBrushBrushFloat and Collision_ClipToGenericEntity) is
-// VortexArena.Engine.Collision.TraceService, which this drives. The map's curved surfaces are
-// DarkPlaces' own collision triangles (Server/SvPatchCollision.cs), not that library's slabs: the
-// client predicts its player against the same shapes the server moves it against, or it is corrected
-// by several units every time it crosses a curved floor.
+// The sweep itself (collision.c Collision_TraceBrushBrushFloat and Collision_ClipToGenericEntity),
+// the lengthened trace (Collision_ClipExtendPrepare / Finish) and the map's collision are
+// VortexArena.Engine.Collision - TraceService on a world built with BspCollisionOptions.DarkPlaces,
+// exactly as the server half (Server/SvWorld.cs) builds its own: the client predicts its player
+// against the same shapes the server moves it against, or it is corrected by several units every
+// time it crosses a curved floor.
 using System.Numerics;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Services;
@@ -41,14 +41,12 @@ namespace VortexArena.Legacy.Csqc;
 /// hitnetworkplayers): <c>trace_networkentity</c> is always 0. Xonotic networks its players and most
 /// of its movers through the client program, which links them itself.</item>
 /// <item>A SOLID_BSP entity whose model is not a map submodel, and any entity under MOVE_HITMODEL, is
-/// clipped as its box. DarkPlaces traces the model's triangles.</item>
+/// clipped against its model's triangles as DarkPlaces clips it, but at the model's first frame
+/// whatever the entity shows, and only for MD3 and IQM models within the bounds of
+/// <see cref="Server.SvModelCollision"/>; any other is clipped as its box.</item>
 /// <item>Every trace is lengthened by one unit (collision_extendtracelinelength and
 /// collision_extendtraceboxlength, both 1, are what the program's traceline and tracebox use); a
 /// tracetoss, which DarkPlaces lengthens by collision_extendmovelength (16), gets the same one unit.</item>
-/// <item>A curved surface that belongs to a brush-model entity stops a line from both sides; the
-/// world's stop it from the front only, as DarkPlaces' patch triangles do.</item>
-/// <item><c>trace_dpstartcontents</c> is the contents at the start <em>point</em>; DarkPlaces reports
-/// the contents of every brush the box starts in. For a line they are the same.</item>
 /// <item>A trace that starts inside an entity without ever leaving it names no entity; DarkPlaces
 /// (Collision_CombineTraces) names the one it started in.</item>
 /// </list>
@@ -104,16 +102,13 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
     private CsqcHost? _host;
     private int _ownerField = -1, _clipGroupField = -1, _enemyField = -1;
 
-    // DarkPlaces tests a box against brushes and patch triangles, a line against brushes and (from
-    // their front) patch triangles, a point against brushes alone: two views of the map.
-    private TraceService? _worldTrace;    // world brushes and patch triangles: box sweeps before a program exists
-    private TraceService? _trace;         // the same and the program's entities
-    private TraceService? _worldLine;     // world brushes only: pointcontents, lines and points
-    private TraceService? _line;          // world brushes and the program's entities
-    private CollisionWorld? _full;        // brushes and patch triangles, for a line's triangle candidates
-    private int _patchTriangles;
-    private readonly List<Brush> _lineBrushes = new();
+    // The map as DarkPlaces collides with it - brushes and patch triangles in one world. The trace
+    // library tests a box against both, a line against the brushes and the front of the triangles, a
+    // point against the brushes alone.
+    private TraceService? _worldTrace;    // the world: traces before a program exists, pointcontents
+    private TraceService? _trace;         // the world and the program's entities
     private TraceService? _entityTrace;   // the entities alone, over an empty world: the MOVE_MISSILE pass
+    private readonly Server.SvModelCollision _models;
     private BspPvs? _pvs;
     private Vector3 _worldMins, _worldMaxs;
     private readonly Dictionary<string, BspCollisionBuilder.Submodel> _submodels = new(StringComparer.Ordinal);
@@ -153,7 +148,11 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
     {
         _files = files ?? throw new ArgumentNullException(nameof(files));
         _calls = calls;
+        _models = new Server.SvModelCollision(files);
     }
+
+    /// <summary>The collision meshes of the level's non-brush models, loaded as traces meet them.</summary>
+    public Server.SvModelCollision ModelCollision => _models;
 
     /// <summary>The map that is loaded ("maps/x.bsp"), or null.</summary>
     public string? MapName { get; private set; }
@@ -187,8 +186,9 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         }
         try
         {
-            BspData bsp = BspReader.Read(_files.ReadBytes(worldModel));
-            UseMap(worldModel, bsp, BspCollisionBuilder.Build(bsp));
+            byte[] file = _files.ReadBytes(worldModel);
+            BspData bsp = BspReader.Read(file);
+            UseMap(worldModel, bsp, BuildCollision(bsp, file));
             return true;
         }
         catch (Exception e) when (e is not OutOfMemoryException)
@@ -201,49 +201,64 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
     }
 
     /// <summary>
-    /// Takes a map that is already parsed and built, in place of <see cref="LoadMap"/>: for an owner
-    /// that needs the same data for drawing and should not read the file twice.
+    /// The collision of a map as legacy mode needs it: brushes, DarkPlaces' patch triangles, its
+    /// hierarchy. What <see cref="UseMap(string, BspData?, BspCollisionBuilder.Result)"/> expects to be
+    /// handed, and what the server half builds for itself.
+    /// </summary>
+    /// <param name="mapFile">The bytes the map was parsed from (see <see cref="BspCollisionOptions.MapFile"/>).</param>
+    public static BspCollisionBuilder.Result BuildCollision(BspData bsp, ReadOnlyMemory<byte> mapFile) =>
+        BspCollisionBuilder.Build(bsp, null, BspCollisionOptions.DarkPlaces(mapFile));
+
+    /// <summary>
+    /// Takes a map that is already parsed, in place of <see cref="LoadMap"/>, and builds its collision
+    /// once: for an owner that needs the parsed map for drawing and should not parse the file twice.
+    /// (The file is read once more, unparsed, for the patches' LOD bounds.)
+    /// </summary>
+    public void UseMap(string worldModel, BspData bsp)
+    {
+        ArgumentNullException.ThrowIfNull(bsp);
+        byte[] file = Array.Empty<byte>();
+        try
+        {
+            if (!string.IsNullOrEmpty(worldModel) && LegacyQcHost.IsSafePath(worldModel) && _files.Exists(worldModel)) file = _files.ReadBytes(worldModel);
+        }
+        catch (IOException) { /* no LOD bounds: no two patches are grouped */ }
+        UseMap(worldModel, bsp, BuildCollision(bsp, file));
+    }
+
+    /// <summary>
+    /// Takes a map that is already parsed and built, in place of <see cref="LoadMap"/>.
     /// </summary>
     /// <param name="bsp">The parsed map, for bounds and visibility; null for collision built by hand
     /// (then there is no visibility data and the bounds are the brushes').</param>
+    /// <param name="built">The collision, from <see cref="BuildCollision"/>. It is used as it is.
+    /// The one exception is for a caller that still hands over the shared builder's default
+    /// (patch slabs) together with the map it came from: slabs are not what a DarkPlaces server
+    /// collides with, so that result is set aside and the collision built again here - the cost
+    /// <see cref="UseMap(string, BspData)"/> exists to avoid.</param>
     public void UseMap(string worldModel, BspData? bsp, BspCollisionBuilder.Result built)
     {
         ArgumentNullException.ThrowIfNull(built);
+        if (bsp is not null && built.PatchCollision != PatchCollisionMode.DarkPlacesTriangles)
+        {
+            UseMap(worldModel, bsp);
+            return;
+        }
         Unload();
         Bsp = bsp;
-        CollisionWorld brushWorld = built.World, full = built.World;
+        CollisionWorld full = built.World;
         IReadOnlyList<BspCollisionBuilder.Submodel> submodels = built.Submodels;
-        if (bsp is not null)
-        {
-            // What the caller built holds the shared builder's patch slabs, which are not what a
-            // DarkPlaces server collides with. Build the brushes again from the map without its
-            // faces, and add DarkPlaces' patch triangles. (The file is read once more for the LOD
-            // bounds that group patches for seamless tessellation; without it no patches are grouped.)
-            byte[] file = !string.IsNullOrEmpty(worldModel) && LegacyQcHost.IsSafePath(worldModel) && _files.Exists(worldModel) ? _files.ReadBytes(worldModel) : Array.Empty<byte>();
-            BspData brushesOnly = new() { Version = bsp.Version, Textures = bsp.Textures, Planes = bsp.Planes, Models = bsp.Models, Brushes = bsp.Brushes, BrushSides = bsp.BrushSides };
-            BspCollisionBuilder.Result brushes = BspCollisionBuilder.Build(brushesOnly);
-            List<Brush>[] patches = Server.SvPatchCollision.Build(bsp, file);
-            brushWorld = brushes.World;
-            full = new CollisionWorld();
-            full.AddBrushes(brushes.World.Brushes);
-            full.AddBrushes(patches[0]);
-            full.BuildGrid();
-            _patchTriangles = patches[0].Count;
-            List<BspCollisionBuilder.Submodel> withPatches = new(brushes.Submodels.Count);
-            foreach (BspCollisionBuilder.Submodel submodel in brushes.Submodels)
-            {
-                int index = submodel.Name.Length > 1 && int.TryParse(submodel.Name.AsSpan(1), out int n) ? n : -1;
-                withPatches.Add(index > 0 && index < patches.Length && patches[index].Count > 0
-                    ? submodel with { Brushes = submodel.Brushes.Concat(patches[index]).ToArray() } : submodel);
-            }
-            submodels = withPatches;
-        }
         Collision = full;
-        _full = full;
         foreach (BspCollisionBuilder.Submodel submodel in submodels) _submodels[submodel.Name] = submodel;
         _pvs = bsp is null ? null : new BspPvs(bsp);
         // cl.world.mins / maxs are the world model's normalmins / normalmaxs: model 0 of the map.
-        if (bsp is { Models.Length: > 0 })
+        if (built.DarkPlacesWorldBounds is { } worldBounds)
+        {
+            // (enlarged, as DarkPlaces does, to hold everything the model draws)
+            _worldMins = worldBounds.Mins;
+            _worldMaxs = worldBounds.Maxs;
+        }
+        else if (bsp is { Models.Length: > 0 })
         {
             _worldMins = bsp.Models[0].Mins;
             _worldMaxs = bsp.Models[0].Maxs;
@@ -253,13 +268,11 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
             _worldMins = built.World.WorldMins;
             _worldMaxs = built.World.WorldMaxs;
         }
-        _worldTrace = new TraceService(full);
-        _trace = new TraceService(full, this);
-        _worldLine = new TraceService(brushWorld);
-        _line = new TraceService(brushWorld, this);
+        _worldTrace = new TraceService(full) { DarkPlacesArithmetic = true };
+        _trace = new TraceService(full, this) { DarkPlacesArithmetic = true };
         CollisionWorld empty = new();
         empty.BuildGrid();
-        _entityTrace = new TraceService(empty, this);
+        _entityTrace = new TraceService(empty, this) { DarkPlacesArithmetic = true };
         MapName = worldModel;
         SetupGrid();
     }
@@ -270,9 +283,8 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         Bsp = null;
         Collision = null;
         LoadError = null;
-        _worldTrace = _trace = _worldLine = _line = _entityTrace = null;
-        _full = null;
-        _patchTriangles = 0;
+        _worldTrace = _trace = _entityTrace = null;
+        _models.Clear();
         _pvs = null;
         _submodels.Clear();
         _worldMins = _worldMaxs = default;
@@ -333,93 +345,48 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         // collision_extendtracelinelength / collision_extendtraceboxlength, one unit - "to ensure
         // detection of collisions within the collision_impactnudge distance (this does not alter
         // the final trace length)".
-        Vector3 realStart = V(start), realDelta = V(end) - realStart;
-        float realLength = realDelta.Length();
+        Vector3 realStart = V(start), realEnd = V(end);
+        float realLength = (realEnd - realStart).Length();
         if (!(realLength > 0) || !float.IsFinite(realLength)) return TraceUnextended(start, mins, maxs, end, moveType, ignoreEdict, hitContentsMask, isLine);
-        float scaleToExtend = (realLength + TraceExtend) / realLength;
-        LegacyTrace trace = TraceUnextended(start, mins, maxs, Q(realStart + scaleToExtend * realDelta), moveType, ignoreEdict, hitContentsMask, isLine);
+        TraceExtension extension = TraceExtension.Prepare(realStart, realEnd, TraceExtend);
+        LegacyTrace trace = TraceUnextended(start, mins, maxs, Q(extension.ExtendEnd), moveType, ignoreEdict, hitContentsMask, isLine);
         // Collision_ClipExtendFinish
-        if (trace.Fraction != 1.0f)
+        double fraction = extension.FinishFraction(trace.Fraction, out bool cleared);
+        if (cleared)
         {
-            // undo the extended trace length
-            trace.Fraction *= scaleToExtend;
-            // "if the extended trace hit something that the unextended trace did not hit (even
-            // considering the collision_impactnudge), then we have to clear the hit information"
-            if (trace.Fraction > 1.0f)
-            {
-                trace.Entity = 0;
-                trace.HitQ3SurfaceFlags = 0;
-                trace.HitContents = 0;
-                trace.HitTextureName = null;
-                trace.PlaneNormal = default;
-                trace.PlaneDist = 0;
-            }
+            trace.Entity = 0;
+            trace.HitQ3SurfaceFlags = 0;
+            trace.HitContents = 0;
+            trace.HitTextureName = null;
+            trace.PlaneNormal = default;
+            trace.PlaneDist = 0;
         }
-        trace.Fraction = Math.Clamp(trace.Fraction, 0, 1);
-        trace.EndPos = Q(realStart + trace.Fraction * realDelta);
+        trace.Fraction = (float)fraction;
+        trace.EndPos = Q(extension.EndPos(fraction));
         return trace;
     }
 
     private const float TraceExtend = 1;
 
+    // One trace, as asked. (Until the collision world found its candidates the way DarkPlaces does - by
+    // walking a hierarchy along the move - a long move was cut into 384-unit pieces here, because the
+    // grid broadphase handed a long line most of the map: 75 microseconds a line on stormkeep. With
+    // the hierarchy a long line costs 5, less than the pieces did, and the pieces were not the same
+    // trace: a line that started in solid ended at the first piece.)
     private LegacyTrace TraceUnextended(QcVector start, QcVector mins, QcVector maxs, QcVector end, int moveType, int ignoreEdict, int hitContentsMask, bool isLine)
-    {
-
-        // A long move is traced as a run of short ones, stopping at the first that hits. The collision
-        // library finds its candidates by the bounding box of the whole move, and the client program
-        // routinely fires lines thousands of units long (crosshair, shot origin, waypoint visibility):
-        // measured on stormkeep, one such line averaged 75 microseconds against 5 for a player-sized
-        // box moved a short way, because its box covered most of the map's 29,000 brushes. DarkPlaces
-        // does not pay this (it walks a bounding-interval hierarchy along the line). Short moves - all of
-        // player movement prediction - take the single-trace path below, bit for bit as before.
-        float dx = end.X - start.X, dy = end.Y - start.Y, dz = end.Z - start.Z;
-        float length = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
-        if (!(length > SegmentLength * 1.5f) || !float.IsFinite(length))
-            return TraceSegment(start, mins, maxs, end, moveType, ignoreEdict, hitContentsMask, isLine);
-
-        int segments = Math.Min(MaxSegments, (int)MathF.Ceiling(length / SegmentLength));
-        LegacyTrace first = default;
-        QcVector from = start;
-        for (int i = 0; i < segments; i++)
-        {
-            float t = (i + 1) / (float)segments;
-            QcVector to = i == segments - 1 ? end : new QcVector(start.X + dx * t, start.Y + dy * t, start.Z + dz * t);
-            LegacyTrace part = TraceSegment(from, mins, maxs, to, moveType, ignoreEdict, hitContentsMask, isLine);
-            if (i == 0) first = part;
-            if (part.Fraction < 1 || part.StartSolid)
-            {
-                // What the move started in is a fact about its first step, wherever it ended.
-                part.Fraction = (i + part.Fraction) / segments;
-                part.StartContents = first.StartContents;
-                part.StartSolid = first.StartSolid;
-                part.AllSolid = first.AllSolid && i == 0;
-                return part;
-            }
-            from = to;
-        }
-        first.Fraction = 1;
-        first.EndPos = end;
-        return first;
-    }
-
-    private const float SegmentLength = 384;
-    private const int MaxSegments = 64;
-
-    private LegacyTrace TraceSegment(QcVector start, QcVector mins, QcVector maxs, QcVector end, int moveType, int ignoreEdict, int hitContentsMask, bool isLine)
     {
         // On a Quake 3 map neither inopen nor inwater is ever set: only the Quake 1 hull code
         // (model_brush.c Mod_Q1BSP_RecursiveHullCheck) writes them, and Collision_CombineTraces
         // copies inwater alone. So both stay false, which is what the program sees in DarkPlaces.
         LegacyTrace result = new() { Fraction = 1, EndPos = end };
-        if (_trace is null || _worldTrace is null || _line is null || _worldLine is null) return result;
+        if (_trace is null || _worldTrace is null) return result;
 
         Vector3 vStart = V(start), vEnd = V(end), vMins = V(mins), vMaxs = V(maxs);
         if (!IsFinite(vStart) || !IsFinite(vEnd) || !IsFinite(vMins) || !IsFinite(vMaxs)) return result;
 
         // CL_TraceBox: a box of no size is a point (CL_TracePoint) or, if it moves, a line (CL_TraceLine).
-        bool pointBox = vMins == vMaxs;
-        TraceService service = pointBox ? _line : _trace, worldService = pointBox ? _worldLine : _worldTrace;
-        result.StartContents = ContentsFromEngine(_worldLine.PointContents(vStart + (pointBox ? vMins : Vector3.Zero)));
+        // (The trace library makes the same distinction for what it tests a point against.)
+        TraceService service = _trace, worldService = _worldTrace;
         int engineMask = ContentsToEngine(hitContentsMask);
         // A mask with none of the known bits can stop on nothing.
         if (engineMask == 0) return result;
@@ -436,9 +403,12 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         _passMirror.Owner = null;
 
         TraceResult hit;
-        int hitEdict = 0;
+        int hitEdict = 0, startContents;
         if (moveType == MoveWorldOnly || host is null)
+        {
             hit = worldService.Trace(vStart, vMins, vMaxs, vEnd, MoveFilter.WorldOnly, _passMirror);
+            startContents = worldService.LastStartContents;
+        }
         else if (moveType == MoveMissile)
         {
             // "size when clipping against monsters": a MOVE_MISSILE box is 15 units larger on every
@@ -447,6 +417,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
             _monsters = MonsterFilter.Without;
             hit = service.Trace(vStart, vMins, vMaxs, vEnd, MoveFilter.Normal, _passMirror);
             hitEdict = EdictOf(hit.Ent);
+            startContents = service.LastStartContents;
             // (Always run: the first pass looked for candidates along the thin box, so it cannot say
             // whether a monster lies within the margin. Over an empty world this costs one grid query.)
             if (_entityTrace is not null)
@@ -455,6 +426,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
                 Vector3 grow = new(15, 15, 15);
                 // (This pass refills the mirrors, which is why the first pass's entity was noted above.)
                 TraceResult monster = _entityTrace.Trace(vStart, vMins - grow, vMaxs + grow, vEnd, MoveFilter.Normal, _passMirror);
+                startContents |= _entityTrace.LastStartContents;
                 // Collision_CombineTraces: the nearer impact wins; solid starts accumulate.
                 bool startSolid = hit.StartSolid || monster.StartSolid, allSolid = hit.AllSolid || monster.AllSolid;
                 if (monster.Fraction < hit.Fraction && monster.PlaneNormal != Vector3.Zero)
@@ -472,31 +444,10 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
             MoveFilter filter = moveType == MoveNoMonsters ? MoveFilter.NoMonsters : moveType == MoveHitModel ? MoveFilter.HitModel : MoveFilter.Normal;
             hit = service.Trace(vStart, vMins, vMaxs, vEnd, filter, _passMirror);
             hitEdict = EdictOf(hit.Ent);
+            startContents = service.LastStartContents;
         }
-
-        // Mod_CollisionBIH_TraceLine's BIH_COLLISIONTRIANGLE case: a line is also stopped by the
-        // world's patch triangles, from their front side, if that is nearer than what it has hit.
-        if (pointBox && vStart != vEnd && _patchTriangles > 0 && _full is { } full)
-        {
-            Vector3 lineStart = vStart + vMins, lineEnd = vEnd + vMins;
-            Server.SvPatchCollision.LineHit line = new() { Fraction = hit.Fraction };
-            _lineBrushes.Clear();
-            full.Query(Vector3.Min(lineStart, lineEnd) - Vector3.One, Vector3.Max(lineStart, lineEnd) + Vector3.One, _lineBrushes);
-            foreach (Brush brush in _lineBrushes)
-                if (Server.SvPatchCollision.IsTriangle(brush) && (brush.Contents & engineMask) != 0)
-                    Server.SvPatchCollision.TraceLineTriangle(ref line, lineStart, lineEnd, brush);
-            if (line.Triangle is { } triangle)
-            {
-                hit.Fraction = line.Fraction;
-                hit.EndPos = vStart + line.Fraction * (vEnd - vStart);
-                hit.PlaneNormal = line.PlaneNormal;
-                hit.PlaneDist = line.PlaneDist;
-                hit.DpHitContents = triangle.Contents;
-                hit.DpHitQ3SurfaceFlags = triangle.SurfaceFlags;
-                hit.DpHitTextureName = triangle.Texture;
-                hitEdict = 0;
-            }
-        }
+        // trace.startsupercontents: the contents of everything the box starts inside, whatever the mask
+        result.StartContents = ContentsFromEngine(startContents);
 
         result.Fraction = hit.Fraction;
         result.EndPos = Q(hit.EndPos);
@@ -523,9 +474,9 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
     {
         Count(nameof(PointSuperContents));
         Vector3 p = V(point);
-        if (_worldLine is null || !IsFinite(p)) return 0;
+        if (_worldTrace is null || !IsFinite(p)) return 0;
         // brushes, never patch triangles ("skipped because they have no volume")
-        return ContentsFromEngine(_worldLine.PointContents(p));
+        return ContentsFromEngine(_worldTrace.PointContents(p));
     }
 
     /// <summary>
@@ -736,6 +687,18 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         if (!_submodels.TryGetValue(model, out BspCollisionBuilder.Submodel submodel) || submodel.Brushes.Length == 0) return false;
         localBrushes = submodel.Brushes;
         toWorld = EntityMatrix.FromQuakeEntity(e.Origin, e.Angles);
+        return true;
+    }
+
+    // CL_TraceBox: "if (solid == SOLID_BSP || type == MOVE_HITMODEL) model = CL_GetModelFromEdict(touch)"
+    // for a model that is not a map submodel, with the pitch of an alias model turned the other way
+    // (CL_GetPitchSign).
+    bool TraceService.IEntityProvider.TryGetEntityMeshModel(Entity e, MoveFilter filter, out CollisionMesh? mesh, out EntityMatrix toWorld)
+    {
+        mesh = null;
+        toWorld = EntityMatrix.Identity;
+        if (_host is not { } host || (mesh = _models.Get(host.ModelNameOf(e.Index))) is null) return false;
+        toWorld = EntityMatrix.FromQuakeEntity(e.Origin, new Vector3(-e.Angles.X, e.Angles.Y, e.Angles.Z));
         return true;
     }
 

@@ -3,14 +3,13 @@
 // World_UnlinkEdict, World_UnlinkAll, World_EntitiesInBox (the area grid); collision.c
 // Collision_CombineTraces (which entity a trace names); model_brush.c Mod_Q3BSP_Load (the yaw and
 // rotated bounds of a brush model) and Mod_BSP_GetPVS / Mod_BSP_BoxTouchingPVS.
-// Collision_ClipExtendPrepare / Collision_ClipExtendFinish (the lengthened trace) and model_brush.c
-// Mod_CollisionBIH_TraceLine / TraceBox / TracePoint as far as they choose what a line, a box and a
-// point are tested against (brushes and patch triangles; brushes and one-sided patch triangles;
-// brushes alone).
-// The sweep itself (Collision_TraceBrushBrushFloat, Collision_ClipToGenericEntity) is
-// VortexArena.Engine.Collision.TraceService, which this drives - the same library the client half's
-// BspLegacyWorld drives, and the one the port's own player physics was validated on. The map's
-// curved surfaces are not that library's: see SvPatchCollision.
+// The sweep itself (Collision_TraceBrushBrushFloat, Collision_ClipToGenericEntity), what a box, a
+// line and a point are each tested against (Mod_CollisionBIH_TraceBox / TraceLine / TracePoint), the
+// map's curved surfaces as DarkPlaces' collision triangles, the hierarchy that orders the leaves and
+// the lengthened trace (Collision_ClipExtendPrepare / Finish) are VortexArena.Engine.Collision -
+// TraceService on a world built with BspCollisionOptions.DarkPlaces - which this drives. It is the
+// same library, built the same way, that the client half's BspLegacyWorld drives; the native game
+// uses it with its own defaults.
 using System.Buffers;
 using System.Numerics;
 using VortexArena.Common.Framework;
@@ -68,15 +67,13 @@ public readonly record struct SvModelBounds(QcVector NormalMins, QcVector Normal
 /// <remarks>
 /// Knowing deviations from DarkPlaces, all about what is clipped rather than how:
 /// <list type="bullet">
-/// <item>MOVE_HITMODEL clips an entity as its box; DarkPlaces traces the model's triangles. Likewise
-/// a SOLID_BSP entity whose model is not a map submodel.</item>
-/// <item>A curved surface that belongs to a brush-model entity (a door with a curved panel) stops a
-/// line from both sides; DarkPlaces' patch triangles stop a line from the front only, which is what
-/// the world's do here.</item>
-/// <item><c>trace_dpstartcontents</c> is the contents at the start <em>point</em>.</item>
+/// <item>A SOLID_BSP entity whose model is not a map submodel, and any entity under MOVE_HITMODEL,
+/// is clipped against its model's triangles as DarkPlaces clips it - at the model's first frame,
+/// whatever frame the entity shows, and only for MD3 and IQM models (<see cref="SvModelCollision"/>);
+/// one of another format, or refused by that class's bounds, is clipped as its box.</item>
 /// <item>startdepth / startdepthnormal (<see cref="StartDepth"/>) are measured on the faces of each
 /// brush and of the box; DarkPlaces also tries the cross products of their edges. Against a rotated
-/// brush-model entity no depth is measured.</item>
+/// brush-model or mesh-model entity no depth is measured.</item>
 /// </list>
 /// </remarks>
 public sealed class SvWorld : TraceService.IEntityProvider
@@ -102,21 +99,20 @@ public sealed class SvWorld : TraceService.IEntityProvider
     private SvFieldOffsets? _f;
     private Func<int, string?>? _modelNameOf;
 
-    // Two views of the map, because DarkPlaces tests three kinds of trace against different things
-    // (Mod_CollisionBIH_TraceBox / TraceLine / TracePoint): a box against brushes and patch triangles;
-    // a line against brushes, and against patch triangles from their front side only; a point against
-    // brushes alone ("collision triangle - skipped because they have no volume").
-    private CollisionWorld? _collision;   // brushes and patch triangles: box sweeps, start depth
-    private CollisionWorld? _brushWorld;  // brushes alone: lines, points, contents
+    // The map as DarkPlaces collides with it: brushes and patch triangles in one world, found through
+    // its bounding interval hierarchy. The trace library tests a box against both, a line against the
+    // brushes and the front of the triangles, a point against the brushes alone.
+    private CollisionWorld? _collision;
     private readonly List<Brush> _depthBrushes = new();
-    private readonly List<Brush> _lineBrushes = new();
-    private Dictionary<Brush, int> _leafRank = new();
-    private Comparison<Brush>? _byLeafRank;
-    private TraceService? _worldTrace;    // world brushes and patch triangles
-    private TraceService? _trace;         // the same and the program's entities
-    private TraceService? _worldLine;     // world brushes only
-    private TraceService? _line;          // world brushes and the program's entities
+    private TraceService? _worldTrace;    // the world
+    private TraceService? _trace;         // the world and the program's entities
     private TraceService? _entityTrace;   // the entities alone, over an empty world
+    private readonly SvModelCollision _models;
+    private readonly CollisionBih.Walker _depthWalker = new();
+    private readonly List<int> _depthLeaves = new();
+    private readonly Brush _depthTriangle = DarkPlacesPatchCollision.NewScratchTriangle();
+    /// <summary>The static collision world (brushes and patch triangles), for a tool that asks it questions of its own.</summary>
+    public CollisionWorld? Collision => _collision;
     /// <summary>Patch collision triangles in the world model (BIH_COLLISIONTRIANGLE leaves).</summary>
     public int PatchTriangles { get; private set; }
     private BspPvs? _pvs;
@@ -152,7 +148,14 @@ public sealed class SvWorld : TraceService.IEntityProvider
 
     private enum MonsterFilter { All, Without, Only }
 
-    public SvWorld(VirtualFileSystem files) => _files = files ?? throw new ArgumentNullException(nameof(files));
+    public SvWorld(VirtualFileSystem files)
+    {
+        _files = files ?? throw new ArgumentNullException(nameof(files));
+        _models = new SvModelCollision(files);
+    }
+
+    /// <summary>The collision meshes of the level's non-brush models (crates, barrels), loaded as traces meet them.</summary>
+    public SvModelCollision ModelCollision => _models;
 
     /// <summary>The map that is loaded ("maps/x.bsp"), or null.</summary>
     public string? MapName { get; private set; }
@@ -182,21 +185,18 @@ public sealed class SvWorld : TraceService.IEntityProvider
         {
             byte[] file = _files.ReadBytes(worldModel);
             BspData bsp = BspReader.Read(file);
-            // The shared builder is given the map without its faces, so it makes brushes and no patch
-            // slabs; the curved surfaces are added as DarkPlaces' own collision triangles.
-            BspData brushesOnly = new() { Version = bsp.Version, Textures = bsp.Textures, Planes = bsp.Planes, Models = bsp.Models, Brushes = bsp.Brushes, BrushSides = bsp.BrushSides };
-            BspCollisionBuilder.Result built = BspCollisionBuilder.Build(brushesOnly);
-            List<Brush>[] patches = SvPatchCollision.Build(bsp, file);
+            // Brushes, the curved surfaces as DarkPlaces' own collision triangles, and its hierarchy over both.
+            BspCollisionBuilder.Result built = BspCollisionBuilder.Build(bsp, null, BspCollisionOptions.DarkPlaces(file));
             Bsp = bsp;
-            foreach (BspCollisionBuilder.Submodel submodel in built.Submodels)
-            {
-                int index = submodel.Name.Length > 1 && int.TryParse(submodel.Name.AsSpan(1), out int n) ? n : -1;
-                _submodels[submodel.Name] = index > 0 && index < patches.Length && patches[index].Count > 0
-                    ? submodel with { Brushes = submodel.Brushes.Concat(patches[index]).ToArray() }
-                    : submodel;
-            }
+            foreach (BspCollisionBuilder.Submodel submodel in built.Submodels) _submodels[submodel.Name] = submodel;
             _pvs = new BspPvs(bsp);
-            if (bsp.Models.Length > 0)
+            if (built.DarkPlacesWorldBounds is { } worldBounds)
+            {
+                // normalmins / normalmaxs of the world model: the model lump's box, enlarged to hold what the model draws
+                _worldMins = worldBounds.Mins;
+                _worldMaxs = worldBounds.Maxs;
+            }
+            else if (bsp.Models.Length > 0)
             {
                 _worldMins = bsp.Models[0].Mins;
                 _worldMaxs = bsp.Models[0].Maxs;
@@ -206,21 +206,13 @@ public sealed class SvWorld : TraceService.IEntityProvider
                 _worldMins = built.World.WorldMins;
                 _worldMaxs = built.World.WorldMaxs;
             }
-            CollisionWorld full = new();
-            full.AddBrushes(built.World.Brushes);
-            full.AddBrushes(patches[0]);
-            full.BuildGrid();
-            PatchTriangles = patches[0].Count;
-            _leafRank = SvBihOrder.Rank(full.Brushes, SvPatchCollision.IsTriangle);
-            _collision = full;
-            _brushWorld = built.World;
-            _worldTrace = new TraceService(full);
-            _trace = new TraceService(full, this);
-            _worldLine = new TraceService(built.World);
-            _line = new TraceService(built.World, this);
+            PatchTriangles = built.PatchTriangles;
+            _collision = built.World;
+            _worldTrace = new TraceService(built.World) { DarkPlacesArithmetic = true };
+            _trace = new TraceService(built.World, this) { DarkPlacesArithmetic = true };
             CollisionWorld empty = new();
             empty.BuildGrid();
-            _entityTrace = new TraceService(empty, this);
+            _entityTrace = new TraceService(empty, this) { DarkPlacesArithmetic = true };
             MapName = worldModel;
             SetupGrid();
             return true;
@@ -238,9 +230,9 @@ public sealed class SvWorld : TraceService.IEntityProvider
         MapName = null;
         Bsp = null;
         LoadError = null;
-        _worldTrace = _trace = _worldLine = _line = _entityTrace = null;
-        _collision = _brushWorld = null;
-        _leafRank = new Dictionary<Brush, int>();
+        _worldTrace = _trace = _entityTrace = null;
+        _collision = null;
+        _models.Clear();
         PatchTriangles = 0;
         _pvs = null;
         _submodels.Clear();
@@ -266,14 +258,14 @@ public sealed class SvWorld : TraceService.IEntityProvider
         maxs = Q(_worldMaxs);
     }
 
-    /// <summary>The bounds of map submodel "*N" (N at least 1), as the BSP's model lump has them.</summary>
+    /// <summary>The bounds of map submodel "*N" (N at least 1): its normalmins / normalmaxs, which are the
+    /// map's model lump enlarged to hold everything the submodel draws.</summary>
     public bool TryGetSubmodelBounds(string name, out QcVector mins, out QcVector maxs)
     {
         mins = maxs = default;
-        if (Bsp is null || name.Length < 2 || name[0] != '*' || !int.TryParse(name.AsSpan(1), out int index)) return false;
-        if (index <= 0 || index >= Bsp.Models.Length) return false;
-        mins = Q(Bsp.Models[index].Mins);
-        maxs = Q(Bsp.Models[index].Maxs);
+        if (name.Length < 2 || name[0] != '*' || !_submodels.TryGetValue(name, out BspCollisionBuilder.Submodel submodel)) return false;
+        mins = Q(submodel.Mins);
+        maxs = Q(submodel.Maxs);
         return true;
     }
 
@@ -301,32 +293,23 @@ public sealed class SvWorld : TraceService.IEntityProvider
         Traces++;
         SvTrace result = new() { Fraction = 1, EndPos = end, Ent = -1 };
         QcVm? vm = _vm;
-        if (_trace is null || _worldTrace is null || _entityTrace is null || _line is null || _worldLine is null) return result;
+        if (_trace is null || _worldTrace is null || _entityTrace is null) return result;
 
         Vector3 vStart = V(start), vEnd = V(end), vMins = V(mins), vMaxs = V(maxs);
         if (!IsFinite(vStart) || !IsFinite(vEnd) || !IsFinite(vMins) || !IsFinite(vMaxs)) return result;
 
         // SV_TraceBox: "if (VectorCompare(mins, maxs))" the box is a point - shifted by mins - and the
         // trace is SV_TracePoint when it does not move, SV_TraceLine when it does.
-        bool isPoint = vMins == vMaxs;
-        bool isLine = isPoint && (vStart != vEnd);
-        TraceService service = isPoint ? _line : _trace, worldService = isPoint ? _worldLine : _worldTrace;
+        // (The trace library makes the same distinction for what it tests a point against.)
+        TraceService service = _trace, worldService = _worldTrace;
 
-        result.StartContents = BspLegacyWorld.ContentsFromEngine(_worldLine.PointContents(vStart + (isPoint ? vMins : Vector3.Zero)));
         int engineMask = BspLegacyWorld.ContentsToEngine(hitContentsMask);
         // A mask with none of the known bits can stop on nothing.
         if (engineMask == 0) return result;
 
         // Collision_ClipExtendPrepare: "make the trace longer according to the extend parameter"
-        Vector3 realDelta = vEnd - vStart;
-        float realLength = realDelta.Length(), scaleToExtend = 1.0f;
-        Vector3 extendEnd = vEnd;
-        if (realLength != 0 && extend != 0 && float.IsFinite(extend) && float.IsFinite(realLength))
-        {
-            scaleToExtend = (realLength + extend) / realLength;
-            extendEnd = vStart + scaleToExtend * realDelta;
-            if (!IsFinite(extendEnd)) { extendEnd = vEnd; scaleToExtend = 1.0f; }
-        }
+        TraceExtension extension = TraceExtension.Prepare(vStart, vEnd, extend);
+        Vector3 extendEnd = extension.ExtendEnd;
 
         // A trace made from inside another trace's entity loop (it cannot happen today: nothing here
         // calls back into the program) would share the mirrors; refuse rather than corrupt them.
@@ -345,11 +328,12 @@ public sealed class SvWorld : TraceService.IEntityProvider
             _passMirror.Owner = null;
 
             TraceResult hit;
-            int hitEdict = -1;
+            int hitEdict = -1, startContents;
             if (type == MoveWorldOnly || vm is null)
             {
                 hit = worldService.Trace(vStart, vMins, vMaxs, extendEnd, MoveFilter.WorldOnly, _passMirror);
                 result.WorldStartSolid = result.BModelStartSolid = hit.StartSolid;
+                startContents = worldService.LastStartContents;
             }
             else if (type == MoveMissile)
             {
@@ -359,9 +343,11 @@ public sealed class SvWorld : TraceService.IEntityProvider
                 _monsters = MonsterFilter.Without;
                 hit = service.Trace(vStart, vMins, vMaxs, extendEnd, MoveFilter.Normal, _passMirror);
                 hitEdict = EdictOf(hit);
+                startContents = service.LastStartContents;
                 _monsters = MonsterFilter.Only;
                 Vector3 grow = new(15, 15, 15);
                 TraceResult monster = _entityTrace.Trace(vStart, vMins - grow, vMaxs + grow, extendEnd, MoveFilter.Normal, _passMirror);
+                startContents |= _entityTrace.LastStartContents;
                 bool startSolid = hit.StartSolid || monster.StartSolid, allSolid = hit.AllSolid || monster.AllSolid;
                 if (monster.Fraction < hit.Fraction && monster.PlaneNormal != Vector3.Zero)
                 {
@@ -377,53 +363,15 @@ public sealed class SvWorld : TraceService.IEntityProvider
                 MoveFilter filter = type == MoveNoMonsters ? MoveFilter.NoMonsters : type == MoveHitModel ? MoveFilter.HitModel : MoveFilter.Normal;
                 hit = service.Trace(vStart, vMins, vMaxs, extendEnd, filter, _passMirror);
                 hitEdict = EdictOf(hit);
+                startContents = service.LastStartContents;
             }
-
-            // Mod_CollisionBIH_TraceLine's BIH_COLLISIONTRIANGLE case: a line is also stopped by the
-            // world's patch triangles, from their front side, if that is nearer than what it has hit.
-            if (isLine && PatchTriangles > 0 && _collision is { } full)
-            {
-                Vector3 lineStart = vStart + vMins, lineEnd = extendEnd + vMins;
-                SvPatchCollision.LineHit line = new() { Fraction = hit.Fraction };
-                _lineBrushes.Clear();
-                full.Query(Vector3.Min(lineStart, lineEnd) - Vector3.One, Vector3.Max(lineStart, lineEnd) + Vector3.One, _lineBrushes);
-                foreach (Brush brush in _lineBrushes)
-                    if (SvPatchCollision.IsTriangle(brush) && (brush.Contents & engineMask) != 0)
-                        SvPatchCollision.TraceLineTriangle(ref line, lineStart, lineEnd, brush);
-                if (line.Triangle is { } triangle)
-                {
-                    hit.Fraction = line.Fraction;
-                    hit.PlaneNormal = line.PlaneNormal;
-                    hit.PlaneDist = line.PlaneDist;
-                    hit.DpHitContents = triangle.Contents;
-                    hit.DpHitQ3SurfaceFlags = triangle.SurfaceFlags;
-                    hit.DpHitTextureName = triangle.Texture;
-                    hitEdict = 0;
-                }
-            }
+            // trace.startsupercontents: everything the box starts inside, of any contents
+            result.StartContents = BspLegacyWorld.ContentsFromEngine(startContents);
 
             // Collision_ClipExtendFinish
+            bool clearedByExtend = extension.Finish(ref hit);
             float fraction = hit.Fraction;
-            bool clearedByExtend = false;
-            if (fraction != 1.0f)
-            {
-                // undo the extended trace length
-                fraction *= scaleToExtend;
-                // "if the extended trace hit something that the unextended trace did not hit (even
-                // considering the collision_impactnudge), then we have to clear the hit information"
-                if (fraction > 1.0f)
-                {
-                    clearedByExtend = true;
-                    hitEdict = -1;
-                    hit.DpHitQ3SurfaceFlags = 0;
-                    hit.DpHitContents = 0;
-                    hit.DpHitTextureName = null;
-                    hit.PlaneNormal = Vector3.Zero;
-                    hit.PlaneDist = 0;
-                }
-            }
-            // clamp things
-            fraction = Math.Clamp(fraction, 0, 1);
+            if (clearedByExtend) hitEdict = -1;
 
             if (hit.StartSolid && type != MoveWorldOnly && vm is not null)
             {
@@ -441,7 +389,7 @@ public sealed class SvWorld : TraceService.IEntityProvider
 
             result.Fraction = fraction;
             // "calculate the end position"
-            result.EndPos = Q(vStart + fraction * realDelta);
+            result.EndPos = Q(hit.EndPos);
             result.AllSolid = hit.AllSolid;
             result.StartSolid = hit.StartSolid;
             result.PlaneNormal = Q(hit.PlaneNormal);
@@ -551,10 +499,9 @@ public sealed class SvWorld : TraceService.IEntityProvider
         Vector3 bestNormal = default;
         float best = 0;
         _depthBrushes.Clear();
+        // The world's hierarchy hands the leaves over in DarkPlaces' order, which matters here: of two
+        // leaves the box is equally deep in, the first tested is kept.
         _collision.Query(o + lo, o + hi, _depthBrushes);
-        // In DarkPlaces' order: of two leaves the box is equally deep in, the first tested is kept.
-        _byLeafRank ??= (a, b) => _leafRank.GetValueOrDefault(a, int.MaxValue).CompareTo(_leafRank.GetValueOrDefault(b, int.MaxValue));
-        if (_depthBrushes.Count > 1) _depthBrushes.Sort(_byLeafRank);
         foreach (Brush brush in _depthBrushes)
             if ((brush.Contents & engineMask) != 0 && BrushDepth(brush, o, lo, hi, out float d, out Vector3 n))
             {
@@ -572,10 +519,32 @@ public sealed class SvWorld : TraceService.IEntityProvider
                 if (edict == passEdict || vm.FieldFloat(edict, f.Solid) != SolidBsp) continue;
                 if (passEdict != 0 && (edict == owner || vm.FieldInt(edict, f.Owner) == passEdict)) continue;
                 string? model = _modelNameOf(edict);
-                if (model is null || !_submodels.TryGetValue(model, out BspCollisionBuilder.Submodel submodel)) continue;
+                if (model is null) continue;
                 QcVector angles = vm.FieldVector(edict, f.Angles);
                 if (angles.X != 0 || angles.Y != 0 || angles.Z != 0) continue;
                 Vector3 local = o - V(vm.FieldVector(edict, f.Origin));
+                if (!_submodels.TryGetValue(model, out BspCollisionBuilder.Submodel submodel))
+                {
+                    // A mesh model: the triangles its hierarchy puts at the box, each as the brush
+                    // Collision_TraceBrushTriangleFloat makes of it. (One with no area has no planes to
+                    // measure a depth on and is passed over.)
+                    if (_models.Get(model) is not { } mesh) continue;
+                    Vector3 centre = (lo + hi) * 0.5f;
+                    _depthLeaves.Clear();
+                    mesh.Bih.QuerySwept(_depthWalker, local + centre, local + centre, lo - centre, hi - centre, _depthLeaves);
+                    foreach (int leaf in _depthLeaves)
+                    {
+                        CollisionMesh.Surface surface = mesh.Triangle(leaf, out Vector3 v0, out Vector3 v1, out Vector3 v2);
+                        if ((surface.Contents & engineMask) == 0) continue;
+                        if (!DarkPlacesPatchCollision.RefillTriangle(_depthTriangle, v0, v1, v2, surface.Contents, surface.SurfaceFlags, surface.Texture)) continue;
+                        if (BrushDepth(_depthTriangle, local, lo, hi, out float d, out Vector3 n))
+                        {
+                            bmodelStartSolid = true;
+                            if (d < best) { best = d; bestNormal = n; }
+                        }
+                    }
+                    continue;
+                }
                 foreach (Brush brush in submodel.Brushes)
                     if (brush is not null && (brush.Contents & engineMask) != 0 && BrushDepth(brush, local, lo, hi, out float d, out Vector3 n))
                     {
@@ -596,9 +565,25 @@ public sealed class SvWorld : TraceService.IEntityProvider
         normal = default;
         Vector3[] points = brush.Points;
         if (points.Length == 0) return false;
+        // The box as Collision_BrushForBox makes it: corners at start + mins and start + maxs.
+        Vector3 boxMins = origin + mins, boxMaxs = origin + maxs;
         foreach (BrushPlane side in brush.Sides)
         {
             Vector3 axis = side.Normal;
+            if (brush.IsTriangle)
+            {
+                // For a triangle the number is DarkPlaces' own, operation for operation
+                // (nearestplanedist_float of the box's eight corners less furthestplanedist_float of
+                // the triangle's three points, all in single precision). The depth is what the
+                // program moves an item by, at coordinates in the thousands a different order of the
+                // same sums differs in the third decimal, and two thousandths decide whether the
+                // move that follows clears the next triangle or stops dead against it (courtfun's
+                // item_shield, on a patch whose collision triangles do not quite meet).
+                float distance = NearestCorner(axis, boxMins, boxMaxs) - Furthest(axis, points);
+                if (distance >= 0) return false;
+                if (distance > depth) { depth = distance; normal = axis; }
+                continue;
+            }
             // nearest point of the box along the axis, less the furthest point of the brush
             float nearest = Vector3.Dot(axis, origin) + (axis.X > 0 ? mins.X : maxs.X) * axis.X + (axis.Y > 0 ? mins.Y : maxs.Y) * axis.Y + (axis.Z > 0 ? mins.Z : maxs.Z) * axis.Z;
             // The brush's furthest point along its own face normal lies on that face, so the plane's
@@ -612,7 +597,7 @@ public sealed class SvWorld : TraceService.IEntityProvider
         }
         Vector3 bMins = points[0], bMaxs = points[0];
         foreach (Vector3 p in points) { bMins = Vector3.Min(bMins, p); bMaxs = Vector3.Max(bMaxs, p); }
-        if (SvPatchCollision.IsTriangle(brush))
+        if (brush.IsTriangle)
         {
             // A patch triangle is not an AABB brush and has no AABB planes, so DarkPlaces tests it on
             // every axis (the fast case of Collision_TraceBrushBrushFloat does not apply): the box's
@@ -629,9 +614,7 @@ public sealed class SvWorld : TraceService.IEntityProvider
                         Vector3 axis = flip != 0 ? Vector3.Cross(boxDir, edge) : Vector3.Cross(edge, boxDir);
                         if (axis.LengthSquared() < 1.0f / 4194304.0f) continue;   // COLLISION_EDGECROSS_MINLENGTH2: degenerate crossproducts
                         axis = Vector3.Normalize(axis);
-                        float furthest = MathF.Max(Vector3.Dot(axis, points[0]), MathF.Max(Vector3.Dot(axis, points[1]), Vector3.Dot(axis, points[2])));
-                        float nearest = Vector3.Dot(axis, origin) + (axis.X > 0 ? mins.X : maxs.X) * axis.X + (axis.Y > 0 ? mins.Y : maxs.Y) * axis.Y + (axis.Z > 0 ? mins.Z : maxs.Z) * axis.Z;
-                        if (nearest - furthest >= 0) return false;
+                        if (NearestCorner(axis, boxMins, boxMaxs) - Furthest(axis, points) >= 0) return false;
                     }
             return true;
         }
@@ -653,6 +636,30 @@ public sealed class SvWorld : TraceService.IEntityProvider
         return true;
     }
 
+    // DotProduct, as the C writes it: three products summed left to right in single precision.
+    private static float Dot(Vector3 a, Vector3 b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+
+    // nearestplanedist_float over the eight points of Collision_BrushForBox, in its order.
+    private static float NearestCorner(Vector3 axis, Vector3 lo, Vector3 hi)
+    {
+        float nearest = Dot(new Vector3(lo.X, lo.Y, lo.Z), axis);
+        nearest = MathF.Min(nearest, Dot(new Vector3(hi.X, lo.Y, lo.Z), axis));
+        nearest = MathF.Min(nearest, Dot(new Vector3(lo.X, hi.Y, lo.Z), axis));
+        nearest = MathF.Min(nearest, Dot(new Vector3(hi.X, hi.Y, lo.Z), axis));
+        nearest = MathF.Min(nearest, Dot(new Vector3(lo.X, lo.Y, hi.Z), axis));
+        nearest = MathF.Min(nearest, Dot(new Vector3(hi.X, lo.Y, hi.Z), axis));
+        nearest = MathF.Min(nearest, Dot(new Vector3(lo.X, hi.Y, hi.Z), axis));
+        return MathF.Min(nearest, Dot(new Vector3(hi.X, hi.Y, hi.Z), axis));
+    }
+
+    // furthestplanedist_float
+    private static float Furthest(Vector3 axis, Vector3[] points)
+    {
+        float furthest = Dot(points[0], axis);
+        for (int i = 1; i < points.Length; i++) furthest = MathF.Max(furthest, Dot(points[i], axis));
+        return furthest;
+    }
+
     /// <summary>
     /// SV_PointSuperContents: the world's contents at a point, plus those of every SOLID_BSP entity
     /// whose brush model holds it (sv_gameplayfix_swiminbmodels, default 1).
@@ -660,14 +667,14 @@ public sealed class SvWorld : TraceService.IEntityProvider
     public int PointSuperContents(QcVector point)
     {
         Vector3 p = V(point);
-        if (_line is null || !IsFinite(p) || _traceDepth != 0) return 0;
+        if (_trace is null || !IsFinite(p) || _traceDepth != 0) return 0;
         _traceDepth++;
         try
         {
             _passEdict = _passOwner = _passClipGroup = _onlyEdict = 0;
             _monsters = MonsterFilter.All;
             // SV_PointSuperContents asks the world model's PointSuperContents: brushes, never patch triangles
-            return BspLegacyWorld.ContentsFromEngine(_line.PointContents(p));
+            return BspLegacyWorld.ContentsFromEngine(_trace.PointContents(p));
         }
         finally { _traceDepth--; }
     }
@@ -1087,6 +1094,18 @@ public sealed class SvWorld : TraceService.IEntityProvider
         if (!_submodels.TryGetValue(model, out BspCollisionBuilder.Submodel submodel) || submodel.Brushes.Length == 0) return false;
         localBrushes = submodel.Brushes;
         toWorld = EntityMatrix.FromQuakeEntity(e.Origin, e.Angles);
+        return true;
+    }
+
+    // SV_TraceBox: "if (solid == SOLID_BSP || type == MOVE_HITMODEL) model = SV_GetModelFromEdict(touch)"
+    // for a model that is not a map submodel, and "pitchsign = SV_GetPitchSign(prog, touch)": an alias
+    // model's pitch turns the other way.
+    bool TraceService.IEntityProvider.TryGetEntityMeshModel(Entity e, MoveFilter filter, out CollisionMesh? mesh, out EntityMatrix toWorld)
+    {
+        mesh = null;
+        toWorld = EntityMatrix.Identity;
+        if (_modelNameOf is null || (mesh = _models.Get(_modelNameOf(e.Index))) is null) return false;
+        toWorld = EntityMatrix.FromQuakeEntity(e.Origin, new Vector3(-e.Angles.X, e.Angles.Y, e.Angles.Z));
         return true;
     }
 

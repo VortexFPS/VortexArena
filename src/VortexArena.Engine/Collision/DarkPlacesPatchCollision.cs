@@ -5,13 +5,14 @@
 // data_collisionelement3i) and Mod_MakeCollisionBIH (which surfaces become BIH_COLLISIONTRIANGLE
 // leaves); model_shared.c Mod_SnapVertices, Mod_RemoveDegenerateTriangles; collision.c
 // Collision_TraceBrushTriangleFloat (the brush it builds: Collision_SnapCopyPoints,
-// Collision_CalcPlanesForTriangleBrushFloat) and Collision_TraceLineTriangleFloat.
+// Collision_CalcPlanesForTriangleBrushFloat) and Collision_TraceLineTriangleFloat; model_brush.c
+// Mod_Q3BSP_Load ("enlarge the bounding box to enclose all geometry of this model": ModelBounds, with
+// the visual half of Mod_Q3BSP_LoadFaces' tessellation, PATCH_LOD_VISUAL).
 using System.Buffers.Binary;
 using System.Numerics;
-using VortexArena.Engine.Collision;
 using VortexArena.Formats.Bsp;
 
-namespace VortexArena.Legacy.Server;
+namespace VortexArena.Engine.Collision;
 
 /// <summary>
 /// Collision geometry for a Q3 map's curved surfaces ("patches"), built exactly as DarkPlaces builds
@@ -24,20 +25,25 @@ namespace VortexArena.Legacy.Server;
 ///
 /// Every one of those choices is visible to the game: where an item dropped onto a curved floor
 /// comes to rest, whether a spawn point beside a curved wall is "in solid", what the program's
-/// DropToFloor and move-out-of-solid passes do to both. The port's shared collision builder
-/// (VortexArena.Engine.Collision.BspCollisionBuilder) makes thick slabs from its own finer
-/// tessellation instead, which suits the native game and puts things in different places than a
-/// DarkPlaces server does; so the server builds its patch collision here and gives the shared
-/// builder a map without patches.
+/// DropToFloor and move-out-of-solid passes do to both. <see cref="BspCollisionBuilder"/> makes
+/// thick slabs from its own finer tessellation by default, which is what the native game was tuned
+/// on and puts things in different places than a DarkPlaces server does; asked for
+/// <see cref="PatchCollisionMode.DarkPlacesTriangles"/> it uses these triangles instead. Legacy
+/// mode (a Xonotic server program, or a client predicting against one) always asks for them.
+///
+/// A triangle is a <see cref="Brush"/> with <see cref="Brush.IsTriangle"/> set; <see cref="TraceService"/>
+/// sweeps a box against it as against any brush, sends a line to <see cref="TraceLineTriangle(ref LineHit, Vector3, Vector3, Brush)"/>
+/// and leaves it out of point tests.
 ///
 /// Not ported: surfaces whose shader says dpmeshcollisions (MATERIALFLAG_MESHCOLLISIONS: collide with
 /// the drawn triangles) - the shader scripts are not read here; stock Xonotic maps do not use it.
 /// </summary>
-internal static class SvPatchCollision
+public static class DarkPlacesPatchCollision
 {
     // model_brush.c: mod_q3bsp_curves_subdivisions_tolerance / _mintess / _maxtess / _maxvertices
     // (the dedicated-server limit: "cls.state == ca_dedicated ? mod_q3bsp_curves_subdivisions_maxvertices")
     private const float CollisionTolerance = 15;
+    private const float RenderTolerance = 4;   // r_subdivisions_tolerance (mintess 0, maxtess 1024 likewise)
     private const int MinTess = 0, MaxTess = 1024, MaxVertices = 4225;
     private const int MaxTessellatedVertices = 65536;   // r_subdivisions_maxvertices, used here as a hard bound
     private const int MaxTriangles = 4_000_000;         // on the whole map
@@ -53,7 +59,7 @@ internal static class SvPatchCollision
     }
 
     /// <summary>A brush made by <see cref="Build"/> for one collision triangle: two face planes and three side planes around three points.</summary>
-    public static bool IsTriangle(Brush brush) => brush.Sides.Length == 5 && brush.Points.Length == 3;
+    public static bool IsTriangle(Brush brush) => brush.IsTriangle;
 
     /// <summary>
     /// The collision triangles of every patch in the map, as brushes, per inline model: index 0 is
@@ -65,7 +71,107 @@ internal static class SvPatchCollision
         int models = Math.Max(1, bsp.Models.Length);
         List<Brush>[] result = new List<Brush>[models];
         for (int i = 0; i < models; i++) result[i] = new List<Brush>();
+        List<Patch> patches = ChoosePatches(bsp, file, CollisionTolerance);
 
+        // Second pass: tessellate, snap, drop degenerate triangles, make the brushes.
+        int triangles = 0;
+        foreach (Patch patch in patches)
+        {
+            BspFace face = bsp.Faces[patch.Face];
+            BspTexture texture = bsp.Textures[face.TextureIndex];
+            int contents = SuperContents.FromQ3Native(texture.ContentFlags);
+            // A triangle of contents nothing can ask for is never hit; it need not exist.
+            if (contents == 0) continue;
+
+            BoundTessellation(patch);
+            int finalWidth = DimForTess(patch.XSize, patch.XTess), finalHeight = DimForTess(patch.YSize, patch.YTess);
+            if (finalWidth < 2 || finalHeight < 2 || (long)finalWidth * finalHeight > MaxTessellatedVertices) continue;
+            if (triangles > MaxTriangles) break;
+            float[] vertices = new float[finalWidth * finalHeight * 3];
+            Tessellate(vertices, patch.XSize, patch.YSize, patch.Vertices, patch.XTess, patch.YTess);
+            int[] elements = new int[(finalWidth - 1) * (finalHeight - 1) * 6];
+            TriangleElements(elements, finalWidth, finalHeight);
+            // Mod_SnapVertices(3, finalvertices, surfacecollisionvertex3f, 1): floor to whole units
+            for (int v = 0; v < vertices.Length; v++) vertices[v] = (float)Math.Floor(vertices[v] * 1.0);
+
+            List<Brush> into = result[ModelOfFace(bsp, patch.Face)];
+            for (int t = 0; t + 2 < elements.Length; t += 3)
+            {
+                Vector3 v0 = Vertex(vertices, elements[t]), v1 = Vertex(vertices, elements[t + 1]), v2 = Vertex(vertices, elements[t + 2]);
+                // Mod_RemoveDegenerateTriangles: "a degenerate triangle is one with no width"
+                if (Vector3.Cross(v1 - v0, v2 - v0).LengthSquared() < 0.001f) continue;
+                if (TriangleBrush(v0, v1, v2, contents, texture.SurfaceFlags, texture.ShaderName) is { } brush)
+                {
+                    into.Add(brush);
+                    triangles++;
+                }
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// model_t.normalmins / normalmaxs of the map's models as Mod_Q3BSP_Load leaves them: the box
+    /// from the map's model lump, then "enlarge[d] ... to enclose all geometry of this model, because
+    /// q3map2 sometimes lies (mostly to affect the lightgrid)" - every vertex of every face the model
+    /// draws, a curved surface counting as the vertices DarkPlaces tessellates it into for drawing
+    /// (r_subdivisions_tolerance 4, neighbours settled together as for collision). Index 0 is the
+    /// world: its box is sv.world.mins / maxs, what a QuakeC program reads as world.mins / world.maxs
+    /// and the box the server's area grid is laid over.
+    /// </summary>
+    public static (Vector3 Mins, Vector3 Maxs)[] ModelBounds(BspData bsp, ReadOnlySpan<byte> file)
+    {
+        (Vector3 Mins, Vector3 Maxs)[] bounds = new (Vector3, Vector3)[bsp.Models.Length];
+        for (int m = 0; m < bounds.Length; m++) bounds[m] = (bsp.Models[m].Mins, bsp.Models[m].Maxs);
+        if (bounds.Length == 0) return bounds;
+        void Add(int face, Vector3 v)
+        {
+            int m = ModelOfFace(bsp, face);
+            if (!float.IsFinite(v.X) || !float.IsFinite(v.Y) || !float.IsFinite(v.Z)) return;
+            bounds[m] = (Vector3.Min(bounds[m].Mins, v), Vector3.Max(bounds[m].Maxs, v));
+        }
+        Dictionary<int, Patch> patches = new();
+        foreach (Patch patch in ChoosePatches(bsp, file, RenderTolerance)) patches[patch.Face] = patch;
+        for (int i = 0; i < bsp.Faces.Length; i++)
+        {
+            BspFace face = bsp.Faces[i];
+            if (face.TextureIndex < 0 || face.TextureIndex >= bsp.Textures.Length) continue;
+            if (face.Type == BspFaceType.Patch)
+            {
+                if (!patches.TryGetValue(i, out Patch? patch)) continue;
+                BoundTessellation(patch);
+                int width = DimForTess(patch.XSize, patch.XTess), height = DimForTess(patch.YSize, patch.YTess);
+                if (width < 2 || height < 2 || (long)width * height > MaxTessellatedVertices) continue;
+                float[] vertices = new float[width * height * 3];
+                Tessellate(vertices, patch.XSize, patch.YSize, patch.Vertices, patch.XTess, patch.YTess);
+                for (int v = 0; v < width * height; v++) Add(i, Vertex(vertices, v));
+            }
+            else if (face.Type is BspFaceType.Flat or BspFaceType.Mesh)
+            {
+                if (face.FirstVertex < 0 || (long)face.FirstVertex + face.VertexCount > bsp.Vertices.Length) continue;
+                for (int v = 0; v < face.VertexCount; v++) Add(i, bsp.Vertices[face.FirstVertex + v].Position);
+            }
+        }
+        return bounds;
+    }
+
+    // Not DarkPlaces': a bound on what one patch may allocate. The tessellation level comes from
+    // the patch's own coordinates, and a map file - which on the client side may be one a server
+    // sent - can ask for millions of vertices per patch. No real curve comes near this (a
+    // tolerance of 15 units gives the stock maps levels of 0 to 3).
+    private static void BoundTessellation(Patch patch)
+    {
+        while ((long)DimForTess(patch.XSize, patch.XTess) * DimForTess(patch.YSize, patch.YTess) > MaxTessellatedVertices && (patch.XTess > 1 || patch.YTess > 1))
+        {
+            if (patch.XTess >= patch.YTess) patch.XTess--;
+            else patch.YTess--;
+        }
+    }
+
+    // Mod_Q3BSP_LoadFaces' first loop and its "Fix patches tesselations so that they make no seams"
+    // pass, for one level of detail: which faces are sound patches, and how finely each is cut.
+    private static List<Patch> ChoosePatches(BspData bsp, ReadOnlySpan<byte> file, float tolerance)
+    {
         RawLump faceLump = bsp.RawLumps.Length > (int)BspLump.Faces ? bsp.RawLumps[(int)BspLump.Faces] : default;
         bool haveRaw = !faceLump.IsEmpty && faceLump.Offset >= 0 && (long)faceLump.Offset + faceLump.Length <= file.Length
             && faceLump.Length / FaceRecordSize == bsp.Faces.Length;
@@ -91,8 +197,8 @@ internal static class SvPatchCollision
             }
             // "lower quality collision patches! Same procedure as before, but different cvars";
             // bound to user settings, then to sanity settings
-            patch.XTess = Math.Clamp(Math.Clamp(TessellationOnX(w, h, patch.Vertices, CollisionTolerance), MinTess, MaxTess), 0, 1024);
-            patch.YTess = Math.Clamp(Math.Clamp(TessellationOnY(w, h, patch.Vertices, CollisionTolerance), MinTess, MaxTess), 0, 1024);
+            patch.XTess = Math.Clamp(Math.Clamp(TessellationOnX(w, h, patch.Vertices, tolerance), MinTess, MaxTess), 0, 1024);
+            patch.YTess = Math.Clamp(Math.Clamp(TessellationOnY(w, h, patch.Vertices, tolerance), MinTess, MaxTess), 0, 1024);
             if (haveRaw)
             {
                 ReadOnlySpan<byte> bounds = file.Slice(faceLump.Offset + i * FaceRecordSize + FaceLodBoundsOffset, 24);
@@ -124,49 +230,7 @@ internal static class SvPatchCollision
         }
         while (again && ++rounds < 4096);   // each round raises a tessellation that is bounded by 1024
 
-        // Second pass: tessellate, snap, drop degenerate triangles, make the brushes.
-        int triangles = 0;
-        foreach (Patch patch in patches)
-        {
-            BspFace face = bsp.Faces[patch.Face];
-            BspTexture texture = bsp.Textures[face.TextureIndex];
-            int contents = SuperContents.FromQ3Native(texture.ContentFlags);
-            // A triangle of contents nothing can ask for is never hit; it need not exist.
-            if (contents == 0) continue;
-
-            // Not DarkPlaces': a bound on what one patch may allocate. The tessellation level comes from
-            // the patch's own coordinates, and a map file - which on the client side may be one a server
-            // sent - can ask for millions of vertices per patch. No real curve comes near this (a
-            // tolerance of 15 units gives the stock maps levels of 0 to 3).
-            while ((long)DimForTess(patch.XSize, patch.XTess) * DimForTess(patch.YSize, patch.YTess) > MaxTessellatedVertices && (patch.XTess > 1 || patch.YTess > 1))
-            {
-                if (patch.XTess >= patch.YTess) patch.XTess--;
-                else patch.YTess--;
-            }
-            int finalWidth = DimForTess(patch.XSize, patch.XTess), finalHeight = DimForTess(patch.YSize, patch.YTess);
-            if (finalWidth < 2 || finalHeight < 2 || (long)finalWidth * finalHeight > MaxTessellatedVertices) continue;
-            if (triangles > MaxTriangles) break;
-            float[] vertices = new float[finalWidth * finalHeight * 3];
-            Tessellate(vertices, patch.XSize, patch.YSize, patch.Vertices, patch.XTess, patch.YTess);
-            int[] elements = new int[(finalWidth - 1) * (finalHeight - 1) * 6];
-            TriangleElements(elements, finalWidth, finalHeight);
-            // Mod_SnapVertices(3, finalvertices, surfacecollisionvertex3f, 1): floor to whole units
-            for (int v = 0; v < vertices.Length; v++) vertices[v] = (float)Math.Floor(vertices[v] * 1.0);
-
-            List<Brush> into = result[ModelOfFace(bsp, patch.Face)];
-            for (int t = 0; t + 2 < elements.Length; t += 3)
-            {
-                Vector3 v0 = Vertex(vertices, elements[t]), v1 = Vertex(vertices, elements[t + 1]), v2 = Vertex(vertices, elements[t + 2]);
-                // Mod_RemoveDegenerateTriangles: "a degenerate triangle is one with no width"
-                if (Vector3.Cross(v1 - v0, v2 - v0).LengthSquared() < 0.001f) continue;
-                if (TriangleBrush(v0, v1, v2, contents, texture.SurfaceFlags, texture.ShaderName) is { } brush)
-                {
-                    into.Add(brush);
-                    triangles++;
-                }
-            }
-        }
-        return result;
+        return patches;
     }
 
     private static Vector3 Vertex(float[] vertices, int index) => new(vertices[index * 3], vertices[index * 3 + 1], vertices[index * 3 + 2]);
@@ -397,17 +461,60 @@ internal static class SvPatchCollision
     /// </summary>
     public static Brush? TriangleBrush(Vector3 v0, Vector3 v1, Vector3 v2, int contents, int surfaceFlags, string? texture)
     {
+        Brush brush = NewScratchTriangle();
+        return RefillTriangle(brush, v0, v1, v2, contents, surfaceFlags, texture) ? brush : null;
+    }
+
+    /// <summary>An empty triangle brush for <see cref="RefillTriangle"/> to fill, again and again.</summary>
+    public static Brush NewScratchTriangle() =>
+        new(new BrushPlane[5], new Vector3[3], new Vector3[3], 0, 0, isAabb: false, texture: null) { IsTriangle = true };
+
+    private static readonly BrushPlane[] NoPlanes = Array.Empty<BrushPlane>();
+
+    /// <summary>
+    /// <see cref="TriangleBrush"/> into a brush that already exists (made by <see cref="NewScratchTriangle"/>),
+    /// without allocating: DarkPlaces builds this brush on its stack for every triangle of a model's
+    /// mesh it tests, and so does <see cref="TraceService"/>. False for a triangle with no area
+    /// ("there's no point in processing a degenerate triangle (GIGO - Garbage In, Garbage Out)":
+    /// brush->numplanes = 0). The brush is then left with its three points and edges and no planes,
+    /// which is what DarkPlaces goes on to sweep against - the box's own planes and the edge cross
+    /// products can still find it.
+    /// </summary>
+    /// <param name="planes">The brush's own five-plane array, kept by the caller because a
+    /// degenerate triangle takes it out of <see cref="Brush.Sides"/>.</param>
+    public static bool RefillTriangle(Brush brush, Vector3 v0, Vector3 v1, Vector3 v2, int contents, int surfaceFlags, string? texture, BrushPlane[]? planes = null)
+    {
+        // Collision_SnapCopyPoints(..., COLLISION_SNAPSCALE, COLLISION_SNAP)
         Vector3 p0 = new(SnapPoint(v0.X), SnapPoint(v0.Y), SnapPoint(v0.Z));
         Vector3 p1 = new(SnapPoint(v1.X), SnapPoint(v1.Y), SnapPoint(v1.Z));
         Vector3 p2 = new(SnapPoint(v2.X), SnapPoint(v2.Y), SnapPoint(v2.Z));
-        // TriangleNormal(a, b, c, n): (a - b) x (c - b)
-        Vector3 normal = Vector3.Cross(p0 - p1, p2 - p1);
-        // "there's no point in processing a degenerate triangle (GIGO - Garbage In, Garbage Out)"
-        if (normal.LengthSquared() < 0.0001f) return null;
-        normal = Vector3.Normalize(normal);
-        float dist = Vector3.Dot(p0, normal);
         // edge directions are easy to calculate
         Vector3 edge0 = p2 - p0, edge1 = p0 - p1, edge2 = p1 - p2;
+        Vector3[] points = brush.Points, edges = brush.EdgeDirs;
+        points[0] = p0; points[1] = p1; points[2] = p2;
+        edges[0] = edge0; edges[1] = edge1; edges[2] = edge2;
+        brush.Contents = contents;
+        brush.SurfaceFlags = surfaceFlags;
+        brush.Texture = texture;
+        brush.IsAabb = false;
+        brush.IsTriangle = true;
+        // The broadphase box of a BIH_COLLISIONTRIANGLE leaf: the triangle's bounds grown by one unit.
+        brush.Mins = Vector3.Min(p0, Vector3.Min(p1, p2)) - Vector3.One;
+        brush.Maxs = Vector3.Max(p0, Vector3.Max(p1, p2)) + Vector3.One;
+
+        // TriangleNormal(a, b, c, n): (a - b) x (c - b). The planes are made with the C's own
+        // operations in the C's order (Cross, Dot and Normalize below): a plane that differs from
+        // DarkPlaces' in its last bit moves, at map coordinates, a start depth in its fourth decimal,
+        // and where an item sits on a ridge of two mirrored triangles that decides which side it is
+        // pushed off.
+        Vector3 normal = Cross(p0 - p1, p2 - p1);
+        if (!(Dot(normal, normal) >= 0.0001f))
+        {
+            brush.Sides = NoPlanes;
+            return false;
+        }
+        normal = Normalize(normal);
+        float dist = Dot(p0, normal);
 
         // collision_triangle_axialsides
         int best = 0;
@@ -418,28 +525,36 @@ internal static class SvPatchCollision
         Vector3 projectionNormal = best == 0 ? new Vector3(sign, 0, 0) : best == 1 ? new Vector3(0, sign, 0) : new Vector3(0, 0, sign);
         Vector3 n2 = SideNormal(edge0, projectionNormal, best), n3 = SideNormal(edge1, projectionNormal, best), n4 = SideNormal(edge2, projectionNormal, best);
 
-        BrushPlane[] sides =
-        {
-            new(normal, dist, surfaceFlags, contents, texture),
-            new(-normal, -dist, surfaceFlags, contents, texture),
-            new(n2, Vector3.Dot(p2, n2), surfaceFlags, contents, texture),
-            new(n3, Vector3.Dot(p0, n3), surfaceFlags, contents, texture),
-            new(n4, Vector3.Dot(p1, n4), surfaceFlags, contents, texture),
-        };
-        Brush brush = new(sides, new[] { p0, p1, p2 }, new[] { edge0, edge1, edge2 }, contents, surfaceFlags, isAabb: false, texture: texture);
-        // The broadphase box of a BIH_COLLISIONTRIANGLE leaf: the triangle's bounds grown by one unit.
-        brush.Mins -= Vector3.One;
-        brush.Maxs += Vector3.One;
-        return brush;
+        BrushPlane[] sides = planes ?? (brush.Sides.Length == 5 ? brush.Sides : new BrushPlane[5]);
+        sides[0] = new BrushPlane(normal, dist, surfaceFlags, contents, texture);
+        sides[1] = new BrushPlane(-normal, -dist, surfaceFlags, contents, texture);
+        sides[2] = new BrushPlane(n2, Dot(p2, n2), surfaceFlags, contents, texture);
+        sides[3] = new BrushPlane(n3, Dot(p0, n3), surfaceFlags, contents, texture);
+        sides[4] = new BrushPlane(n4, Dot(p1, n4), surfaceFlags, contents, texture);
+        brush.Sides = sides;
+        return true;
     }
 
     private static Vector3 SideNormal(Vector3 edge, Vector3 projectionNormal, int best)
     {
         if (best == 0) edge.X = 0; else if (best == 1) edge.Y = 0; else edge.Z = 0;
-        Vector3 normal = Vector3.Cross(edge, projectionNormal);
-        // VectorNormalize leaves a zero vector zero
-        float length = normal.Length();
-        return length > 0 ? normal / length : normal;
+        return Normalize(Cross(edge, projectionNormal));
+    }
+
+    // DotProduct: three products summed left to right.
+    private static float Dot(Vector3 a, Vector3 b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+
+    // CrossProduct
+    private static Vector3 Cross(Vector3 a, Vector3 b) => new(a.Y * b.Z - a.Z * b.Y, a.Z * b.X - a.X * b.Z, a.X * b.Y - a.Y * b.X);
+
+    // VectorNormalize: "float ilength = (float)DotProduct(v, v); if (ilength) ilength = 1.0f / sqrt(ilength)"
+    // - the square root and the division in double, the result a float each component is multiplied
+    // by. A zero vector stays zero.
+    private static Vector3 Normalize(Vector3 v)
+    {
+        float ilength = Dot(v, v);
+        if (ilength != 0) ilength = (float)(1.0 / Math.Sqrt(ilength));
+        return new Vector3(v.X * ilength, v.Y * ilength, v.Z * ilength);
     }
 
     /// <summary>What <see cref="TraceLineTriangle"/> found: the closest impact so far.</summary>
@@ -459,27 +574,36 @@ internal static class SvPatchCollision
     /// </summary>
     public static void TraceLineTriangle(ref LineHit trace, Vector3 lineStart, Vector3 lineEnd, Brush triangle)
     {
-        Vector3 point0 = triangle.Points[0], point1 = triangle.Points[1], point2 = triangle.Points[2];
+        if (TraceLineTriangle(ref trace, lineStart, lineEnd, triangle.Points[0], triangle.Points[1], triangle.Points[2])) trace.Triangle = triangle;
+    }
+
+    /// <summary>
+    /// The same against three points as they are - a model's mesh is tested unsnapped ("FIXME: snap
+    /// vertices?" in Collision_TraceLineTriangleMeshFloat). True if the triangle is now the closest
+    /// impact; <see cref="LineHit.Triangle"/> is not touched.
+    /// </summary>
+    public static bool TraceLineTriangle(ref LineHit trace, Vector3 lineStart, Vector3 lineEnd, Vector3 point0, Vector3 point1, Vector3 point2)
+    {
         // calculate the faceplanenormal of the triangle, this represents the front side
         Vector3 edge01 = point0 - point1, edge21 = point2 - point1;
         Vector3 facePlaneNormal = Vector3.Cross(edge01, edge21);
         float facePlaneNormalLength2 = Vector3.Dot(facePlaneNormal, facePlaneNormal);
-        if (facePlaneNormalLength2 < 0.0001f) return;
+        if (facePlaneNormalLength2 < 0.0001f) return false;
         float facePlaneDist = Vector3.Dot(point0, facePlaneNormal);
 
         // if start point is on the back side there is no collision
         float d1 = Vector3.Dot(facePlaneNormal, lineStart);
-        if (d1 <= facePlaneDist) return;
+        if (d1 <= facePlaneDist) return false;
         // if both are in front, there is no collision
         float d2 = Vector3.Dot(facePlaneNormal, lineEnd);
-        if (d2 >= facePlaneDist) return;
+        if (d2 >= facePlaneDist) return false;
 
         // the line starts infront and ends behind, passing through it
         float d = 1.0f / (d1 - d2);
         float f = (d1 - facePlaneDist) * d;
         float f2 = f - Collision.ImpactNudge * d;
         // skip out if this impact is further away than previous ones
-        if (f2 >= trace.Fraction) return;
+        if (f2 >= trace.Fraction) return false;
         // calculate the perfect impact point for classification of insidedness
         Vector3 impact = new(lineStart.X + f * (lineEnd.X - lineStart.X), lineStart.Y + f * (lineEnd.Y - lineStart.Y), lineStart.Z + f * (lineEnd.Z - lineStart.Z));
 
@@ -487,12 +611,12 @@ internal static class SvPatchCollision
         // away from the triangle; because of the way the insidedness comparison is written it does
         // not need to be normalized)
         Vector3 edgeNormal = Vector3.Cross(edge01, facePlaneNormal);
-        if (Vector3.Dot(impact, edgeNormal) > Vector3.Dot(point1, edgeNormal)) return;
+        if (Vector3.Dot(impact, edgeNormal) > Vector3.Dot(point1, edgeNormal)) return false;
         edgeNormal = Vector3.Cross(facePlaneNormal, edge21);
-        if (Vector3.Dot(impact, edgeNormal) > Vector3.Dot(point2, edgeNormal)) return;
+        if (Vector3.Dot(impact, edgeNormal) > Vector3.Dot(point2, edgeNormal)) return false;
         Vector3 edge02 = point0 - point2;
         edgeNormal = Vector3.Cross(facePlaneNormal, edge02);
-        if (Vector3.Dot(impact, edgeNormal) > Vector3.Dot(point0, edgeNormal)) return;
+        if (Vector3.Dot(impact, edgeNormal) > Vector3.Dot(point0, edgeNormal)) return false;
 
         // store the new trace fraction and plane (because collisions only happen from the front this
         // is always simply the triangle normal, never flipped)
@@ -500,6 +624,6 @@ internal static class SvPatchCollision
         d = 1.0f / MathF.Sqrt(facePlaneNormalLength2);
         trace.PlaneNormal = facePlaneNormal * d;
         trace.PlaneDist = facePlaneDist * d;
-        trace.Triangle = triangle;
+        return true;
     }
 }

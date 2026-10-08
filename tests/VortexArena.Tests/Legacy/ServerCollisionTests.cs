@@ -15,9 +15,10 @@ namespace VortexArena.Tests.Legacy;
 /// The numbers asserted here were read off the reference server ("prvm_edicts server" and its console
 /// a few seconds after "map"): where the program's DropToFloor and move-out-of-solid passes leave
 /// items and spawn points depends on exactly how the engine collides with a map's curved surfaces
-/// (SvPatchCollision), how far it runs a trace past its end (collision_extend*), and in which order it
-/// tests the leaves a box starts in (SvBihOrder). Every test needs <c>../Base</c> and returns early
-/// without it.
+/// (Engine.Collision.DarkPlacesPatchCollision), how far it runs a trace past its end (collision_extend*:
+/// TraceExtension), and in which order it tests the leaves a box starts in (CollisionBih). Every test
+/// needs <c>../Base</c> and returns early without it. Traces recorded from that server by the thousand
+/// are checked in DarkPlacesTraceParityTests.
 /// </summary>
 public class ServerCollisionTests
 {

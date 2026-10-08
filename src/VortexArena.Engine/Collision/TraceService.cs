@@ -40,6 +40,23 @@ public sealed class TraceService : ITraceService
         /// aren't loaded and whose AABB is degenerate), in which case the caller uses the AABB sweep.
         /// </summary>
         bool TryGetEntityBrushModel(Entity e, out IReadOnlyList<Brush> localBrushes, out EntityMatrix toWorld);
+
+        /// <summary>
+        /// For an entity that <see cref="TryGetEntityBrushModel"/> declined: the triangle mesh of its model
+        /// (an MD3 / IQM / OBJ decoration that is SOLID_BSP, or any model when the move is MOVE_HITMODEL) and
+        /// the entity's local→world transform, so the trace clips against the model's shape instead of the
+        /// entity's box - DP's <c>SV_TraceBox</c>: "if (solid == SOLID_BSP || type == MOVE_HITMODEL) model =
+        /// SV_GetModelFromEdict(touch)", then <c>Collision_ClipToGenericEntity</c> → <c>model->TraceBox</c>
+        /// (<c>Mod_CollisionBIH_TraceBox</c> on the model's collision BIH). Only asked for SOLID_BSP entities
+        /// and under <see cref="MoveFilter.HitModel"/>. The default - and the native game's answer - is
+        /// false: such an entity is clipped as its box, as it always was here.
+        /// </summary>
+        bool TryGetEntityMeshModel(Entity e, MoveFilter filter, out CollisionMesh? mesh, out EntityMatrix toWorld)
+        {
+            mesh = null;
+            toWorld = EntityMatrix.Identity;
+            return false;
+        }
     }
 
     private readonly IEntityProvider? _entities;
@@ -48,6 +65,7 @@ public sealed class TraceService : ITraceService
     {
         _world = world;
         _entities = entities;
+        _meshTrianglePlanes = _meshTriangle.Sides;
     }
 
     /// <summary>
@@ -96,6 +114,64 @@ public sealed class TraceService : ITraceService
     // candidate is used immediately + never retained), instead of allocating a fresh Brush per entity per trace.
     // The dominant remaining sim.move allocation under bot/player clustering (many candidates per sweep).
     private readonly Brush _entBrush = Brush.FromBox(new Vector3(-1f, -1f, -1f), Vector3.One);
+
+    // Scratch for a mesh-model entity (ClipToMesh): the leaves of one walk of the model's hierarchy, and the
+    // one triangle brush that is refilled for each of them (DP builds it on the stack per triangle).
+    private readonly CollisionBih.Walker _meshWalker = new();
+    private readonly List<int> _meshLeaves = new(64);
+    private readonly Brush _meshTriangle = DarkPlacesPatchCollision.NewScratchTriangle();
+    private readonly BrushPlane[] _meshTrianglePlanes;
+
+    /// <summary>
+    /// How <see cref="MoveFilter.Missile"/> grows the moving box. DarkPlaces grows it by 15 units a side
+    /// ("size when clipping against monsters", sv_phys.c SV_TraceBox: clipmins2 / clipmaxs2) and uses the
+    /// grown box only against entities with FL_MONSTER - against everything else, players included, a
+    /// MOVE_MISSILE trace is a MOVE_NORMAL one. This port has always grown it against <em>every</em> entity,
+    /// which is the default (false) and what the native game runs. True is DarkPlaces' rule, with the
+    /// candidates gathered over the grown box as DarkPlaces gathers them.
+    ///
+    /// For trying DarkPlaces' rule on the whole native game without a code change, a process started with
+    /// the environment variable <see cref="MissileTrialVariable"/> set to <c>monsters</c> has it on in
+    /// every service it creates.
+    /// </summary>
+    public bool MissileGrowsOnlyAgainstMonsters { get; set; } = MissileTrial;
+
+    /// <summary>The environment variable read once for the initial value of <see cref="MissileGrowsOnlyAgainstMonsters"/>.</summary>
+    public const string MissileTrialVariable = "VORTEX_MISSILE_MARGIN";
+
+    private static readonly bool MissileTrial = ReadMissileTrial();
+
+    private static bool ReadMissileTrial()
+    {
+        try { return string.Equals(Environment.GetEnvironmentVariable(MissileTrialVariable)?.Trim(), "monsters", StringComparison.OrdinalIgnoreCase); }
+        catch (System.Security.SecurityException) { return false; }
+    }
+
+    /// <summary>
+    /// Sweep a box against a brush or a triangle with DarkPlaces' arithmetic, operation for operation
+    /// (<see cref="TraceBrushVsBrushExact"/>), and honour <see cref="Brush.HasAabbPlanes"/>. Off by default.
+    ///
+    /// The default sweep is the same algorithm with its sums taken in a different order: it projects the
+    /// box's corners relative to the box and adds the box's position, where DarkPlaces projects the corners
+    /// at their place in the world. In exact arithmetic the two are one number; in single precision, at map
+    /// coordinates in the thousands, they differ in the third decimal. That is far below anything a player
+    /// feels, and it is enough to put an item a QuakeC program nudges out of a wall on the other side of a
+    /// decision: whether a box 1/1000 of a unit from a triangle is touching it. Legacy mode, which must
+    /// place things where a DarkPlaces server does, turns this on; the native game has no such obligation.
+    /// </summary>
+    public bool DarkPlacesArithmetic { get; set; }
+
+    /// <summary>
+    /// trace_t.startsupercontents of the last <see cref="Trace"/>: the contents of every brush (and every
+    /// entity body) the moving box <em>started inside</em>, whatever the move's hit mask - what QuakeC reads
+    /// as <c>trace_dpstartcontents</c>. DP ORs it together in the started-inside branch of
+    /// Collision_TraceBrushBrushFloat ("trace->startsupercontents |= other_start->supercontents") and across
+    /// entities in Collision_CombineTraces. It is not the contents at the start <em>point</em>: a box with
+    /// one edge in a wall starts in SOLID though its origin is in the open, and Xonotic's
+    /// _Movetype_TestEntityPosition decides "stuck" on exactly that. (<see cref="TraceResult"/> has no field
+    /// for it, so it is kept here; valid until the next trace on this service.)
+    /// </summary>
+    public int LastStartContents { get; private set; }
 
     /// <summary>The cached read-only moving-box brush for a hull (allocated once per distinct mins/maxs).</summary>
     private Brush BoxBrush(Vector3 mins, Vector3 maxs)
@@ -157,6 +233,20 @@ public sealed class TraceService : ITraceService
         }
     }
 
+    /// <summary>
+    /// <see cref="Trace"/> as DarkPlaces runs one: traced <paramref name="extend"/> units further than asked
+    /// and cut back (<see cref="TraceExtension"/>; 1 for what QuakeC's traceline / tracebox do, 16 for the
+    /// engine's own entity moves). <paramref name="clearedByExtend"/> is true when the only impact lay in the
+    /// extra length and was discarded.
+    /// </summary>
+    public TraceResult TraceExtended(Vector3 start, Vector3 mins, Vector3 maxs, Vector3 end, MoveFilter filter, Entity? ignore, float extend, out bool clearedByExtend)
+    {
+        TraceExtension extension = TraceExtension.Prepare(start, end, extend);
+        TraceResult result = Trace(start, mins, maxs, extension.ExtendEnd, filter, ignore);
+        clearedByExtend = extension.Finish(ref result);
+        return result;
+    }
+
     private TraceResult TraceUnlocked(Vector3 start, Vector3 mins, Vector3 maxs, Vector3 end, MoveFilter filter, Entity? ignore)
     {
         // The moving trace box brush (cached per hull — see _boxCache). For a point trace (mins==maxs) it's a point brush.
@@ -186,8 +276,23 @@ public sealed class TraceService : ITraceService
         _candidates.Clear();
         _world.QuerySwept(start, end, mins, maxs, _candidates);
 
+        // A box of no size is a point, and DP does not sweep a point against a collision triangle
+        // (Mod_CollisionBIH_TraceLine / TracePoint): see ClipLineToTriangle. No world built by default has one.
+        bool pointBox = box.Sides.Length == 0;
+        bool exact = DarkPlacesArithmetic;
+        if (exact && !pointBox) SetExactBox(box, start, end);
         for (int i = 0; i < _candidates.Count; i++)
-            TraceBrushVsBrush(ref trace, box, start, end, _candidates[i], worldBrush: true, hitEnt: null);
+        {
+            Brush candidate = _candidates[i];
+            if (pointBox && candidate.IsTriangle)
+                ClipLineToTriangle(ref trace, start + mins, end + mins, candidate, hitEnt: null);
+            else if (exact && !pointBox)
+                TraceBrushVsBrushExact(ref trace, box, candidate, hitEnt: null);
+            else if (exact)
+                TraceLineVsBrushExact(ref trace, start + mins, end + mins, candidate, hitEnt: null);
+            else
+                TraceBrushVsBrush(ref trace, box, start, end, candidate, worldBrush: true, hitEnt: null);
+        }
 
         bool worldStartSolid = trace.StartSolid;
 
@@ -203,9 +308,18 @@ public sealed class TraceService : ITraceService
             }
             Brush entBox = (entMins == mins && entMaxs == maxs) ? box : BoxBrush(entMins, entMaxs);
 
-            ClipToEntities(ref trace, entBox, start, end, sweepMins, sweepMaxs, filter, ignore, mins, maxs);
+            if (MissileGrowsOnlyAgainstMonsters && filter == MoveFilter.Missile)
+            {
+                // DP: "create the bounding box of the entire move" from min(hullmins, clipmins2) / max(hullmaxs,
+                // clipmaxs2) - the grown box - and choose the box per entity in the loop.
+                SweptBounds(start, end, entMins, entMaxs, out sweepMins, out sweepMaxs);
+                ClipToEntities(ref trace, box, start, end, sweepMins, sweepMaxs, filter, ignore, mins, maxs, monsterBox: entBox);
+            }
+            else
+                ClipToEntities(ref trace, entBox, start, end, sweepMins, sweepMaxs, filter, ignore, mins, maxs);
         }
 
+        LastStartContents = trace.StartContents;
         return BuildResult(trace, start, end, worldStartSolid);
     }
 
@@ -240,7 +354,8 @@ public sealed class TraceService : ITraceService
         for (int i = 0; i < _candidates.Count; i++)
         {
             var b = _candidates[i];
-            if (b.ContainsPoint(point))
+            // "collision triangle - skipped because they have no volume" (Mod_CollisionBIH_TracePoint)
+            if (!b.IsTriangle && b.ContainsPoint(point))
                 contents |= b.Contents;
         }
 
@@ -267,7 +382,7 @@ public sealed class TraceService : ITraceService
                 for (int b = 0; b < localBrushes.Count; b++)
                 {
                     Brush mb = localBrushes[b];
-                    if (mb != null && mb.ContainsPoint(local))
+                    if (mb != null && !mb.IsTriangle && mb.ContainsPoint(local))
                         contents |= mb.Contents;
                 }
             }
@@ -281,9 +396,11 @@ public sealed class TraceService : ITraceService
     // =============================================================================================
 
     private void ClipToEntities(ref SweepState trace, Brush box, Vector3 start, Vector3 end,
-        Vector3 sweepMins, Vector3 sweepMaxs, MoveFilter filter, Entity? ignore, Vector3 pointMins, Vector3 pointMaxs)
+        Vector3 sweepMins, Vector3 sweepMaxs, MoveFilter filter, Entity? ignore, Vector3 pointMins, Vector3 pointMaxs,
+        Brush? monsterBox = null)
     {
         bool pointTrace = pointMins == pointMaxs;
+        Brush plainBox = box;
         // Broadphase (D1): only the entities whose footprint overlaps the swept AABB, not every solid entity.
         // The precise BoxesOverlap + Solid/filter tests below are unchanged, so the clipped set is identical.
         _entities!.EntitiesInBox(sweepMins, sweepMaxs, _entCandidates);
@@ -317,6 +434,11 @@ public sealed class TraceService : ITraceService
             if (!CollisionWorld.BoxesOverlap(sweepMins, sweepMaxs, absMin, absMax))
                 continue;
 
+            // (MissileGrowsOnlyAgainstMonsters) "if (type == MOVE_MISSILE && (int)flags & FL_MONSTER)" clip with
+            // clipmins2 / clipmaxs2, else with clipmins / clipmaxs.
+            if (monsterBox is not null)
+                box = (touch.Flags & EntFlags.Monster) != 0 ? monsterBox : plainBox;
+
             // SOLID_BSP brush-model entities (func_door/plat/breakable, rotating doors, etc.) clip against
             // the model's actual brush planes transformed into the entity's local space — DP's
             // SV_ClipMoveToEntity → Collision_ClipToGenericEntity. We only take this path when the entity
@@ -325,7 +447,42 @@ public sealed class TraceService : ITraceService
             if (touch.Solid == Solid.Bsp &&
                 _entities.TryGetEntityBrushModel(touch, out IReadOnlyList<Brush> localBrushes, out EntityMatrix toWorld))
             {
-                ClipToBrushModel(ref trace, box, start, end, localBrushes, toWorld, touch);
+                if (DarkPlacesArithmetic)
+                {
+                    SweepState own = new() { Fraction = 1f, HitMask = trace.HitMask };
+                    ClipToBrushModel(ref own, box, start, end, localBrushes, toWorld, touch);
+                    CombineTraces(ref trace, own, touch);
+                }
+                else
+                    ClipToBrushModel(ref trace, box, start, end, localBrushes, toWorld, touch);
+                continue;
+            }
+
+            // A model that is not made of brushes, where DP would trace it (a SOLID_BSP decoration; anything
+            // under MOVE_HITMODEL): its triangles. Only a provider that opts in answers true.
+            if ((touch.Solid == Solid.Bsp || filter == MoveFilter.HitModel) &&
+                _entities.TryGetEntityMeshModel(touch, filter, out CollisionMesh? mesh, out EntityMatrix meshToWorld) && mesh is not null)
+            {
+                // "model->TracePoint ... else Collision_ClipTrace_Point(bodymins, bodymaxs)": see CollisionMesh.PointUsesBodyBox
+                if (!(box.Sides.Length == 0 && start == end && mesh.PointUsesBodyBox))
+                {
+                    if (DarkPlacesArithmetic)
+                    {
+                        SweepState own = new() { Fraction = 1f, HitMask = trace.HitMask };
+                        ClipToMesh(ref own, box, start, end, mesh, meshToWorld, touch);
+                        CombineTraces(ref trace, own, touch);
+                    }
+                    else
+                        ClipToMesh(ref trace, box, start, end, mesh, meshToWorld, touch);
+                    continue;
+                }
+            }
+
+            if (DarkPlacesArithmetic)
+            {
+                SweepState own = new() { Fraction = 1f, HitMask = trace.HitMask };
+                ClipToEntityBoxExact(ref own, box, start, end, touch);
+                CombineTraces(ref trace, own, touch);
                 continue;
             }
 
@@ -372,7 +529,10 @@ public sealed class TraceService : ITraceService
         // no-rotation case the box is unchanged (the AABB fast path stays available); for a rotated brush
         // model the box becomes a fixed-orientation oriented box (rotation only — its position is supplied
         // by localStart/localEnd, matching TraceBrushVsBrush's Points-centred + Dot(axis, boxStart) model).
-        Brush localBox = inv.IsTranslationOnly ? box : box.Transform(inv.RotationOnly());
+        bool exactBox = DarkPlacesArithmetic && box.Sides.Length != 0;
+        Brush localBox;
+        if (exactBox) localBox = inv.IsTranslationOnly ? SetExactBox(box, localStart, localEnd) : SetExactBoxRotated(box, start, end, inv);
+        else localBox = inv.IsTranslationOnly ? box : box.Transform(inv.RotationOnly());
 
         for (int i = 0; i < localBrushes.Count; i++)
         {
@@ -385,7 +545,18 @@ public sealed class TraceService : ITraceService
             // plane by 'matrix' after the local trace).
             float prevFrac = trace.Fraction;
 
-            TraceBrushVsBrush(ref trace, localBox, localStart, localEnd, mb, worldBrush: false, hitEnt: hitEnt);
+            if (mb.IsTriangle && box.Sides.Length == 0)
+            {
+                // a point against a curved panel of the brush model: a line from its front, or nothing
+                // (the point's place in the model is the entity's inverse of start + its offset)
+                ClipLineToTriangle(ref trace, inv.TransformPoint(start + box.Points[0]), inv.TransformPoint(end + box.Points[0]), mb, hitEnt);
+            }
+            else if (exactBox)
+                TraceBrushVsBrushExact(ref trace, localBox, mb, hitEnt);
+            else if (DarkPlacesArithmetic)
+                TraceLineVsBrushExact(ref trace, inv.TransformPoint(start + box.Points[0]), inv.TransformPoint(end + box.Points[0]), mb, hitEnt);
+            else
+                TraceBrushVsBrush(ref trace, localBox, localStart, localEnd, mb, worldBrush: false, hitEnt: hitEnt);
 
             if (trace.Fraction < prevFrac)
             {
@@ -393,6 +564,112 @@ public sealed class TraceService : ITraceService
                 trace.PlaneNormal = wn;
                 trace.PlaneDist = wd;
             }
+        }
+    }
+
+    // =============================================================================================
+    // Collision triangles and mesh models — port of the BIH_COLLISIONTRIANGLE / BIH_RENDERTRIANGLE cases of
+    // Mod_CollisionBIH_TraceLineShared / Mod_CollisionBIH_TraceBrush / Mod_CollisionBIH_TracePoint
+    // (model_brush.c) and of Collision_ClipToGenericEntity / Collision_ClipLineToGenericEntity
+    // (collision.c) for a model whose TraceBox is Mod_CollisionBIH_TraceBox.
+    // =============================================================================================
+
+    /// <summary>
+    /// A point moving from <paramref name="lineStart"/> to <paramref name="lineEnd"/> against one collision
+    /// triangle (a <see cref="Brush.IsTriangle"/> brush, in the same space as the line):
+    /// Collision_TraceLineTriangleFloat, which stops a line that crosses the triangle from its front and lets
+    /// one from behind through. A point that does not move meets nothing.
+    /// </summary>
+    private static void ClipLineToTriangle(ref SweepState trace, Vector3 lineStart, Vector3 lineEnd, Brush triangle, Entity? hitEnt)
+    {
+        if (lineStart == lineEnd || triangle.Sides.Length == 0) return;
+        // "skip if this trace should not be blocked by these contents"
+        if ((trace.HitMask & triangle.Contents) == 0) return;
+        var line = new DarkPlacesPatchCollision.LineHit { Fraction = trace.Fraction };
+        if (!DarkPlacesPatchCollision.TraceLineTriangle(ref line, lineStart, lineEnd, triangle.Points[0], triangle.Points[1], triangle.Points[2]))
+            return;
+        // DP stores the nudged fraction as it is - it is below zero for a line that starts within the nudge
+        // distance of the triangle - and clamps when the trace is finished (BuildResult here).
+        trace.Fraction = line.Fraction;
+        trace.PlaneNormal = line.PlaneNormal;
+        trace.PlaneDist = line.PlaneDist;
+        trace.HitContents = triangle.Contents;
+        trace.HitSurfaceFlags = triangle.SurfaceFlags;
+        trace.HitTexture = triangle.Texture;
+        trace.Ent = hitEnt;
+        trace.Hit = true;
+    }
+
+    /// <summary>
+    /// Clip the move against a mesh-model entity. As in <see cref="ClipToBrushModel"/> the move is carried
+    /// into the entity's space and the impact plane back out; what is tested there is each triangle the
+    /// model's hierarchy puts near the move, in DP's order: for a box, the brush
+    /// Collision_TraceBrushTriangleFloat builds from it (points snapped to 1/32); for a moving point, the
+    /// triangle itself, unsnapped and from its front only; for a point at rest, nothing.
+    /// </summary>
+    private void ClipToMesh(ref SweepState trace, Brush box, Vector3 start, Vector3 end, CollisionMesh mesh, EntityMatrix toWorld, Entity hitEnt)
+    {
+        EntityMatrix inv = toWorld.Inverted();
+        _meshLeaves.Clear();
+
+        if (box.Sides.Length == 0)
+        {
+            // Mod_CollisionBIH_TracePoint_Mesh: a mesh has no volume for a point to be in
+            if (start == end) return;
+            Vector3 lineStart = inv.TransformPoint(start + box.Points[0]), lineEnd = inv.TransformPoint(end + box.Points[0]);
+            mesh.Bih.QuerySwept(_meshWalker, lineStart, lineEnd, Vector3.Zero, Vector3.Zero, _meshLeaves);
+            for (int i = 0; i < _meshLeaves.Count; i++)
+            {
+                CollisionMesh.Surface surface = mesh.Triangle(_meshLeaves[i], out Vector3 v0, out Vector3 v1, out Vector3 v2);
+                if ((trace.HitMask & surface.Contents) == 0) continue;
+                var line = new DarkPlacesPatchCollision.LineHit { Fraction = trace.Fraction };
+                if (!DarkPlacesPatchCollision.TraceLineTriangle(ref line, lineStart, lineEnd, v0, v1, v2)) continue;
+                trace.Fraction = line.Fraction;
+                // "transform plane" back to the world
+                (trace.PlaneNormal, trace.PlaneDist) = toWorld.TransformPositivePlane(line.PlaneNormal, line.PlaneDist);
+                trace.HitContents = surface.Contents;
+                trace.HitSurfaceFlags = surface.SurfaceFlags;
+                trace.HitTexture = surface.Texture;
+                trace.Ent = hitEnt;
+                trace.Hit = true;
+            }
+            return;
+        }
+
+        Vector3 localStart = inv.TransformPoint(start), localEnd = inv.TransformPoint(end);
+        // "we get here if TraceBrush exists, AND we have a rotation component": the box is turned into the
+        // model's space and swept as a brush; otherwise it stays the axis-aligned box it was.
+        bool exact = DarkPlacesArithmetic;
+        Brush localBox;
+        if (exact && !inv.IsTranslationOnly)
+        {
+            localBox = SetExactBoxRotated(box, start, end, inv);
+            // Mod_CollisionBIH_TraceBrush, "calculate tracebox-like parameters for efficient culling", from the
+            // bounds of the turned box at each end of the move
+            Bounds(_exactStart, out Vector3 startMins, out Vector3 startMaxs);
+            Bounds(_exactEnd, out Vector3 endMins, out Vector3 endMaxs);
+            Vector3 walkStart = (startMins + startMaxs) * 0.5f, walkEnd = (endMins + endMaxs) * 0.5f;
+            mesh.Bih.QuerySwept(_meshWalker, walkStart, walkEnd, Vector3.Min(startMins - walkStart, endMins - walkEnd), Vector3.Max(startMaxs - walkStart, endMaxs - walkEnd), _meshLeaves);
+        }
+        else
+        {
+            localBox = inv.IsTranslationOnly ? box : box.Transform(inv.RotationOnly());
+            if (exact) SetExactBox(box, localStart, localEnd);
+            // Mod_CollisionBIH_TraceBrush, "calculate tracebox-like parameters for efficient culling"
+            Vector3 centre = (localBox.Mins + localBox.Maxs) * 0.5f;
+            mesh.Bih.QuerySwept(_meshWalker, localStart + centre, localEnd + centre, localBox.Mins - centre, localBox.Maxs - centre, _meshLeaves);
+        }
+        for (int i = 0; i < _meshLeaves.Count; i++)
+        {
+            CollisionMesh.Surface surface = mesh.Triangle(_meshLeaves[i], out Vector3 v0, out Vector3 v1, out Vector3 v2);
+            DarkPlacesPatchCollision.RefillTriangle(_meshTriangle, v0, v1, v2, surface.Contents, surface.SurfaceFlags, surface.Texture, _meshTrianglePlanes);
+            float prevFrac = trace.Fraction;
+            if (exact)
+                TraceBrushVsBrushExact(ref trace, localBox, _meshTriangle, hitEnt);
+            else
+                TraceBrushVsBrush(ref trace, localBox, localStart, localEnd, _meshTriangle, worldBrush: false, hitEnt: hitEnt);
+            if (trace.Fraction < prevFrac)
+                (trace.PlaneNormal, trace.PlaneDist) = toWorld.TransformPositivePlane(trace.PlaneNormal, trace.PlaneDist);
         }
     }
 
@@ -567,6 +844,8 @@ public sealed class TraceService : ITraceService
         }
         else
         {
+            // "trace->startsupercontents |= other_start->supercontents": before the mask is asked (LastStartContents)
+            trace.StartContents |= other.Contents;
             // started inside the brush (no enter event): startsolid / allsolid bookkeeping.
             if ((trace.HitMask & other.Contents) != 0)
             {
@@ -578,6 +857,403 @@ public sealed class TraceService : ITraceService
                 // trace_dphittexturename reads trace->hittexture ONLY (prvm_cmds.c:5242), which is left NULL on
                 // a pure startsolid (no enter event sets it). So a started-inside trace reports DpHitTextureName
                 // == null — matching DP exactly. (trace->starttexture has no QC accessor and no port consumer.)
+            }
+        }
+    }
+
+    // =============================================================================================
+    // The same sweep in DarkPlaces' own arithmetic (DarkPlacesArithmetic) — Collision_TraceBrushBrushFloat
+    // (collision.c:559) line for line, for the case that neither brush turns during the move (the start and
+    // end planes of every axis are then the same plane, as in the sweep above). What differs from the sweep
+    // above is only which floating-point operations produce each number:
+    //   - the box's points are taken at their place in the world (Collision_BrushForBox of start + mins,
+    //     start + maxs), at the start and again at the end (SetExactBox), and each set is projected on the axis;
+    //   - a dot product is three products summed left to right;
+    //   - an edge cross product is normalised by multiplying with 1/sqrt, and one shorter than
+    //     COLLISION_EDGECROSS_MINLENGTH2 (1/4194304) is skipped;
+    //   - the impact plane is "startplane * (1 - enterfrac) + endplane * enterfrac";
+    //   - a brush with hasaabbplanes is tested on its own planes only;
+    //   - a brush the box starts in overwrites the trace's plane with the (zero) plane of no impact, as the
+    //     C's "VectorCopy(newimpactplane, trace->plane.normal)" does in its started-inside branch.
+    // =============================================================================================
+
+    private const float ExactEdgeCrossMinLength2 = 1.0f / 4194304.0f;
+
+    /// <summary>
+    /// Collision_CombineTraces (collision.c:1914): DP clips the move against each entity on its own - a fresh
+    /// trace that knows nothing of what the world or another entity stopped it at - and then "take[s] the
+    /// 'best' answers from the new trace". Two consequences the shared accumulator of the default sweep does
+    /// not have: an entity's impact counts only if its plane is not the zero vector (an impact followed, in
+    /// the same entity, by a brush the box starts inside has had its plane overwritten with zeros, and is
+    /// dropped); and such a start-inside cannot wipe the plane of an impact found elsewhere.
+    /// </summary>
+    private static void CombineTraces(ref SweepState clip, in SweepState trace, Entity touch)
+    {
+        if (trace.AllSolid) clip.AllSolid = true;
+        if (trace.StartSolid) clip.StartSolid = true;
+        if (trace.Fraction < clip.Fraction && DotExact(trace.PlaneNormal, trace.PlaneNormal) > 0)
+        {
+            clip.Fraction = trace.Fraction;
+            clip.PlaneNormal = trace.PlaneNormal;
+            clip.PlaneDist = trace.PlaneDist;
+            clip.Ent = touch;
+            clip.HitContents = trace.HitContents;
+            clip.HitSurfaceFlags = trace.HitSurfaceFlags;
+            clip.HitTexture = trace.HitTexture;
+            clip.Hit = true;
+        }
+        clip.StartContents |= trace.StartContents;
+    }
+
+    // The six planes of Collision_ClipTrace_Box / Collision_ClipTrace_Point, refilled per entity.
+    private readonly Brush _cbox = new(new BrushPlane[6], Array.Empty<Vector3>(), Array.Empty<Vector3>(), 0, 0, isAabb: true, texture: null);
+
+    /// <summary>
+    /// A box-shaped entity as DP clips against one: Collision_ClipTrace_Box (and Collision_ClipTrace_Point for
+    /// a point at rest), in the entity's own space - the move's ends less the entity's origin. The entity's
+    /// box is grown by the moving box ("cbox_planes[0].dist = cmaxs[0] - mins[0]" and so on) and the move's
+    /// origin is traced through it as a line; so a body of no size is still the size of the mover, and what
+    /// is compared are plane distances near zero rather than map coordinates.
+    /// </summary>
+    private void ClipToEntityBoxExact(ref SweepState trace, Brush box, Vector3 start, Vector3 end, Entity touch)
+    {
+        // the moving box's mins / maxs: a box brush keeps them as its bounds, a point brush as its point
+        Vector3 mins = box.Sides.Length == 0 ? box.Points[0] : box.Mins, maxs = box.Sides.Length == 0 ? box.Points[0] : box.Maxs;
+        bool point = box.Sides.Length == 0;
+        // SV_TraceBox hands a point over already shifted by its offset, as a box of no size
+        Vector3 offset = point ? mins : Vector3.Zero;
+        if (point) mins = maxs = Vector3.Zero;
+        Vector3 cmins = touch.Mins, cmaxs = touch.Maxs;
+        int contents = touch.Solid == Solid.Corpse ? SuperContents.Corpse : SuperContents.Body;
+        BrushPlane[] p = _cbox.Sides;
+        p[0] = new BrushPlane(new Vector3(1, 0, 0), cmaxs.X - mins.X, 0, contents, null);
+        p[1] = new BrushPlane(new Vector3(-1, 0, 0), maxs.X - cmins.X, 0, contents, null);
+        p[2] = new BrushPlane(new Vector3(0, 1, 0), cmaxs.Y - mins.Y, 0, contents, null);
+        p[3] = new BrushPlane(new Vector3(0, -1, 0), maxs.Y - cmins.Y, 0, contents, null);
+        p[4] = new BrushPlane(new Vector3(0, 0, 1), cmaxs.Z - mins.Z, 0, contents, null);
+        p[5] = new BrushPlane(new Vector3(0, 0, -1), maxs.Z - cmins.Z, 0, contents, null);
+        _cbox.Contents = contents;
+        // Matrix4x4_Transform by the inverse of a translation
+        Vector3 localStart = start + offset - touch.Origin, localEnd = end + offset - touch.Origin;
+        float prevFrac = trace.Fraction;
+        if (point && start == end) TracePointVsBrushExact(ref trace, localStart, _cbox);
+        else TraceLineVsBrushExact(ref trace, localStart, localEnd, _cbox, touch);
+        // "transform plane": by a translation, the normal stays and the distance moves with the origin
+        if (trace.Fraction < prevFrac) trace.PlaneDist += DotExact(trace.PlaneNormal, touch.Origin);
+    }
+
+    /// <summary>Collision_TraceLineBrushFloat (collision.c:760): a line against a brush, by its planes alone.</summary>
+    private static void TraceLineVsBrushExact(ref SweepState trace, Vector3 lineStart, Vector3 lineEnd, Brush other, Entity? hitEnt)
+    {
+        if (lineStart == lineEnd)
+        {
+            // Mod_CollisionBIH_TraceLine: "if (VectorCompare(start, end))" it is Mod_CollisionBIH_TracePoint
+            TracePointVsBrushExact(ref trace, lineStart, other);
+            return;
+        }
+        BrushPlane[] planes = other.Sides;
+        float enterfrac = -1, leavefrac = 1, enterfrac2 = -1;
+        Vector3 newImpactNormal = Vector3.Zero;
+        float newImpactDist = 0;
+        int hitSurfaceFlags = 0;
+        string? hitTexture = null;
+        for (int nplane = 0; nplane < planes.Length; nplane++)
+        {
+            Vector3 plane = planes[nplane].Normal;
+            float planeDist = planes[nplane].Dist;
+            float startdist = DotExact(lineStart, plane) - planeDist, enddist = DotExact(lineEnd, plane) - planeDist;
+            if (startdist > enddist)
+            {
+                // moving into brush
+                if (enddist > 0.0f) return;
+                if (startdist > 0)
+                {
+                    // enter
+                    float imove = 1 / (startdist - enddist);
+                    float f = startdist * imove;
+                    if (enterfrac < f)
+                    {
+                        enterfrac = f;
+                        if (enterfrac > leavefrac) return;
+                        enterfrac2 = (startdist - Collision.ImpactNudge) * imove;
+                        if (enterfrac2 >= trace.Fraction) return;
+                        float ie = 1.0f - enterfrac;
+                        newImpactNormal = new Vector3(plane.X * ie + plane.X * enterfrac, plane.Y * ie + plane.Y * enterfrac, plane.Z * ie + plane.Z * enterfrac);
+                        newImpactDist = planeDist * ie + planeDist * enterfrac;
+                        hitSurfaceFlags = planes[nplane].SurfaceFlags;
+                        hitTexture = planes[nplane].Texture;
+                    }
+                }
+            }
+            else
+            {
+                // moving out of brush
+                if (startdist > 0) return;
+                if (enddist > 0)
+                {
+                    // leave
+                    float f = startdist / (startdist - enddist);
+                    if (leavefrac > f)
+                    {
+                        leavefrac = f;
+                        if (enterfrac > leavefrac) return;
+                    }
+                }
+            }
+        }
+        if (enterfrac > -1)
+        {
+            // started outside, and overlaps, therefore there is a collision here
+            if ((trace.HitMask & other.Contents) != 0)
+            {
+                trace.HitContents = other.Contents;
+                trace.HitSurfaceFlags = hitSurfaceFlags;
+                trace.HitTexture = hitTexture;
+                trace.Fraction = Clamp01(enterfrac2);
+                trace.PlaneNormal = newImpactNormal;
+                trace.PlaneDist = newImpactDist;
+                trace.Ent = hitEnt;
+                trace.Hit = true;
+            }
+        }
+        else
+        {
+            // started inside, update startsolid and friends
+            trace.StartContents |= other.Contents;
+            if ((trace.HitMask & other.Contents) != 0)
+            {
+                trace.StartSolid = true;
+                if (leavefrac < 1) trace.AllSolid = true;
+                trace.PlaneNormal = newImpactNormal;
+                trace.PlaneDist = newImpactDist;
+            }
+        }
+    }
+
+    /// <summary>Collision_TracePointBrushFloat (collision.c:923): a point at rest is inside a brush it is behind
+    /// every plane of, and is then both startsolid and allsolid.</summary>
+    private static void TracePointVsBrushExact(ref SweepState trace, Vector3 point, Brush other)
+    {
+        BrushPlane[] planes = other.Sides;
+        for (int nplane = 0; nplane < planes.Length; nplane++)
+            if (DotExact(point, planes[nplane].Normal) - planes[nplane].Dist > 0) return;
+        trace.StartContents |= other.Contents;
+        if ((trace.HitMask & other.Contents) != 0)
+        {
+            trace.StartSolid = true;
+            trace.AllSolid = true;
+            trace.PlaneNormal = Vector3.Zero;
+            trace.PlaneDist = 0;
+        }
+    }
+
+    private static float DotExact(Vector3 a, Vector3 b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+
+    // The moving box's eight points at the start and at the end of the move, in the space the sweep runs in
+    // (trace_start->points / trace_end->points). Filled by SetExactBox / SetExactBoxRotated before a run of
+    // TraceBrushVsBrushExact calls against the brushes of one space.
+    private readonly Vector3[] _exactStart = new Vector3[8], _exactEnd = new Vector3[8];
+    private readonly Brush _exactRotatedBox = new(new BrushPlane[6], new Vector3[8], new Vector3[3], 0, 0, isAabb: false, texture: null);
+
+    // Collision_BrushForBox(start + mins, start + maxs) and the same at the end: the box where it is.
+    private Brush SetExactBox(Brush box, Vector3 start, Vector3 end)
+    {
+        Vector3[] points = box.Points;
+        for (int i = 0; i < 8; i++)
+        {
+            _exactStart[i] = points[i] + start;
+            _exactEnd[i] = points[i] + end;
+        }
+        return box;
+    }
+
+    /// <summary>
+    /// The box against a turned entity, as Collision_ClipToGenericEntity makes it ("we get here if TraceBrush
+    /// exists, AND we have a rotation component"): Collision_BrushForBox(mins, maxs), Collision_TranslateBrush
+    /// to each end of the move, Collision_TransformBrush by the entity's inverse matrix. The result is not
+    /// axis-aligned. Its edge directions are transformed as <em>points</em> - Collision_TransformBrush runs
+    /// them through Matrix4x4_Transform, translation and all - so they are not the box's edges at all, and
+    /// the edge cross products the sweep goes on to test are not the axes a correct test would use. That is
+    /// what a DarkPlaces server computes against every turned crate and door, so it is what this returns.
+    /// </summary>
+    private Brush SetExactBoxRotated(Brush box, Vector3 start, Vector3 end, in EntityMatrix inv)
+    {
+        Vector3[] points = box.Points;
+        for (int i = 0; i < 8; i++)
+        {
+            _exactStart[i] = inv.TransformPoint(points[i] + start);
+            _exactEnd[i] = inv.TransformPoint(points[i] + end);
+        }
+        Brush turned = _exactRotatedBox;
+        for (int i = 0; i < 6; i++)
+        {
+            // Matrix4x4_TransformPositivePlane: the normal turned (the distance is never read: the sweep
+            // measures the box by its points)
+            Vector3 n = box.Sides[i].Normal;
+            turned.Sides[i] = new BrushPlane(inv.TransformDirection(n), 0, box.Sides[i].SurfaceFlags, box.Sides[i].Contents, box.Sides[i].Texture);
+        }
+        for (int i = 0; i < 3; i++) turned.EdgeDirs[i] = inv.TransformPoint(box.EdgeDirs[i]);
+        for (int i = 0; i < 8; i++) turned.Points[i] = _exactStart[i];
+        Bounds(_exactStart, out turned.Mins, out turned.Maxs);
+        turned.IsAabb = false;
+        return turned;
+    }
+
+    private static void Bounds(Vector3[] points, out Vector3 mins, out Vector3 maxs)
+    {
+        mins = maxs = points[0];
+        for (int i = 1; i < points.Length; i++)
+        {
+            mins = Vector3.Min(mins, points[i]);
+            maxs = Vector3.Max(maxs, points[i]);
+        }
+    }
+
+    private void TraceBrushVsBrushExact(ref SweepState trace, Brush box, Brush other, Entity? hitEnt)
+    {
+        Vector3[] startPoints = _exactStart, endPoints = _exactEnd, otherPoints = other.Points;
+        if (otherPoints.Length == 0) return;
+        int traceEdgeDirs = box.EdgeDirs.Length;
+        int numplanes1 = other.Sides.Length;
+        int numplanes2 = numplanes1 + box.Sides.Length;
+        int numplanes3 = numplanes2 + traceEdgeDirs * other.EdgeDirs.Length * 2;
+        float enterfrac = -1, leavefrac = 1, enterfrac2 = -1;
+        Vector3 newImpactNormal = Vector3.Zero;
+        float newImpactDist = 0;
+        int hitSurfaceFlags = 0;
+        string? hitTexture = null;
+
+        // fast case for AABB vs compiled brushes
+        if (box.IsAabb && (other.IsAabb || other.HasAabbPlanes))
+            numplanes3 = numplanes2 = numplanes1;
+
+        for (int nplane = 0; nplane < numplanes3; nplane++)
+        {
+            Vector3 plane;
+            if (nplane < numplanes1) plane = other.Sides[nplane].Normal;
+            else if (nplane < numplanes2) plane = box.Sides[nplane - numplanes1].Normal;
+            else
+            {
+                // pick an edgedir from each brush and cross them
+                int nplane2 = nplane - numplanes2;
+                int nedge1 = nplane2 >> 1;
+                int nedge2 = nedge1 / traceEdgeDirs;
+                nedge1 -= nedge2 * traceEdgeDirs;
+                Vector3 a = (nplane2 & 1) != 0 ? box.EdgeDirs[nedge1] : other.EdgeDirs[nedge2];
+                Vector3 b = (nplane2 & 1) != 0 ? other.EdgeDirs[nedge2] : box.EdgeDirs[nedge1];
+                // CrossProduct
+                plane = new Vector3(a.Y * b.Z - a.Z * b.Y, a.Z * b.X - a.X * b.Z, a.X * b.Y - a.Y * b.X);
+                float length2 = DotExact(plane, plane);
+                if (length2 < ExactEdgeCrossMinLength2) continue;   // degenerate crossproducts
+                // VectorNormalize: "ilength = 1.0f / sqrt(ilength)", the division in double
+                float ilength = (float)(1.0 / Math.Sqrt(length2));
+                plane = new Vector3(plane.X * ilength, plane.Y * ilength, plane.Z * ilength);
+            }
+
+            // furthestplanedist_float(startplane, other_start->points)
+            float planeDist = DotExact(otherPoints[0], plane);
+            for (int i = 1; i < otherPoints.Length; i++)
+            {
+                float d = DotExact(otherPoints[i], plane);
+                if (planeDist < d) planeDist = d;
+            }
+            // nearestplanedist_float(startplane, trace_start->points) and (endplane, trace_end->points)
+            float startNearest = DotExact(startPoints[0], plane), endNearest = DotExact(endPoints[0], plane);
+            for (int i = 1; i < startPoints.Length; i++)
+            {
+                float ds = DotExact(startPoints[i], plane), de = DotExact(endPoints[i], plane);
+                if (startNearest > ds) startNearest = ds;
+                if (endNearest > de) endNearest = de;
+            }
+            float startdist = startNearest - planeDist, enddist = endNearest - planeDist;
+
+            if (startdist > enddist)
+            {
+                // moving into brush
+                if (enddist > 0.0f) return;
+                if (startdist >= 0)
+                {
+                    // enter
+                    float imove = 1 / (startdist - enddist);
+                    float f = startdist * imove;
+                    // check if this will reduce the collision time range
+                    if (enterfrac < f)
+                    {
+                        enterfrac = f;
+                        // if the collision time range is now empty, no collision
+                        if (enterfrac > leavefrac) return;
+                        // calculate the nudged fraction and impact normal we'll need if we accept this collision later
+                        enterfrac2 = (startdist - Collision.ImpactNudge) * imove;
+                        // if the collision would be further away than the trace's existing collision data, we don't care about this collision
+                        if (enterfrac2 >= trace.Fraction) return;
+                        float ie = 1.0f - enterfrac;
+                        newImpactNormal = new Vector3(plane.X * ie + plane.X * enterfrac, plane.Y * ie + plane.Y * enterfrac, plane.Z * ie + plane.Z * enterfrac);
+                        newImpactDist = planeDist * ie + planeDist * enterfrac;
+                        if (nplane < numplanes1)
+                        {
+                            // use the plane from other
+                            hitSurfaceFlags = other.Sides[nplane].SurfaceFlags;
+                            hitTexture = other.Sides[nplane].Texture;
+                        }
+                        else if (nplane < numplanes2)
+                        {
+                            // use the plane from trace
+                            hitSurfaceFlags = box.Sides[nplane - numplanes1].SurfaceFlags;
+                            hitTexture = box.Sides[nplane - numplanes1].Texture;
+                        }
+                        else
+                        {
+                            hitSurfaceFlags = other.SurfaceFlags;
+                            hitTexture = other.Texture;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // moving out of brush
+                if (startdist >= 0) return;
+                if (enddist > 0)
+                {
+                    // leave
+                    float f = startdist / (startdist - enddist);
+                    // check if this will reduce the collision time range
+                    if (leavefrac > f)
+                    {
+                        leavefrac = f;
+                        // if the collision time range is now empty, no collision
+                        if (enterfrac > leavefrac) return;
+                    }
+                }
+            }
+        }
+
+        // at this point we know the trace overlaps the brush because it was not rejected at any point in the loop above
+        if (enterfrac > -1)
+        {
+            // started outside, and overlaps, therefore there is a collision here
+            if ((trace.HitMask & other.Contents) != 0)
+            {
+                trace.HitContents = other.Contents;
+                trace.HitSurfaceFlags = hitSurfaceFlags;
+                trace.HitTexture = hitTexture;
+                trace.Fraction = Clamp01(enterfrac2);
+                trace.PlaneNormal = newImpactNormal;
+                trace.PlaneDist = newImpactDist;
+                trace.Ent = hitEnt;
+                trace.Hit = true;
+            }
+        }
+        else
+        {
+            // started inside, update startsolid and friends
+            trace.StartContents |= other.Contents;
+            if ((trace.HitMask & other.Contents) != 0)
+            {
+                trace.StartSolid = true;
+                if (leavefrac < 1) trace.AllSolid = true;
+                trace.PlaneNormal = newImpactNormal;
+                trace.PlaneDist = newImpactDist;
             }
         }
     }
@@ -658,8 +1334,12 @@ public sealed class TraceService : ITraceService
     private static TraceResult BuildResult(in SweepState s, Vector3 start, Vector3 end, bool worldStartSolid)
     {
         var r = TraceResult.Miss(end);
-        r.Fraction = s.Fraction;
-        r.EndPos = start + (end - start) * s.Fraction;
+        // (A line that hit a collision triangle from within the nudge distance carries a fraction below 0
+        // to here, as DP's does to Collision_ClipExtendFinish's "clamp things". Every other fraction is
+        // already in 0..1, so for a world without triangles this clamp changes no bit.)
+        float fraction = s.Fraction < 0f ? 0f : s.Fraction;
+        r.Fraction = fraction;
+        r.EndPos = start + (end - start) * fraction;
         r.AllSolid = s.AllSolid;
         r.StartSolid = s.StartSolid;
         if (s.Hit)
@@ -690,5 +1370,6 @@ public sealed class TraceService : ITraceService
         public int HitSurfaceFlags;
         public string? HitTexture;
         public int HitMask;
+        public int StartContents;
     }
 }

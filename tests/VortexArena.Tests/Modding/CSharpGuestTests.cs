@@ -70,7 +70,7 @@ public class CSharpGuestTests
     public void ACSharpMod_ImportsOnlyTheInterfaceAndTheWasiFunctionsTheSandboxAnswers()
     {
         if (GuestPath() is not { } path || !WasmModSandbox.IsAvailable) return;
-        using Engine engine = new();
+        using Wasmtime.Engine engine = new();
         using Module module = Module.FromBytes(engine, "guest", File.ReadAllBytes(path));
 
         // Anything else would be refused at load. Pinned so that a compiler upgrade which starts

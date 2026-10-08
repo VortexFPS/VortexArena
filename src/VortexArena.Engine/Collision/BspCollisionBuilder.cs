@@ -239,17 +239,28 @@ public static class BspCollisionBuilder
     /// <summary>Solve the intersection point of three planes (Cramer's rule); false if near-parallel.</summary>
     private static bool TryIntersect3(in BrushPlane a, in BrushPlane b, in BrushPlane c, out Vector3 point)
     {
-        Vector3 n1 = a.Normal, n2 = b.Normal, n3 = c.Normal;
-        Vector3 cross23 = Vector3.Cross(n2, n3);
-        float denom = Vector3.Dot(n1, cross23);
-        if (MathF.Abs(denom) < 1e-6f)
+        // In double precision, as DarkPlaces builds brush points (collision.c Collision_NewBrushFromPlanes
+        // clips with the PolygonD_* routines). In single precision the corners of a floor at z = -32 came
+        // out at -31.999998, so a box resting exactly on it traced as starting inside the brush where
+        // DarkPlaces says it does not. DarkPlaces does NOT snap these points to a grid (it snaps only
+        // triangle-mesh collision points); the fix is the precision of the arithmetic, not rounding.
+        double n1x = a.Normal.X, n1y = a.Normal.Y, n1z = a.Normal.Z;
+        double n2x = b.Normal.X, n2y = b.Normal.Y, n2z = b.Normal.Z;
+        double n3x = c.Normal.X, n3y = c.Normal.Y, n3z = c.Normal.Z;
+        double c23x = n2y * n3z - n2z * n3y, c23y = n2z * n3x - n2x * n3z, c23z = n2x * n3y - n2y * n3x;
+        double denom = n1x * c23x + n1y * c23y + n1z * c23z;
+        if (Math.Abs(denom) < 1e-6)
         {
             point = default;
             return false;
         }
-        Vector3 cross31 = Vector3.Cross(n3, n1);
-        Vector3 cross12 = Vector3.Cross(n1, n2);
-        point = (a.Dist * cross23 + b.Dist * cross31 + c.Dist * cross12) * (1f / denom);
+        double c31x = n3y * n1z - n3z * n1y, c31y = n3z * n1x - n3x * n1z, c31z = n3x * n1y - n3y * n1x;
+        double c12x = n1y * n2z - n1z * n2y, c12y = n1z * n2x - n1x * n2z, c12z = n1x * n2y - n1y * n2x;
+        double d1 = a.Dist, d2 = b.Dist, d3 = c.Dist;
+        point = new Vector3(
+            (float)((d1 * c23x + d2 * c31x + d3 * c12x) / denom),
+            (float)((d1 * c23y + d2 * c31y + d3 * c12y) / denom),
+            (float)((d1 * c23z + d2 * c31z + d3 * c12z) / denom));
         return true;
     }
 

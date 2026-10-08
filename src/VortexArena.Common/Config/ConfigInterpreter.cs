@@ -516,6 +516,19 @@ public sealed class ConfigInterpreter
         return sb.ToString();
     }
 
+    /// <summary>
+    /// When true (the default), <c>${$1}</c> resolves the inner reference first and reads the cvar it names,
+    /// as DarkPlaces does. Xonotic's own configuration relies on it: <c>alias makesaved "seta $1 \"${$1 ?}\""</c>
+    /// otherwise reads a cvar literally named "$1", which is empty, and blanks every cvar it touches.
+    ///
+    /// It began as an opt-in for legacy mode, where that blanking hid the first-person weapon
+    /// (r_drawviewmodel). Made the default on 2026-10-07 after running the native client's whole
+    /// configuration chain both ways: of 6,027 cvars exactly two changed, cl_maxfps_alwayssleep and
+    /// v_kicktime, each from "" to "0" - the same number. NestedReferenceDefaultTests pins that.
+    /// Settable so the old behaviour can still be compared against.
+    /// </summary>
+    public bool NestedReferences { get; set; } = true;
+
     /// <summary>Resolve the inside of a <c>$ref</c> / <c>${ref}</c> to its replacement text.</summary>
     private string ResolveRef(string inner, IReadOnlyList<string>? args)
     {
@@ -529,6 +542,14 @@ public sealed class ConfigInterpreter
             selector = inner.Substring(0, sp);
         if (selector.Length == 0)
             return "";
+
+        // DP Cmd_GetCvarValue "${$1}": the name of the cvar is itself a reference (Xonotic's
+        // `alias makesaved "seta $1 \"${$1 ?}\""`). Opt-in: see NestedReferences.
+        if (NestedReferences && selector.Length > 1 && selector[0] == '$')
+        {
+            string name = ResolveRef(selector.Substring(1), args);
+            return name.Length == 0 ? "" : _cvars.GetString(name);
+        }
 
         // All-arguments: $*  /  ${* asis}
         if (selector == "*")

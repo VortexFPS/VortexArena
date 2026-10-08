@@ -83,13 +83,13 @@ public class SimulationTickRateTests
         return world;
     }
 
+    // Through TestPaths, not a walk up from the binaries of its own: that walk finds nothing when the suite
+    // is built with an output directory outside the checkout (`dotnet test --artifacts-path`), and this
+    // test then failed for a reason that had nothing to do with the tick rate.
     private static string FindRepoRoot()
     {
-        string dir = System.AppContext.BaseDirectory;
-        while (dir is not null && !System.IO.File.Exists(System.IO.Path.Combine(dir, "VortexArena.csproj")))
-            dir = System.IO.Path.GetDirectoryName(dir)!;
-        Assert.NotNull(dir);
-        return dir!;
+        Assert.True(System.IO.File.Exists(System.IO.Path.Combine(TestPaths.RepoRoot, "VortexArena.csproj")), "repo root not found");
+        return TestPaths.RepoRoot;
     }
 
     [Fact]

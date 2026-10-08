@@ -241,9 +241,21 @@ internal static class TestPaths
     /// (<c>VortexArena.sln</c> → <c>VortexArena.sln</c>) and <c>.git</c> does not. It is a directory
     /// in a normal clone and a file in a worktree, so both are accepted.
     /// </summary>
-    private static string? FindRepoRoot()
+    private static string? FindRepoRoot() =>
+        WalkUpToGit(AppContext.BaseDirectory) ?? WalkUpToGit(SourceDirectory());
+
+    // Fallback for a build whose output lives outside the checkout (`dotnet test --artifacts-path <dir>`,
+    // which parallel work on one tree needs so builds do not collide). Walking up from the binaries then
+    // finds no .git, every content root comes back Unresolved, and every guarded real-data test returns
+    // early and PASSES - a green run that checked nothing. The compiler-recorded path of this file still
+    // names the checkout the tests were built from.
+    private static string SourceDirectory([System.Runtime.CompilerServices.CallerFilePath] string thisFile = "") =>
+        Path.GetDirectoryName(thisFile) ?? "";
+
+    private static string? WalkUpToGit(string start)
     {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        if (string.IsNullOrEmpty(start) || !Directory.Exists(start)) return null;
+        var dir = new DirectoryInfo(start);
         while (dir is not null)
         {
             string git = Path.Combine(dir.FullName, ".git");

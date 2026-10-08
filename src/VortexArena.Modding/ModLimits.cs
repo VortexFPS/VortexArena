@@ -7,7 +7,12 @@ namespace VortexArena.Modding;
 public sealed record ModLimits
 {
     /// <summary>Largest linear memory the guest may grow to. A <c>memory.grow</c> past it fails inside the guest.</summary>
-    public long MaxMemoryBytes { get; init; } = 64L * 1024 * 1024;
+    /// <remarks>
+    /// 128 MiB because of C#: the .NET runtime inside a NativeAOT-LLVM guest grows its memory to about
+    /// 50 MiB while starting up, before the mod has allocated anything (measured with the hello-hud
+    /// template). A Rust guest of the same mod needs a fraction of a megabyte.
+    /// </remarks>
+    public long MaxMemoryBytes { get; init; } = 128L * 1024 * 1024;
 
     /// <summary>Largest module accepted for compilation, before any of it is parsed.</summary>
     public long MaxModuleBytes { get; init; } = 16L * 1024 * 1024;

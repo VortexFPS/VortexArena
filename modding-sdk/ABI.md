@@ -95,7 +95,7 @@ Positions are in Quake units and Quake axes (x forward, y left, z up), as everyw
 |---|---|---|
 | Time per `mod_frame` / `mod_event` | 8 ms | The mod is disabled. |
 | Time for `_initialize`, `mod_init`, `mod_shutdown` | 2 s | The mod is disabled (or fails to load). |
-| Linear memory | 64 MiB | `memory.grow` fails; your allocator sees out-of-memory. |
+| Linear memory | 128 MiB | `memory.grow` fails; your allocator sees out-of-memory. |
 | Call stack | 1 MiB | The mod is disabled. |
 | Module size | 16 MiB | The module is not loaded. |
 | One string read by the host | 4,096 bytes | The mod is disabled. |

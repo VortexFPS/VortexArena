@@ -14,6 +14,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- A PLAIN WebAssembly module, not a component: see the VortexPlainWasmModule target below.
+         LinkerFlavor=lld keeps the build from passing the component-only "component-type" argument to
+         the plain linker. -->
+    <LinkerFlavor>lld</LinkerFlavor>
     <!-- Smaller module: no culture data, no exception message resources, size over speed. -->
     <InvariantGlobalization>true</InvariantGlobalization>
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
@@ -27,4 +31,21 @@
     <PackageReference Include="runtime.linux-x64.Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-rc.1.26357.1" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
     <ProjectReference Include="..\..\Vortex.Modding\Vortex.Modding.csproj" />
   </ItemGroup>
+
+  <!-- Left alone, this compiler targets WASI 0.2 ("wasm32-unknown-wasip2") and wraps its output as a
+       component. That fails here twice over: the wrapper cannot describe imports from "vortex_1"
+       ("failed to encode component"), and the game's sandbox loads plain modules only - a module built
+       for WASI 0.2 imports "wasi:io/error@0.2.0" and friends and is refused at load.
+       Targeting WASI preview 1 produces a plain module whose only non-Vortex imports are 13
+       wasi_snapshot_preview1 functions, all of which the sandbox answers without granting anything.
+
+       It has to be a TARGET. The compiler's own build files assign IlcLlvmTarget unconditionally after
+       this project file is read, so a plain property here is silently overwritten (it only "works" when
+       passed on the command line). This runs after that assignment and before anything uses it.
+       Verified with compiler 10.0.0-rc.1.26357.1 and WASI SDK 29.0. -->
+  <Target Name="VortexPlainWasmModule" BeforeTargets="SetupProperties">
+    <PropertyGroup>
+      <IlcLlvmTarget>wasm32-unknown-wasip1</IlcLlvmTarget>
+    </PropertyGroup>
+  </Target>
 </Project>

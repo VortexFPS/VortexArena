@@ -11,16 +11,26 @@ player's machine.
 
 Design and security model: [`planning/specs/modding.md`](../planning/specs/modding.md).
 
-## Status — read before relying on this
+## Status
 
-**The C# library and template have not yet been compiled to WebAssembly.** The C# code compiles to .NET
-bytecode, and the compiler packages restore, but the final step needs the WASI SDK, which was not
-installed on the machine this was written on (2026-10-07). Until one real build has run under the
-sandbox, treat the C# path as untested. The host side it talks to *is* tested
-(`tests/VortexArena.Tests/Modding/`).
+**A C# mod compiles to WebAssembly and runs in the sandbox** (verified 2026-10-07 with the `hello-hud`
+template, compiler `10.0.0-rc.1.26357.1`, WASI SDK 29.0, on Windows x64):
 
-The sandbox itself is off in the client (`cl_allow_mods 0`) until the checklist in the modding spec is
-complete.
+| | |
+|---|---|
+| Module size | 2.15 MB |
+| Imports | 3 from `vortex_1`; 13 from `wasi_snapshot_preview1`, all answered by the sandbox without granting anything |
+| Load, compile and instantiate | about 220 ms |
+| Start-up (`_initialize` + `mod_init`) | 25 ms |
+| One frame | about 6 microseconds on average, 148 at worst over 20,000 frames |
+| Memory after start-up | 50.5 MiB, flat afterwards (the .NET runtime's own heap; the mod allocates nothing per frame) |
+
+`tests/VortexArena.Tests/Modding/CSharpGuestTests.cs` runs these checks wherever the template has been
+built; the module itself is a build output and is not committed.
+
+Not yet done: a mod drawing in the real game window, and everything about how a server offers a mod to a
+client. The sandbox stays off in the client (`cl_allow_mods 0`) until the checklist in the modding spec
+is complete.
 
 ## Building a C# mod
 
@@ -39,6 +49,14 @@ dotnet publish -c Release
 ```
 
 The module is written to `bin/Release/net10.0/wasi-wasm/publish/hello-hud.wasm`.
+
+**Start from the template's project file, not from a blank one.** Left alone, this compiler targets WASI 0.2
+and wraps its output as a "component". That build fails with `failed to encode component` (the wrapper
+cannot describe the `vortex_1` imports), and a module built that way would be refused by the game anyway,
+because it imports `wasi:io/...@0.2.0` interfaces instead of plain functions. The template's
+`VortexPlainWasmModule` target switches the compiler to WASI preview 1, which yields a plain module. It has
+to be a build target: the same setting written as an ordinary property is silently overwritten by the
+compiler's own build files.
 
 The compiler (`Microsoft.DotNet.ILCompiler.LLVM`) is an experimental Microsoft package that is not on
 nuget.org; [`csharp/nuget.config`](csharp/nuget.config) adds the feed it comes from for projects under

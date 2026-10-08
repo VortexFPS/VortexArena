@@ -119,7 +119,7 @@ wrong signature; a missing `memory` or `mod_frame` export; a known export with t
 
 | Limit | Default | Enforced by |
 |---|---|---|
-| `MaxMemoryBytes` | 64 MiB | Wasmtime store limiter; `memory.grow` past it fails *inside the guest* |
+| `MaxMemoryBytes` | 128 MiB (a C# guest's runtime takes about 50 MiB before the mod allocates anything) | Wasmtime store limiter; `memory.grow` past it fails *inside the guest* |
 | `MaxModuleBytes` | 16 MiB | Checked before parsing |
 | `FrameBudgetMs` | 8 ms | Epoch interruption |
 | `InitBudgetMs` | 2,000 ms | Epoch interruption |
@@ -247,7 +247,15 @@ whatever `wasi_snapshot_preview1` functions a module imports:
 | `proc_exit` | A trap; the mod is disabled |
 | Everything else (`path_open`, sockets, polling, …) | "Function not supported" |
 
-**Not yet measured:** exactly which WASI functions a NativeAOT-LLVM module imports. That needs the WASI
+**Measured 2026-10-07** with the `hello-hud` template: a NativeAOT-LLVM module built for WASI preview 1
+imports exactly 13 WASI functions - `environ_get`, `environ_sizes_get`, `clock_time_get`, `fd_close`,
+`fd_fdstat_get`, `fd_prestat_get`, `fd_prestat_dir_name`, `fd_seek`, `fd_write`, `poll_oneoff`, `proc_exit`,
+`sched_yield`, `random_get` - and starts and runs with every one answered as in the table above. A test pins
+the reviewed list, so a compiler upgrade that imports something new fails by name. Built for WASI 0.2, the
+compiler's default, the module instead imports `wasi:io/...@0.2.0` interfaces and is refused at load.
+
+*What this paragraph said before the measurement, kept because the reasoning still explains the design:*
+exactly which WASI functions a NativeAOT-LLVM module imports was not known. That needs the WASI
 SDK to finish a C# guest build (§8). The stand-ins are defined per import by name and signature, so an
 unexpected one falls into the last row rather than failing to load — but a function that falls there and
 that the .NET runtime *requires to succeed* would surface as a start-up failure of the guest. Settle this
@@ -365,7 +373,7 @@ mirror cannot substitute content. The virtual filesystem needs two additions for
 
 `cl_allow_mods` stays 0 until every line is true:
 
-- [ ] A real C# guest builds and runs under the sandbox, and the WASI imports it needs are known (§7).
+- [x] A real C# guest builds and runs under the sandbox, and the WASI imports it needs are known (§7). Done 2026-10-07.
 - [ ] Traps (out-of-bounds, abort, stack overflow, timeout) are exercised **inside the Godot client** on
       Windows, Linux and macOS, not only in the test host.
 - [ ] A real exported build loads the Wasmtime native library on all six supported platform/CPU pairs.
@@ -381,7 +389,7 @@ mirror cannot substitute content. The virtual filesystem needs two additions for
 |---|---|
 | Sandbox host, limits, import/export checks, command decoder, WASI stand-ins (`src/VortexArena.Modding`) | **Built and tested** — 33 tests in `tests/VortexArena.Tests/Modding/`, on Windows x64 |
 | Interface reference (`modding-sdk/ABI.md`) | Written |
-| C# guest SDK and template (`modding-sdk/csharp/`) | **Written, not yet compiled to wasm** — blocked on installing the WASI SDK 29.0 |
+| C# guest SDK and template (`modding-sdk/csharp/`) | **Built and run under the sandbox** - 2.15 MB module, 25 ms start-up, about 6 microseconds a frame, 50.5 MiB after start-up (`CSharpGuestTests`). Not yet drawn in the game window. |
 | Rust reference guest | Not started |
 | Manifest, cache, content diff | Not started |
 | Handshake split and reconcile flow | Not started |

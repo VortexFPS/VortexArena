@@ -69,6 +69,22 @@ public sealed class DpDownload
     /// <summary>The largest inflated result accepted, so a small deflated file cannot expand without bound.</summary>
     public int MaxInflatedSize { get; set; } = 256 << 20;
 
+    /// <summary>
+    /// How many blocks may wait to be acknowledged in the next packet. DarkPlaces keeps four
+    /// (CL_MAX_DOWNLOADACKS) and forgets the rest; the server then finds a gap and sends everything after it
+    /// again, so a client frame longer than four server frames costs a download a round trip of repeats.
+    /// Nothing in the protocol limits the acknowledgements in one packet (seven bytes each), so an owner
+    /// may raise this: every block that arrived is then acknowledged, in order.
+    /// </summary>
+    public int MaxPendingAcks { get; set; } = DpProtocol.MaxDownloadAcks;
+
+    /// <summary>Blocks seen since the download began, how many of them the server had sent before (it
+    /// went back after an acknowledgement it did not expect), and acknowledgements that found no room.</summary>
+    public int BlocksReceived { get; private set; }
+    public int BlocksRepeated { get; private set; }
+    public int AcksDropped { get; private set; }
+    private int _highWater;
+
     public bool Active => _memory is not null;
     public string Name { get; private set; } = "";
     public bool Deflate { get; private set; }
@@ -89,6 +105,8 @@ public sealed class DpDownload
         _maxSize = size;
         _memory = new byte[size];
         _curSize = 0;
+        BlocksReceived = BlocksRepeated = AcksDropped = 0;
+        _highWater = 0;
         Deflate = deflate;
         return true;
     }
@@ -112,8 +130,13 @@ public sealed class DpDownload
     {
         // record the start/size information to ack in the next input packet. Only four are kept,
         // and a fifth before the next packet is dropped, as in the C: the server re-sends.
-        if (_acks.Count < DpProtocol.MaxDownloadAcks)
+        if (_acks.Count < MaxPendingAcks)
             _acks.Add(new DpDownloadAck(start, data.Length));
+        else
+            AcksDropped++;
+        BlocksReceived++;
+        if (_memory is not null && data.Length > 0 && start < _highWater) BlocksRepeated++;
+        if (start + data.Length > _highWater) _highWater = start + data.Length;
 
         if (_memory is null)
             return true; // "received %i bytes with no download active"

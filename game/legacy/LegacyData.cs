@@ -35,6 +35,48 @@ public static class LegacyData
     /// <summary>Seconds after entering the game at which "join" is sent; 0 never. A hook for unattended runs.</summary>
     public const string AutoJoinCvar = "legacy_autojoin";
 
+    public const string CurlEnabledCvar = "legacy_curl_enabled";
+    public const string CurlMaxSizeCvar = "legacy_curl_maxsize";
+    public const string CurlMaxSpeedCvar = "legacy_curl_maxspeed";
+    public const string CurlTimeoutCvar = "legacy_curl_timeout";
+    public const string InBandCvar = "legacy_download_inband";
+
+    /// <summary>The limits for a session's package downloads, from the player's own settings.</summary>
+    public static VortexArena.Legacy.Downloads.LegacyDownloadLimits DownloadLimits(CvarService? player)
+    {
+        VortexArena.Legacy.Downloads.LegacyDownloadLimits limits = new() { UserAgent = "VortexArena (legacy compatibility; DarkPlaces protocol)" };
+        if (player is null) return limits;
+        limits.Enabled = !player.Has(CurlEnabledCvar) || player.GetFloat(CurlEnabledCvar) != 0;
+        float size = player.GetFloat(CurlMaxSizeCvar);
+        if (float.IsFinite(size) && size >= 1)
+        {
+            limits.MaxFileBytes = (long)Math.Min(size, 16384) << 20;
+            limits.MaxConnectionBytes = limits.MaxFileBytes * 4;
+        }
+        float speed = player.GetFloat(CurlMaxSpeedCvar);
+        limits.MaxKiBPerSecond = float.IsFinite(speed) && speed > 0 ? speed : 0;
+        float timeout = player.GetFloat(CurlTimeoutCvar);
+        if (float.IsFinite(timeout) && timeout >= 1) limits.StallTimeoutSeconds = Math.Min(timeout, 600);
+        return limits;
+    }
+
+    /// <summary>
+    /// Block-compressed textures made while packages a server had this client download are mounted go to a
+    /// cache of their own, named after exactly that set of packages: the cache is keyed by a texture's name
+    /// alone, and one server's "textures/foo" must not be what the next server's, or Xonotic's own, is read
+    /// back as. The root is mounted on the session's file system and becomes where its asset system writes.
+    /// </summary>
+    public static void UseDownloadTextureCache(VortexArena.Formats.Vfs.VirtualFileSystem files, VortexArena.Game.Loaders.AssetSystem assets, string packageSetKey)
+    {
+        try
+        {
+            string root = Path.Combine(UserRoot, "texcache-dl", packageSetKey);
+            Directory.CreateDirectory(root);
+            if (files.Mount(root)) assets.DdsCacheRoot = root;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { }
+    }
+
     /// <summary><c>--legacy-data &lt;dir&gt;</c>: overrides the cvar for this run without being saved into the player's configuration.</summary>
     public static string? CommandLineDataDir { get; set; }
 
@@ -49,6 +91,18 @@ public static class LegacyData
             "download the server's client program (csprogs.dat) even when the game data or the download cache has it");
         cvars.Register(AutoJoinCvar, "0", CvarFlags.None,
             "seconds after entering a Xonotic server at which to send \"join\" (leave the spectators); 0 never. For unattended test runs");
+        // Package downloads a server asks for ("curl --pak"). These live in the PLAYER's store, where nothing a
+        // server sends can change them (a session has its own store for what the server sets).
+        cvars.Register(CurlEnabledCvar, "1", CvarFlags.Save,
+            "download the packages (maps, server packages) a Xonotic server names when joining it; 0 refuses them, and a server whose map is missing cannot be joined");
+        cvars.Register(CurlMaxSizeCvar, "512", CvarFlags.Save,
+            "largest package a Xonotic server may have this client download, in MiB (all packages of one connection together: four times this)");
+        cvars.Register(CurlMaxSpeedCvar, "0", CvarFlags.Save,
+            "download speed limit for packages a Xonotic server names, in KiB per second; 0 is no limit (DarkPlaces: curl_maxspeed)");
+        cvars.Register(CurlTimeoutCvar, "45", CvarFlags.Save,
+            "seconds without any data after which a package download from a Xonotic server is given up");
+        cvars.Register(InBandCvar, "1", CvarFlags.Save,
+            "ask a Xonotic server for a missing map through the game connection when no package download delivered it");
         // Local games (the server program in this process): the LAN switch and where the server runs.
         LegacyLocalGames.RegisterCvars(cvars);
     }

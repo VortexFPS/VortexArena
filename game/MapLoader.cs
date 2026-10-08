@@ -722,6 +722,15 @@ public static class MapLoader
         arrays[(int)Mesh.ArrayType.Index] = sb.Indices.ToArray();
 
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        // Keep `arrays` reachable until the engine has returned. The binding hands the engine the array's
+        // native handle WITHOUT taking a reference, then allocates its two default arguments (an empty
+        // blend-shape array and an empty LOD dictionary) before making the call. In optimised code `arrays`
+        // is already dead at that point, so a collection started by one of those allocations may finalize
+        // it — which frees the native array — while the engine is about to read it: the intermittent
+        // 'p_arrays.size() != ARRAY_MAX' at map load, after which the surface is missing and every later
+        // surface of that cell is drawn with its neighbour's material. (Never in a Debug build, where a
+        // local lives to the end of its method.)
+        GC.KeepAlive(arrays);
     }
 
     /// <summary>

@@ -1,23 +1,26 @@
 // Port of the CSQC half of qcsrc/common/mapobjects/func/pointparticles.qc (Draw_PointParticles,
-// pointparticles.qc:166-233): the persistent client emitters for func_pointparticles / func_sparks.
+// pointparticles.qc:166-233): the client emitters for func_pointparticles / func_sparks.
 //
-// DP re-spawns individual particles every draw frame (n = impulse * drawframetime emissions, each a
-// __pointparticles of .count multiplier). Doing that through EffectSystem.Spawn would churn a transient
-// GpuParticles3D node per frame per emitter (courtfun has 44) — so instead each map entity gets ONE
-// long-lived continuous GpuParticles3D configured from its effectinfo block, with Amount sized so the
-// steady-state particles-per-second matches DP's:
-//     rate/sec = impulse (absolute) | -impulse * volume/64^3 (relative)
-//     particles/sec = rate * (countabsolute + count * block.count)
-//     Amount = particles/sec * particle lifetime (capped)
-// PARTICLES_IMPULSE entities instead fire an absolute one-shot burst of .impulse on each toggle-ON
-// (QC ABSOLUTE_ONLY_SPAWN_AT_TOGGLE).
+// A map emitter is NOT a stream of particles. Each frame the QuakeC works out a number of EMISSIONS
+// (n = impulse * frametime; `for (i = random(); i <= n; ++i)`), and every emission is one whole
+// pointparticles(effect, point, velocity, count) — a complete burst of the effectinfo effect, every block of
+// it, at a random point of the entity's brush. Stormkeep's one emitter ("mdl" "sparks", impulse 4, count 6,
+// velocity 50 -100 30) is therefore about four separate bursts a second of ninety sparks each, thrown
+// sideways, slowed by the effect's air friction, bouncing, and gone within a second.
+//
+// Until 2026-10 each entity instead owned ONE continuous GpuParticles3D built from the effect's FIRST block,
+// with the emission rate, a cone spread and the lifetime estimated from it — no air friction, no bounce, no
+// velocity stretch, not the effect's other blocks. On stormkeep that drew a steady curtain of long streaks
+// falling straight down. Emissions now go through EffectSystem.Spawn like every other effect, so the
+// faithful simulation (src/VortexArena.Engine/Particles/ParticleSim.cs) draws them exactly as it draws a
+// weapon impact; the emission arithmetic itself is PointParticleEmitter (Godot-free, unit-tested).
 //
 // Scans the ambient entity facade like LaserRenderer/TriggerTouch.Predict*Ambient — live on the
 // listen-server/demo paths only (a pure --connect client has no facade/BSP yet; the established seam).
 //
-// Known approximations (documented residuals): the WarpZoneLib_BoxTouchesBrush point-in-brush retry (we
-// emit in the whole bbox), the per-emission .noise sound, bgmscript ADSR, and .movedir surface projection
-// (approximated by ONE trace from the box center instead of per-particle traces).
+// What still differs from the QuakeC (documented residuals): the per-emission .noise sound and the bgmscript
+// envelope are not played; a ROTATED brush entity emits from its whole bounding box (the brush test is done
+// for unrotated entities, which is every stock emitter).
 
 using System;
 using System.Collections.Generic;
@@ -25,34 +28,39 @@ using Godot;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Services;
+using VortexArena.Engine.Collision;
+using VortexArena.Engine.Particles;
 using NVec3 = System.Numerics.Vector3;
 
 namespace VortexArena.Game.Client;
 
-/// <summary>Persistent func_pointparticles/func_sparks emitters. Hosted by <see cref="ClientWorld"/>.</summary>
+/// <summary>func_pointparticles/func_sparks emitters. Hosted by <see cref="ClientWorld"/>.</summary>
 public partial class MapParticleEmitters : Node3D
 {
-    /// <summary>Effectinfo block lookup + particle-mesh construction (shared catalog).</summary>
+    /// <summary>The effect system the emissions are played through.</summary>
     public EffectSystem? Effects { get; set; }
 
     private const float RescanInterval = 2f;
-    private const int MaxAmountPerEmitter = 1500;
-    private const float DpGravity = 800f;
+
+    // The particle simulation's clock advances by at most this much a frame (FaithfulParticleBackend); the
+    // emitters use the same step so a stall does not arrive as one frame's worth of bursts all at once.
+    private const float MaxStep = 0.05f;
 
     private sealed class MapEmitter
     {
         public Entity Entity = null!;
-        public GpuParticles3D Particles = null!;
-        public bool ImpulseMode;     // PARTICLES_IMPULSE: one-shot burst on toggle-ON only
+        public readonly PointParticleEmitter Emission = new();
         public bool WasActive;
+        public NVec3 BuiltAt;                             // entity origin the box/brush were taken at
         // (draws 2026-08-02) PVS gating state: the cluster of the emitter's position (re-derived when it
-        // moves — a train-mounted emitter changes rooms) and whether we culled it last frame.
+        // moves — a train-mounted emitter changes rooms).
         public int PvsCluster = -2;                       // -2 = never derived
-        public System.Numerics.Vector3 PvsClusterAt;      // origin the cluster was derived at
-        public bool PvsCulled;
+        public NVec3 PvsClusterAt;                        // origin the cluster was derived at
     }
 
     private readonly Dictionary<Entity, MapEmitter> _emitters = new();
+    private readonly List<NVec3> _points = new();
+    private readonly Random _rng = new();
     private float _rescanIn;
 
     public override void _Process(double delta)
@@ -69,10 +77,19 @@ public partial class MapParticleEmitters : Node3D
             _rescanIn = RescanInterval;
         }
 
-        // (draws 2026-08-02) PVS gate: an emitter in a room no current viewpoint can see runs neither its
-        // GPU process dispatch nor its draw (courtfun has 44 of these; every one used to run every frame).
-        // Same conservative contract as the world cells — the culler answers "show" whenever it can't prove
-        // otherwise. `r_pvs_cull_emitters 0` restores always-on for A/B.
+        EffectSystem? fx = Effects;
+        if (fx is null || _emitters.Count == 0)
+            return;
+
+        // #30 slowmo/pause: the same scaled step the particle simulation ages on, so the bursts-per-second
+        // stay in step with the particles (frozen at slowmo 0).
+        float frametime = MathF.Min(ClientRenderTime.ScaleDelta((float)delta), MaxStep);
+        if (!(frametime > 0f))
+            return;
+
+        // (draws 2026-08-02) PVS gate: an emitter in a room no current viewpoint can see emits nothing (courtfun
+        // has 44 of these). Same conservative contract as the world cells — the culler answers "show" whenever
+        // it cannot prove otherwise. `r_pvs_cull_emitters 0` restores always-on for A/B.
         var culler = VortexArena.Game.WorldPvsCuller.Instance;
         bool pvsGate = culler is { CullActive: true }
             && Api.Cvars.GetFloat("r_pvs_cull_emitters") != 0f;
@@ -80,60 +97,57 @@ public partial class MapParticleEmitters : Node3D
         foreach (MapEmitter em in _emitters.Values)
         {
             Entity e = em.Entity;
-            if (e.IsFreed || !GodotObject.IsInstanceValid(em.Particles))
+            if (e.IsFreed)
                 continue;
 
-            // #30 slowmo/pause: ambient map emitters are Godot self-processing particle nodes (they ignore the
-            // scaled deltas the CPU-side drivers use), so drive their SpeedScale from the shared factor — frozen
-            // mid-air at slowmo 0, slow drift at fractional slowmo. Nothing else sets SpeedScale (default 1).
-            em.Particles.SpeedScale = VortexArena.Game.Client.ClientRenderTime.Scale;
+            // QC: "if (i && !this.impulse) this.just_toggled = 1" — the entity went from off to on.
+            bool active = e.Active == MapMover.ActiveActive;
+            if (active && !em.WasActive)
+                em.Emission.JustToggled = true;
+            em.WasActive = active;
+            if (!active)
+                continue;
 
-            bool pvsCulled = false;
+            if (e.Origin != em.BuiltAt)
+                Place(em);
+
             if (pvsGate)
             {
                 // Re-derive the cluster only when the emitter moved (~all are static; 32qu covers mover sway).
-                if (em.PvsCluster == -2
-                    || System.Numerics.Vector3.DistanceSquared(e.Origin, em.PvsClusterAt) > 32f * 32f)
+                if (em.PvsCluster == -2 || NVec3.DistanceSquared(e.Origin, em.PvsClusterAt) > 32f * 32f)
                 {
-                    em.PvsCluster = culler!.ClusterAt(e.Origin);
+                    em.PvsCluster = culler!.ClusterAt((em.Emission.BoxMin + em.Emission.BoxMax) * 0.5f);
                     em.PvsClusterAt = e.Origin;
                 }
-                pvsCulled = !culler!.ClusterVisibleFromView(em.PvsCluster);
-            }
-            if (pvsCulled != em.PvsCulled)
-            {
-                em.PvsCulled = pvsCulled;
-                em.Particles.Visible = !pvsCulled;
-                if (pvsCulled && em.Particles.Emitting)
-                    em.Particles.Emitting = false;   // stop the stream; the state machine below re-arms it
-                if (pvsCulled)
-                {
-                    em.WasActive = false;            // an impulse edge while hidden re-fires on unculling
+                if (!culler!.ClusterVisibleFromView(em.PvsCluster))
                     continue;
-                }
-            }
-            else if (pvsCulled)
-            {
-                continue;                            // stays hidden: skip the per-frame drive entirely
             }
 
-            bool active = e.Active == MapMover.ActiveActive;
-            if (em.ImpulseMode)
-            {
-                // ABSOLUTE_ONLY_SPAWN_AT_TOGGLE: a burst of .impulse particles exactly on the rising edge.
-                if (active && !em.WasActive)
-                {
-                    em.Particles.Amount = System.Math.Clamp((int)MathF.Max(1f, e.Impulse), 1, MaxAmountPerEmitter);
-                    em.Particles.Restart();
-                    em.Particles.Emitting = true;
-                }
-            }
-            else if (em.Particles.Emitting != active)
-            {
-                em.Particles.Emitting = active;
-            }
-            em.WasActive = active;
+            if (em.Emission.Step(frametime, _rng, _points) == 0)
+                continue;
+
+            foreach (NVec3 point in _points)
+                Emit(fx, e, point);
         }
+    }
+
+    /// <summary>One emission: Draw_PointParticles' <c>__pointparticles(eff, p, velocity, count)</c>.</summary>
+    private void Emit(EffectSystem fx, Entity e, NVec3 p)
+    {
+        NVec3 velocity = e.Velocity;
+        if (e.MoveDir != NVec3.Zero)
+        {
+            // traceline(p, p + normalize(movedir) * 4096, 0, NULL): the emission moves to the surface the
+            // entity points at and leaves along its normal at |movedir|.
+            ITraceService trace = fx.FaithfulParticles?.Sim.Trace ?? Api.Trace;
+            TraceResult tr = trace.Trace(p, NVec3.Zero, NVec3.Zero,
+                p + VortexArena.Common.Math.QMath.Normalize(e.MoveDir) * 4096f, MoveFilter.WorldOnly, e);
+            p = tr.EndPos;
+            velocity += tr.PlaneNormal * e.MoveDir.Length();
+        }
+        if (e.ParticleJitter != 0f)
+            velocity += PointParticleEmitter.RandomVec(_rng) * e.ParticleJitter;   // randomvec() * waterlevel
+        fx.Spawn(e.Mdl, p, velocity, e.ParticleCount);
     }
 
     // =================================================================================================
@@ -150,207 +164,42 @@ public partial class MapParticleEmitters : Node3D
             if (kv.Key.IsFreed)
                 (dead ??= new List<Entity>()).Add(kv.Key);
         if (dead is not null)
-        {
             foreach (Entity e in dead)
-            {
-                if (GodotObject.IsInstanceValid(_emitters[e].Particles))
-                    _emitters[e].Particles.QueueFree();
                 _emitters.Remove(e);
-            }
-        }
     }
 
     private void Scan(string className)
     {
         foreach (Entity e in Api.Entities.FindByClass(className))
         {
-            if (e.IsFreed || _emitters.ContainsKey(e))
+            if (e.IsFreed || _emitters.ContainsKey(e) || string.IsNullOrEmpty(e.Mdl))
                 continue;
-            MapEmitter? em = Build(e);
-            if (em is not null)
-                _emitters[e] = em;
+            var em = new MapEmitter { Entity = e, WasActive = e.Active == MapMover.ActiveActive };
+            Place(em);
+            _emitters[e] = em;
+            GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"[MapEmitters] {className} '{e.Mdl}': {em.Emission.Impulse:0.###} emissions/s ({em.Emission.Absolute}), " +
+                $"count {e.ParticleCount:0.###}, velocity {e.Velocity}, box {em.Emission.BoxMin}..{em.Emission.BoxMax}, " +
+                $"{(em.Emission.Brushes is { } b ? b.Count + " brush(es)" : "no brush: whole box")}"));
         }
     }
 
-    // =================================================================================================
-    //  Emitter construction
-    // =================================================================================================
-
-    private MapEmitter? Build(Entity e)
+    /// <summary>Take the emission box, the brush and the rate from the entity (again when it has moved).</summary>
+    private static void Place(MapEmitter em)
     {
-        // Resolve the effectinfo block the .mdl names (first defined, renderable, dry-land block).
-        EffectInfoEmitter? block = null;
-        IReadOnlyList<EffectInfoEmitter>? blocks = Effects?.GetInfoBlocks(e.Mdl);
-        if (blocks is not null)
-        {
-            foreach (EffectInfoEmitter b in blocks)
-            {
-                if (!b.Defined || b.Underwater) continue;
-                if (b.Type is EiType.Decal or EiType.Beam or EiType.Bubble) continue;
-                block = b;
-                break;
-            }
-        }
-
-        // --- emission volume: the entity's linked bbox (brush model or explicit mins/maxs box) ---
-        NVec3 qMin = e.Origin + e.Mins;
-        NVec3 qMax = e.Origin + e.Maxs;
-        NVec3 qCenter = (qMin + qMax) * 0.5f;
-        NVec3 qSize = qMax - qMin;
-
-        // --- base velocity (DP: __pointparticles emit velocity = .velocity + randomvec()*.waterlevel; the
-        //     block then applies its own multiplier/offset/jitter) ---
-        NVec3 emitVelQ = e.Velocity;
-
-        // movedir: DP traces each random point along movedir 4096 and emits at the surface with velocity
-        // plane_normal*|movedir|. Approximate with ONE center trace (documented above).
-        if (e.MoveDir != NVec3.Zero && Api.Services is not null)
-        {
-            TraceResult tr = Api.Trace.Trace(qCenter, NVec3.Zero, NVec3.Zero,
-                qCenter + VortexArena.Common.Math.QMath.Normalize(e.MoveDir) * 4096f, MoveFilter.Normal, e);
-            if (tr.Fraction < 1f)
-            {
-                qCenter = tr.EndPos;
-                qSize = NVec3.Zero;
-                emitVelQ += tr.PlaneNormal * e.MoveDir.Length();
-            }
-        }
-
-        // --- rate: emissions/sec; negative impulse = relative density per 64^3 cube (wire decode) ---
-        float rate = e.Impulse;
-        if (rate < 0f)
-        {
-            float vol = MathF.Max(1f, MathF.Abs(qSize.X * qSize.Y * qSize.Z));
-            rate = -rate * vol / (64f * 64f * 64f);
-        }
-        if (rate <= 0f)
-            rate = 1f;
-
-        float perEmission = block is null ? 1f : block.CountAbsolute + e.ParticleCount * block.CountMultiplier;
-        if (perEmission <= 0f)
-            perEmission = e.ParticleCount;
-        float pps = MathF.Max(0.25f, rate * perEmission);
-        float life = block?.Lifetime() ?? 1.5f;
-        life = Mathf.Clamp(life, 0.1f, 10f);
-
-        bool impulseMode = (e.SpawnFlags & PointParticles.ParticlesImpulse) != 0;
-
-        var particles = new GpuParticles3D
-        {
-            Name = $"pp#{e.Index}_{e.Mdl}",
-            Amount = System.Math.Clamp((int)MathF.Ceiling(pps * life), 1, MaxAmountPerEmitter),
-            Lifetime = life,
-            OneShot = impulseMode,
-            Explosiveness = impulseMode ? 1f : 0f,   // continuous emitters stream steadily
-            Emitting = !impulseMode && e.Active == MapMover.ActiveActive,
-            Position = Coords.ToGodot(qCenter),
-            // Particles can drift far from a big volume; give the AABB room so the whole emitter isn't culled.
-            VisibilityAabb = new Aabb(new Vector3(-512f, -512f, -512f), new Vector3(1024f, 1024f, 1024f)),
-        };
-
-        var mat = new ParticleProcessMaterial();
-
-        // emission box spans the volume (+ the block's originjitter).
-        Vector3 halfG = AbsToGodot(qSize * 0.5f);
-        Vector3 jitterG = block is null ? Vector3.Zero : AbsToGodot(block.OriginJitter);
-        mat.EmissionShape = ParticleProcessMaterial.EmissionShapeEnum.Box;
-        mat.EmissionBoxExtents = new Vector3(
-            MathF.Max(0.05f, halfG.X + jitterG.X),
-            MathF.Max(0.05f, halfG.Y + jitterG.Y),
-            MathF.Max(0.05f, halfG.Z + jitterG.Z));
-
-        // velocity: block multiplier/offset on the entity velocity, plus the jitter spread.
-        NVec3 baseVelQ = block is null
-            ? emitVelQ
-            : emitVelQ * (block.VelocityMultiplier != 0f ? block.VelocityMultiplier : 1f) + block.VelocityOffset;
-        Vector3 baseVelG = Coords.ToGodot(baseVelQ);
-        float baseSpeed = baseVelG.Length();
-        mat.Direction = baseSpeed > 0.001f ? baseVelG / baseSpeed : Vector3.Up;
-        mat.InitialVelocityMin = baseSpeed;
-        mat.InitialVelocityMax = baseSpeed;
-        float jitterSpeed = e.ParticleJitter;
-        if (block is not null)
-        {
-            Vector3 vj = AbsToGodot(block.VelocityJitter);
-            jitterSpeed += (vj.X + vj.Y + vj.Z) / 3f;
-        }
-        if (jitterSpeed > 0.001f)
-        {
-            mat.Spread = baseSpeed > 0.001f ? 60f : 180f;
-            mat.InitialVelocityMin = MathF.Max(0f, baseSpeed - jitterSpeed);
-            mat.InitialVelocityMax = baseSpeed + jitterSpeed;
-        }
-
-        mat.Gravity = new Vector3(0f, -DpGravity * (block?.Gravity ?? 0f), 0f);
-
-        // color/alpha: the block's midpoint color fading out over life (TE_SPARK and friends are additive
-        // via the mesh material). No block => a warm spark-ish default so func_sparks still reads.
-        Color baseColor;
-        if (block is not null)
-        {
-            (float r, float g, float bl) = block.MidColor();
-            baseColor = new Color(r, g, bl);
-        }
-        else
-        {
-            baseColor = new Color(1f, 0.85f, 0.4f);
-        }
-        float a0 = block?.MidAlpha01() ?? 1f;
-        var ramp = new Gradient();
-        ramp.SetColor(0, new Color(baseColor.R, baseColor.G, baseColor.B, a0));
-        ramp.SetColor(1, new Color(baseColor.R, baseColor.G, baseColor.B, 0f));
-        mat.ColorRamp = new GradientTexture1D { Gradient = ramp };
-        mat.Color = baseColor;
-
-        if (block is not null)
-        {
-            float sMin = MathF.Max(0.01f, block.SizeMin) * 2f;
-            float sMax = MathF.Max(0.01f, block.SizeMax) * 2f;
-            float grow = block.SizeIncrease * 2f * life;
-            mat.ScaleMin = MathF.Max(0.4f, MathF.Min(sMin, sMin + grow));
-            mat.ScaleMax = MathF.Max(mat.ScaleMin, MathF.Max(sMax, sMax + grow));
-        }
-        else
-        {
-            mat.ScaleMin = 0.5f;
-            mat.ScaleMax = 1f;
-        }
-
-        particles.ProcessMaterial = mat;
-        particles.DrawPass1 = block is not null && Effects is not null
-            ? Effects.BuildEmitterMesh(block, baseColor)
-            : DefaultSparkMesh(baseColor);
-
-        AddChild(particles);
-        return new MapEmitter
-        {
-            Entity = e,
-            Particles = particles,
-            ImpulseMode = impulseMode,
-            WasActive = e.Active == MapMover.ActiveActive,
-        };
-    }
-
-    private static Mesh DefaultSparkMesh(Color color)
-    {
-        var quad = new QuadMesh { Size = new Vector2(0.5f, 0.5f) };
-        quad.Material = new StandardMaterial3D
-        {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            BlendMode = BaseMaterial3D.BlendModeEnum.Add,
-            BillboardMode = BaseMaterial3D.BillboardModeEnum.Particles,
-            BillboardKeepScale = true,
-            VertexColorUseAsAlbedo = true,
-            AlbedoColor = color,
-            DisableReceiveShadows = true,
-        };
-        return quad;
-    }
-
-    private static Vector3 AbsToGodot(NVec3 q)
-    {
-        Vector3 g = Coords.ToGodot(q);
-        return new Vector3(MathF.Abs(g.X), MathF.Abs(g.Y), MathF.Abs(g.Z));
+        Entity e = em.Entity;
+        PointParticleEmitter emission = em.Emission;
+        em.BuiltAt = e.Origin;
+        emission.BoxMin = e.Origin + e.Mins;
+        emission.BoxMax = e.Origin + e.Maxs;
+        emission.BrushOrigin = e.Origin;
+        emission.Brushes = null;
+        // The entity's own brushes, so a point is taken from the brush and not from its bounding box
+        // (WarpZoneLib_BoxTouchesBrush). Stormkeep's emitter is a tilted slab that fills about half its box.
+        if (e.ModelIndex != 0 && e.Angles == NVec3.Zero
+            && Api.Entities is VortexArena.Engine.Simulation.EntityService table
+            && table.TryGetEntityBrushModel(e, out IReadOnlyList<Brush> brushes, out _))
+            emission.Brushes = brushes;
+        emission.Configure(e.Impulse, (e.SpawnFlags & PointParticles.ParticlesImpulse) != 0);
     }
 }

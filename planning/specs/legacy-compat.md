@@ -434,6 +434,7 @@ or, in the console: `legacy_xonotic_data "<dir>"`, then `legacy_connect <host[:p
 | `legacy_status 1` | Print a one-line status every second (signon stage, frames, faults, scene entities, draw commands, node count). |
 | `legacy_csprogs_download 1` | Fetch the client program from the server even when the mounted data has a matching one. |
 | `legacy_autojoin <seconds>` | Send `join` after that long in the game; for unattended runs. |
+| `--legacy-demo <file.dem>` | Play a DarkPlaces recording in the window (DarkPlaces' `playdemo`): no server, no socket, no input; the view is the recorded player's. Command line only. The run ends when the recording does. With the environment variable `VORTEX_LEGACY_TIMEDEMO` set it is `timedemo`: one recorded message a frame. |
 
 **Isolation.** A legacy session has its own cvar store, command interpreter, virtual filesystem and asset
 loader. The server's program creates thousands of cvars and aliases and the server sends console commands;
@@ -536,3 +537,62 @@ What was tried and removed (the reasons are in the header of `QcVm.Run.cs`): fus
 (34% fewer dispatches, no change in time) and translating functions to .NET methods (three times faster on a
 hot loop, no faster on the real frame, because the program calls something every 14 instructions). ADR-0019
 decision 5 therefore stands unchanged: the interpreter is the only execution path.
+
+### Rounds three and four in the window (added 2026-10-08)
+
+**Round three** (commit 30407b6d) was about memory and loading rather than the frame: player models are read when an
+entity first shows one instead of all twenty at level start, a level's doors and platforms share the world's lightmap
+atlas, a node an entity has finished with is kept for the next entity of that model, the end of a load waits a bounded
+time for files still being read, and every model built ahead is drawn once opaque and once half transparent out of
+sight so that its pipelines exist. Measured then: 1.4 GB less memory in play and a first load twice as fast.
+
+**Round four** built the comparison the earlier rounds lacked and used it.
+
+- **The harness: one recording, both engines.** `--legacy-demo <file.dem>` plays a DarkPlaces recording in the window
+  (`LegacyClientSession.PlayDemo` / `ReadDemo`, a port of `CL_ReadDemoMessage`; the recording carries its own client
+  program). DarkPlaces records it (`record <name> <map>`) and plays it (`playdemo`) with `host_speeds 1`; the same
+  stretch of the same recording is then timed in both. Scripts: `_scratch/perf4/dp.ps1`, `run-legacy.ps1`, `ab.ps1`,
+  `analyze.py --window A B`. The recording used: stormkeep, 4 bots, 92 s, first an observer's view, then a bot's.
+- **Two runs of one build differ by up to 15 % in mean frame time** on the development machine while its owner works
+  on it (measured: 3.88, 3.98 and 4.49 ms for the same export in one sitting). A single run per arm cannot rank two
+  builds that are closer than that. Two answers: at least three interleaved pairs for a whole-build comparison, and for
+  one part of the frame an alternation INSIDE one run: `VORTEX_LEGACY_TOGGLE=<parts>` leaves the named parts out every
+  other two seconds, the perf log marks each frame with the half it was in, and `_scratch/perf4/toggle.py` compares the
+  halves pairwise. `VORTEX_LEGACY_ABLATE=<parts>` leaves them out for the whole run. Parts: `hud`, `world`, `ents`, `fx`,
+  `3d`, `msaa`, `sun`, `pose`, `skel`, `morph`, `move`, `hudchunk`. (A run with `world` or `3d` left out shows a grey
+  screen with only the HUD: that is the measurement, not a fault.)
+- **Where the frame goes** (the recording's seconds 15 to 80, Release export, 1280x720, before this round's changes):
+  about 4.0 to 4.6 ms a frame, of which the client program 2.4 (interpreter 1.24, builtins 1.11 of which submitting
+  entities 0.40), receiving 0.13, handing over the 2D list 0.12, and 1.6 to 2.0 outside the legacy node. Outside the
+  node, by alternation: particles 0.68 +- 0.12 ms (the native particle system's simulation and its buffer upload),
+  the HUD 0.5 (replaying the 2D list onto canvas items), entities 0.45 +- 0.17, the rest the engine's own frame.
+  Drawing no 3D at all saved 0.24 ms and multisampling nothing measurable: the frame is bound by the main thread, not
+  by the renderer or the GPU.
+- **What was changed.**
+  - *The 2D list is cut into stretches of eight commands* (`LegacyDrawLayer`), each its own canvas item, replayed only
+    when its content changed. One item per blend mode meant that three moving name tags replayed the whole HUD, text
+    glyph by glyph, every frame: 0.22 +- 0.11 ms a frame and 5.5 KB of allocation a frame.
+  - *Nothing animates on its own.* The engine switches a node's per-frame call on when the node enters the tree,
+    which undid the `SetProcess(false)` of every vertex-animated model: ninety-five `Md3Morph` and `ModelAnimator`
+    nodes were called every frame, most of them playing a clip no entity had asked for. They are stopped after they
+    enter the tree, and a skinned MD3 now shows the frame the program sets, as in DarkPlaces.
+  - *A compressed sample is decoded to PCM after its first start*, on a pool thread, through the engine's own decoder
+    and resampler. Starting an Ogg Vorbis sample set up a decoder each time: 0.45 to 1.5 ms on the main thread, 1,093
+    times in the 92 s recording; with the PCM copy a start takes 0.01 ms and 102 slow starts are left (the first of
+    each sample). `VORTEX_LEGACY_NOPCM=1` turns it off.
+  - *Every door and platform is built when the level is loaded* (20 submodels in 0.17 s on stormkeep), not on the
+    frame it first comes into view (6 to 12 ms each, 60 ms once).
+  - *`findkeysforcommand` asks the bind table* instead of asking about each of 44,032 key numbers: 1.3 ms a call, ten
+    calls in the frame a spectator's key hints first appear (13 ms of a 57 ms frame).
+- **Measured** (three interleaved runs each, same sitting, mean / p50 / p99 / p99.9 / worst in ms, frames over 16.7
+  and over 33.3 ms in 65 s): before 3.98 / 3.80 / 7.44 / 12.30 / 49 with 4 and 1 (the median run of 3.88, 3.98,
+  4.49); after 3.68 / 3.49 / 6.92 / 10.63 / 35 with 4 and 1 (3.67, 3.68, 3.80); DarkPlaces (medians of six runs) 3.22 / 3.08 / 6.4 / 16.4 /
+  233 with 19 and 2 (means 3.14 to 3.64). The mean is 14 % behind DarkPlaces where it was 24 %; the tail is ahead
+  of it (DarkPlaces stops for 200 to 250 ms when the spectated player changes).
+- **What is left, by size.** The interpreter (1.24 ms; see above for what was tried). The particle system (0.68 ms;
+  shared with the native game, a faithful port of DarkPlaces' own). The first use of a material configuration
+  (double-sided, full-bright): 12 to 18 ms in `ApplyMaterialBits` three times a session in its first seconds, followed
+  by 15 to 40 ms outside the node - the shader for the configuration, then its pipeline. A player model's node, built
+  on the main thread when its files arrive: 16 to 19 ms. A second instance of a multi-frame MD3 (2.2 ms for a muzzle
+  flash, 10 ms for a weapon): `ModelAnimator` uploads a mesh per instance. A burst of `bloodshower` effects: 0.3 to
+  0.6 ms a call, fifteen calls when a player is gibbed.

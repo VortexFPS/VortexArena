@@ -987,6 +987,18 @@ public sealed class QcProfile
         WorstTicks = 0;
     }
 
+    /// <summary>Copies the time spent under each builtin so far into <paramref name="into"/> (grown if it is too
+    /// short) and returns how many entries are meaningful: the "before" of a per-frame difference.</summary>
+    public int CopyTicks(ref long[] into)
+    {
+        if (into.Length < _ticks.Length) into = new long[_ticks.Length];
+        System.Array.Copy(_ticks, into, _ticks.Length);
+        return _ticks.Length;
+    }
+
+    /// <summary>Time spent under builtin <paramref name="number"/> so far.</summary>
+    public long TicksOf(int number) => (uint)number < (uint)_ticks.Length ? _ticks[number] : 0;
+
     /// <summary>Builtins by time spent, largest first: (number, calls, ticks).</summary>
     public System.Collections.Generic.IEnumerable<(int Number, long Calls, long Ticks)> ByBuiltin()
     {

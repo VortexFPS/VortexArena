@@ -43,6 +43,11 @@ public sealed class DpClientClock
     /// <summary>cl.movevars_ticrate, or 0 if unknown (mode 7 aims one tick behind the newest stamp).</summary>
     public double TicRate { get; set; }
 
+    /// <summary>cls.demoplayback: the clock runs free between the recording's time stamps and is only
+    /// pulled forward over a gap. <see cref="TimeDemo"/> (cls.timedemo): the clock IS the newest stamp.</summary>
+    public bool Demo { get; set; }
+    public bool TimeDemo { get; set; }
+
     public void Reset()
     {
         Time = OldTime = ServerTime = ServerPrevTime = 0;
@@ -67,9 +72,16 @@ public sealed class DpClientClock
     {
         ServerPrevTime = ServerTime;
         ServerTime = newTime;
-        if (ServerPrevTime == ServerTime || !signedOn)
+        if (ServerPrevTime == ServerTime || !signedOn || (Demo && TimeDemo))
         {
             Time = ServerPrevTime = newTime;
+            return;
+        }
+        if (Demo)
+        {
+            // "when time falls behind during demo playback it means the cl.mtime[1] was altered due to a
+            // large time gap, so treat it as an instant change in time"
+            if (Time < newTime - 0.1) ServerPrevTime = Time = newTime;
             return;
         }
 

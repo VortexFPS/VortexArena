@@ -92,6 +92,13 @@ public partial class LegacyGame : Node
     /// instead of a socket. <see cref="Address"/> is then only a name for messages. Null: join <see cref="Address"/>.
     /// </summary>
     public LegacyLocalGameRequest? LocalGame { get; set; }
+    /// <summary>
+    /// Set to play a DarkPlaces recording (a <c>.dem</c> file on disk) instead of joining anything: DarkPlaces'
+    /// <c>playdemo</c>. No server, no socket, no input; the view is the recorded player's. Only the command
+    /// line sets it (<c>--legacy-demo</c>), so nothing a server or a program sends can. With the environment
+    /// variable VORTEX_LEGACY_TIMEDEMO set it is <c>timedemo</c>: one recorded message a frame.
+    /// </summary>
+    public string? DemoPath { get; set; }
     /// <summary>A level-changing console line ("map x", "changelevel x", "restart") typed during a local game
     /// that has no Xonotic menu to read it. True if it was acted on.</summary>
     public Func<string, bool>? MapCommand { get; set; }
@@ -277,7 +284,7 @@ public partial class LegacyGame : Node
         _options = new LegacyClientOptions
         {
             AlwaysDownloadProgram = forceDownload,
-            Host = new CsqcHostOptions { KeyBinding = KeyBinding, CenterPrint = text => ConsolePrint?.Invoke(text) },
+            Host = new CsqcHostOptions { KeyBinding = KeyBinding, FindKeysForCommand = FindKeysForCommand, CenterPrint = text => ConsolePrint?.Invoke(text) },
             ProgramCache = (name, size, crc) => LegacyData.ReadCachedProgram(dataDirectory, name, size, crc),
             ProgramDownloaded = LegacyData.WriteCachedProgram,
         };
@@ -317,6 +324,20 @@ public partial class LegacyGame : Node
         };
 
         _autoJoinAfter = PlayerCvars is { } p ? p.GetFloat(LegacyData.AutoJoinCvar) : 0;
+        if (DemoPath is { Length: > 0 } demoPath)
+        {
+            // --- a recording: CL_PlayDemo_f. The messages are read in Frame, where datagrams would be ---
+            System.IO.FileStream demo = new(demoPath, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read, 1 << 16);
+            bool timeDemo = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_TIMEDEMO"));
+            _transport = new NoTransport(demoPath);
+            _autoJoinAfter = 0;
+            Log($"playing the demo {demoPath} ({demo.Length} bytes{(timeDemo ? ", as a timedemo: one message a frame" : "")})");
+            _session.PlayDemo(demo, Now, timeDemo);
+            LoadingScreen?.UpdateProgress(0.05f, "Reading the demo...");
+            _presentation.BeginPreload(null);
+            _shared?.LeaveSession();
+            return;
+        }
         if (LocalGame is { } local)
         {
             // --- a local game: the server first, the connection when it is up (PumpServer) ---
@@ -349,6 +370,18 @@ public partial class LegacyGame : Node
         // While the server answers: the files of the last level's precache lists, on the worker threads.
         _presentation.BeginPreload(null);
         _shared?.LeaveSession();
+    }
+
+    // What a demo is "connected" through: nothing arrives and what is sent is dropped.
+    private sealed class NoTransport : ILegacyTransport
+    {
+        public NoTransport(string peer) => Peer = "demo " + peer;
+        public void Send(byte[] datagram) { }
+        public bool TryReceive(out byte[] datagram) { datagram = Array.Empty<byte>(); return false; }
+        public long Sent => 0;
+        public long Received => 0;
+        public string Peer { get; }
+        public void Dispose() { }
     }
 
     // =====================================================================================================
@@ -804,6 +837,9 @@ public partial class LegacyGame : Node
     }
 
     private bool _traceInstalled;
+    private long[] _tracedTicks = new long[700];
+    private int _tracedCount;
+    private long _tracedBuiltins;
     private int _tracedCommand = -1;
     private long _tracedSince;
 
@@ -812,11 +848,31 @@ public partial class LegacyGame : Node
         long now = System.Diagnostics.Stopwatch.GetTimestamp();
         QcProfile? profile = _session?.Host?.Vm.Profile;
         if (_tracedCommand >= 0 && _inGame && System.Diagnostics.Stopwatch.GetElapsedTime(_tracedSince, now).TotalMilliseconds >= 2)
-            LegacyPerfLog.Event("server command " + ((VortexArena.Legacy.Protocol.Svc)_tracedCommand).ToString()
-                + (profile is null ? "" : string.Create(CultureInfo.InvariantCulture, $" (longest builtin call #{profile.WorstBuiltin}: {QcProfile.ToMilliseconds(profile.WorstTicks):0.00} ms)")), _tracedSince);
+        {
+            string detail = "";
+            if (profile is not null)
+            {
+                // The three builtins the command spent most under, and all of them together.
+                Span<(long Ticks, int Number)> top = stackalloc (long, int)[3];
+                for (int number = 0; number < _tracedCount; number++)
+                {
+                    long spent = profile.TicksOf(number) - _tracedTicks[number];
+                    if (spent <= top[2].Ticks) continue;
+                    top[2] = (spent, number);
+                    for (int i = 2; i > 0 && top[i].Ticks > top[i - 1].Ticks; i--) (top[i], top[i - 1]) = (top[i - 1], top[i]);
+                }
+                detail = string.Create(CultureInfo.InvariantCulture, $" (builtins {QcProfile.ToMilliseconds(profile.BuiltinTicks - _tracedBuiltins):0.0} ms: #{top[0].Number} {QcProfile.ToMilliseconds(top[0].Ticks):0.0}, #{top[1].Number} {QcProfile.ToMilliseconds(top[1].Ticks):0.0}, #{top[2].Number} {QcProfile.ToMilliseconds(top[2].Ticks):0.0}; longest call #{profile.WorstBuiltin}: {QcProfile.ToMilliseconds(profile.WorstTicks):0.00} ms)");
+            }
+            LegacyPerfLog.Event("server command " + ((VortexArena.Legacy.Protocol.Svc)_tracedCommand).ToString() + detail, _tracedSince);
+        }
         profile?.ResetWorst();
         _tracedCommand = next;
         _tracedSince = now;
+        if (profile is not null && next >= 0)
+        {
+            _tracedCount = profile.CopyTicks(ref _tracedTicks);
+            _tracedBuiltins = profile.BuiltinTicks;
+        }
     }
 
     // What a run is measured by: the whole frame as Godot reports it (delta), and this node's own share of it.
@@ -889,13 +945,21 @@ public partial class LegacyGame : Node
             if (_traceInstalled) CloseTracedCommand(-1);
             if (_shutDown || _failed) return;
         }
+        if (session.DemoPlaying)
+        {
+            // CL_ReadDemoMessage: the recorded messages whose time has come.
+            session.ReadDemo();
+            if (_traceInstalled) CloseTracedCommand(-1);
+            if (_shutDown || _failed) return;
+        }
         // Loading a level inside Receive can take seconds; everything after it uses the time it is now.
         now = Now;
         LegacyPerfLog.Part(LegacyPerfLog.Receive);
 
         // --- input, the command, the send ---
         UpdateViewSize();
-        LegacyInput input = SampleInput(session);
+        // A recording has its own view angles and takes no input.
+        LegacyInput input = session.State.IsDemo ? default : SampleInput(session);
         foreach (byte[] datagram in session.Frame(now, input))
             transport.Send(datagram);
 
@@ -904,7 +968,17 @@ public partial class LegacyGame : Node
 
         // --- draw: the engine's view for the frame, CSQC_UpdateView, then what it submitted ---
         presentation.BeginFrame(_viewSize, session.State.Time);
+        QcProfile? frameProfile = s_profileProgram && _inGame ? session.Host?.Vm.Profile : null;
+        long drawBegan = 0, builtinsBefore = 0;
+        int profiled = 0;
+        if (frameProfile is not null)
+        {
+            profiled = frameProfile.CopyTicks(ref _ticksBefore);
+            builtinsBefore = frameProfile.BuiltinTicks;
+            drawBegan = System.Diagnostics.Stopwatch.GetTimestamp();
+        }
         session.Draw(delta);
+        if (frameProfile is not null && System.Diagnostics.Stopwatch.GetElapsedTime(drawBegan).TotalMilliseconds >= 8) NoteSlowProgramFrame(session, frameProfile, drawBegan, builtinsBefore, profiled);
         LegacyPerfLog.Part(LegacyPerfLog.Program);
         // SCR_DrawScreen: the engine's own 2D goes on after the program's (Con_DrawNotify after CL_VM_UpdateView).
         if (_inGame) presentation.DrawChatArea(_chatLines, now);
@@ -927,6 +1001,34 @@ public partial class LegacyGame : Node
         if (now >= _nextStatus) Status(session, presentation, now);
         CaptureForReview(now);
         LegacyPerfLog.Part(LegacyPerfLog.Present);
+    }
+
+    // Developer aid (VORTEX_LEGACY_QCPROFILE): a frame whose CSQC_UpdateView took 8 ms or more is named in the perf
+    // log by the builtins it spent the time under - what a slow "program" was.
+    private long[] _ticksBefore = new long[700];
+
+    private void NoteSlowProgramFrame(LegacyClientSession session, QcProfile profile, long began, long builtinsBefore, int count)
+    {
+        Span<(long Ticks, int Number)> top = stackalloc (long, int)[5];
+        for (int number = 0; number < count; number++)
+        {
+            long spent = profile.TicksOf(number) - _ticksBefore[number];
+            if (spent <= top[4].Ticks) continue;
+            top[4] = (spent, number);
+            for (int i = 4; i > 0 && top[i].Ticks > top[i - 1].Ticks; i--) (top[i], top[i - 1]) = (top[i - 1], top[i]);
+        }
+        StringBuilder text = new("slow program frame: builtins ");
+        text.Append(CultureInfo.InvariantCulture, $"{QcProfile.ToMilliseconds(profile.BuiltinTicks - builtinsBefore):0.0} ms -");
+        foreach ((long ticks, int number) in top)
+        {
+            if (ticks <= 0) break;
+            string name = "?";
+            if (session.Host?.Vm is { } vm)
+                foreach (QcFunction function in vm.Functions)
+                    if (function.IsBuiltin && -function.FirstStatement == number) { name = function.Name; break; }
+            text.Append(CultureInfo.InvariantCulture, $" #{number} {name} {QcProfile.ToMilliseconds(ticks):0.0};");
+        }
+        LegacyPerfLog.Event(text.ToString(), began);
     }
 
     // Developer aid for checking legacy mode by eye without sitting at the machine: with the environment
@@ -1070,6 +1172,20 @@ public partial class LegacyGame : Node
                 }
                 continue;
             }
+            if (command == "nodes")
+            {
+                // "nodes": which nodes of the whole tree are processed every frame, by type - what else runs
+                // beside the session (the perf log's "outside the node").
+                Dictionary<string, int> processing = new();
+                int all = 0;
+                CountProcessing(GetTree().Root, processing, ref all);
+                List<KeyValuePair<string, int>> rows = new(processing);
+                rows.Sort((a, b) => b.Value.CompareTo(a.Value));
+                StringBuilder line = new($"nodes: {all} in the tree; processed each frame:");
+                foreach ((string type, int count) in rows) line.Append(' ').Append(type).Append(" x").Append(count).Append(';');
+                Log(line.ToString());
+                continue;
+            }
             if (command.StartsWith("warp ", StringComparison.Ordinal))
             {
                 Warp(session.State.PlayerEntity, command[5..].Trim());
@@ -1090,6 +1206,18 @@ public partial class LegacyGame : Node
             else if (command.StartsWith("server ", StringComparison.Ordinal)) session.Client.SendStringCommand(command[7..]);
             else ConsoleCommand(command);   // as if typed
         }
+    }
+
+    private static void CountProcessing(Node node, Dictionary<string, int> into, ref int all)
+    {
+        all++;
+        string modes = (node.IsProcessing() ? "P" : "") + (node.IsPhysicsProcessing() ? "F" : "") + (node.IsProcessingInternal() ? "p" : "") + (node.IsPhysicsProcessingInternal() ? "f" : "");
+        if (modes.Length > 0 && node.CanProcess())
+        {
+            string key = node.GetType().Name + "/" + modes + (node is CanvasItem { Visible: false } or Node3D { Visible: false } ? "(hidden)" : "");
+            into[key] = into.GetValueOrDefault(key) + 1;
+        }
+        foreach (Node child in node.GetChildren()) CountProcessing(child, into, ref all);
     }
 
     // "warp <classname>[#n] [x y z]" or "warp at <x> <y> <z>" in a review script of a LOCAL game: puts the local
@@ -1500,6 +1628,24 @@ public partial class LegacyGame : Node
     /// DarkPlaces key number, read from the bind table. The table is copied once a second; the program
     /// asks about every key number there is, several times a frame.
     /// </summary>
+    // Key_FindKeysForCommand over the same table KeyBinding answers from: the keys bound to exactly this command,
+    // lowest numbers first.
+    private void FindKeysForCommand(string command, Span<int> keys, int bindMap)
+    {
+        if (_shared is not null)
+        {
+            _shared.Keys.FindKeysForCommand(command, keys, bindMap);
+            return;
+        }
+        KeyBinding(0, bindMap);   // refreshes the snapshot when it is due
+        _foundKeys.Clear();
+        foreach ((int number, string bound) in _bindSnapshot)
+            if ((uint)number < VortexArena.Legacy.Csqc.CsqcKeys.MaxKeys && string.Equals(bound, command, StringComparison.Ordinal)) _foundKeys.Add(number);
+        _foundKeys.Sort();
+        for (int i = 0; i < keys.Length && i < _foundKeys.Count; i++) keys[i] = _foundKeys[i];
+    }
+    private readonly List<int> _foundKeys = new();
+
     private string? KeyBinding(int key, int bindMap)
     {
         // On the menu's console the bindings are Xonotic's own table, which is DarkPlaces' in every respect.

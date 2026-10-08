@@ -146,6 +146,80 @@ public sealed class LegacyClientSession : IDisposable
         Client.Connect(now);
     }
 
+    // ---- demo playback (cl_demo.c CL_PlayDemo_f, CL_ReadDemoMessage) --------------------------------------
+
+    private DpDemoReader? _demo;
+    private Stream? _demoStream;
+    private Vector3 _demoAngles0, _demoAngles1;
+
+    /// <summary>True while a recording is being played (cls.demoplayback).</summary>
+    public bool DemoPlaying => _demo is not null;
+    /// <summary>Recorded messages handed to the parser so far.</summary>
+    public int DemoMessages { get; private set; }
+
+    /// <summary>
+    /// CL_PlayDemo_f: play a DarkPlaces recording in place of a connection. The stream is the session's from
+    /// here on. <paramref name="timeDemo"/> is cls.timedemo: one message a frame, as fast as frames come.
+    /// The owner calls <see cref="ReadDemo"/> once a frame where it would hand over datagrams.
+    /// </summary>
+    public void PlayDemo(Stream demo, double now, bool timeDemo = false)
+    {
+        _demoStream = demo ?? throw new ArgumentNullException(nameof(demo));
+        _demo = new DpDemoReader(demo);
+        DemoMessages = 0;
+        _demoAngles0 = _demoAngles1 = default;
+        State.IsDemo = true;
+        _lastFrame = now;
+        _clockStarted = false;
+        Clock.Reset();
+        Clock.Demo = true;
+        Clock.TimeDemo = timeDemo;
+        Client.BeginDemo(now);
+    }
+
+    /// <summary>
+    /// CL_ReadDemoMessage: every message until the client is in the game; after that the messages whose
+    /// time has come (one a frame for a timedemo). The recorded view angles are interpolated between the last
+    /// two messages, as cl_main.c does "if playing a demo". Returns false once the recording has ended.
+    /// </summary>
+    public bool ReadDemo()
+    {
+        if (_demo is not { } demo) return false;
+        while (Client.State == DpClientState.Connected)
+        {
+            bool signedOn = State.Signon >= DpProtocol.Signons;
+            if (signedOn && !Clock.TimeDemo && Clock.Time < Clock.ServerTime) break;
+            if (!demo.TryReadMessage(out DpDemoMessage message))
+            {
+                Note(demo.Error is { } error ? "the demo stopped: " + error : $"the demo ended after {DemoMessages} messages");
+                Client.EndDemo();
+                _demoStream?.Dispose();
+                _demoStream = null;
+                _demo = null;
+                return false;
+            }
+            DemoMessages++;
+            _demoAngles1 = _demoAngles0;
+            _demoAngles0 = message.ViewAngles;
+            Client.ReceiveDemoMessage(message.Data);
+            if (signedOn && Clock.TimeDemo) break;
+        }
+        // CL_LerpPoint, then "interpolate the angles if playing a demo".
+        double span = Math.Min(Clock.ServerTime - Clock.ServerPrevTime, 0.1);
+        double frac = span <= 0 || Clock.TimeDemo ? 1 : Math.Clamp((Clock.Time - (Clock.ServerTime - span)) / span, 0, 1);
+        State.ViewAngles = new QcVector(LerpAngle(_demoAngles1.X, _demoAngles0.X, frac), LerpAngle(_demoAngles1.Y, _demoAngles0.Y, frac), LerpAngle(_demoAngles1.Z, _demoAngles0.Z, frac));
+        if (State.Signon >= DpProtocol.Signons) State.Time = Clock.Time;
+        return true;
+
+        static float LerpAngle(float from, float to, double frac)
+        {
+            float d = to - from;
+            if (d > 180) d -= 360;
+            else if (d < -180) d += 360;
+            return (float)(from + frac * d);
+        }
+    }
+
     /// <summary>
     /// The start of a client frame: "cl.oldtime = cl.time; cl.time += clframetime". It comes before
     /// the frame's datagrams are handed over, because a server time stamp among them corrects the
@@ -253,6 +327,9 @@ public sealed class LegacyClientSession : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _demoStream?.Dispose();
+        _demoStream = null;
+        _demo = null;
         UnloadProgram();
         Console.Detach();
     }

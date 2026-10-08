@@ -36,6 +36,7 @@ public sealed partial class GodotLegacyPresentation
 
     private bool Budget()
     {
+        if (s_noEffects) return false;
         if (_effectsThisFrame < MaxEffectsPerFrame)
         {
             _effectsThisFrame++;
@@ -81,10 +82,13 @@ public sealed partial class GodotLegacyPresentation
         bool box = originMin.X != originMax.X || originMin.Y != originMax.Y || originMin.Z != originMax.Z
             || velocityMin.X != velocityMax.X || velocityMin.Y != velocityMax.Y || velocityMin.Z != velocityMax.Z;
         int points = box ? Math.Clamp((int)MathF.Ceiling(count), 1, MaxBoxPoints) : 1;
+        long began = LegacyPerfLog.Stamp();
         if (points == 1) _effects.Spawn(name, Middle(originMin, originMax), Middle(velocityMin, velocityMax), count, tint);
         else
             for (int i = 0; i < points; i++)
                 _effects.Spawn(name, Within(originMin, originMax), Within(velocityMin, velocityMax), count / points, tint);
+        if (LegacyPerfLog.Enabled && System.Diagnostics.Stopwatch.GetElapsedTime(began).TotalMilliseconds >= 0.3)
+            LegacyPerfLog.Event(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"effect {name} count {count:0.##} points {points}"), began);
         EffectsSpawned++;
         if (s_debugEntities) _debugEffects[name] = _debugEffects.GetValueOrDefault(name) + 1;
     }

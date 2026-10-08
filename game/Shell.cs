@@ -64,6 +64,9 @@ public partial class Shell : Node
     /// (<see cref="StartLegacyLocalGame"/>). <see cref="BootLegacyGametype"/> (<c>--legacy-gametype</c>) and
     /// <see cref="BootLegacyBots"/> (<c>--legacy-bots</c>) are optional.</summary>
     public string? BootLegacyMap { get; set; }
+    /// <summary>If set at boot (CLI <c>--legacy-demo &lt;file&gt;</c>), skip the menu and play this DarkPlaces
+    /// recording in legacy compatibility mode (DarkPlaces' <c>playdemo</c>): no server and no socket.</summary>
+    public string? BootLegacyDemo { get; set; }
     public string? BootLegacyGametype { get; set; }
     public int? BootLegacyBots { get; set; }
 
@@ -445,6 +448,8 @@ public partial class Shell : Node
             if (BootLegacyMenu) StartLegacyMenu();          // --legacy-menu too: the join runs on the Xonotic menu's console
             ConnectToLegacyServer(LegacyConnectAddress!);   // --legacy-connect <addr>: join a stock Xonotic server
         }
+        else if (!string.IsNullOrWhiteSpace(BootLegacyDemo))
+            StartLegacySession("demo " + BootLegacyDemo, null, BootLegacyDemo);   // --legacy-demo <file>: DarkPlaces' playdemo
         else if (!string.IsNullOrWhiteSpace(BootLegacyMap))
         {
             if (BootLegacyMenu) StartLegacyMenu();          // --legacy-menu too: the game runs on the Xonotic menu's console
@@ -1100,7 +1105,7 @@ public partial class Shell : Node
         Game.Legacy.LegacyLocalGames.HandleMapCommand(line, _legacyMenu, _legacyGame, MenuState.Cvars,
             map => StartLegacyLocalGame(map), _console.Print);
 
-    private async void StartLegacySession(string address, VortexArena.Legacy.Local.LegacyLocalGameRequest? local)
+    private async void StartLegacySession(string address, VortexArena.Legacy.Local.LegacyLocalGameRequest? local, string? demo = null)
     {
         if (string.IsNullOrWhiteSpace(address))
         {
@@ -1139,12 +1144,26 @@ public partial class Shell : Node
             OpenChat = team => OpenChatPrompt(team),
             // A local game: the session hosts the server too. Null for a join.
             LocalGame = local,
+            DemoPath = demo,
             MapCommand = HandleLegacyMapCommand,
             // A level change (match end, vote, changelevel) puts the loading screen back up.
             ShowLoadingScreen = map => { ShowLoadingScreen(map); return _loadingScreen; },
         };
         legacy.ConnectionFailed = reason => HandleLegacyConnectionFailed(legacy, reason, address);
-        legacy.Disconnected = () => { if (legacy == _legacyGame) ReturnToMainMenu(); };
+        legacy.Disconnected = () =>
+        {
+            if (legacy != _legacyGame) return;
+            if (demo is not null)
+            {
+                // A recording played from the command line ends the run with it (a measurement, not a visit to
+                // the menu - whose server list would go and ask the master servers).
+                Log.Info("[Shell] the demo ended; exiting.");
+                TeardownGame();
+                GetTree().Quit();
+                return;
+            }
+            ReturnToMainMenu();
+        };
         legacy.ConsolePrint += _console.Print;
         _legacyGame = legacy;
 

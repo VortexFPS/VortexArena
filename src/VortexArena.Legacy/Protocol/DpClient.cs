@@ -148,9 +148,35 @@ public sealed class DpClient
     {
         Handshake = new DpConnectionHandshake(_config.ConnectUserInfo, _config.ConnectTries);
         Handshake.Start(now);
+        DemoPlayback = false;
         State = DpClientState.Connecting;
         LastError = null;
         _outgoing.Clear();
+    }
+
+    /// <summary>cls.demoplayback: the messages come from a recording (<see cref="ReceiveDemoMessage"/>),
+    /// nothing is sent, and nothing times out.</summary>
+    public bool DemoPlayback { get; private set; }
+
+    /// <summary>CL_PlayDemo_f: the connection is "established" at once, with nobody at the other end.</summary>
+    public void BeginDemo(double now)
+    {
+        LastError = null;
+        _outgoing.Clear();
+        ConnectionEstablished(now);
+        DemoPlayback = true;
+    }
+
+    /// <summary>One recorded server message (CL_ReadDemoMessage's CL_ParseServerMessage).</summary>
+    public void ReceiveDemoMessage(byte[] message)
+    {
+        if (DemoPlayback && State == DpClientState.Connected) ProcessMessage(message);
+    }
+
+    /// <summary>The recording has no more messages: CL_Disconnect.</summary>
+    public void EndDemo()
+    {
+        if (DemoPlayback && State == DpClientState.Connected) End(DpClientState.Disconnected, "the demo ended");
     }
 
     /// <summary>Hand over one datagram that arrived from the server. Never throws on malformed data.</summary>
@@ -262,7 +288,7 @@ public sealed class DpClient
     /// </summary>
     public IReadOnlyList<byte[]> KeepAlive(double now)
     {
-        if (State != DpClientState.Connected || Signon.Stage >= DpProtocol.Signons || now - _lastSendTime < _config.KeepAliveInterval)
+        if (DemoPlayback || State != DpClientState.Connected || Signon.Stage >= DpProtocol.Signons || now - _lastSendTime < _config.KeepAliveInterval)
             return Array.Empty<byte[]>();
         _unreliable.Clear();
         DpClientMessages.WriteNop(_unreliable);
@@ -277,7 +303,7 @@ public sealed class DpClient
     /// <summary>CL_ForwardToServer: queue a console command for the server on the reliable stream.</summary>
     public void SendStringCommand(string command)
     {
-        if (State != DpClientState.Connected)
+        if (State != DpClientState.Connected || DemoPlayback)
             return;
         CommandSent?.Invoke(command);
         DpClientMessages.WriteStringCommand(Channel.Reliable, command);
@@ -309,7 +335,7 @@ public sealed class DpClient
             if (Handshake.State == DpHandshakeState.TimedOut)
                 End(DpClientState.TimedOut, "Connect: failed, no reply");
         }
-        else if (State == DpClientState.Connected)
+        else if (State == DpClientState.Connected && !DemoPlayback)
         {
             SendMove(now);
             if (State == DpClientState.Connected && now - Channel.LastMessageTime > _config.Timeout)

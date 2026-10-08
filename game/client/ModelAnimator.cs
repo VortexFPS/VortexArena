@@ -173,15 +173,22 @@ public partial class ModelAnimator : Node3D
         return a;
     }
 
+    /// <summary>A measuring hook: when set, called with a step's name and the Stopwatch timestamp at which it
+    /// began, once per step of building an animator. Null (always, outside a perf capture): nothing is timed.</summary>
+    internal static Action<string, long>? BuildProbe;
+
     private void Initialize(Md3Data md3, AssetSystem? assets, SkinFile? skin)
     {
         _md3 = md3 ?? throw new ArgumentNullException(nameof(md3));
         _assets = assets;
+        long probe = BuildProbe is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         ResolveSurfaces(skin);
+        if (BuildProbe is { } p1) { p1("animator step: materials " + md3.Name, probe); probe = System.Diagnostics.Stopwatch.GetTimestamp(); }
 
         _mesh = ModelLoader.BuildModel(_md3, 0, _assets, skin);
         _mesh.Name = "Mesh";
         AddChild(_mesh);
+        if (BuildProbe is { } p2) { p2("animator step: frame-0 mesh " + md3.Name, probe); probe = System.Diagnostics.Stopwatch.GetTimestamp(); }
 
         _tagsRoot = ModelLoader.BuildTags(_md3, 0);
         AddChild(_tagsRoot);
@@ -193,7 +200,9 @@ public partial class ModelAnimator : Node3D
                     _tagMarkers.Add((tag, m));
             }
 
+        if (BuildProbe is { } p3) { p3("animator step: tags " + md3.Name, probe); probe = System.Diagnostics.Stopwatch.GetTimestamp(); }
         AutoRegisterClips();
+        if (BuildProbe is { } p4) { p4("animator step: clips " + md3.Name, probe); probe = System.Diagnostics.Stopwatch.GetTimestamp(); }
 
         // Default to the first registered clip (idle if present), else just hold frame 0.
         if (_clips.TryGetValue("idle", out AnimClip idle)) Play(idle.Name);
@@ -201,6 +210,7 @@ public partial class ModelAnimator : Node3D
         {
             foreach (AnimClip c in _clips.Values) { Play(c.Name); break; }
         }
+        BuildProbe?.Invoke("animator step: first clip frame " + md3.Name, probe);
     }
 
     /// <summary>

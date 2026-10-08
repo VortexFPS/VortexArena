@@ -101,7 +101,10 @@ public sealed partial class GodotLegacyPresentation
     private bool StartVoice(int owner, int channel, string sample, QcVector origin, float volume, float attenuation, float startPosition, bool loop, float speed, bool isStatic)
     {
         if (_soundsThisFrame >= MaxSoundsPerFrame || !Finite(origin)) return false;
+        long t0 = LegacyPerfLog.Stamp();
         if (!(volume > 0) || LoadSample(sample) is not { } stream) return false;
+        stream = Decoded(stream, loop);
+        long t1 = LegacyPerfLog.Stamp();
         _soundsThisFrame++;
 
         // "replace the channel of the same entity and entchannel"; channel 0 never replaces.
@@ -113,7 +116,9 @@ public sealed partial class GodotLegacyPresentation
         if (voice is null) return false;
 
         AudioStreamPlayer3D player = voice.Player;
+        long t2 = LegacyPerfLog.Stamp();
         player.Stop();
+        long t3 = LegacyPerfLog.Stamp();
         voice.InUse = true;
         voice.Static = isStatic;
         voice.Owner = owner;
@@ -127,10 +132,21 @@ public sealed partial class GodotLegacyPresentation
         float radius = _cvars.Has("snd_soundradius") ? _cvars.GetFloat("snd_soundradius") : 1200f;
         voice.DistanceFade = radius > 0 ? voice.Attenuation / radius : 0;
         player.Stream = stream;
+        long t4 = LegacyPerfLog.Stamp();
         player.PitchScale = float.IsFinite(speed) ? Math.Clamp(speed, 0.05f, 8f) : 1f;
         ApplyFalloff(voice);
+        long t5 = LegacyPerfLog.Stamp();
         double length = stream.GetLength();
+        long t6 = LegacyPerfLog.Stamp();
         player.Play(startPosition > 0 && startPosition < length ? startPosition : 0f);
+        if (LegacyPerfLog.Enabled)
+        {
+            long t7 = LegacyPerfLog.Stamp();
+            double ms = (t7 - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            if (ms >= 0.2)
+                LegacyPerfLog.Event(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"sound {sample} ({stream.GetClass()}): load {(t1 - t0) * 1e6 / System.Diagnostics.Stopwatch.Frequency:0} us; voice {(t2 - t1) * 1e6 / System.Diagnostics.Stopwatch.Frequency:0}; stop {(t3 - t2) * 1e6 / System.Diagnostics.Stopwatch.Frequency:0}; set stream {(t4 - t3) * 1e6 / System.Diagnostics.Stopwatch.Frequency:0}; falloff {(t5 - t4) * 1e6 / System.Diagnostics.Stopwatch.Frequency:0}; length {(t6 - t5) * 1e6 / System.Diagnostics.Stopwatch.Frequency:0}; play {(t7 - t6) * 1e6 / System.Diagnostics.Stopwatch.Frequency:0}"), t0);
+        }
         SoundsStarted++;
         if (s_debugEntities && _debugSounds.Count < 400)
             _debugSounds.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
@@ -165,6 +181,97 @@ public sealed partial class GodotLegacyPresentation
     }
 
     private readonly List<string> _debugSounds = new();
+
+    // ---- short compressed samples, decoded once ------------------------------------------------------------
+    //
+    // Starting a compressed (Ogg Vorbis) sample makes the engine set up a decoder for it: half a millisecond to a
+    // millisecond and a half on the main thread, every time - a shotgun blast, two pain sounds and a ricochet in
+    // one frame were three milliseconds of it. DarkPlaces decodes a sample to PCM when it loads it and starting it
+    // is free. Here a sample is decoded the first time it has been started: on a pool thread, through the
+    // engine's own decoder and resampler (so it sounds as it did), into a PCM stream that every later start of it
+    // uses. Only what a match actually plays is decoded, short samples only, and never a looping one.
+    // VORTEX_LEGACY_NOPCM=1 turns it off (the other arm of a comparison).
+    private const double MaxDecodedSeconds = 6;
+    private const int MaxDecodedSamples = 512;
+    private static readonly bool s_noPcm = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_NOPCM"));
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<AudioStream, AudioStream?> _decoded = new();
+    private long _decodedBytes;
+
+    /// <summary>Samples decoded to PCM so far in this session, and the bytes they take.</summary>
+    public int DecodedSamples => _decoded.Count;
+    public long DecodedBytes => Interlocked.Read(ref _decodedBytes);
+
+    private AudioStream Decoded(AudioStream stream, bool loop)
+    {
+        if (s_noPcm || loop || stream is not AudioStreamOggVorbis ogg) return stream;
+        if (_decoded.TryGetValue(stream, out AudioStream? pcm)) return pcm ?? stream;
+        if (_decoded.Count >= MaxDecodedSamples || ogg.Loop) return stream;
+        double length = stream.GetLength();
+        if (!(length > 0) || length > MaxDecodedSeconds) { _decoded[stream] = null; return stream; }
+        _decoded[stream] = null;   // being decoded: this start, and any before it is ready, plays the compressed one
+        float mixRate = AudioServer.GetMixRate();
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                if (DecodeToPcm(ogg, mixRate, length) is { } wav)
+                {
+                    _decoded[stream] = wav;
+                    Interlocked.Add(ref _decodedBytes, wav.Data.Length);
+                }
+            }
+            catch (Exception e) when (e is not OutOfMemoryException) { }
+        });
+        return stream;
+    }
+
+    // The whole sample through a playback of its own, at the mixer's rate: what the mixer would have been given.
+    private static AudioStreamWav? DecodeToPcm(AudioStreamOggVorbis source, float mixRate, double length)
+    {
+        AudioStreamPlayback? playback = source.InstantiatePlayback();
+        if (playback is null) return null;
+        int expected = (int)Math.Ceiling(length * mixRate) + 64, limit = (int)(MaxDecodedSeconds * mixRate) + 4096;
+        List<Vector2[]> blocks = new();
+        int frames = 0;
+        playback.Start();
+        while (frames < expected && frames < limit)
+        {
+            Vector2[] block = playback.MixAudio(1f, Math.Min(4096, expected - frames));
+            if (block.Length == 0) break;
+            blocks.Add(block);
+            frames += block.Length;
+            if (!playback.IsPlaying()) break;
+        }
+        playback.Stop();
+        if (frames == 0) return null;
+        bool stereo = false;
+        foreach (Vector2[] block in blocks)
+        {
+            foreach (Vector2 frame in block)
+                if (MathF.Abs(frame.X - frame.Y) > 1f / 32768f) { stereo = true; break; }
+            if (stereo) break;
+        }
+        // Trailing silence past the sample's end (the estimate of its length is rounded up) is dropped.
+        int channels = stereo ? 2 : 1;
+        byte[] data = new byte[frames * channels * 2];
+        int at = 0, lastAudible = 0;
+        foreach (Vector2[] block in blocks)
+            foreach (Vector2 frame in block)
+            {
+                short left = (short)Math.Clamp(MathF.Round(frame.X * 32767f), -32768f, 32767f);
+                data[at++] = (byte)left; data[at++] = (byte)(left >> 8);
+                if (stereo)
+                {
+                    short right = (short)Math.Clamp(MathF.Round(frame.Y * 32767f), -32768f, 32767f);
+                    data[at++] = (byte)right; data[at++] = (byte)(right >> 8);
+                    if (right != 0) lastAudible = at;
+                }
+                if (left != 0) lastAudible = at;
+            }
+        int keep = Math.Min(data.Length, (lastAudible + channels * 2 - 1) / (channels * 2) * (channels * 2) + channels * 2 * 64);
+        if (keep < data.Length) Array.Resize(ref data, Math.Max(channels * 2, keep));
+        return new AudioStreamWav { Format = AudioStreamWav.FormatEnum.Format16Bits, Stereo = stereo, MixRate = (int)MathF.Round(mixRate), Data = data };
+    }
 
     // CL_VM_GetViewEntity: the view entity as the server numbers it, or the program's entity for it.
     private bool IsViewEntity(int owner)

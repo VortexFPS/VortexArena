@@ -101,6 +101,54 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         if (LegacyMemoryMap.Enabled) LegacyData.LevelReport = _memoryLine = MemoryLine;
     }
 
+    // Developer aid for finding out what a frame is spent on, as the other VORTEX_LEGACY_* variables:
+    // VORTEX_LEGACY_ABLATE names parts of the picture to leave out, separated by commas - "hud" (the 2D list is
+    // not handed to its canvas), "world" (the map is hidden), "ents" (no entity is shown), "fx" (no particles),
+    // "3d" (the viewport draws no 3D at all), "msaa" (no multisampling), "sun" (the directional light is hidden),
+    // "pose" (no entity is animated: "skel" the skeletons only, "morph" the vertex-animated models only), "move"
+    // (an entity stays where it was first put), "hudchunk" (the 2D list is not cut into short stretches).
+    // The frame time that disappears with a part is what the part costs.
+    //
+    // Two runs of one build differ by a tenth in frame time on this kind of machine for no reason of the
+    // build's (where the scheduler put the threads), which is more than most parts cost. So the same names in
+    // VORTEX_LEGACY_TOGGLE are left out only every other two seconds of the run, and the perf log marks each
+    // frame with which half it was in: the two halves of ONE run are compared (_scratch/perf4/toggle.py).
+    // Environment variables, so nothing a server or a program sends can blank the screen.
+    private static readonly string[] s_ablate = Parts("VORTEX_LEGACY_ABLATE"), s_toggle = Parts("VORTEX_LEGACY_TOGGLE");
+    private static readonly double s_togglePeriod = double.TryParse(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_TOGGLE_SECONDS"),
+        System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double period) && period > 0.05 ? period : 2.0;
+    private static bool s_noHud, s_noWorld, s_noEntities, s_noEffects, s_no3D, s_noMsaa, s_noSun, s_noPose, s_noMove, s_noSkeleton, s_noMorph;
+    private static string[] Parts(string variable) =>
+        (System.Environment.GetEnvironmentVariable(variable) ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    private int _ablationPhase = -1;
+    private Viewport.Msaa _msaaBefore;
+
+    private void ApplyAblation()
+    {
+        if (s_ablate.Length == 0 && s_toggle.Length == 0) return;
+        if (_sceneRoot.GetViewport() is not { } viewport) return;
+        int phase = s_toggle.Length == 0 ? 0 : (int)((long)(Time.GetTicksMsec() / (s_togglePeriod * 1000.0)) & 1);
+        LegacyPerfLog.Flag = (byte)phase;
+        if (phase == _ablationPhase) return;
+        if (_ablationPhase < 0)
+        {
+            _msaaBefore = viewport.Msaa3D;
+            _note("VORTEX_LEGACY_ABLATE: left out of the picture: " + string.Join(",", s_ablate)
+                + (s_toggle.Length == 0 ? "" : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"; left out every other {s_togglePeriod:0.##} s (VORTEX_LEGACY_TOGGLE): {string.Join(",", s_toggle)}")));
+        }
+        _ablationPhase = phase;
+        bool Out(string part) => Array.IndexOf(s_ablate, part) >= 0 || (phase == 1 && Array.IndexOf(s_toggle, part) >= 0);
+        s_noHud = Out("hud"); s_noWorld = Out("world"); s_noEntities = Out("ents"); s_noEffects = Out("fx");
+        s_no3D = Out("3d"); s_noMsaa = Out("msaa"); s_noSun = Out("sun"); s_noPose = Out("pose"); s_noMove = Out("move");
+        s_noSkeleton = Out("skel"); s_noMorph = Out("morph");
+        LegacyDrawLayer.ChunkOff = Out("hudchunk");
+        viewport.Disable3D = s_no3D;
+        viewport.Msaa3D = s_noMsaa ? Viewport.Msaa.Disabled : _msaaBefore;
+        _drawLayer.Visible = !s_noHud;
+        if (_sun is not null) _sun.Visible = !s_noSun;
+    }
+    private DirectionalLight3D? _sun;
+
     // Developer aid (VORTEX_LEGACY_MEMMAP): what this session's level holds, for the review scripts' "mem".
     private Func<string>? _memoryLine;
     private string MemoryLine() =>
@@ -240,7 +288,11 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
             _effects.SetDecalGeometry(bsp);
             ModelLighting.ApplyMap(bsp.LightGrid);
             ApplyEnvironment(bsp);
-            _note($"map \"{map}\" loaded: {bsp.Models.Length} models, {bsp.Faces.Length} faces");
+            // Every door and platform now, under the loading screen, instead of each on the frame it is first seen.
+            long submodelsBegan = LegacyPerfLog.Stamp();
+            (int submodels2, double submodelSeconds) = PrebuildSubmodels();
+            LegacyPerfLog.Event($"precache: {submodels2} map submodels built ahead", submodelsBegan);
+            _note(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"map \"{map}\" loaded: {bsp.Models.Length} models, {bsp.Faces.Length} faces; {submodels2} submodels built ahead in {submodelSeconds:0.00} s"));
             return true;
         }
         catch (Exception e) when (e is not OutOfMemoryException)
@@ -259,7 +311,8 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         {
             _environment = new WorldEnvironment { Name = "WorldEnvironment" };
             _sceneRoot.AddChild(_environment);
-            _sceneRoot.AddChild(new DirectionalLight3D { Name = "Sun", RotationDegrees = new Vector3(-50f, -30f, 0f), ShadowEnabled = false });
+            _sun = new DirectionalLight3D { Name = "Sun", RotationDegrees = new Vector3(-50f, -30f, 0f), ShadowEnabled = false };
+            _sceneRoot.AddChild(_sun);
         }
         Sky sky = SkyboxLoader.TryBuild(bsp, _assets.Assets) ?? new Sky { SkyMaterial = new ProceduralSkyMaterial() };
         Godot.Environment env = new()
@@ -317,6 +370,8 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
     {
         EndSceneFrame();
         LastDrawCommands = DrawList.Count;
+        ApplyAblation();
+        if (s_noHud) DrawList.Clear();
         _drawLayer.Present(Canvas);
         UpdateSounds();
     }
@@ -342,6 +397,7 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
     // which got pages of its own) is taken out, or each level ever played stays in memory.
     private void ReleaseLevelMaps()
     {
+        ReleasePrebuiltSubmodels();
         int pages = 0;
         foreach (BspData map in _levelMaps) pages += MapLoader.ReleaseLightmaps(map);
         if (_levelMaps.Count > 0) _note($"level released: {_levelMaps.Count} map views, {pages} lightmap pages forgotten");

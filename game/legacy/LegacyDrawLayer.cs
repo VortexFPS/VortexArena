@@ -30,6 +30,17 @@ public partial class LegacyDrawLayer : Control
     // are cut, and a settings dialog has several.
     private const int MaxSegments = 192;
 
+    // A stretch is also ended after this many commands. A canvas item is replayed whole when anything in it
+    // changed, and in a game something always has (a name tag that follows a player, the clock, a damage number
+    // on its way up): with one item per blend mode the whole HUD was replayed every frame, text glyph by glyph,
+    // to move three name tags - half a millisecond of a four millisecond frame. Cut into short stretches, the
+    // ones that did not change are kept, and those are most of them. Not applied to the two blend modes that
+    // read the screen (each of their items costs a copy of it). VORTEX_LEGACY_HUDCHUNK overrides the length
+    // (0: no cutting), as the other developer aids: an environment variable, for the other arm of a comparison.
+    /// <summary>Set by the presentation's developer aid (VORTEX_LEGACY_ABLATE / _TOGGLE "hudchunk"): no cutting.</summary>
+    internal static bool ChunkOff;
+    private static readonly int s_chunk = int.TryParse(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_HUDCHUNK"), out int chunk) ? Math.Clamp(chunk, 0, 4096) : 8;
+
     private readonly List<LegacyDrawSegment> _segments = new();
     private readonly List<LegacyTextRun> _runs = new();
     private readonly Vector2[] _trianglePoints = new Vector2[3];
@@ -92,7 +103,7 @@ public partial class LegacyDrawLayer : Control
     {
         _source = source;
         IReadOnlyList<LegacyDrawCommand> commands = source.DrawList.Commands;
-        int used = 0, clipped = 0, start = 0, currentClass = -1;
+        int used = 0, clipped = 0, start = 0, currentClass = -1, inStretch = 0;
         Rect2? clip = null, clipAtStart = null, hardClip = null;
         for (int i = 0; i < commands.Count; i++)
         {
@@ -118,18 +129,21 @@ public partial class LegacyDrawLayer : Control
             {
                 currentClass = blend;
                 start = i;
+                inStretch = 0;
                 clipAtStart = clip;
                 if (needsHardClip) hardClip = clip;
             }
-            else if ((blend != currentClass || needsHardClip) && used < MaxSegments - 1)
+            else if ((blend != currentClass || needsHardClip || (s_chunk > 0 && !ChunkOff && inStretch >= s_chunk && blend < 3 && used < MaxSegments - 32)) && used < MaxSegments - 1)
             {
                 Assign(used++, start, i, currentClass, clipAtStart, hardClip, ref clipped);
                 start = i;
+                inStretch = 0;
                 currentClass = blend;
                 // The clip commands between the two stretches were consumed above; carry their result over.
                 clipAtStart = clip;
                 if (needsHardClip) hardClip = clip;
             }
+            inStretch++;
         }
         if (commands.Count > start && currentClass >= 0) Assign(used++, start, commands.Count, currentClass, clipAtStart, hardClip, ref clipped);
         for (int i = used; i < _segments.Count; i++)

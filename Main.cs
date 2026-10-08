@@ -168,6 +168,10 @@ public partial class Main : Node
             int lm = Array.IndexOf(args, "--legacy-map");
             if (lm >= 0 && lm + 1 < args.Length)
                 shell.BootLegacyMap = args[lm + 1];
+            //   `--legacy-demo <file.dem>` plays a DarkPlaces recording (its `playdemo`): no server, no socket.
+            int ldm = Array.IndexOf(args, "--legacy-demo");
+            if (ldm >= 0 && ldm + 1 < args.Length)
+                shell.BootLegacyDemo = args[ldm + 1];
             int lgt = Array.IndexOf(args, "--legacy-gametype");
             if (lgt >= 0 && lgt + 1 < args.Length)
                 shell.BootLegacyGametype = args[lgt + 1];

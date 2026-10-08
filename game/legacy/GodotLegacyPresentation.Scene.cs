@@ -55,6 +55,8 @@ public sealed partial class GodotLegacyPresentation
         public Skeleton3D? Skeleton;
         public int[]? BoneParents;
         public ModelAnimator? Animator;
+        // A vertex-animated model the asset pipeline built (a skin other than the first): posed the same way.
+        public VortexArena.Game.Loaders.Models.Md3Morph? Morph;
         public int LastFrame = int.MinValue;
         public readonly List<GeometryInstance3D> Geometry = new();
         public List<(MeshInstance3D Mesh, int Surface, Material? Original)>? Surfaces;
@@ -295,7 +297,7 @@ public sealed partial class GodotLegacyPresentation
     // where the newest frame put it.
     private void SubmitNetworkState(int key, in EntityState entity, CsqcClientState state)
     {
-        if ((entity.Effects & EfNoDraw) != 0) return;
+        if ((entity.Effects & EfNoDraw) != 0 || s_noEntities) return;
         if (state.ModelNameForIndex(entity.ModelIndex) is not { Length: > 0 } model) return;
         _submittedThisFrame++;
         if (model[0] == '*') SubmodelSubmissions++;
@@ -318,9 +320,10 @@ public sealed partial class GodotLegacyPresentation
         ApplyTint(proxy, entity.Colormap,
             new QcVector(entity.ColorMod0 / 32f, entity.ColorMod1 / 32f, entity.ColorMod2 / 32f),
             new QcVector(entity.GlowMod0 / 32f, entity.GlowMod1 / 32f, entity.GlowMod2 / 32f));
-        if (proxy.Animator is { } animator && proxy.LastFrame != entity.Frame && !proxy.Stale)
+        if (proxy.LastFrame != entity.Frame && !proxy.Stale && (proxy.Animator is not null || proxy.Morph is not null))
         {
-            animator.SetRawFrame(entity.Frame);
+            if (proxy.Animator is { } animator) animator.SetRawFrame(entity.Frame);
+            else proxy.Morph!.SetFrame(entity.Frame);
             proxy.LastFrame = entity.Frame;
         }
     }
@@ -342,11 +345,16 @@ public sealed partial class GodotLegacyPresentation
         return AddEntityCore(entity, profile);
     }
 
+    private static string s_lapModel = "";
+
     private static long Lap(long[]? profile, int slot, long since)
     {
         if (profile is null) return 0;
         long now = System.Diagnostics.Stopwatch.GetTimestamp();
         profile[slot] += now - since;
+        // One step of one entity that took a millisecond: named in the perf log (what a slow addentities was).
+        if (now - since > System.Diagnostics.Stopwatch.Frequency / 1000)
+            LegacyPerfLog.Event(slot switch { 0 => "entity step: engine entities", 1 => "entity step: placement", 2 => "entity step: proxy/build", 3 => "entity step: transform", 4 => "entity step: render state", 5 => "entity step: tint", _ => "entity step: pose" } + " " + s_lapModel, since);
         return now;
     }
 
@@ -355,8 +363,10 @@ public sealed partial class GodotLegacyPresentation
         long lap = profile is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         if (string.IsNullOrEmpty(entity.Model)) return false;
         if (!Collecting) return true;
+        if (s_noEntities) return true;
         _submittedThisFrame++;
         string model = entity.Model;
+        if (profile is not null) s_lapModel = model;
         if (model[0] == '*') SubmodelSubmissions++;
         if (model == "null") return false;
 
@@ -401,7 +411,7 @@ public sealed partial class GodotLegacyPresentation
         lap = Lap(profile, 4, lap);
         ApplyTint(proxy, entity.ColorMap, entity.ColorMod, entity.GlowMod);
         lap = Lap(profile, 5, lap);
-        if (!proxy.Stale) ApplyPose(proxy, entity);
+        if (!proxy.Stale && !s_noPose) ApplyPose(proxy, entity);
         Lap(profile, 6, lap);
         return true;
     }
@@ -529,6 +539,16 @@ public sealed partial class GodotLegacyPresentation
         if (LegacyPerfLog.Enabled && System.Diagnostics.Stopwatch.GetElapsedTime(step).TotalMilliseconds >= 2) LegacyPerfLog.Event("model step: into the scene " + model, step);
         _proxyNodes++;
         proxy.Node = node;
+        // The program sets every frame of every model (.frame, .frame2, .lerpfrac): nothing plays on its own. The
+        // engine switches a node's per-frame call on when the node enters the tree, whatever was asked before, so
+        // it is switched off here, after - some ninety vertex-animated nodes were each called every frame, most
+        // of them playing their first clip, which no entity had asked for.
+        animator?.SetProcess(false);
+        if (animator is null && FindMorph(node) is { } morph)
+        {
+            morph.SetFrame(0);
+            proxy.Morph = morph;
+        }
         CollectGeometry(node, proxy.Geometry);
         // DarkPlaces lights every model from the map's light grid; the request is honoured while a grid is bound.
         step = LegacyPerfLog.Stamp();
@@ -568,8 +588,11 @@ public sealed partial class GodotLegacyPresentation
             Md3Data? md3 = skin == 0 && model.EndsWith(".md3", StringComparison.OrdinalIgnoreCase) ? _assets.LoadMd3(model) : null;
             if (md3 is { FrameCount: > 1 })
             {
+                if (LegacyPerfLog.Enabled) ModelAnimator.BuildProbe ??= static (step, began) => { if (System.Diagnostics.Stopwatch.GetElapsedTime(began).TotalMilliseconds >= 0.3) LegacyPerfLog.Event(step, began); };
                 animator = ModelAnimator.Create(md3, null, _assets.Assets);
+                long rawBegan = LegacyPerfLog.Stamp();
                 animator.SetRawFrame(0);
+                if (LegacyPerfLog.Enabled && System.Diagnostics.Stopwatch.GetElapsedTime(rawBegan).TotalMilliseconds >= 0.3) LegacyPerfLog.Event("animator step: raw frame 0 " + model, rawBegan);
                 // The client program sets every frame itself (SetRawFrame / SetRawFrameBlend apply at once):
                 // the animator's own per-frame step has nothing to play, for some seventy nodes in a fight.
                 animator.SetProcess(false);
@@ -617,6 +640,57 @@ public sealed partial class GodotLegacyPresentation
             return;
         }
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        // Built behind the loading screen (PrebuildSubmodels): taken as it is.
+        if (!_prebuiltSubmodels.Remove(index, out Node3D? node) || !GodotObject.IsInstanceValid(node)) node = CreateSubmodelNode(bsp, index);
+        if (node is null)
+        {
+            proxy.Failed = true;
+            return;
+        }
+        node.Visible = false;
+        _sceneRoot.AddChild(node);
+        _proxyNodes++;
+        proxy.Node = node;
+        proxy.IsSubmodel = true;
+        CollectGeometry(node, proxy.Geometry);
+        foreach (GeometryInstance3D geometry in proxy.Geometry) geometry.Visible = true;
+        SubmodelsBuilt++;
+        SubmodelBuildSeconds += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds;
+    }
+
+    // One node per inline brush model of the level, made when the level is loaded and kept out of the scene
+    // until an entity shows it. A door or a platform was otherwise built the first time it came into view - 6 to
+    // 60 ms in the middle of a frame, once per door - and a level has a few dozen.
+    private readonly Dictionary<int, Node3D> _prebuiltSubmodels = new();
+
+    /// <summary>Builds every submodel of the level that has none yet; returns how many and how long it took.</summary>
+    private (int Built, double Seconds) PrebuildSubmodels()
+    {
+        if (Headless || s_noPrecache || _levelBsp is not { } bsp || s_memberwiseClone is null || s_bspFaces is null) return (0, 0);
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        int built = 0;
+        for (int index = 1; index < bsp.Models.Length; index++)
+        {
+            if (_prebuiltSubmodels.ContainsKey(index)) continue;
+            if (CreateSubmodelNode(bsp, index) is not { } node) continue;
+            _prebuiltSubmodels[index] = node;
+            built++;
+            if ((built & 7) == 0) ModelData.Working?.Invoke();
+        }
+        return (built, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds);
+    }
+
+    private void ReleasePrebuiltSubmodels()
+    {
+        foreach (Node3D node in _prebuiltSubmodels.Values)
+            if (GodotObject.IsInstanceValid(node)) node.QueueFree();
+        _prebuiltSubmodels.Clear();
+    }
+
+    // The node of one inline brush model, not yet in the scene; null if it has no faces or cannot be built.
+    private Node3D? CreateSubmodelNode(VortexArena.Formats.Bsp.BspData bsp, int index)
+    {
+        string model = "*" + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
         Node3D? node = null;
         try
         {
@@ -647,11 +721,7 @@ public sealed partial class GodotLegacyPresentation
         {
             _note($"map submodel {model} could not be built: {e.GetType().Name}: {e.Message}");
         }
-        if (node is null)
-        {
-            proxy.Failed = true;
-            return;
-        }
+        if (node is null) return null;
         foreach (Node child in node.GetChildren())
             if (child is WorldPvsCuller or WorldOcclusion)
             {
@@ -659,15 +729,15 @@ public sealed partial class GodotLegacyPresentation
                 child.QueueFree();
             }
         node.Name = "Submodel" + index;
-        node.Visible = false;
-        _sceneRoot.AddChild(node);
-        _proxyNodes++;
-        proxy.Node = node;
-        proxy.IsSubmodel = true;
-        CollectGeometry(node, proxy.Geometry);
-        foreach (GeometryInstance3D geometry in proxy.Geometry) geometry.Visible = true;
-        SubmodelsBuilt++;
-        SubmodelBuildSeconds += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds;
+        return node;
+    }
+
+    private static VortexArena.Game.Loaders.Models.Md3Morph? FindMorph(Node node)
+    {
+        if (node is VortexArena.Game.Loaders.Models.Md3Morph morph) return morph;
+        foreach (Node child in node.GetChildren())
+            if (FindMorph(child) is { } found) return found;
+        return null;
     }
 
     private static void CollectGeometry(Node node, List<GeometryInstance3D> into)
@@ -692,6 +762,7 @@ public sealed partial class GodotLegacyPresentation
         }
         if (proxy.HasPlacement && proxy.Placement.Origin == placement.Origin && proxy.Placement.Fwd == placement.Fwd
             && proxy.Placement.Left == placement.Left && proxy.Placement.Up == placement.Up) return true;
+        if (s_noMove && proxy.HasPlacement) return true;
         proxy.HasPlacement = true;
         proxy.Placement = placement;
         node.Transform = IqmBuilder.ConjugateQuakeWorldToGodot(ToTransform(placement));
@@ -709,12 +780,14 @@ public sealed partial class GodotLegacyPresentation
     {
         if (proxy.Node is not { } node) return;
         bool hidden = (renderFlags & RfExternalModel) != 0 || (effects & EfNoDraw) != 0 || !(alpha > 0);
+        long step = SceneProfile is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         if (proxy.Shown == hidden)
         {
             proxy.Shown = !hidden;
             node.Visible = !hidden;
         }
         if (hidden) return;
+        step = Step("render state: shown", step);
 
         alpha = Math.Clamp(alpha, 0f, 1f);
         if (MathF.Abs(alpha - proxy.Alpha) > 0.004f)
@@ -722,6 +795,7 @@ public sealed partial class GodotLegacyPresentation
             proxy.Alpha = alpha;
             foreach (GeometryInstance3D geometry in proxy.Geometry) geometry.Transparency = 1f - alpha;
         }
+        step = Step("render state: alpha", step);
 
         bool castsShadow = (renderFlags & (RfViewModel | RfNoShadow)) == 0 && (effects & (EfNoShadow | EfAdditive | EfNoDepthTest)) == 0 && alpha >= 1;
         if (castsShadow != proxy.CastsShadow)
@@ -761,16 +835,28 @@ public sealed partial class GodotLegacyPresentation
         }
         // A morphing model swaps its mesh on the first frame it is posed, so the state is asserted again for a
         // few frames after it is first wanted (the call is idempotent and walks only this entity's surfaces).
+        step = Step("render state: shadow and depth flags", step);
         if (depthHack && proxy.DepthHackAsserted < 8)
         {
             proxy.DepthHackAsserted++;
             ViewModelRenderFx.Apply(node);
         }
+        step = Step("render state: view model materials", step);
         if (bits != proxy.Bits)
         {
             proxy.Bits = bits;
             ApplyMaterialBits(proxy, bits);
         }
+        Step("render state: material bits", step);
+    }
+
+    // Developer aid (VORTEX_LEGACY_QCPROFILE): a part of ApplyRenderState that took half a millisecond, by name.
+    private long Step(string name, long since)
+    {
+        if (since == 0) return 0;
+        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (now - since > System.Diagnostics.Stopwatch.Frequency / 2000) LegacyPerfLog.Event(name + " " + s_lapModel, since);
+        return now;
     }
 
     // ---- colormap, colormod, glowmod ---------------------------------------------------------------------
@@ -863,7 +949,9 @@ public sealed partial class GodotLegacyPresentation
             if (!_materialVariants.TryGetValue(variantKey, out Material? variant))
             {
                 if (_materialVariants.Count >= MaxMaterialVariants) continue;
+                long dupBegan = LegacyPerfLog.Stamp();
                 BaseMaterial3D copy = (BaseMaterial3D)standard.Duplicate();
+                if (LegacyPerfLog.Enabled && System.Diagnostics.Stopwatch.GetElapsedTime(dupBegan).TotalMilliseconds >= 0.3) LegacyPerfLog.Event($"material variant: duplicate {standard.GetClass()} bits {bits}", dupBegan);
                 if ((bits & BitAdditive) != 0)
                 {
                     copy.BlendMode = BaseMaterial3D.BlendModeEnum.Add;
@@ -883,7 +971,8 @@ public sealed partial class GodotLegacyPresentation
     private void ApplyPose(Proxy proxy, in LegacyRenderEntity entity)
     {
         bool persistent = entity.Edict > 0;
-        if (proxy.Animator is { } animator)
+        if (proxy.Animator is not null || proxy.Morph is not null ? s_noMorph : s_noSkeleton) return;
+        if (proxy.Animator is not null || proxy.Morph is not null)
         {
             // frame / frame2 / lerpfrac as VM_FrameBlendFromFrameGroupBlend resolved them: the two strongest
             // poses and the weight of the second.
@@ -897,7 +986,8 @@ public sealed partial class GodotLegacyPresentation
             }
             if (frameA != proxy.LastFrame || frameB != proxy.LastFrameB || MathF.Abs(weight - proxy.LastLerp) > 0.004f)
             {
-                animator.SetRawFrameBlend(frameA, frameB, weight);
+                if (proxy.Animator is { } animator) animator.SetRawFrameBlend(frameA, frameB, weight);
+                else proxy.Morph!.LerpFrames(frameA, frameB, weight);
                 proxy.LastFrame = frameA;
                 proxy.LastFrameB = frameB;
                 proxy.LastLerp = weight;
@@ -983,7 +1073,7 @@ public sealed partial class GodotLegacyPresentation
                 _camera.Size = Math.Clamp(View.FovY * 2f, 1f, 131072f);
             }
         }
-        if (_mapRoot is not null) _mapRoot.Visible = View.DrawWorld;
+        if (_mapRoot is not null) _mapRoot.Visible = View.DrawWorld && !s_noWorld;
         ApplyProgramFog();
 
         LastDynamicLights = _lights.Count;

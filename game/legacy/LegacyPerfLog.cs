@@ -38,7 +38,7 @@ public static class LegacyPerfLog
         public int Gc0, Gc1, Gc2;
         public float GcPause;
         public int DrawCalls, Objects;
-        public byte State;
+        public byte State, Flag;
     }
 
     private static Frame[]? s_frames;
@@ -84,10 +84,14 @@ public static class LegacyPerfLog
         if (Enabled && s_open) s_current.State = (byte)state;
     }
 
+    /// <summary>Which half of an alternating comparison the frames are in (GodotLegacyPresentation's VORTEX_LEGACY_TOGGLE): 0 or 1.</summary>
+    public static byte Flag;
+
     public static void EndFrame()
     {
         if (!Enabled || !s_open || s_frames is null) return;
         s_open = false;
+        s_current.Flag = Flag;
         s_current.Total = (float)((Stopwatch.GetTimestamp() - s_current.Began) * 1000.0 / Stopwatch.Frequency);
         s_current.Allocated = GC.GetAllocatedBytesForCurrentThread();
         s_current.AllocatedAll = GC.GetTotalAllocatedBytes(false);
@@ -130,7 +134,7 @@ public static class LegacyPerfLog
             CultureInfo ci = CultureInfo.InvariantCulture;
             double perMs = 1000.0 / Stopwatch.Frequency;
             StringBuilder text = new(s_count * 96 + 4096);
-            text.Append("F,t_ms,state,total_ms,server_ms,receive_ms,send_ms,program_ms,present_ms,alloc_main,alloc_all,gc0,gc1,gc2,gc_pause_ms,draw_calls,objects\n");
+            text.Append("F,t_ms,state,total_ms,server_ms,receive_ms,send_ms,program_ms,present_ms,alloc_main,alloc_all,gc0,gc1,gc2,gc_pause_ms,draw_calls,objects,flag\n");
             for (int i = 0; i < s_count; i++)
             {
                 ref Frame f = ref s_frames[i];
@@ -140,7 +144,7 @@ public static class LegacyPerfLog
                     .Append(f.P3.ToString("0.000", ci)).Append(',').Append(f.P4.ToString("0.000", ci)).Append(',')
                     .Append(f.Allocated).Append(',').Append(f.AllocatedAll).Append(',')
                     .Append(f.Gc0).Append(',').Append(f.Gc1).Append(',').Append(f.Gc2).Append(',')
-                    .Append(f.GcPause.ToString("0.00", ci)).Append(',').Append(f.DrawCalls).Append(',').Append(f.Objects).Append('\n');
+                    .Append(f.GcPause.ToString("0.00", ci)).Append(',').Append(f.DrawCalls).Append(',').Append(f.Objects).Append(',').Append(f.Flag).Append('\n');
             }
             lock (s_eventLock)
             {

@@ -91,6 +91,8 @@ public sealed partial class CsqcBuiltins
         keys.Fill(-1);
         int count = 0;
         // The C walks all 44,032 key slots; with no bind table behind the host there is nothing to find.
+        if (_host.FindKeysForCommand is { } find && bindMap < CsqcKeys.MaxBindMaps) find(command, keys, bindMap);
+        else
         for (int key = 0; _host.HasKeyBindings && key < CsqcKeys.MaxKeys && count < keys.Length; key++)
         {
             string? bind = Binding(key, bindMap);

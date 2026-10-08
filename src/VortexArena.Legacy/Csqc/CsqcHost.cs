@@ -43,6 +43,9 @@ public sealed record CsqcDesync(int MessageIndex, string Context, int ServerEnti
         + $": {Reason} at offset {ReaderOffset} of {MessageLength} (payload began at {PayloadStart}); in {Where}";
 }
 
+/// <summary>See <see cref="CsqcHostOptions.FindKeysForCommand"/>.</summary>
+public delegate void CsqcFindKeys(string command, Span<int> keys, int bindMap);
+
 public sealed class CsqcHostOptions
 {
     /// <summary>gamename: CSQC_Init is told the engine is "DarkPlaces " + this.</summary>
@@ -66,6 +69,12 @@ public sealed class CsqcHostOptions
 
     /// <summary>Key_GetBind: the command bound to a key in a bind map (-1: the active maps), or null.</summary>
     public Func<int, int, string?>? KeyBinding { get; init; }
+
+    /// <summary>Key_FindKeysForCommand, for an owner whose bind table can answer it without being asked about
+    /// every one of the 44,032 key numbers in turn: the first keys.Length key numbers bound to exactly this
+    /// command in ascending order, the rest left as they are (-1). Null: <see cref="KeyBinding"/> is asked key by
+    /// key, which gives the same answer (1.3 ms a call; a HUD that shows ten key hints asked ten times in a frame).</summary>
+    public CsqcFindKeys? FindKeysForCommand { get; init; }
 
     /// <summary>The uri_get builtin (#513): (url, id) to "request started". Null: no HTTP, as when
     /// DarkPlaces runs without libcurl.</summary>
@@ -640,6 +649,7 @@ public sealed partial class CsqcHost : IDisposable
     internal void CenterPrint(string text) => _options.CenterPrint?.Invoke(text);
     internal string? KeyBinding(int key, int bindMap) => _options.KeyBinding?.Invoke(key, bindMap);
     internal bool HasKeyBindings => _options.KeyBinding is not null;
+    internal CsqcFindKeys? FindKeysForCommand => _options.FindKeysForCommand;
     internal bool UriGet(string url, int id) => _options.UriGet?.Invoke(url, id) ?? false;
 
     // ---- the message being parsed ------------------------------------------------------------------

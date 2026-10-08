@@ -122,10 +122,37 @@ public static class SpawnSystem
     private const float  DefSuperweaponsTime     = 30f;
 
     /// <summary>
-    /// QC <c>start_weapons</c> for the stock DM loadout: just the Blaster (the always-available sidearm).
-    /// Other weapons are picked up from the map. Kept as NetNames to match <see cref="Player.OwnedWeapons"/>.
+    /// The start weapons when no balance config has been loaded (unit tests, a bare simulation): just the
+    /// Blaster. With a config loaded, <see cref="StartWeaponNames"/> decides. Kept as NetNames to match
+    /// <see cref="Player.OwnedWeapons"/>.
     /// </summary>
     public static readonly string[] DefaultLoadout = { "blaster" };
+
+    /// <summary>
+    /// QC <c>start_weapons</c> without an arena (server/world.qc readlevelcvars, want_weapon): every weapon
+    /// whose <c>g_balance_&lt;weapon&gt;_weaponstart</c> is set, unless a mutator blocks it. Stock Xonotic
+    /// balance sets it for the Blaster and the Shotgun. <c>_weaponstartoverride</c> of 0 or more replaces the
+    /// answer (bit 1 = start with it). Falls back to <see cref="DefaultLoadout"/> when no weapon declares the
+    /// cvar at all, which is the no-config case.
+    /// </summary>
+    public static IReadOnlyList<string> StartWeaponNames()
+    {
+        if (Api.Services is null) return DefaultLoadout;
+        List<string> names = new();
+        bool anyDeclared = false;
+        foreach (Weapon w in Weapons.All)
+        {
+            string start = Api.Cvars.GetString($"g_balance_{w.NetName}_weaponstart");
+            if (string.IsNullOrEmpty(start)) continue;
+            anyDeclared = true;
+            bool want = Api.Cvars.GetFloat($"g_balance_{w.NetName}_weaponstart") != 0f
+                && (w.SpawnFlags & WeaponFlags.MutatorBlocked) == 0;
+            float over = CvarOr($"g_balance_{w.NetName}_weaponstartoverride", -1f);
+            if (over >= 0f) want = ((int)over & 1) != 0;
+            if (want) names.Add(w.NetName);
+        }
+        return anyDeclared ? names : DefaultLoadout;
+    }
 
     /// <summary>Deterministic RNG for spawn selection (QC random()). Seeded so headless sims are reproducible.</summary>
     private static Random _rng = new(0x5EED);
@@ -1244,8 +1271,8 @@ public static class SpawnSystem
         }
         else
         {
-            // No arena: the normal DM start weapons (just the Blaster sidearm; other weapons are map pickups).
-            foreach (string w in DefaultLoadout) l.Weapons.Add(w);
+            // No arena: the balance config's start weapons (stock: Blaster and Shotgun; the rest are pickups).
+            foreach (string w in StartWeaponNames()) l.Weapons.Add(w);
         }
 
         // QC world.qc:2106-2110: g_balance_superweapons_time < 0 ⇒ IT_UNLIMITED_SUPERWEAPONS;
@@ -1482,7 +1509,7 @@ public static class SpawnSystem
         }
         else
         {
-            foreach (string w in DefaultLoadout)
+            foreach (string w in StartWeaponNames())
             {
                 warmupLoadout.Weapons.Add(w);
                 if (Weapons.ByName(w) is { } wep) p.OwnedWeaponSet.Add(wep);

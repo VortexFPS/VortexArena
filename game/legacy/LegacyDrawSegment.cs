@@ -22,6 +22,11 @@ public partial class LegacyDrawSegment : Control
     public int End { get; set; }
     /// <summary>The clip area in force when this stretch begins, in virtual-screen coordinates; null for none.</summary>
     public Rect2? ClipAtStart { get; set; }
+    /// <summary>What the segment last drew, as the layer summed it up (LegacyDrawLayer.Assign): while the next
+    /// frame's stretch sums to the same, the canvas item keeps its drawing and nothing is replayed.</summary>
+    internal ulong DrawnContent { get; set; }
+    internal bool HasDrawnContent { get; set; }
+    internal int BlendClass { get; set; } = -1;
     /// <summary>The rectangle this segment occupies and clips to, in the layer's pixels; null when it covers the layer and clips nothing.</summary>
     public Rect2? HardClip { get; private set; }
 

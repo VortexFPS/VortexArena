@@ -905,6 +905,75 @@ public sealed class AssetSystem
     private readonly object _uploadGate = new();
 
     /// <summary>
+    /// <see cref="WarmTextureOffThread"/> for a LOADING SCREEN: the same resolve, decode, mip and upload from a
+    /// worker thread, but WITHOUT the one-upload-at-a-time gate, so as many textures go up at once as the
+    /// caller has workers.
+    ///
+    /// <para><b>Why the gate is wrong here.</b> It exists because concurrent uploads saturate the driver's
+    /// ingest and stall the frame thread in present - a real cost while frames are being shown (the menu
+    /// warm, a live match), and no cost at all while the frame thread is itself blocked inside a level load
+    /// behind a loading screen. There the gate only made a level's textures a single-file queue: measured on
+    /// stormkeep's 272 precached models, 2,674 warm calls summed to 46 s across 8 workers and took 9.2 s of
+    /// wall clock, almost all of it waiting for the gate. The renderer itself is built for this - each
+    /// calling thread gets its own transfer worker and staging buffer (RenderingDevice
+    /// <c>_acquire_transfer_worker</c>), which is what its own threaded resource loader relies on.</para>
+    ///
+    /// <para>Two workers are kept off one file by an in-flight set; a main-thread <see cref="LoadTexture"/>
+    /// racing a worker for the same file can still upload it twice, in which case the first to publish wins
+    /// and the other texture is dropped unreferenced. Best effort, like the gated version: a failure is
+    /// noted and the texture loads the ordinary way when something needs it.</para>
+    /// </summary>
+    public void WarmTextureForLoad(string baseNameNoExt)
+    {
+        if (string.IsNullOrEmpty(baseNameNoExt) || baseNameNoExt[0] == '$')
+            return;
+        string? vpath = null;
+        bool mine = false;
+        try
+        {
+            vpath = _vfs.ResolveImage(baseNameNoExt);   // ConcurrentDictionary-cached (thread-safe)
+            if (vpath is null)
+                return;
+            lock (_textureCacheGate)
+                if (_textureCache.ContainsKey(vpath))
+                    return;
+            mine = _loadWarmInFlight.TryAdd(vpath, 0);
+            if (!mine)
+                return;                             // another worker has this file in hand
+
+            PredecodeTexture(baseNameNoExt);
+            Image? image = PrepareImage(vpath);
+            if (image is null)
+                return;
+            lock (_textureCacheGate)
+                if (_textureCache.ContainsKey(vpath))
+                    return;                         // the main thread got there first; `image` is a local
+            Texture2D? tex;
+            using (VortexArena.Common.Diagnostics.Prof.Sample("stream.upload"))
+                tex = UploadImage(vpath, image);
+            lock (_textureCacheGate)
+                _textureCache.TryAdd(vpath, tex);
+            // The renderer has its own copy now. Left to the collector, a level's worth of these (a full mip
+            // chain of a 2048 x 2048 skin is 22 MB of native memory behind a tiny managed wrapper, so nothing
+            // tells the collector to hurry) stayed allocated long after the load: over a gigabyte, measured.
+            image.Dispose();
+        }
+        catch (Exception ex)
+        {
+            GD.Print($"[AssetSystem] load-time warm of '{baseNameNoExt}' failed ({ex.Message}); " +
+                     "it will load normally on first use.");
+        }
+        finally
+        {
+            if (mine && vpath is not null)
+                _loadWarmInFlight.TryRemove(vpath, out _);
+        }
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _loadWarmInFlight =
+        new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Run <paramref name="build"/> holding the upload gate. For callers that construct Godot GPU resources
     /// OUTSIDE <see cref="LoadTexture"/> — notably the menu warm's material wave, where
     /// <c>ShaderCompiler.Compile</c> builds a <c>Shader</c>/<c>ShaderMaterial</c> and any texture its stage
@@ -933,8 +1002,30 @@ public sealed class AssetSystem
         if (string.IsNullOrEmpty(baseNameNoExt))
             return null;
         string? vpath = _vfs.ResolveImage(baseNameNoExt);
-        return vpath == null ? null : LoadImageFromVpath(vpath);
+        if (vpath == null)
+            return null;
+        if (LoadImageCache is not { } cache)
+            return LoadImageFromVpath(vpath);
+        // Callers convert and blit the image they are given, so each gets a copy of the kept one.
+        if (!cache.TryGetValue(vpath, out Image? kept))
+        {
+            kept = LoadImageFromVpath(vpath);
+            if (kept is null)
+                return null;
+            cache[vpath] = kept;
+        }
+        return (Image)kept.Duplicate();
     }
+
+    /// <summary>
+    /// Main-thread only, and null by default (nothing is kept; the native game never sets it). While an owner
+    /// has a dictionary here, <see cref="LoadImage"/> decodes each file once and hands out copies. For a
+    /// caller that builds many small things from the same few large images in turn - legacy compatibility
+    /// mode builds each of a map's doors and platforms as its own mesh, and every one of them re-decoded the
+    /// map's lightmap pages (two 2048 x 2048 JPEGs, ~80 ms a door, in the middle of play). The owner clears
+    /// the dictionary when it is done; the images are plain memory until then.
+    /// </summary>
+    public Dictionary<string, Image>? LoadImageCache { get; set; }
 
     /// <summary>
     /// OFF-THREAD-SAFE. A small preview image for a material — the editor's texture browser (backlog T6).
@@ -1046,7 +1137,7 @@ public sealed class AssetSystem
             return;
         bool prepared = EncodeOffThread;
         if (prepared)
-            PrepareDecoded(vpath, img);  // picmip + mips + block compress, all on the WORKER
+            PrepareDecoded(vpath, img, DdsCacheRoot);  // picmip + mips + block compress, all on the WORKER
         else
             EnsureMipmaps(vpath, img);   // on the WORKER — the main-thread upload then includes mips for free
         _predecodedImages.TryAdd(vpath, new Parked(img, prepared));
@@ -1357,7 +1448,7 @@ public sealed class AssetSystem
         return ok;
     }
 
-    private static void MaybeCompress(string vpath, Image image)
+    private static void MaybeCompress(string vpath, Image image, string? cacheRoot = null)
     {
         // Cheap pre-check before taking the gate: the great majority of calls bail immediately (compression
         // off, already compressed, category disabled), and queueing those behind the budget would serialise
@@ -1369,7 +1460,7 @@ public sealed class AssetSystem
             _compressGate ??= new System.Threading.SemaphoreSlim(BudgetWidth, BudgetWidth);
         gate.Wait();
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-        try { MaybeCompressCore(vpath, image); }
+        try { MaybeCompressCore(vpath, image, cacheRoot); }
         finally
         {
             long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -1435,7 +1526,7 @@ public sealed class AssetSystem
     /// and the user dir is already the highest-priority mount, so what we write is what gets found. Failures
     /// are counted and swallowed — a read-only disk or a full one should cost the cache, not the load.</para>
     /// </summary>
-    private static void SaveDdsCache(string vpath, Image image)
+    private static void SaveDdsCache(string vpath, Image image, string? cacheRoot = null)
     {
         string? fourCc = null;
         uint dxgi = 0;
@@ -1470,7 +1561,7 @@ public sealed class AssetSystem
                 return;
             string stem = AssetPaths.StripImageExtension(AssetPaths.Normalize(vpath));
             string rel = System.IO.Path.Combine(cacheDir, stem.Replace('/', System.IO.Path.DirectorySeparatorChar)) + ".dds";
-            string full = System.IO.Path.Combine(UserPaths.GameDir, rel);
+            string full = System.IO.Path.Combine(cacheRoot ?? UserPaths.GameDir, rel);
             string? dir = System.IO.Path.GetDirectoryName(full);
             if (dir is null)
                 return;
@@ -1493,7 +1584,7 @@ public sealed class AssetSystem
         }
     }
 
-    private static void MaybeCompressCore(string vpath, Image image)
+    private static void MaybeCompressCore(string vpath, Image image, string? cacheRoot = null)
     {
         int mode = TextureCompression;
         if (mode <= 0 || image.IsCompressed() || image.IsEmpty() || !image.HasMipmaps())
@@ -1624,7 +1715,7 @@ public sealed class AssetSystem
                 _compressOk++;
                 // r_texture_dds_save: bank the result so the next launch reads blocks instead of encoding.
                 if (DdsSave)
-                    SaveDdsCache(vpath, image);
+                    SaveDdsCache(vpath, image, cacheRoot);
             }
         }
         catch (Exception ex)
@@ -1691,13 +1782,13 @@ public sealed class AssetSystem
             // second time (MaybePicmip is not idempotent), so this early-out is load-bearing, not an optimisation.
             if (parked.Prepared)
                 return parked.Image;
-            PrepareDecoded(vpath, parked.Image);
+            PrepareDecoded(vpath, parked.Image, DdsCacheRoot);
             return parked.Image;
         }
         Image? image = LoadImageFromVpath(vpath);
         if (image == null)
             return null;
-        PrepareDecoded(vpath, image);
+        PrepareDecoded(vpath, image, DdsCacheRoot);
         return image;
     }
 
@@ -1707,12 +1798,27 @@ public sealed class AssetSystem
     /// <see cref="PrepareImage"/>, or on a streamer worker from <see cref="PredecodeTexture"/> when
     /// <see cref="CompressOffThread"/> is set. <b>Not idempotent</b> — see <see cref="Parked"/>.
     /// </summary>
-    private static void PrepareDecoded(string vpath, Image image)
+    private static void PrepareDecoded(string vpath, Image image, string? cacheRoot = null)
     {
         MaybePicmip(vpath, image);     // gl_picmip: halve the resolution N times before mips/compression
         EnsureMipmaps(vpath, image);   // no-op when the image already carries them (a DDS can)
-        MaybeCompress(vpath, image);   // gl_texturecompression: shrink RGBA8 to BC before it reaches VRAM
+        MaybeCompress(vpath, image, cacheRoot);   // gl_texturecompression: shrink RGBA8 to BC before it reaches VRAM
     }
+
+    /// <summary>
+    /// Where THIS asset system banks the textures it block-compresses (r_texture_dds_save), as
+    /// <c>&lt;root&gt;/&lt;DdsCacheDir&gt;/&lt;stem&gt;.dds</c>. Null - the default, and what the native game uses - is the
+    /// player's own game directory, which the native file system mounts and so reads back on the next launch.
+    ///
+    /// <para>An asset system over OTHER game data needs its own root, for two reasons. Its file system does
+    /// not mount the player's game directory, so what it wrote there was never read back: every launch
+    /// re-encoded every texture and wrote it again (measured in legacy compatibility mode: 545 files and
+    /// 605 MB rewritten per level load, 39 CPU-seconds of encoding). And the cache is keyed by a texture's
+    /// name alone, so a different game's <c>textures/foo</c> written into the player's directory is what the
+    /// native game would then load for its own <c>textures/foo</c>. The owner must also mount the root on its
+    /// file system, or nothing written here is found again.</para>
+    /// </summary>
+    public string? DdsCacheRoot { get; set; }
 
     // (BC5 normals 2026-08-02; widened to format+mips 2026-08-03) What each uploaded texture actually became
     // on the GPU, keyed by instance id. Filled at upload — the one place every cached texture passes through —

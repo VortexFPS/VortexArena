@@ -113,6 +113,7 @@ public sealed class LegacyCanvas : ILegacyDraw
         {
             value = Math.Clamp(value, 0, 3);
             if (value == _fontHinting) return;
+            _generation++;
             _fontHinting = value;
             foreach (FontFile file in _fontFiles.Values) ApplyHinting(file);
             _measured.Clear();
@@ -155,8 +156,19 @@ public sealed class LegacyCanvas : ILegacyDraw
         return new QcVector(width, height, 0);
     }
 
+    private int _generation;
+
+    /// <summary>
+    /// Changes whenever something a recorded draw command only NAMES may have changed under it: a picture
+    /// freed or sent anew by the server, a font slot loaded, the hinting, the glyph atlas emptied. The draw
+    /// layer keeps what it drew for a stretch of commands for as long as the commands and this number stay
+    /// the same.
+    /// </summary>
+    public int Generation => _generation + Atlas.Generation;
+
     public void FreePicture(string name)
     {
+        _generation++;
         Pictures.Free(name);
         _textures.Remove(name);
         _definedPictures.Remove(name);
@@ -174,6 +186,7 @@ public sealed class LegacyCanvas : ILegacyDraw
         if (!LegacyPictureCatalog.TryReadImageSize(jpeg, out int width, out int height) || width > MaxDefinedPictureSide || height > MaxDefinedPictureSide) return;
         Image image = new();
         if (image.LoadJpgFromBuffer(jpeg.ToArray()) != Error.Ok) return;
+        _generation++;
         _definedPictures[name] = ImageTexture.CreateFromImage(image);
         _textures.Remove(name);
     }
@@ -203,6 +216,8 @@ public sealed class LegacyCanvas : ILegacyDraw
         }
         // Past the bound the oldest answers are forgotten wholesale; the asset pipeline still has the textures.
         if (_textures.Count >= MaxTextures) _textures.Clear();
+        // A name that drew nothing a moment ago may draw something now (and the reverse).
+        _generation++;
         _textures[name] = texture;
         return texture;
     }
@@ -486,6 +501,7 @@ public sealed class LegacyCanvas : ILegacyDraw
         foreach (string token in (sizes ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries))
             if (float.TryParse(token, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float size)) wanted.Add(size);
         int loaded = Fonts.Load(name, files, slot, scale, verticalOffset, wanted);
+        _generation++;
         _measured.Clear();
         return loaded;
     }
@@ -497,6 +513,7 @@ public sealed class LegacyCanvas : ILegacyDraw
     public void LoadFontCommand(IReadOnlyList<string> argv)
     {
         if (Fonts.LoadCommand(argv) < 0) return;
+        _generation++;
         _measured.Clear();
         _glyphs.Clear();
     }
@@ -552,6 +569,7 @@ public sealed class LegacyCanvas : ILegacyDraw
         if (font is not null && fallbacks.Count > 0) font = new FontVariation { BaseFont = font, Fallbacks = fallbacks };
         font ??= _assets.Fonts.GetUiFont() ?? ThemeDB.FallbackFont;
         if (_slotFonts.Count > LegacyFontSlots.MaxSlots) { _slotFonts.Clear(); _slotFaces.Clear(); }
+        _generation++;   // a slot's font was (re)resolved: text drawn with the old one is stale
         _slotFonts[slot] = (record.Version, font, metrics, outline);
         return font;
     }

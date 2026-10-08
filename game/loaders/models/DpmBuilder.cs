@@ -90,7 +90,10 @@ public static class DpmBuilder
     /// A <see cref="Node3D"/> root holding the <see cref="Skeleton3D"/> (whose children are the skinned
     /// <see cref="MeshInstance3D"/>s) and an <see cref="AnimationPlayer"/> named "AnimationPlayer".
     /// </returns>
-    public static Node3D Build(DpmData dpm, AssetSystem assets, IReadOnlyList<FrameGroup>? framegroups = null)
+    /// <param name="buildAnimations">False leaves the <see cref="AnimationPlayer"/> without clips: for a caller
+    /// that poses every bone itself each frame, the baked clips are load time and memory spent on nothing.</param>
+    public static Node3D Build(DpmData dpm, AssetSystem assets, IReadOnlyList<FrameGroup>? framegroups = null,
+        bool buildAnimations = true)
     {
         ArgumentNullException.ThrowIfNull(dpm);
 
@@ -106,10 +109,20 @@ public static class DpmBuilder
         var skeleton = new Skeleton3D { Name = "Skeleton3D" };
         root.AddChild(skeleton);
 
+        // A file may name two bones alike (models/monsters/spider.dpm has three "Spider"). Skeleton3D refuses
+        // the second AddBone of a name, which left the skeleton bones short and every later bone index -
+        // parents, rests, the mesh's skin weights - pointing too far. A repeat gets its index appended.
+        var boneNames = new HashSet<string>(StringComparer.Ordinal);
         for (int b = 0; b < boneCount; b++)
         {
             DpmBone bone = dpm.Bones[b];
-            skeleton.AddBone(string.IsNullOrEmpty(bone.Name) ? $"bone{b}" : bone.Name);
+            string boneName = string.IsNullOrEmpty(bone.Name) ? $"bone{b}" : bone.Name;
+            if (!boneNames.Add(boneName))
+            {
+                boneName = $"{boneName}~{b}";
+                boneNames.Add(boneName);
+            }
+            skeleton.AddBone(boneName);
         }
         // Parent links are set in a second pass: AddBone appends at the end, so a parent that comes first
         // already exists by the time we wire children (DPM guarantees parent index < child index, but we
@@ -166,7 +179,7 @@ public static class DpmBuilder
         // shoot '3', pain1/2 '7'/'8', die1/2 '1'/'2'). Stash the ordered clip names on the root as metadata so a
         // frame-driver (DpmFrameDriver, wired in ClientWorld for frame-driven monster entities) can map that
         // ordinal back to the clip and play it — the DPM analog of ModelAnimator.FollowEntityFrame for MD3.
-        List<string> clipNames = BuildAnimations(dpm, skeleton, player, framegroups);
+        List<string> clipNames = buildAnimations ? BuildAnimations(dpm, skeleton, player, framegroups) : new List<string>();
         if (clipNames.Count > 0)
         {
             var meta = new Godot.Collections.Array();

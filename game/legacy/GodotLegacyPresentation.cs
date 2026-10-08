@@ -68,6 +68,9 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         _cvars = cvars ?? throw new ArgumentNullException(nameof(cvars));
         _note = note ?? (_ => { });
 
+        // The client program poses every skeleton itself: the clip library a model's builder would make (a
+        // hundred milliseconds and tens of megabytes for a player model) would never be played.
+        assets.SkipModelAnimations = true;
         Map = new BspLegacyWorld(files);
         ModelData = new FormatLegacyModels(files, Map) { View = () => (View.Origin, View.Angles) };
         Canvas = canvas ?? new LegacyCanvas(files, assets);
@@ -148,19 +151,36 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
     public void BeginLevel(CsqcClientState state)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
-        ReleaseAllProxies();
-        ReleaseLevelMaps();
+        Loading = true;
+        string map = state.WorldModel;
+        // The first level of a session may find its map already loaded (BeginPreload, a local game) and its
+        // files already on the worker threads; a later level starts from nothing but the loader's caches.
+        bool first = _levelsBegun++ == 0;
+        bool preloaded = first && _preloadedWorld is { } ready && ready == map && _mapRoot is not null;
+        _preloadedWorld = null;
+        if (!first)
+        {
+            CancelPrecache();
+            ReleaseAllProxies();
+            ReleasePrebuilt();
+            ModelData.ClearCache();
+        }
         _staticEntities.Clear();
         StopAllSounds();
-        ModelData.ClearCache();
         _refdef.Reset();
+        if (preloaded)
+        {
+            BeginPrecache(state);
+            _note($"map \"{map}\" was loaded while the server was starting");
+            return;
+        }
+        ReleaseLevelMaps();
         if (_mapRoot is not null)
         {
             _mapRoot.QueueFree();
             _mapRoot = null;
         }
 
-        string map = state.WorldModel;
         // The name is the server's. It has to be a plain path inside the game data and nothing else.
         if (!LegacyQcHost.IsSafePath(map) || !map.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase) || !_vfs.Exists(map))
         {
@@ -169,6 +189,15 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
             return;
         }
 
+        // The level's models and sounds start loading on worker threads now, under the map build and CSQC_Init.
+        BeginPrecache(state);
+        LoadWorld(map, state.WorldNameNoExtension);
+    }
+
+    // The level's map: parsed once and used three ways (see BeginLevel). False if it could not be drawn - the
+    // world is then collision only, or empty, and the reason has been noted.
+    private bool LoadWorld(string map, string levelName)
+    {
         try
         {
             BspData? bsp = _assets.ReadBsp(map);
@@ -176,7 +205,7 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
             {
                 Map.LoadMap(map);
                 _note($"map \"{map}\" could not be parsed: {Map.LoadError}");
-                return;
+                return false;
             }
             // One collision build, the DarkPlaces-exact one (curved surfaces as coarse triangles, as a
             // Xonotic server collides). Building the native slab form here first only had it thrown
@@ -190,8 +219,8 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
             for (int i = 1; i < bsp.Models.Length; i++) submodels.Add(i);
             _levelBsp = bsp;
             _levelMaps.Add(bsp);
-            _levelName = state.WorldNameNoExtension;
-            _mapRoot = MapLoader.BuildMap(bsp, _assets.Assets, state.WorldNameNoExtension, submodels);
+            _levelName = levelName;
+            _mapRoot = MapLoader.BuildMap(bsp, _assets.Assets, levelName, submodels);
             _sceneRoot.AddChild(_mapRoot);
             // Particles collide with the same world the game does.
             if (Map.Collision is { } collision) _effects.SetCollisionWorld(collision);
@@ -199,12 +228,14 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
             ModelLighting.ApplyMap(bsp.LightGrid);
             ApplyEnvironment(bsp);
             _note($"map \"{map}\" loaded: {bsp.Models.Length} models, {bsp.Faces.Length} faces");
+            return true;
         }
         catch (Exception e) when (e is not OutOfMemoryException)
         {
             // A map from a server's download directory is as untrusted as anything else it sends.
             _note($"map \"{map}\" failed to build ({e.GetType().Name}: {e.Message}); falling back to collision only");
             Map.LoadMap(map);
+            return false;
         }
     }
 
@@ -280,8 +311,10 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
     /// <summary>Stops everything audible and drops every node: the session is over.</summary>
     public void Shutdown()
     {
+        CancelPrecache();
         StopAllSounds();
         ReleaseAllProxies();
+        ReleasePrebuilt();
         ReleaseLevelMaps();
         DrawList.Clear();
         _drawLayer.Present(Canvas);
@@ -299,6 +332,8 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         if (_levelMaps.Count > 0) _note($"level released: {_levelMaps.Count} map views, {pages} lightmap pages forgotten");
         _levelMaps.Clear();
         _levelBsp = null;
+        foreach (Image image in _submodelImages.Values) image.Dispose();
+        _submodelImages.Clear();
     }
 
     private readonly List<BspData> _levelMaps = new();

@@ -137,6 +137,8 @@ public partial class LegacyGame : Node
     private byte _pendingImpulse;
     private Vector2 _mouseDelta, _mousePosition, _reportedMousePosition = new(-1, -1);
     private bool _showScores;
+    private double _enteredAt;
+    private const double MaxSettleSeconds = 3;
     private Vector2 _viewSize;
     private readonly Dictionary<int, string> _bindSnapshot = new();
     private double _bindSnapshotAt = -1;
@@ -226,6 +228,7 @@ public partial class LegacyGame : Node
         // it has made for as long as it lives, so a level loaded through the menu's stayed in memory after the
         // game was left - about 0.9 GB of a level nobody was in. This one dies with the session.
         AssetLoader assets = new(_vfs);
+        LegacyData.MountTextureCache(_vfs, assets.Assets);
         _presentation = new GodotLegacyPresentation(_sceneRoot, _drawLayer, _vfs, assets, _cvars, Log);
 
         RegisterEngineCommands(_interpreter);
@@ -339,6 +342,8 @@ public partial class LegacyGame : Node
             $"client program {(forceDownload ? "always downloaded" : "from the game data or the download cache if it matches")}); writes go to {LegacyData.UserRoot}");
         _session.Connect(Now);
         LoadingScreen?.UpdateProgress(0.05f, "Connecting...");
+        // While the server answers: the files of the last level's precache lists, on the worker threads.
+        _presentation.BeginPreload(null);
         _shared?.LeaveSession();
     }
 
@@ -392,6 +397,9 @@ public partial class LegacyGame : Node
             Log("local game: cvars for the server: " + names.ToString().TrimEnd());
         }
         LoadingScreen?.UpdateProgress(0.05f, "Starting the server...");
+        // The server is loading the level on its own thread. This thread would only wait for it: it loads its
+        // own copy of the map now instead, and the worker threads start on the files of the last level's lists.
+        _presentation?.BeginPreload(LegacyLocalCommands.IsMapName(request.Map) ? "maps/" + request.Map + ".bsp" : null);
     }
 
     // Host_Frame's server half, as far as this thread has one: the server's queued console output and events,
@@ -712,13 +720,24 @@ public partial class LegacyGame : Node
     public override void _Process(double delta)
     {
         if (_shutDown || _failed) return;
+        LegacyPerfLog.BeginFrame(_inGame ? 1 : 0);
+        try { ProcessFrame(delta); }
+        finally { LegacyPerfLog.EndFrame(); }
+    }
+
+    private void ProcessFrame(double delta)
+    {
         // host.c Host_Frame: the server's part of the frame first, then the client's.
         if (_server is { } server)
         {
             using var _serverScope = FrameProfiler.Scope("legacy-server");
             PumpServer(server);
         }
+        LegacyPerfLog.Part(LegacyPerfLog.Server);
         using var _scope = FrameProfiler.Scope("legacy");
+        // Frames spent waiting (for the local server, for the first message): models whose files the worker
+        // threads have finished get their nodes built, a few milliseconds a frame.
+        if (!_inGame && _presentation is { } waiting) waiting.PrebuildReady(0.008);
         // No transport yet: the local server is still starting, and the loading screen is all there is to draw.
         if (_shutDown || _failed || _session is not { } session || _transport is not { } transport || _presentation is not { } presentation)
             return;
@@ -775,6 +794,7 @@ public partial class LegacyGame : Node
         }
         // Loading a level inside Receive can take seconds; everything after it uses the time it is now.
         now = Now;
+        LegacyPerfLog.Part(LegacyPerfLog.Receive);
 
         // --- input, the command, the send ---
         UpdateViewSize();
@@ -783,10 +803,12 @@ public partial class LegacyGame : Node
             transport.Send(datagram);
 
         if (!CheckConnection(session, now)) return;
+        LegacyPerfLog.Part(LegacyPerfLog.Send);
 
         // --- draw: the engine's view for the frame, CSQC_UpdateView, then what it submitted ---
         presentation.BeginFrame(_viewSize, session.State.Time);
         session.Draw(delta);
+        LegacyPerfLog.Part(LegacyPerfLog.Program);
         // SCR_DrawScreen: the engine's own 2D goes on after the program's (Con_DrawNotify after CL_VM_UpdateView).
         if (_inGame) presentation.DrawChatArea(_chatLines, now);
         if (_inGame && session.State.Paused) presentation.DrawPause();
@@ -807,6 +829,7 @@ public partial class LegacyGame : Node
         }
         if (now >= _nextStatus) Status(session, presentation, now);
         CaptureForReview(now);
+        LegacyPerfLog.Part(LegacyPerfLog.Present);
     }
 
     // Developer aid for checking legacy mode by eye without sitting at the machine: with the environment
@@ -1006,25 +1029,66 @@ public partial class LegacyGame : Node
         if (!_inGame && session.State.Signon >= DpProtocol.Signons)
         {
             _inGame = true;
+            _enteredAt = now;
             _levelsEntered++;
             if (_inGameAt < 0)
             {
                 _inGameAt = now;
+                LegacyPerfLog.Mark("in the game");
+                LegacyPerfLog.SetState(1);
                 Log(string.Create(CultureInfo.InvariantCulture, $"in the game {now - _startedAt:0.00} s after the session was started"));
             }
             else Log(string.Create(CultureInfo.InvariantCulture, $"in the game again (level {_levelsEntered} of this session)"));
             _nextStatus = now + 1;
             _frameMeter.Reset();
             _clientMeter.Reset();
+            if (s_profileProgram && session.Host is { } profiled)
+            {
+                profiled.Vm.Profile ??= new QcProfile();
+                if (_presentation is { } scene) scene.SceneProfile ??= new long[8];
+            }
         }
-        if (_inGame && !_loadingDismissed && !_levelChangePending)
+        // The loading screen stays for the level's first few frames: the entities of the first server frames are
+        // given their models under it, and the pipelines of what was built ahead are compiled, instead of both
+        // being the first thing the player sees of the level. Bounded: a level that never settles is shown anyway.
+        if (_inGame && !_loadingDismissed && !_levelChangePending
+            && (_presentation is not { } settling || settling.SceneSettled || now - _enteredAt > MaxSettleSeconds))
         {
+            if (_presentation is { } shown) shown.Loading = false;
+            LegacyPerfLog.Mark("loading screen down");
+            Log(string.Create(CultureInfo.InvariantCulture, $"the loading screen came down {now - _startedAt:0.00} s after the session was started ({now - _enteredAt:0.00} s after entering the game)"));
             _loadingDismissed = true;
             // The screen is the shell's node and is freed by this call: nothing here may touch it afterwards.
             LoadingScreen = null;
             DismissLoadingScreen?.Invoke();
         }
         return true;
+    }
+
+    // Developer aid, with VORTEX_LEGACY_PERFLOG: VORTEX_LEGACY_QCPROFILE times every builtin the client program
+    // calls while in the game and writes the totals into the perf log when the session ends. It costs two
+    // timestamps per builtin call, so a run with it is for finding where the time goes, not for frame times.
+    private static readonly bool s_profileProgram = LegacyPerfLog.Enabled && !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_QCPROFILE"));
+
+    private void DumpProgramProfile(LegacyClientSession session)
+    {
+        if (session.Host?.Vm is not { Profile: { } profile } vm) return;
+        long frames = Math.Max(1, session.FramesDrawn);
+        Dictionary<int, string> names = new();
+        foreach (QcFunction function in vm.Functions)
+            if (function.IsBuiltin) names.TryAdd(-function.FirstStatement, function.Name);
+        LegacyPerfLog.Mark(string.Create(CultureInfo.InvariantCulture,
+            $"qcprofile total {QcProfile.ToMilliseconds(profile.TotalTicks) / frames:0.000} ms/frame = interpreter {QcProfile.ToMilliseconds(profile.InterpreterTicks) / frames:0.000} + builtins {QcProfile.ToMilliseconds(profile.BuiltinTicks) / frames:0.000} ({profile.BuiltinCalls / frames} calls/frame) over {frames} frames"));
+        if (_presentation?.SceneProfile is { } sceneTicks)
+            LegacyPerfLog.Mark(string.Create(CultureInfo.InvariantCulture,
+                $"qcprofile scene submission ms/frame: engine entities {QcProfile.ToMilliseconds(sceneTicks[0]) / frames:0.0000}, placement {QcProfile.ToMilliseconds(sceneTicks[1]) / frames:0.0000}, proxy {QcProfile.ToMilliseconds(sceneTicks[2]) / frames:0.0000}, transform {QcProfile.ToMilliseconds(sceneTicks[3]) / frames:0.0000}, render state {QcProfile.ToMilliseconds(sceneTicks[4]) / frames:0.0000}, tint {QcProfile.ToMilliseconds(sceneTicks[5]) / frames:0.0000}, pose {QcProfile.ToMilliseconds(sceneTicks[6]) / frames:0.0000}"));
+        int listed = 0;
+        foreach ((int number, long calls, long ticks) in profile.ByBuiltin())
+        {
+            if (listed++ >= 40) break;
+            LegacyPerfLog.Mark(string.Create(CultureInfo.InvariantCulture,
+                $"qcprofile #{number} {names.GetValueOrDefault(number, "?")}: {QcProfile.ToMilliseconds(ticks) / frames:0.0000} ms/frame; {(double)calls / frames:0.0} calls/frame; {QcProfile.ToMilliseconds(ticks) * 1000 / Math.Max(1, calls):0.00} us/call"));
+        }
     }
 
     private void Fail(string reason)
@@ -1285,6 +1349,7 @@ public partial class LegacyGame : Node
         {
             if (_session is { } session)
             {
+                DumpProgramProfile(session);   // before the goodbye: that unloads the program
                 if (_transport is { } transport && session.Client.State == DpClientState.Connected)
                 {
                     foreach (byte[] datagram in session.Disconnect(Now)) transport.Send(datagram);
@@ -1334,6 +1399,8 @@ public partial class LegacyGame : Node
             _vfs = null;
             if (!Headless) MouseCapture.SetWantCapture(false);
             ReleaseLevelMemory(Godot.Engine.GetMainLoop() as SceneTree);
+            LegacyPerfLog.Mark("session over");
+            LegacyPerfLog.Flush();
         }
     }
 

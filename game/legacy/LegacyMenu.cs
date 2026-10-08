@@ -142,6 +142,7 @@ public partial class LegacyMenu : Node
             return;
         }
         _assets = new AssetLoader(_vfs);
+        LegacyData.MountTextureCache(_vfs, _assets.Assets);
 
         // --- the canvas: above a session's HUD (5) and the mod layer (6), below the native menu (10) and the console ---
         _canvasLayer = new CanvasLayer { Name = "LegacyMenuLayer", Layer = 8 };
@@ -515,6 +516,22 @@ public partial class LegacyMenu : Node
     // =====================================================================================================
 
     public override void _Process(double delta)
+    {
+        // The menu alone is recorded as its own kind of frame; with a game running the game's frame is the record.
+        bool recorded = _session is null;
+        if (recorded) LegacyPerfLog.BeginFrame(2);
+        try { ProcessFrame(); }
+        finally
+        {
+            if (recorded)
+            {
+                LegacyPerfLog.Part(LegacyPerfLog.Program);
+                LegacyPerfLog.EndFrame();
+            }
+        }
+    }
+
+    private void ProcessFrame()
     {
         using var _scope = FrameProfiler.Scope("legacy-menu");
         if (!_started || _shutDown || _failed || _console is not { } console || _canvas is not { } canvas || _drawLayer is not { } layer) return;
@@ -944,6 +961,7 @@ public partial class LegacyMenu : Node
             _session?.Shutdown();
             _host?.Shutdown();
             SaveConfig();
+            LegacyPerfLog.Flush();
         }
         finally
         {

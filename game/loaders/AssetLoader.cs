@@ -119,6 +119,18 @@ public sealed class AssetLoader
         new(StringComparer.Ordinal);
 
 
+    /// <summary>
+    /// When set, <see cref="LoadModel"/> builds skeletal (IQM and DPM) models WITHOUT their animation clip library:
+    /// the node still has its skeleton, mesh and an (empty) AnimationPlayer, but no clips. For a caller that
+    /// poses every bone itself each frame (legacy compatibility mode, where the server's client program owns
+    /// the pose) the library is pure cost - ~100-360 ms and tens of MB per player model, built and never
+    /// played. Default false: the native client's models are unchanged. Set once, before the first load.
+    /// </summary>
+    public bool SkipModelAnimations { get; set; }
+
+    // The one empty library every clip-less model shares (attached verbatim, never mutated).
+    private AnimationLibrary? _noAnimations;
+
     /// <summary>The virtual filesystem this loader reads from (mounted gamedirs/pk3s).</summary>
     public VirtualFileSystem Vfs => _vfs;
 
@@ -421,14 +433,16 @@ public sealed class AssetLoader
                 // every later instance of this (model, skin) binds the same ArrayMesh — 69 of the shipped
                 // weapon models are IQM. Perf-neutral at 1 instance; pays at N (see the geometry-cache note).
                 var shared = new IqmBuilder.SharedSkinnedGeometry();
-                return new ModelParse(() => IqmBuilder.Build(iqm, _assets, groups, skin, null, null, shared),
-                                      IqmEffectiveMaterials(iqm, skin));
+                return new ModelParse(
+                    () => IqmBuilder.Build(iqm, _assets, groups, skin,
+                        SkipModelAnimations ? _noAnimations ??= new AnimationLibrary() : null, null, shared),
+                    IqmEffectiveMaterials(iqm, skin));
             }
             if (magic.StartsWith(MagicDpm, StringComparison.Ordinal))
             {
                 DpmData dpm = DpmReader.Read(bytes);
                 IReadOnlyList<FrameGroup>? groups = LoadFrameGroups(key);
-                return new ModelParse(() => DpmBuilder.Build(dpm, _assets, groups),
+                return new ModelParse(() => DpmBuilder.Build(dpm, _assets, groups, buildAnimations: !SkipModelAnimations),
                                       DpmBuilder.EffectiveMaterials(dpm));
             }
             if (magic.StartsWith(MagicMd3, StringComparison.Ordinal))

@@ -121,29 +121,86 @@ public sealed class FormatLegacyModels : ILegacyModels
             if (_world is not null && _world.TryGetSubmodel(name, out Vector3 mins, out Vector3 maxs, out _))
                 model = LegacyModelLoader.Submodel(name, mins, maxs);
         }
+        else if (_preparsed is { } preparsed && preparsed.TryRemove(name, out Lazy<Parsed>? ahead))
+        {
+            // Parsed ahead on a worker thread (Preparse), or being parsed there now: the value waits for it.
+            Working?.Invoke();
+            Parsed parsed = ahead.Value;
+            model = parsed.Model;
+            if (parsed.Bytes > 0)
+            {
+                ModelsParsed++;
+                ModelBytesRead += parsed.Bytes;
+                ModelLoadSeconds += parsed.Seconds;
+            }
+        }
         else if (LegacyQcHost.IsSafePath(name) && _files.Exists(name))
         {
-            try
+            Working?.Invoke();
+            Parsed parsed = ParseFile(_files, name);
+            model = parsed.Model;
+            if (parsed.Bytes > 0)
             {
-                Working?.Invoke();
-                long started = System.Diagnostics.Stopwatch.GetTimestamp();
-                byte[] data = _files.ReadBytes(name);
-                string sidecar = name + ".framegroups";
-                string? frameGroups = _files.Exists(sidecar) ? _files.ReadText(sidecar) : null;
-                model = LegacyModelLoader.Load(name, data, frameGroups);
                 ModelsParsed++;
-                ModelBytesRead += data.Length;
-                ModelLoadSeconds += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds;
-            }
-            catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
-            {
-                model = null;
+                ModelBytesRead += parsed.Bytes;
+                ModelLoadSeconds += parsed.Seconds;
             }
         }
 
         if (_cache.Count >= MaxCachedModels) Evict();
         _cache[name] = new CacheEntry { Model = model, LastUse = ++_useCounter };
         return model;
+    }
+
+    // One model file read and parsed: the model (null if it is missing or malformed), the bytes read and the
+    // time it took. Touches nothing but the file system and its own result, so it may run on any thread.
+    private readonly record struct Parsed(LegacyModel? Model, long Bytes, double Seconds);
+
+    private static Parsed ParseFile(VirtualFileSystem files, string name)
+    {
+        try
+        {
+            if (!files.Exists(name)) return default;
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            byte[] data = files.ReadBytes(name);
+            string sidecar = name + ".framegroups";
+            string? frameGroups = files.Exists(sidecar) ? files.ReadText(sidecar) : null;
+            LegacyModel? model = LegacyModelLoader.Load(name, data, frameGroups);
+            return new Parsed(model, data.Length, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds);
+        }
+        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException or ArgumentException or IndexOutOfRangeException)
+        {
+            return default;
+        }
+    }
+
+    private System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Parsed>>? _preparsed;
+
+    /// <summary>
+    /// Starts reading and parsing these model files on worker threads, so that the program's own
+    /// precache_model / setmodel calls - several hundred of them inside CSQC_Init, one file each, some of
+    /// them megabytes of animation - find the work done or under way instead of doing it one at a time on
+    /// the caller's thread. DarkPlaces loads a level's models in CL_BeginDownloads; the names here are that
+    /// same list (the server's model precache). Returns at once. A name that is asked for before a worker
+    /// reaches it is parsed by the asker; one being parsed is waited for; the answers are the same either way.
+    /// A second call adds to the first: names already under way are not started again.
+    /// </summary>
+    /// <param name="names">Model names as the server or the program gives them. Unsafe paths, "null" and "*N" are skipped.</param>
+    /// <param name="workers">How many threads may parse at once.</param>
+    public void Preparse(IEnumerable<string?> names, int workers)
+    {
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Parsed>> table = _preparsed ??= new(StringComparer.Ordinal);
+        List<Lazy<Parsed>> work = new();
+        VirtualFileSystem files = _files;
+        foreach (string? candidate in names)
+        {
+            if (candidate is not { Length: > 0 } name || name == "null" || name[0] == '*' || !LegacyQcHost.IsSafePath(name) || _cache.ContainsKey(name)) continue;
+            Lazy<Parsed> lazy = new(() => ParseFile(files, name), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+            if (table.TryAdd(name, lazy)) work.Add(lazy);
+        }
+        if (work.Count == 0) return;
+        System.Threading.Tasks.ParallelOptions options = new() { MaxDegreeOfParallelism = Math.Clamp(workers, 1, 32) };
+        System.Threading.Tasks.Task.Run(() => System.Threading.Tasks.Parallel.ForEach(work, options, static lazy => { _ = lazy.Value; }));
     }
 
     // Drops the least recently used quarter. Skeleton objects keep their own reference to the model
@@ -158,7 +215,11 @@ public sealed class FormatLegacyModels : ILegacyModels
     }
 
     /// <summary>Forgets every parsed model (a new level: the submodels are different ones).</summary>
-    public void ClearCache() => _cache.Clear();
+    public void ClearCache()
+    {
+        _cache.Clear();
+        _preparsed = null;
+    }
 
     public bool TryGetBounds(string model, out QcVector mins, out QcVector maxs)
     {

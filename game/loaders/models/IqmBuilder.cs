@@ -491,8 +491,21 @@ public static class IqmBuilder
     {
         IqmJoint[] joints = iqm.Joints;
         var names = new string[joints.Length];
+        // A file may name two joints alike (stock Xonotic has such models). Skeleton3D refuses the second
+        // AddBone of a name, which left the skeleton a bone short and every later bone index - parents, rests,
+        // the mesh's skin weights - pointing one bone too far. The first of a name keeps it (lookups by name
+        // find that one, as they did); a repeat gets its index appended.
+        HashSet<string>? seen = null;
         for (int i = 0; i < joints.Length; i++)
-            names[i] = string.IsNullOrEmpty(joints[i].Name) ? $"bone_{i}" : SanitizeBoneName(joints[i].Name);
+        {
+            string name = string.IsNullOrEmpty(joints[i].Name) ? $"bone_{i}" : SanitizeBoneName(joints[i].Name);
+            if (!(seen ??= new HashSet<string>(StringComparer.Ordinal)).Add(name))
+            {
+                name = $"{name}~{i}";
+                seen.Add(name);
+            }
+            names[i] = name;
+        }
         return names;
     }
 

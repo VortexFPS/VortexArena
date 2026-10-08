@@ -339,6 +339,7 @@ public sealed class LegacyClientSession : IDisposable
         {
             _programPending = false;
             Note("the server names no client program");
+            Presentation.EndLevelLoad(State);
             return;
         }
         byte[]? program = signon.CsprogsData ?? (_options.AlwaysDownloadProgram ? null : LocalProgram(signon.CsqcProgName, signon.CsqcProgSize, signon.CsqcProgCrc));
@@ -371,7 +372,11 @@ public sealed class LegacyClientSession : IDisposable
                 try { _options.ProgramDownloaded?.Invoke(signon.CsqcProgName, signon.CsqcProgSize, signon.CsqcProgCrc, program); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Note("the downloaded program could not be cached: " + e.Message); }
             }
-            Note($"client program {signon.CsqcProgName} loaded ({program.Length} bytes, crc {host.ProgramCrc}, {ProgramSource}); CSQC_Init {(ok ? "completed" : "FAULTED: " + host.FaultMessage)} in {seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)} s");
+            Note($"client program {signon.CsqcProgName} loaded ({program.Length} bytes, crc {host.ProgramCrc}, {ProgramSource}); CSQC_Init {(ok ? "completed" : "FAULTED: " + host.FaultMessage)} in {seconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} s");
+            started = System.Diagnostics.Stopwatch.GetTimestamp();
+            Presentation.EndLevelLoad(State);
+            seconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds;
+            if (seconds >= 0.05) Note($"the level's precached models and sounds were made ready in {seconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} s");
         }
         catch (CsqcLoadException e)
         {

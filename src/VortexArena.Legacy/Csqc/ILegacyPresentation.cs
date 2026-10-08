@@ -35,6 +35,13 @@ public interface ILegacyPresentation
     /// with a world loads it here, because <see cref="ILegacyWorld.Bounds"/> is asked for as the
     /// program is created. The default does nothing.</summary>
     void BeginLevel(CsqcClientState state) { }
+
+    /// <summary>Called once per level when its program has been loaded and CSQC_Init has returned (or the
+    /// server named no program): the end of cl_parse.c CL_BeginDownloads, by which point DarkPlaces has every
+    /// model and sound of the level in memory. An implementation that draws finishes loading what the server
+    /// and the program precached here, so that the first sight of a thing during play does not stop the game
+    /// to load it. The default does nothing.</summary>
+    void EndLevelLoad(CsqcClientState state) { }
 }
 
 /// <summary>A presentation that counts the calls it receives, for the reports of a headless run.</summary>

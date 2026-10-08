@@ -62,10 +62,19 @@ public sealed partial class GodotLegacyPresentation
         public (Color ColorMod, Color GlowMod, Color Shirt, Color Pants)? Tint;
         public int LastFrameB = int.MinValue;
         public float LastLerp = -1;
+        // What the node was last told, so that a frame in which nothing about an entity changed (most
+        // entities, most frames: items, torches, a player standing still) makes no call into the engine for it.
+        public bool HasPlacement, Shown;
+        public BoneMatrix Placement;
+        public Vector3[]? PosePositions;
+        public Quaternion[]? PoseRotations;
     }
 
     private readonly Dictionary<int, Proxy> _proxies = new();
-    private readonly LegacySceneLedger _ledger = new() { Capacity = MaxProxies, ReleaseAfterFrames = 180 };
+    // An entity not submitted for this many frames gives its node back. It was 180, which at 200 frames a second
+    // is under a second: a door out of sight for a moment was built again when it came back (50-100 ms for a
+    // map submodel), and every weapon model a few times a minute. A hidden node costs the renderer nothing.
+    private readonly LegacySceneLedger _ledger = new() { Capacity = MaxProxies, ReleaseAfterFrames = 3600 };
     private readonly List<int> _hide = new(), _release = new();
     private readonly List<LegacyDynamicLight> _lights = new();
     private readonly List<OmniLight3D> _lightPool = new();
@@ -93,15 +102,19 @@ public sealed partial class GodotLegacyPresentation
     private void BeginSceneFrame()
     {
         _debugEntities.Clear();
+        // "Settled" is a run of frames in which every entity submitted already had its model.
+        _framesWithoutBuilds = _mainRendered && _buildsThisFrame == 0 && _buildsWaiting == 0 ? _framesWithoutBuilds + 1 : 0;
         _mainRendered = false;
         _viewsThisFrame = 0;
         _oneOffs = 0;
         _buildsThisFrame = 0;
+        _buildsWaiting = 0;
         _buildSecondsThisFrame = 0;
         _submittedThisFrame = 0;
         _polygonsThisFrame = 0;
         _polygonVertices = 0;
         _lights.Clear();
+        _oneOffsOfModel.Clear();
         _polygonMesh.ClearSurfaces();
         _ledger.BeginFrame();
         _refdef.BeginFrame();
@@ -116,7 +129,11 @@ public sealed partial class GodotLegacyPresentation
         LastSceneEntities = _submittedThisFrame;
         _ledger.Sweep(_hide, _release);
         foreach (int key in _hide)
-            if (_proxies.TryGetValue(key, out Proxy? hidden) && hidden.Node is { } node) node.Visible = false;
+            if (_proxies.TryGetValue(key, out Proxy? hidden) && hidden.Node is { } node && hidden.Shown)
+            {
+                hidden.Shown = false;
+                node.Visible = false;
+            }
         foreach (int key in _release) FreeProxy(key);
     }
 
@@ -139,6 +156,7 @@ public sealed partial class GodotLegacyPresentation
         _proxyNodes = 0;
         // The variants hold duplicates of the level's materials; a new level makes its own.
         _materialVariants.Clear();
+        _oneOffKeys.Clear();
     }
 
     // ---- ILegacyScene ---------------------------------------------------------------------------------
@@ -160,6 +178,13 @@ public sealed partial class GodotLegacyPresentation
     /// the engine's own view model (ENTMASK_ENGINEVIEWMODELS) does not exist: Xonotic draws its own.
     /// </summary>
     void ILegacyScene.AddEngineEntities(int drawMask)
+    {
+        long began = SceneProfile is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
+        AddEngineEntitiesCore(drawMask);
+        Lap(SceneProfile, 0, began);
+    }
+
+    private void AddEngineEntitiesCore(int drawMask)
     {
         if (!Collecting || _state is not { } state) return;
 
@@ -218,8 +243,28 @@ public sealed partial class GodotLegacyPresentation
     /// carried through any chain of tag attachments, and relative to the view with RF_VIEWMODEL - which
     /// <see cref="FormatLegacyModels.TagMatrix"/> already computes from the same fields.
     /// </summary>
+    /// <summary>Developer aid (VORTEX_LEGACY_QCPROFILE): where the time of submitting entities goes, in
+    /// Stopwatch ticks - 0 engine entities, 1 placement (tag matrix), 2 proxy lookup and builds, 3 transform,
+    /// 4 render state, 5 tint, 6 pose. Null: not measured.</summary>
+    public long[]? SceneProfile { get; set; }
+
     bool ILegacyScene.AddEntity(in LegacyRenderEntity entity)
     {
+        if (SceneProfile is not { } profile) return AddEntityCore(entity, null);
+        return AddEntityCore(entity, profile);
+    }
+
+    private static long Lap(long[]? profile, int slot, long since)
+    {
+        if (profile is null) return 0;
+        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+        profile[slot] += now - since;
+        return now;
+    }
+
+    private bool AddEntityCore(in LegacyRenderEntity entity, long[]? profile)
+    {
+        long lap = profile is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         if (string.IsNullOrEmpty(entity.Model)) return false;
         if (!Collecting) return true;
         _submittedThisFrame++;
@@ -232,7 +277,8 @@ public sealed partial class GodotLegacyPresentation
         else
         {
             if (_oneOffs >= MaxOneOffsPerFrame) return false;
-            key = OneOffKeyBase + _oneOffs++;
+            _oneOffs++;
+            key = OneOffKey(model, entity.Skin);
         }
 
         BoneMatrix placement;
@@ -252,18 +298,46 @@ public sealed partial class GodotLegacyPresentation
             }
         }
 
+        lap = Lap(profile, 1, lap);
         if (Touch(key, model, entity.Skin) is not { } proxy) return false;
+        lap = Lap(profile, 2, lap);
         if (s_debugEntities && _debugEntities.Count < 300)
             _debugEntities.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
                 $"ent {entity.Edict,4} {model} rf {entity.RenderFlags} ef {entity.Effects} a {entity.Alpha:0.##} sc {entity.Scale:0.##} cm {entity.ColorMap} skin {entity.Skin} fr {entity.Frame:0} tag {entity.TagEntity}/{entity.TagIndex} org {entity.Origin.X:0.#} {entity.Origin.Y:0.#} {entity.Origin.Z:0.#} ang {entity.Angles.X:0.#} {entity.Angles.Y:0.#} {entity.Angles.Z:0.#} -> at {placement.Origin.X:0.#} {placement.Origin.Y:0.#} {placement.Origin.Z:0.#} |fwd| {placement.Fwd.Length():0.###} colormod {entity.ColorMod.X:0.##} {entity.ColorMod.Y:0.##} {entity.ColorMod.Z:0.##} glow {entity.GlowMod.X:0.##} {entity.GlowMod.Y:0.##} {entity.GlowMod.Z:0.##} node {(proxy.Node is null ? "none" : "ok")} failed {proxy.Failed}"));
         if (proxy.Node is null) return !proxy.Failed;
         if (!ApplyPlacement(proxy, placement)) return true;
+        lap = Lap(profile, 3, lap);
 
         // "if (!entrender->alpha) entrender->alpha = 1"
         ApplyRenderState(proxy, entity.Alpha == 0 ? 1 : entity.Alpha, entity.Effects, entity.RenderFlags);
+        lap = Lap(profile, 4, lap);
         ApplyTint(proxy, entity.ColorMap, entity.ColorMod, entity.GlowMod);
+        lap = Lap(profile, 5, lap);
         ApplyPose(proxy, entity);
+        Lap(profile, 6, lap);
         return true;
+    }
+
+    // An entity submitted with addentity has no number of its own (a muzzle flash, a casing, the weapon in the
+    // HUD's selection strip). Numbering them in the order they came made the n-th one of a frame share a proxy
+    // with whatever was n-th in the frame before - another model as often as not, so the node was thrown away
+    // and built again, a millisecond or two each time, all through a fight. They are numbered per model
+    // instead: the first shotgun flash of a frame is the first shotgun flash of the last one.
+    private readonly Dictionary<(string Model, int Skin, int Nth), int> _oneOffKeys = new();
+    private readonly Dictionary<string, int> _oneOffsOfModel = new(StringComparer.Ordinal);
+    private const int MaxOneOffKeys = 4096;
+
+    private int OneOffKey(string model, int skin)
+    {
+        _oneOffsOfModel.TryGetValue(model, out int nth);
+        _oneOffsOfModel[model] = nth + 1;
+        (string, int, int) which = (model, skin, nth);
+        if (_oneOffKeys.TryGetValue(which, out int key)) return key;
+        // Past the bound the old numbering takes over for the rest: correct, only not stable.
+        if (_oneOffKeys.Count >= MaxOneOffKeys) return OneOffKeyBase + MaxOneOffKeys + _oneOffs;
+        key = OneOffKeyBase + _oneOffKeys.Count;
+        _oneOffKeys[which] = key;
+        return key;
     }
 
     // The proxy for a submission: built on first sight, rebuilt when its model or skin changes. At most a
@@ -285,54 +359,48 @@ public sealed partial class GodotLegacyPresentation
         }
         // One build always; more only while the frame has spent little on them. A level's first frames have
         // seventy models to build, and six a frame made each of those frames take half a second.
-        if (!proxy.Built && !proxy.Failed && _buildsThisFrame < MaxModelBuildsPerFrame && (_buildsThisFrame == 0 || _buildSecondsThisFrame < ModelBuildBudgetSeconds))
+        // Under the loading screen nobody is watching the frame rate: the first frames' entities all get their
+        // models at once. And while the models built ahead are still parked in the pipeline pass, nothing is
+        // built at all - a few frames later each entity takes its model from there for nothing.
+        if (!proxy.Built && !proxy.Failed && !_warmPending
+            && (Loading ? _buildSecondsThisFrame < LoadingBuildBudgetSeconds
+                        : _buildsThisFrame < MaxModelBuildsPerFrame && (_buildsThisFrame == 0 || _buildSecondsThisFrame < ModelBuildBudgetSeconds)))
         {
             _buildsThisFrame++;
             long started = System.Diagnostics.Stopwatch.GetTimestamp();
-            Build(proxy, model, skin);
+            bool ahead = Build(proxy, model, skin);
+            LegacyPerfLog.Event(ahead ? "model (built ahead) " + model : "model " + model, started);
             _buildSecondsThisFrame += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds;
         }
+        else if (!proxy.Built && !proxy.Failed) _buildsWaiting++;
         return proxy;
     }
 
-    private void Build(Proxy proxy, string model, int skin)
+    private const double LoadingBuildBudgetSeconds = 0.1;
+    private int _buildsWaiting;
+
+    // True if the model's node had been built ahead (EndLevelLoad) and was only taken out of the pool here.
+    private bool Build(Proxy proxy, string model, int skin)
     {
         proxy.Built = true;
         if (model[0] == '*')
         {
             BuildSubmodel(proxy, model);
-            return;
+            return false;
         }
-        // The name came from the server or its program: a path inside the session's game data, or nothing.
-        if (!LegacyQcHost.IsSafePath(model) || !_vfs.Exists(model))
+        bool ahead = true;
+        Node3D? node = TakePrebuilt(model, skin, out ModelAnimator? animator);
+        if (node is null)
         {
-            proxy.Failed = true;
-            return;
-        }
-        Node3D? node = null;
-        try
-        {
-            // A vertex-animated model with more than one frame gets the morphing animator, so .frame shows;
-            // everything else (IQM/DPM skeletal, single-frame MD3, MDL, sprites) is the asset pipeline's node.
-            Md3Data? md3 = skin == 0 && model.EndsWith(".md3", StringComparison.OrdinalIgnoreCase) ? _assets.LoadMd3(model) : null;
-            if (md3 is { FrameCount: > 1 })
-            {
-                ModelAnimator animator = ModelAnimator.Create(md3, null, _assets.Assets);
-                animator.SetRawFrame(0);
-                proxy.Animator = animator;
-                node = animator;
-            }
-            else node = _assets.LoadModel(model, Math.Clamp(skin, 0, 255));
-        }
-        catch (Exception e) when (e is not OutOfMemoryException)
-        {
-            _note($"model \"{model}\" could not be built: {e.GetType().Name}: {e.Message}");
+            ahead = false;
+            node = CreateModelNode(model, skin, out animator);
         }
         if (node is null)
         {
             proxy.Failed = true;
-            return;
+            return false;
         }
+        proxy.Animator = animator;
         node.Visible = false;
         _sceneRoot.AddChild(node);
         _proxyNodes++;
@@ -356,6 +424,36 @@ public sealed partial class GodotLegacyPresentation
             proxy.BoneParents = new int[bones];
             for (int i = 0; i < bones; i++) proxy.BoneParents[i] = skeleton.GetBoneParent(i);
         }
+        return ahead;
+    }
+
+    // The node for a model file, not yet in the scene: null if the name is not a file of the session's game
+    // data or cannot be built. Used when an entity first shows a model, and ahead of time for a level's
+    // precached models (EndLevelLoad).
+    private Node3D? CreateModelNode(string model, int skin, out ModelAnimator? animator)
+    {
+        animator = null;
+        // The name came from the server or its program: a path inside the session's game data, or nothing.
+        if (!LegacyQcHost.IsSafePath(model) || !_vfs.Exists(model)) return null;
+        try
+        {
+            // A vertex-animated model with more than one frame gets the morphing animator, so .frame shows;
+            // everything else (IQM/DPM skeletal, single-frame MD3, MDL, sprites) is the asset pipeline's node.
+            Md3Data? md3 = skin == 0 && model.EndsWith(".md3", StringComparison.OrdinalIgnoreCase) ? _assets.LoadMd3(model) : null;
+            if (md3 is { FrameCount: > 1 })
+            {
+                animator = ModelAnimator.Create(md3, null, _assets.Assets);
+                animator.SetRawFrame(0);
+                return animator;
+            }
+            return _assets.LoadModel(model, Math.Clamp(skin, 0, 255));
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            _note($"model \"{model}\" could not be built: {e.GetType().Name}: {e.Message}");
+            animator = null;
+            return null;
+        }
     }
 
     // ---- map submodels ("*N") ------------------------------------------------------------------------
@@ -365,6 +463,8 @@ public sealed partial class GodotLegacyPresentation
     private static readonly System.Reflection.MethodInfo? s_memberwiseClone =
         typeof(object).GetMethod("MemberwiseClone", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
     private static readonly System.Reflection.PropertyInfo? s_bspFaces = typeof(VortexArena.Formats.Bsp.BspData).GetProperty(nameof(VortexArena.Formats.Bsp.BspData.Faces));
+
+    private readonly Dictionary<string, Image> _submodelImages = new(StringComparer.Ordinal);
 
     /// <summary>Submodels built since the level began, and the time that took.</summary>
     public int SubmodelsBuilt { get; private set; }
@@ -401,7 +501,10 @@ public sealed partial class GodotLegacyPresentation
                 VortexArena.Formats.Bsp.BspData view = (VortexArena.Formats.Bsp.BspData)s_memberwiseClone.Invoke(bsp, null)!;
                 s_bspFaces.SetValue(view, faces);
                 _levelMaps.Add(view);
-                node = MapLoader.BuildMap(view, _assets.Assets, _levelName);
+                // The lightmap pages are decoded once for all of the level's submodels, not once for each.
+                _assets.Assets.LoadImageCache = _submodelImages;
+                try { node = MapLoader.BuildMap(view, _assets.Assets, _levelName); }
+                finally { _assets.Assets.LoadImageCache = null; }
             }
         }
         catch (Exception e) when (e is not OutOfMemoryException)
@@ -444,9 +547,17 @@ public sealed partial class GodotLegacyPresentation
         if (proxy.Node is not { } node) return false;
         if (!Finite(placement.Fwd) || !Finite(placement.Left) || !Finite(placement.Up) || !Finite(placement.Origin))
         {
-            node.Visible = false;
+            if (proxy.Shown)
+            {
+                proxy.Shown = false;
+                node.Visible = false;
+            }
             return false;
         }
+        if (proxy.HasPlacement && proxy.Placement.Origin == placement.Origin && proxy.Placement.Fwd == placement.Fwd
+            && proxy.Placement.Left == placement.Left && proxy.Placement.Up == placement.Up) return true;
+        proxy.HasPlacement = true;
+        proxy.Placement = placement;
         node.Transform = IqmBuilder.ConjugateQuakeWorldToGodot(ToTransform(placement));
         return true;
     }
@@ -462,7 +573,11 @@ public sealed partial class GodotLegacyPresentation
     {
         if (proxy.Node is not { } node) return;
         bool hidden = (renderFlags & RfExternalModel) != 0 || (effects & EfNoDraw) != 0 || !(alpha > 0);
-        node.Visible = !hidden;
+        if (proxy.Shown == hidden)
+        {
+            proxy.Shown = !hidden;
+            node.Visible = !hidden;
+        }
         if (hidden) return;
 
         alpha = Math.Clamp(alpha, 0f, 1f);
@@ -660,6 +775,8 @@ public sealed partial class GodotLegacyPresentation
         // The Skeleton3D was built from the same file in the same bone order; a count that differs means it was not.
         if (bones == 0 || bones != parents.Length) return;
         Span<Transform3D> world = stackalloc Transform3D[MaxBones];
+        Vector3[] positions = proxy.PosePositions ??= NewPoseCache<Vector3>(bones);
+        Quaternion[] rotations = proxy.PoseRotations ??= NewPoseCache<Quaternion>(bones);
         for (int i = 0; i < bones; i++)
         {
             ref readonly BoneMatrix bone = ref absolute[i];
@@ -668,9 +785,28 @@ public sealed partial class GodotLegacyPresentation
             world[i] = pose;
             int parent = parents[i];
             Transform3D local = parent >= 0 && parent < i ? world[parent].AffineInverse() * pose : pose;
-            skeleton.SetBonePosePosition(i, local.Origin);
-            skeleton.SetBonePoseRotation(i, local.Basis.GetRotationQuaternion());
+            // Only a bone that moved is handed to the engine: two calls a bone, sixty bones a player.
+            if (positions[i] != local.Origin)
+            {
+                positions[i] = local.Origin;
+                skeleton.SetBonePosePosition(i, local.Origin);
+            }
+            Quaternion rotation = local.Basis.GetRotationQuaternion();
+            if (rotations[i] != rotation)
+            {
+                rotations[i] = rotation;
+                skeleton.SetBonePoseRotation(i, rotation);
+            }
         }
+    }
+
+    // A pose cache that matches nothing yet, so the first pose sets every bone.
+    private static T[] NewPoseCache<T>(int bones) where T : struct
+    {
+        T[] cache = new T[bones];
+        if (cache is Vector3[] positions) Array.Fill(positions, new Vector3(float.NaN, float.NaN, float.NaN));
+        else if (cache is Quaternion[] rotations) Array.Fill(rotations, new Quaternion(float.NaN, float.NaN, float.NaN, float.NaN));
+        return cache;
     }
 
     bool ILegacyScene.SetProperty(int property, QcVector a, QcVector b) => View.Set(property, a, b);

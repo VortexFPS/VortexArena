@@ -147,6 +147,37 @@ public static class LegacyData
         }
     }
 
+    /// <summary>
+    /// The block-compressed copies of Xonotic's textures (r_texture_dds_save), kept apart from the native
+    /// game's own cache: <c>&lt;user directory&gt;/legacy/texcache</c>. A legacy session mounts this on its file
+    /// system (<see cref="MountTextureCache"/>) and points its asset system at it, so a texture is encoded
+    /// once and read back as blocks on every later load.
+    /// </summary>
+    public static string TextureCacheRoot
+    {
+        get
+        {
+            string root = Path.Combine(UserRoot, "texcache");
+            Directory.CreateDirectory(root);
+            return root;
+        }
+    }
+
+    /// <summary>Mounts <see cref="TextureCacheRoot"/> on a legacy file system (once) and gives it to the asset
+    /// system that reads through that file system.</summary>
+    public static void MountTextureCache(VortexArena.Formats.Vfs.VirtualFileSystem files, VortexArena.Game.Loaders.AssetSystem assets)
+    {
+        try
+        {
+            string root = TextureCacheRoot;
+            bool mounted = false;
+            foreach (string path in files.MountedPaths)
+                if (string.Equals(path, root, StringComparison.OrdinalIgnoreCase)) { mounted = true; break; }
+            if (mounted || files.Mount(root)) assets.DdsCacheRoot = root;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { }
+    }
+
     /// <summary>Verified downloads: <c>&lt;user directory&gt;/legacy/dlcache</c>.</summary>
     public static string DownloadCache
     {

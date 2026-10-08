@@ -138,6 +138,8 @@ public partial class LegacyDrawLayer : Control
             if (idle.Start == idle.End && !idle.Visible) continue;
             idle.Start = idle.End = 0;
             idle.Visible = false;
+            idle.HasDrawnContent = false;
+            idle.BlendClass = -1;
             _copies[i].Visible = false;
         }
         SegmentsInUse = used;
@@ -179,8 +181,27 @@ public partial class LegacyDrawLayer : Control
         segment.Start = start;
         segment.End = end;
         segment.ClipAtStart = clipAtStart;
-        segment.Material = blendClass switch { 1 => _additive, 2 => _multiply, 3 => _doubleMultiply, 4 => _screen, _ => null };
-        _copies[index].Visible = blendClass is 3 or 4;
+        if (hardClip is not null) clipped++;
+
+        // Most of a HUD and nearly all of a menu is the same from one frame to the next. A canvas item keeps
+        // what was drawn on it until it is asked to redraw, so a stretch whose commands - and everything
+        // they depend on - are what they were is left alone: no replay, no glyph-by-glyph calls into the
+        // engine, nothing for the renderer to rebuild. (Measured on Xonotic's main menu: the replay was
+        // 5.4 ms of an 11.6 ms frame.)
+        ulong content = _source is { } summed ? Summarise(summed, start, end, blendClass, clipAtStart, hardClip) : 0;
+        if (segment.HasDrawnContent && segment.DrawnContent == content && segment.BlendClass == blendClass && segment.Visible)
+        {
+            SegmentsKept++;
+            return;
+        }
+        segment.DrawnContent = content;
+        segment.HasDrawnContent = _source is not null;
+        if (segment.BlendClass != blendClass)
+        {
+            segment.BlendClass = blendClass;
+            segment.Material = blendClass switch { 1 => _additive, 2 => _multiply, 3 => _doubleMultiply, 4 => _screen, _ => null };
+            _copies[index].Visible = blendClass is 3 or 4;
+        }
 
         // DrawQ_SetClipArea turns the virtual rectangle into whole pixels ("(int)(0.5 + x * width / vid_conwidth)").
         Rect2? pixels = null;
@@ -190,11 +211,68 @@ public partial class LegacyDrawLayer : Control
             float x0 = MathF.Floor(0.5f + area.Position.X * scale.X), y0 = MathF.Floor(0.5f + area.Position.Y * scale.Y);
             float x1 = MathF.Floor(0.5f + area.End.X * scale.X), y1 = MathF.Floor(0.5f + area.End.Y * scale.Y);
             pixels = new Rect2(x0, y0, MathF.Max(0, x1 - x0), MathF.Max(0, y1 - y0));
-            clipped++;
         }
         segment.SetHardClip(pixels, Size);
-        segment.Visible = true;
+        if (!segment.Visible) segment.Visible = true;
         segment.QueueRedraw();
+    }
+
+    /// <summary>Stretches left as they were in the frames presented so far (not replayed).</summary>
+    public long SegmentsKept { get; private set; }
+
+    // Everything a stretch's picture depends on, folded into one number: the commands themselves, the 2D
+    // space they are drawn in, how text looks, and the canvas's own count of changes under the names.
+    private ulong Summarise(LegacyCanvas source, int start, int end, int blendClass, Rect2? clipAtStart, Rect2? hardClip)
+    {
+        ulong h = 14695981039346656037UL;
+        static ulong Mix(ulong h, ulong v) => (h ^ v) * 1099511628211UL;
+        static ulong F(float f) => (ulong)(uint)BitConverter.SingleToInt32Bits(f);
+        Vector2 size = Size;
+        LegacyTextLook look = source.TextLook;
+        h = Mix(h, (ulong)(uint)source.Generation);
+        h = Mix(h, (ulong)(uint)blendClass);
+        h = Mix(h, F(size.X)); h = Mix(h, F(size.Y));
+        h = Mix(h, F(source.ConWidth)); h = Mix(h, F(source.ConHeight));
+        h = Mix(h, F(source.PixelWidth)); h = Mix(h, F(source.PixelHeight));
+        h = Mix(h, F(source.FontSizeSnapping)); h = Mix(h, source.FontKerning ? 1UL : 2UL); h = Mix(h, (ulong)source.FontHinting);
+        h = Mix(h, F(look.Contrast)); h = Mix(h, F(look.Brightness)); h = Mix(h, F(look.Shadow));
+        if (clipAtStart is { } c0) { h = Mix(h, F(c0.Position.X)); h = Mix(h, F(c0.Position.Y)); h = Mix(h, F(c0.Size.X)); h = Mix(h, F(c0.Size.Y)); }
+        else h = Mix(h, 7);
+        if (hardClip is { } c1) { h = Mix(h, F(c1.Position.X)); h = Mix(h, F(c1.Position.Y)); h = Mix(h, F(c1.Size.X)); h = Mix(h, F(c1.Size.Y)); }
+        else h = Mix(h, 11);
+        LegacyDrawList list = source.DrawList;
+        IReadOnlyList<LegacyDrawCommand> commands = list.Commands;
+        IReadOnlyList<LegacyDrawVertex> vertices = list.PolygonVertices;
+        end = Math.Min(end, commands.Count);
+        for (int i = start; i < end; i++)
+        {
+            LegacyDrawCommand c = commands[i];
+            h = Mix(h, (ulong)(uint)c.Kind | ((ulong)(uint)c.Flags << 8) | (c.Rotated ? 1UL << 40 : 0) | (c.IgnoreColorCodes ? 1UL << 41 : 0) | ((ulong)(uint)c.Font << 44));
+            h = Mix(h, F(c.X) | (F(c.Y) << 32));
+            h = Mix(h, F(c.Width) | (F(c.Height) << 32));
+            h = Mix(h, F(c.Color.R) | (F(c.Color.G) << 32));
+            h = Mix(h, F(c.Color.B) | (F(c.Color.A) << 32));
+            if (c.Text is { } text) h = Mix(h, (ulong)(uint)string.GetHashCode(text, StringComparison.Ordinal) | ((ulong)(uint)text.Length << 32));
+            if (c.Kind is LegacyDrawKind.Picture)
+            {
+                h = Mix(h, F(c.SourceX) | (F(c.SourceY) << 32));
+                h = Mix(h, F(c.SourceWidth) | (F(c.SourceHeight) << 32));
+                h = Mix(h, F(c.PivotX) | (F(c.PivotY) << 32));
+                h = Mix(h, F(c.Angle));
+            }
+            else if (c.Kind is LegacyDrawKind.Text) h = Mix(h, F(c.FontScaleX) | (F(c.FontScaleY) << 32));
+            else if (c.Kind is LegacyDrawKind.Line) h = Mix(h, F(c.Angle));
+            else if (c.Kind is LegacyDrawKind.Polygon && c.VertexStart >= 0 && c.VertexStart + c.VertexCount <= vertices.Count)
+                for (int v = c.VertexStart, last = c.VertexStart + c.VertexCount; v < last; v++)
+                {
+                    LegacyDrawVertex vertex = vertices[v];
+                    h = Mix(h, F(vertex.X) | (F(vertex.Y) << 32));
+                    h = Mix(h, F(vertex.U) | (F(vertex.V) << 32));
+                    h = Mix(h, F(vertex.Color.R) | (F(vertex.Color.G) << 32));
+                    h = Mix(h, F(vertex.Color.B) | (F(vertex.Color.A) << 32));
+                }
+        }
+        return h;
     }
 
     /// <summary>Draws one segment's stretch of the list onto it. Called from the segment's own _Draw.</summary>

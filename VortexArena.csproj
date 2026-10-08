@@ -55,6 +55,10 @@
     <!-- The mod SDK (modding-sdk/) is GUEST code: it targets net10.0 and is compiled to WebAssembly by
          its own projects. Compiled into the host it would be dead code that does not even build here. -->
     <Compile Remove="modding-sdk/**/*.cs" />
+    <!-- _scratch/ is where redirected logs and the artifacts of `dotnet test` (its artifacts-path option) go (CLAUDE.md). An
+         artifacts directory there holds obj/**/*.AssemblyInfo.cs for every library, and compiled into the host
+         those are duplicate assembly attributes: the host build then fails on files nobody wrote. -->
+    <Compile Remove="_scratch/**/*.cs" />
     <Compile Remove=".godot/**/*.cs" />
     <Compile Remove="obj/**/*.cs" />
     <Compile Remove="bin/**/*.cs" />

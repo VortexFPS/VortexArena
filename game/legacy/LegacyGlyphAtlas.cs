@@ -62,9 +62,14 @@ public sealed class LegacyGlyphAtlas
         Clear();
     }
 
+    /// <summary>Counts the times the atlas was emptied: what was drawn from it before is drawn from pages
+    /// that no longer exist, so whoever kept such drawing (<see cref="LegacyDrawLayer"/>) must draw again.</summary>
+    public int Generation { get; private set; }
+
     /// <summary>Forgets every glyph (a font was reloaded, the hinting changed).</summary>
     public void Clear()
     {
+        Generation++;
         _glyphs.Clear();
         _pages.Clear();
         _kerning.Clear();

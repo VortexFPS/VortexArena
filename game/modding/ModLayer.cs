@@ -29,11 +29,12 @@ namespace VortexArena.Game.Modding;
 /// class asks the player (<see cref="ModConsentPrompt"/>), then lets <see cref="ModClientSession"/>
 /// download, verify, load and run it. Both end in the same recording and replay.
 ///
-/// STATUS 2026-10-08: the server session wiring, the consent prompt, the clip segments
-/// (<see cref="ModDrawSegment"/>) and sound were written WITHOUT building the Godot host. They
-/// type-check against GodotSharp 4.6.3 in a scratch project with stand-ins for the host classes used
-/// here; they have never been built into the host and never run. Nothing in game/net calls the session
-/// entry points yet (planning/specs/modding.md, section 9.6).
+/// STATUS 2026-10-08: built into the host and run in a window on Windows x64 - both entry points, the
+/// consent prompt, clip segments, pictures, the four guest faults (abort, out-of-bounds, stack overflow,
+/// frame-budget overrun) and a two-process offer over the game connection. What was seen, and what was
+/// not (the prompt's function keys, audible sound, other platforms), is in planning/specs/modding.md,
+/// section 12. The net layer's calls into this class are in game/net/ClientNet.cs (BeginModSession,
+/// HandleModFrame) and the state a mod reads comes from game/net/NetGame.cs (WireModState).
 /// </summary>
 public partial class ModLayer : Control, IModHost
 {
@@ -60,6 +61,7 @@ public partial class ModLayer : Control, IModHost
     private readonly List<(int AssetId, int Channel, float Volume, float Pitch)> _pendingSounds = new();
     private readonly AudioStreamPlayer?[] _voices = new AudioStreamPlayer?[SoundVoices];
     private int _nextVoice;
+    private int _soundsStarted;   // since the current mod started; shown by mod_status
     private WasmModSandbox? _sandbox;
     private CvarService? _cvars;
     private Action<string> _print = _ => { };
@@ -68,6 +70,7 @@ public partial class ModLayer : Control, IModHost
     private ModClientSession? _session;
     private Action<byte[]>? _sendToServer;
     private ModCache? _cache;
+    private ModCompileCache? _compileCache;
     private ModConsentStore? _consent;
     private ModConsentPrompt? _prompt;
     private ModConsentRequest? _promptFor;
@@ -89,11 +92,32 @@ public partial class ModLayer : Control, IModHost
 
     public bool IsRunning => (_session?.Sandbox ?? _sandbox) is { State: ModSandboxState.Running };
 
+    /// <summary>The shell's one mod layer, or null before the shell built it. The net layer reaches it through here.</summary>
+    public static ModLayer? Instance { get; private set; }
+
+    public override void _EnterTree() => Instance = this;
+
     public override void _Ready()
     {
         SetAnchorsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Ignore;
+        // Keeps running while the in-game menu pauses the scene tree, like the net code it is fed by: a
+        // download must keep its clock, and the consent prompt must still take its keys.
+        ProcessMode = ProcessModeEnum.Always;
     }
+
+    /// <summary>
+    /// The canvas layer of the consent prompt: above the loading screen (100), below the engine overlay (120)
+    /// and the console (128). The MOD draws on this node's own layer, 6, under the menu; only the client's own
+    /// question goes up here. It has to: a client that has connected but not yet joined the match is still
+    /// looking at the loading screen, and for a mod the server requires it cannot join until it has answered -
+    /// a prompt underneath that screen would never be seen.
+    /// </summary>
+    private const int ConsentLayer = 110;
+    private CanvasLayer? _promptLayer;
+
+    /// <summary>True while the server session in progress is the one opened with this exact send delegate.</summary>
+    public bool OwnsServerSession(Action<byte[]> sendReliable) => _session is not null && ReferenceEquals(_sendToServer, sendReliable);
 
     private bool ModsAllowed => _cvars is not null && _cvars.GetFloat("cl_allow_mods") != 0f;
 
@@ -141,6 +165,14 @@ public partial class ModLayer : Control, IModHost
 
     private ModConsentStore Consent() => _consent ??= new ModConsentStore(Path.Combine(UserPaths.BaseDir, "mod-consent.json"));
 
+    /// <summary>
+    /// Compiled modules, kept between sessions. A directory of its own in the user directory, on purpose:
+    /// what is in it is machine code that runs unchecked, so it must never be the directory downloads land
+    /// in (that is "modcache"), and nothing a server sends may name a file in it. See
+    /// <see cref="ModCompileCache"/> for the rest of the reasoning.
+    /// </summary>
+    private ModCompileCache CompileCache() => _compileCache ??= new ModCompileCache(Path.Combine(UserPaths.BaseDir, "modcompiled"));
+
     private static double Clock => Time.GetTicksMsec() / 1000.0;
 
     /// <summary>
@@ -169,7 +201,13 @@ public partial class ModLayer : Control, IModHost
             MaxDownloadBytes = maxDownload,
         };
         _sendToServer = sendReliable;
-        _session = new ModClientSession(options, _cache, Consent(), this, _print);
+        // The compiler runs on a worker thread and its output is cached: compiling a C# mod inline cost the
+        // main thread about a fifth of a second the moment a download finished.
+        _session = new ModClientSession(options, _cache, Consent(), this, _print)
+        {
+            CompileCache = CompileCache(),
+            CompileOffThread = true,
+        };
         _session.Loaded += OnServerModLoaded;
         _session.Unloaded += OnServerModUnloaded;
         _reportedState = ModClientState.Idle;
@@ -272,7 +310,9 @@ public partial class ModLayer : Control, IModHost
                 _session?.ResolveConsent(decision);
                 FlushToServer();
             };
-            AddChild(_prompt);
+            _promptLayer = new CanvasLayer { Name = "ModConsentLayer", Layer = ConsentLayer };
+            AddChild(_promptLayer);
+            _promptLayer.AddChild(_prompt);
         }
         _promptFor = request;
         _prompt.Open(request);
@@ -329,6 +369,7 @@ public partial class ModLayer : Control, IModHost
         _sounds.Clear();
         _soundIds.Clear();
         foreach (AudioStreamPlayer? voice in _voices) voice?.Stop();
+        _soundsStarted = 0;
         Present();
     }
 
@@ -344,20 +385,20 @@ public partial class ModLayer : Control, IModHost
                 ModClientState.AwaitingConsent => $"{what}: waiting for your answer (mod_allow / mod_deny)",
                 ModClientState.Downloading => $"{what}: downloading, {offer.DownloadedBytes / 1024} of {offer.DownloadTotalBytes / 1024} KiB",
                 ModClientState.Declined => $"{what}: not running ({offer.DeclineReason}{(offer.DeclineText.Length > 0 ? " - " + offer.DeclineText : "")})",
-                _ when session.Sandbox is { } running => $"{what} {running.State}, {running.MemoryBytes / 1024} KiB of guest memory, {_ops.Count} draw commands last frame",
+                ModClientState.ReadyToLoad when session.IsPreparing => $"{what}: verified, compiling",
+                _ when session.Sandbox is { } running => $"{what} {running.State}, {running.MemoryBytes / 1024} KiB of guest memory, {_ops.Count} draw commands last frame, {_pictures.Count} picture(s) and {_sounds.Count} sound(s) resolved, {_soundsStarted} sound(s) started",
                 _ => $"{what}: {offer.State}",
             };
         }
         if (_sandbox is null) return "no mod loaded";
         return _sandbox.State == ModSandboxState.Disabled
             ? $"mod '{_sandbox.Name}' disabled: {_sandbox.DisabledReason}"
-            : $"mod '{_sandbox.Name}' {_sandbox.State}, {_sandbox.MemoryBytes / 1024} KiB of guest memory, {_ops.Count} draw commands last frame";
+            : $"mod '{_sandbox.Name}' {_sandbox.State}, {_sandbox.MemoryBytes / 1024} KiB of guest memory, {_ops.Count} draw commands last frame, {_pictures.Count} picture(s) and {_sounds.Count} sound(s) resolved, {_soundsStarted} sound(s) started";
     }
 
     /// <summary>
-    /// The developer entry point: a module the player put in their own mods/ folder. Server-pushed mods
-    /// (manifest, consent, download) are specified but not built; when they are, they end in the same
-    /// <see cref="Start"/> call.
+    /// The developer entry point: a module the player put in their own mods/ folder. No manifest, no consent
+    /// prompt and no capabilities to declare - the player chose the file. A server's mod never comes this way.
     /// </summary>
     private void LoadFromUserDir(string name)
     {
@@ -396,9 +437,17 @@ public partial class ModLayer : Control, IModHost
     public bool Start(string name, byte[] wasm, ModLimits limits)
     {
         Unload("replaced");
+        double compileMs;
+        bool fromCache;
+        long started;
         try
         {
-            _sandbox = WasmModSandbox.Load(name, wasm, this, limits);
+            // Inline, unlike a server's mod: this is the developer's own command and its answer is wanted now.
+            ModCompiledModule compiled = WasmModSandbox.Compile(name, wasm, limits, CompileCache());
+            compileMs = compiled.Milliseconds;
+            fromCache = compiled.FromCache;
+            started = System.Diagnostics.Stopwatch.GetTimestamp();
+            _sandbox = WasmModSandbox.Load(compiled, this);
         }
         catch (ModLoadException e)
         {
@@ -412,7 +461,8 @@ public partial class ModLayer : Control, IModHost
             Unload(null);
             return false;
         }
-        _print($"mod '{name}' running");
+        double startMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        _print($"mod '{name}' running ({(fromCache ? "machine code from the compile cache" : "compiled")} in {compileMs:0} ms, started in {startMs:0} ms)");
         return true;
     }
 
@@ -432,6 +482,7 @@ public partial class ModLayer : Control, IModHost
     {
         EndServerSession();
         Unload(null);
+        if (ReferenceEquals(Instance, this)) Instance = null;
     }
 
     public override void _Process(double delta)
@@ -483,7 +534,7 @@ public partial class ModLayer : Control, IModHost
                 {
                     ModDrawSegment segment = new() { Name = $"Segment{used}" };
                     AddChild(segment);
-                    // Segments stay in list order, and under the consent prompt.
+                    // Segments stay in list order, ahead of this node's other children (voices, the prompt's layer).
                     MoveChild(segment, used);
                     _segments.Add(segment);
                 }
@@ -509,6 +560,7 @@ public partial class ModLayer : Control, IModHost
         voice.VolumeDb = Mathf.LinearToDb(Math.Clamp(volume, 0f, 1f));
         voice.PitchScale = Math.Clamp(pitch, 0.5f, 2f);
         voice.Play();
+        _soundsStarted++;
     }
 
     private AudioStreamPlayer NewVoice(int index)

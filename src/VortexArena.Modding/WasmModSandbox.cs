@@ -19,6 +19,49 @@ public sealed class ModLoadException : Exception
     public ModLoadException(string message, Exception? inner = null) : base(message, inner) { }
 }
 
+/// <summary>
+/// A module that has been validated and compiled to machine code but not yet given a host or run:
+/// the product of <see cref="WasmModSandbox.Compile"/>, the slow half of loading, which needs no host
+/// and may run on any thread. <see cref="WasmModSandbox.Load(ModCompiledModule, IModHost)"/> takes it
+/// over; if that never happens, dispose it.
+/// </summary>
+public sealed class ModCompiledModule : IDisposable
+{
+    private Wasmtime.Engine? _engine;
+    private Wasmtime.Module? _module;
+
+    internal ModCompiledModule(string name, ModLimits limits, Wasmtime.Engine engine, Wasmtime.Module module, bool fromCache, double milliseconds)
+    {
+        Name = name;
+        Limits = limits;
+        _engine = engine;
+        _module = module;
+        FromCache = fromCache;
+        Milliseconds = milliseconds;
+    }
+
+    public string Name { get; }
+    public ModLimits Limits { get; }
+    /// <summary>True when the machine code came from the <see cref="ModCompileCache"/> instead of the compiler.</summary>
+    public bool FromCache { get; }
+    /// <summary>How long producing it took, compiler or cache, in milliseconds.</summary>
+    public double Milliseconds { get; }
+
+    /// <summary>Hands the engine and module to a sandbox, which then owns them. Null once taken or disposed.</summary>
+    internal (Wasmtime.Engine Engine, Wasmtime.Module Module)? Take()
+    {
+        Wasmtime.Engine? engine = Interlocked.Exchange(ref _engine, null);
+        Wasmtime.Module? module = Interlocked.Exchange(ref _module, null);
+        return engine is null || module is null ? null : (engine, module);
+    }
+
+    public void Dispose()
+    {
+        Interlocked.Exchange(ref _module, null)?.Dispose();
+        Interlocked.Exchange(ref _engine, null)?.Dispose();
+    }
+}
+
 /// <summary>Thrown inside a host import when the guest passes something it has no right to. Becomes a trap.</summary>
 internal sealed class ModViolationException : Exception
 {
@@ -97,23 +140,87 @@ public sealed class WasmModSandbox : IDisposable
     /// module's own start function, which executes under the init budget.
     /// </summary>
     /// <exception cref="ModLoadException">The module is oversized, malformed, or asks for something outside the ABI.</exception>
-    public static WasmModSandbox Load(string name, ReadOnlySpan<byte> wasm, IModHost host, ModLimits? limits = null)
+    public static WasmModSandbox Load(string name, ReadOnlySpan<byte> wasm, IModHost host, ModLimits? limits = null, ModCompileCache? compileCache = null)
     {
         ArgumentNullException.ThrowIfNull(host);
+        return Load(Compile(name, wasm, limits, compileCache), host);
+    }
+
+    /// <summary>
+    /// The slow half of loading: validates <paramref name="wasm"/> and compiles it to machine code - or,
+    /// with a <paramref name="compileCache"/>, reads back what this client compiled for these exact bytes
+    /// before. No guest code runs and no host is involved, so this may be called on a worker thread; the
+    /// result is then given to <see cref="Load(ModCompiledModule, IModHost)"/> on the thread that owns the
+    /// host.
+    /// </summary>
+    /// <exception cref="ModLoadException">The module is oversized or is not valid WebAssembly.</exception>
+    public static ModCompiledModule Compile(string name, ReadOnlySpan<byte> wasm, ModLimits? limits = null, ModCompileCache? compileCache = null)
+    {
         limits ??= ModLimits.Default;
         if (!IsAvailable) throw new ModLoadException($"the WebAssembly runtime is unavailable on this platform: {UnavailableReason}");
         if (wasm.Length > limits.MaxModuleBytes)
             throw new ModLoadException($"module is {wasm.Length} bytes; the limit is {limits.MaxModuleBytes}");
 
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
         Engine engine = new(BuildConfig(limits));
         Module? module = null;
-        WasmModSandbox? sandbox = null;
         try
         {
-            try { module = Module.FromBytes(engine, name, wasm); }
-            catch (WasmtimeException e) { throw new ModLoadException($"not a valid WebAssembly module: {FirstLine(e.Message)}", e); }
+            bool fromCache = false;
+            string? key = compileCache is null ? null : ModCompileCache.KeyFor(wasm, EngineFingerprint(limits));
+            if (key is not null && compileCache!.TryRead(key, out byte[] stored))
+            {
+                // The bytes passed the cache's own checksum, so they are something this installation wrote.
+                // Wasmtime still refuses them if they were made by another version or for other settings.
+                try
+                {
+                    module = Module.Deserialize(engine, name, stored);
+                    fromCache = true;
+                }
+                catch (WasmtimeException)
+                {
+                    compileCache.Remove(key);
+                }
+            }
 
-            sandbox = new WasmModSandbox(name, host, limits, engine, module);
+            if (module is null)
+            {
+                try { module = Module.FromBytes(engine, name, wasm); }
+                catch (WasmtimeException e) { throw new ModLoadException($"not a valid WebAssembly module: {FirstLine(e.Message)}", e); }
+
+                if (key is not null)
+                {
+                    try { compileCache!.Write(key, module.Serialize()); }
+                    catch (WasmtimeException) { }
+                }
+            }
+
+            double milliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            return new ModCompiledModule(name, limits, engine, module, fromCache, milliseconds);
+        }
+        catch
+        {
+            module?.Dispose();
+            engine.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// The fast half of loading: checks what the module imports and exports against the interface, binds
+    /// the host and instantiates. No guest code runs here except the module's own start function, which
+    /// executes under the init budget. Takes ownership of <paramref name="compiled"/> either way.
+    /// </summary>
+    /// <exception cref="ModLoadException">The module asks for something outside the ABI, or failed to instantiate.</exception>
+    public static WasmModSandbox Load(ModCompiledModule compiled, IModHost host)
+    {
+        ArgumentNullException.ThrowIfNull(compiled);
+        ArgumentNullException.ThrowIfNull(host);
+        if (compiled.Take() is not { } parts) throw new ModLoadException("the compiled module was already loaded or disposed");
+
+        WasmModSandbox sandbox = new(compiled.Name, host, compiled.Limits, parts.Engine, parts.Module);
+        try
+        {
             sandbox.CheckExports();
             sandbox.DefineImports();
             sandbox.Instantiate();
@@ -121,11 +228,18 @@ public sealed class WasmModSandbox : IDisposable
         }
         catch
         {
-            if (sandbox is not null) sandbox.Dispose();
-            else { module?.Dispose(); engine.Dispose(); }
+            sandbox.Dispose();
             throw;
         }
     }
+
+    /// <summary>
+    /// Every engine setting that changes the machine code generated for a module, as text. It is part of
+    /// the compile cache's key, so it MUST change whenever <see cref="BuildConfig"/> does - Wasmtime would
+    /// refuse a mismatched artifact anyway, but a stale key would make every load a wasted read.
+    /// </summary>
+    private static string EngineFingerprint(ModLimits limits) =>
+        $"epoch=1;threads=0;memory64=0;multi-memory=0;gc=0;component-model=0;stack={limits.MaxStackBytes}";
 
     /// <summary>Runs the guest's one-off start-up (<c>_initialize</c>, then <c>mod_init</c>).</summary>
     public bool Init()

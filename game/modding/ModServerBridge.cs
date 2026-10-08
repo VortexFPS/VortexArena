@@ -1,6 +1,3 @@
-// NOT BUILT IN THE GODOT HOST as of 2026-10-08, never run, and NOT YET CALLED from game/net. It type-checks
-// against GodotSharp 4.6.3 in a scratch project with stand-ins for the host classes it uses. The wiring it
-// needs is listed in planning/specs/modding.md, section 9.6.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -20,8 +17,16 @@ namespace VortexArena.Game.Modding;
 public sealed class ModServerBridge : IDisposable
 {
     private readonly ModOfferHub _hub;
+    private readonly Action<string> _print;
+    // What each connected client was last seen doing with the offer, so a change can be logged once.
+    private readonly Dictionary<int, ModPeerState> _seen = new();
+    private readonly List<int> _scratch = new();
 
-    private ModServerBridge(ModOfferHub hub) => _hub = hub;
+    private ModServerBridge(ModOfferHub hub, Action<string> print)
+    {
+        _hub = hub;
+        _print = print;
+    }
 
     public ModOffer Offer => _hub.Offer;
 
@@ -70,7 +75,7 @@ public sealed class ModServerBridge : IDisposable
         {
             ModOffer offer = ModOffer.FromFiles(description, module.Length > 0 ? module : null, packs);
             print($"offering mod '{offer.Manifest.ModId}' {offer.Manifest.ModVersion} to clients ({offer.Manifest.TotalBytes / 1024} KiB, manifest {offer.ManifestSha256[..12]})");
-            return new ModServerBridge(new ModOfferHub(offer));
+            return new ModServerBridge(new ModOfferHub(offer), print);
         }
         catch (Exception e) when (e is ModManifestException or IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -80,13 +85,26 @@ public sealed class ModServerBridge : IDisposable
     }
 
     /// <summary>A client passed the handshake.</summary>
-    public void PeerAccepted(int peerId, double now) => _hub.PeerJoined(peerId, now);
+    public void PeerAccepted(int peerId, double now)
+    {
+        _hub.PeerJoined(peerId, now);
+        _seen[peerId] = ModPeerState.Offered;
+    }
 
-    public void PeerDisconnected(int peerId) => _hub.PeerLeft(peerId);
+    public void PeerDisconnected(int peerId)
+    {
+        _hub.PeerLeft(peerId);
+        _seen.Remove(peerId);
+    }
 
     /// <summary>One mod frame from a client (the bytes after the game protocol's own message id).</summary>
     public void HandleFrame(int peerId, ReadOnlySpan<byte> frame, double now) => _hub.HandleFrame(peerId, frame, now);
 
+    /// <summary>
+    /// Offers the mod to every connected client again. For a server that changes level while keeping its
+    /// connections; the native listen server does not (it restarts, and each client is offered the mod when it
+    /// connects to the new one), so nothing calls this today.
+    /// </summary>
     public void LevelChanged(double now) => _hub.LevelChanged(now);
 
     /// <summary>
@@ -96,7 +114,45 @@ public sealed class ModServerBridge : IDisposable
     public bool MayPlay(int peerId) => _hub.MayPlay(peerId);
 
     /// <summary>Once per server tick: send what is due and drop who must go.</summary>
-    public void Tick(double now, Action<int, byte[]> sendReliable, Action<int, string> disconnect) => _hub.Pump(now, sendReliable, disconnect);
+    public void Tick(double now, Action<int, byte[]> sendReliable, Action<int, string> disconnect)
+    {
+        _hub.Pump(now, sendReliable, disconnect);
+        LogChanges();
+    }
+
+    /// <summary>
+    /// One line in the server log each time a client's answer to the offer changes: the operator's only view
+    /// of whether players are getting the mod, and of why not. The decline text comes from a client and was
+    /// already cut to a short printable line by the offer flow.
+    /// </summary>
+    private void LogChanges()
+    {
+        if (_seen.Count == 0) return;
+        _scratch.Clear();
+        foreach ((int id, ModPeerState before) in _seen)
+            if (_hub.Peer(id) is not { } peer) _scratch.Add(-id - 1);         // dropped by the hub in this pump
+            else if (peer.State != before) _scratch.Add(id);
+
+        foreach (int entry in _scratch)
+        {
+            if (entry < 0)
+            {
+                _seen.Remove(-entry - 1);
+                continue;
+            }
+            ModOfferPeer peer = _hub.Peer(entry)!;
+            _seen[entry] = peer.State;
+            _print(peer.State switch
+            {
+                ModPeerState.Sending => $"mod: peer {entry} accepted the offer and is downloading",
+                ModPeerState.AwaitingReady => $"mod: peer {entry} has every file ({peer.BytesSent / 1024} KiB sent)",
+                ModPeerState.Ready => $"mod: peer {entry} is running the mod ({peer.BytesSent / 1024} KiB sent)",
+                ModPeerState.Declined => $"mod: peer {entry} is not running the mod ({peer.DeclineReason}{(peer.DeclineText.Length > 0 ? ": " + peer.DeclineText : "")})",
+                ModPeerState.Failed => $"mod: peer {entry}: the offer lapsed or failed",
+                _ => $"mod: peer {entry} was offered the mod again",
+            });
+        }
+    }
 
     /// <summary>Server half of the mod to one client's mod. False when that client is not running the mod.</summary>
     public bool SendToClient(int peerId, int eventId, ReadOnlySpan<byte> payload) =>

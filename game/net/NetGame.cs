@@ -16,6 +16,7 @@ using VortexArena.Game.Client;
 using VortexArena.Game.Console;
 using VortexArena.Game.Hud;
 using VortexArena.Game.Menu;
+using VortexArena.Modding;
 using VortexArena.Net;
 using VortexArena.Server;
 using EngineServices = VortexArena.Engine.Simulation.EngineServices;
@@ -1177,6 +1178,21 @@ public sealed partial class NetGame : Node3D
             return;
         }
         _server = server;
+        // Client mods: this server's offer, built from the sv_mod_* cvars (planning/specs/modding.md, section
+        // 9.6). TryCreate returns null - and nothing is attached - unless the operator set sv_mod_module or
+        // sv_mod_packs, which is the default; such a server sends no mod frame at all. The cvars live on the
+        // shared store (Shell registers them there), which is not the world's own store on a threaded host.
+        if ((_sharedCvars ?? _serverWorld.Services.CvarsImpl) is { } modCvars && modCvars.Has("sv_mod_module"))
+        {
+            server.AttachMods(VortexArena.Game.Modding.ModServerBridge.TryCreate(modCvars, NetProtocol.BuildParity(), line =>
+            {
+                GD.Print($"[mods] {line}");
+                // The start-up line is printed here, on the main thread. Later lines (a client accepted,
+                // declined, finished) come from whichever thread runs the server; the in-game console is a
+                // main-thread object, so on a threaded host those go to the log only.
+                if (!ServerNet.OnSimWorker) ConsolePrint?.Invoke(line);
+            }));
+        }
         // DP `sv.active` (host_cmd.c:2527): from here on, a `maxplayers` change is deferred to the next map
         // rather than applied under the running server. Cleared in Shutdown so the menu/next host starts free.
         VortexArena.Common.Config.ServerSlots.IsServerActive = () => _server is not null;
@@ -1845,6 +1861,131 @@ public sealed partial class NetGame : Node3D
         _client.LocalPlayerName = _playerName;
         // Relay server console output (clc_stringcmd replies / notices) to the in-game console via the Shell.
         _client.PrintReceived += s => ConsolePrint?.Invoke(s);
+        // On a listen server this client is the host's own: tell the server which identity that is, so a
+        // required mod is never enforced against the operator (ServerNet.SetLocalClient has the reasons).
+        _server?.SetLocalClient(_client.Identity.Fingerprint);
+        WireModState();
+    }
+
+    // =====================================================================================
+    //  Client mods: the state a mod may read (planning/specs/modding.md, section 5 "State records")
+    // =====================================================================================
+    //
+    // These four functions are everything the game tells a mod about the match. They fill the records
+    // IModHost.ReadState already defines and nothing more: adding a field here means adding it to the
+    // guest interface (modding-sdk/ABI.md), which is a decision, not a convenience.
+    //
+    // All of it is what this client already knows and draws - its own predicted position, the entities the
+    // server chose to send it, the match clock. A mod sees no more of the world than the player's screen does.
+    // The Flags fields are sent as 0: version 1 of the interface names them but defines no bits yet.
+
+    private Func<ModLocalPlayerState?>? _modLocalPlayer;
+    private readonly List<int> _modEntityIds = new();
+    private ulong _modEntityFrame = ulong.MaxValue;
+
+    private void WireModState()
+    {
+        if (VortexArena.Game.Modding.ModLayer.Instance is not { } mods) return;
+        mods.LocalPlayerProvider = _modLocalPlayer = ModLocalPlayer;
+        mods.EntityCountProvider = ModEntityCount;
+        mods.EntityProvider = ModEntity;
+        mods.MatchProvider = ModMatch;
+        mods.TimeProvider = () => _client?.LatestServerTime ?? 0.0;
+        mods.SoundLoader = path => _assets?.LoadSound(path);
+    }
+
+    /// <summary>Takes this match's state away from the mod layer again - unless a newer match has already installed its own.</summary>
+    private void UnwireModState()
+    {
+        if (_modLocalPlayer is null || VortexArena.Game.Modding.ModLayer.Instance is not { } mods
+            || !ReferenceEquals(mods.LocalPlayerProvider, _modLocalPlayer)) return;
+        mods.LocalPlayerProvider = null;
+        mods.EntityCountProvider = null;
+        mods.EntityProvider = null;
+        mods.MatchProvider = null;
+        mods.TimeProvider = null;
+        mods.SoundLoader = null;
+    }
+
+    private ModLocalPlayerState? ModLocalPlayer()
+    {
+        if (_client is not { Accepted: true } client) return null;
+        NVec3 origin = client.PredictedOrigin, velocity = client.PredictedVelocity;
+        return new ModLocalPlayerState
+        {
+            OriginX = origin.X, OriginY = origin.Y, OriginZ = origin.Z,
+            VelocityX = velocity.X, VelocityY = velocity.Y, VelocityZ = velocity.Z,
+            Pitch = _viewAngles.X, Yaw = _viewAngles.Y, Roll = _viewAngles.Z,
+            Health = client.Health, Armor = client.Armor,
+            Team = ModTeamOf(client.LocalNetId),
+            EntityIndex = client.LocalNetId,
+        };
+    }
+
+    /// <summary>The entity list is numbered once per rendered frame, so the indices a mod walks stay put for the whole of its frame.</summary>
+    private void RefreshModEntities()
+    {
+        ulong frame = Godot.Engine.GetProcessFrames();
+        if (frame == _modEntityFrame) return;
+        _modEntityFrame = frame;
+        if (_client is null) _modEntityIds.Clear();
+        else _client.CopyRemoteIds(_modEntityIds);
+    }
+
+    private int ModEntityCount()
+    {
+        RefreshModEntities();
+        return _modEntityIds.Count;
+    }
+
+    private ModEntityState? ModEntity(int index)
+    {
+        RefreshModEntities();
+        if (_client is not { } client || (uint)index >= (uint)_modEntityIds.Count) return null;
+        int id = _modEntityIds[index];
+        if (!client.TryGetRemoteState(id, out NetEntityState state)) return null;
+        // Where the entity is drawn this frame (interpolated), falling back to the newest snapshot.
+        if (!client.SampleRemote(id, _renderClock, out NVec3 origin, out NVec3 angles))
+        {
+            origin = state.Origin;
+            angles = state.Angles;
+        }
+        return new ModEntityState
+        {
+            EntityIndex = id,
+            ModelId = state.ModelIndex,
+            OriginX = origin.X, OriginY = origin.Y, OriginZ = origin.Z,
+            Pitch = angles.X, Yaw = angles.Y, Roll = angles.Z,
+            Team = state.Kind == NetEntityKind.Player ? ModTeamOf(id) : 0,
+            Frame = state.Frame,
+        };
+    }
+
+    private ModMatchState? ModMatch()
+    {
+        if (_client is not { Accepted: true, HasMatchState: true } client) return null;
+        int players = 0;
+        if (client.LatestScoreboard is { } board)
+            foreach (ScoreRowWire row in board.Rows)
+                if (!row.IsSpectator) players++;
+        return new ModMatchState
+        {
+            Time = MathF.Max(0f, client.LatestServerTime - client.MatchStartTime),
+            TimeLimit = client.MatchTimeLimit,
+            // The score limit is not networked. The host's own client can read the server's cvar; a remote
+            // client's local fraglimit says nothing about the server it joined, so it reports 0 (unknown).
+            ScoreLimit = _serverWorld is not null ? (int)_serverWorld.Services.Cvars.GetFloat("fraglimit") : 0,
+            PlayerCount = players,
+        };
+    }
+
+    /// <summary>A player's team as the scoreboard has it (0 = none / free-for-all / not on the board yet).</summary>
+    private int ModTeamOf(int netId)
+    {
+        if (_client?.LatestScoreboard is not { } board) return 0;
+        foreach (ScoreRowWire row in board.Rows)
+            if (row.NetId == netId) return row.Team;
+        return 0;
     }
 
     /// <summary>Spawn the carrier player entity (the local hull the predictor moves), mirroring PlayerController._Ready.</summary>
@@ -4010,6 +4151,7 @@ public sealed partial class NetGame : Node3D
             _client.PrintReceived -= OnServerPrintForChat;
         }
         UnwireEditorReplication();
+        UnwireModState();
         if (_sharedCvarBridge is not null && _sharedCvars is not null)
         {
             _sharedCvars.Changed -= _sharedCvarBridge;   // shared store outlives this match; don't leak the hook

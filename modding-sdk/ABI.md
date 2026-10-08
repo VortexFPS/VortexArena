@@ -106,6 +106,22 @@ version you were built against defines.
 
 Positions are in Quake units and Quake axes (x forward, y left, z up), as everywhere in the game code.
 
+What the client fills in:
+
+- **LocalPlayer** — where the player is predicted to be this frame and how fast it is moving, the view
+  angles, health and armour as last reported by the server, and the team shown on the scoreboard (0 when
+  there are no teams). Returns -1 until the client is connected.
+- **Entity** — one record for each networked entity the client currently knows about, not counting the
+  player's own: the position it is drawn at this frame, the server's model index, the animation frame, and
+  for players their scoreboard team. Indices are stable for the whole of one `mod_frame` and may change
+  between frames; `entityIndex` is the entity's network id, which does not.
+- **Match** — seconds since the match started, the time limit in seconds (0 for none), the score limit (0
+  when there is none or the client does not know it: today only the host's own client is told) and the
+  number of players in the match. Returns -1 before the server has sent its match clock.
+- **Every `flags` field is 0.** Version 1 reserves the fields and defines no bits yet.
+
+It is what the client itself draws: a mod is told nothing about the world that the screen does not show.
+
 ## Budgets
 
 | Budget | Default | What happens at the limit |

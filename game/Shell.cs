@@ -323,6 +323,10 @@ public partial class Shell : Node
         var modLayer = new Game.Modding.ModLayer { Name = "Mods" };
         modCanvas.AddChild(modLayer);
         modLayer.Initialize(MenuState.Interp!, MenuState.Cvars, _console.Print);
+        // The server's half: the sv_mod_* cvars a host sets to offer a mod. Registered here, on the shared
+        // store, so a --cvar pin, server.cfg or the console can set them before a match starts; NetGame reads
+        // them when it starts the listen server. All empty by default: no mod is offered.
+        Game.Modding.ModServerBridge.RegisterCvars(MenuState.Cvars);
 
         // Keybind system: the runtime key→command table is already seeded by MenuState.Boot (above) from the
         // canonical binds-xonotic.cfg via the bind sink (BindInput.RegisterBindCommands), with the user's saved

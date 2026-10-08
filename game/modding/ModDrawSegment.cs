@@ -1,5 +1,3 @@
-// NOT BUILT IN THE GODOT HOST as of 2026-10-08, and never run. It type-checks against GodotSharp 4.6.3 in a
-// scratch project with stand-ins for the host classes it uses; the real build (source generators) is untried.
 using System;
 using System.Collections.Generic;
 using Godot;

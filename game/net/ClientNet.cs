@@ -476,6 +476,68 @@ public sealed class ClientNet : IDisposable
             SendHandshake();
             _handshakeSent = true;
         }
+
+        // The link dropped (the server quit, changed map - a native server restarts its transport for that -
+        // or kicked us): the server's mod stops with it. The session object is kept until this ClientNet is
+        // disposed or re-accepted, so an "allow once" outlives a Reconnect() to the same server.
+        if (_modSession && !_modLinkLostHandled && ConnectionLost)
+        {
+            _modLinkLostHandled = true;
+            if (OwnedModLayer() is { } mods) mods.OnLevelChanged();
+        }
+    }
+
+    // =====================================================================================
+    //  Client mods: the server's offer (planning/specs/modding.md, section 9.6)
+    // =====================================================================================
+
+    // True once this connection handed the mod layer a session. Nothing here does anything until the server
+    // accepts the handshake, and nothing is ever SENT unless the server offers a mod first.
+    private bool _modSession;
+    private bool _modLinkLostHandled;
+    private Action<byte[]>? _modSend;
+    private readonly BitWriter _modWriter = new(256);
+
+    /// <summary>The mod layer, but only while the session it holds is the one this connection opened - so a
+    /// connection that is being torn down can never end, or feed frames to, its successor's session.</summary>
+    private VortexArena.Game.Modding.ModLayer? OwnedModLayer() =>
+        _modSession && _modSend is not null && VortexArena.Game.Modding.ModLayer.Instance is { } mods && mods.OwnsServerSession(_modSend)
+            ? mods
+            : null;
+
+    private void BeginModSession()
+    {
+        if (VortexArena.Game.Modding.ModLayer.Instance is not { } mods) return;   // no mod layer (never, in the shell)
+        if (OwnedModLayer() is { } current)
+        {
+            // Accepted again on the same ClientNet (Reconnect): to the mod this is a level change - the running
+            // instance stops and the server's next offer starts a fresh one, with this connection's answers kept.
+            current.OnLevelChanged();
+        }
+        else
+        {
+            _modSend = SendModFrame;
+            mods.BeginServerSession($"{_host}:{_port}", NetProtocol.BuildParity(), _modSend);
+            _modSession = true;
+        }
+        _modLinkLostHandled = false;
+    }
+
+    private void SendModFrame(byte[] frame)
+    {
+        if (!Accepted) return;
+        _modWriter.Reset();
+        _modWriter.WriteByte((byte)NetControl.ModFrame);
+        _modWriter.WriteBytes(frame);
+        _transport.SendToServer(_modWriter.WrittenSpan, reliable: true);
+    }
+
+    private void HandleModFrame(byte[] data)
+    {
+        // Before the accept there is no session, and a frame then is dropped unread. After it, every byte past
+        // the id goes to the offer flow, which is where a hostile server's input is actually judged.
+        if (data.Length < 2 || OwnedModLayer() is not { } mods) return;
+        mods.HandleServerFrame(data.AsSpan(1));
     }
 
     private bool _handshakeSent;
@@ -655,6 +717,7 @@ public sealed class ClientNet : IDisposable
             case NetControl.ClientInit: HandleClientInit(ref r); break;
             case NetControl.MapVote: HandleMapVote(ref r); break;
             case NetControl.EditorOp: HandleEditorOp(ref r); break;
+            case NetControl.ModFrame: HandleModFrame(data); break;
             default: break;
         }
     }
@@ -1070,6 +1133,7 @@ public sealed class ClientNet : IDisposable
         _replicateSendAll = true;
         _nextReplicateTime = 0f;
         GD.Print($"[ClientNet] handshake accepted by '{ServerName}': netId {LocalNetId}, tickrate {ServerTickRate} Hz.");
+        BeginModSession();
     }
 
     // =====================================================================================
@@ -1490,6 +1554,15 @@ public sealed class ClientNet : IDisposable
     /// <summary>The net ids of all known remote entities (the renderer iterates these to place nodes).</summary>
     public IReadOnlyCollection<int> RemoteIds => _remotes.Keys;
 
+    /// <summary>Replaces <paramref name="into"/> with the remote entity ids in ascending order - a stable
+    /// numbering for a consumer that indexes entities 0..N-1 (the mod sandbox's entity records).</summary>
+    public void CopyRemoteIds(List<int> into)
+    {
+        into.Clear();
+        foreach (int id in _remotes.Keys) into.Add(id);
+        into.Sort();
+    }
+
     /// <summary>
     /// The interpolated render pose of remote entity <paramref name="netId"/> at client time
     /// <paramref name="now"/> (origin + seam-safe blended angles). Returns false if the entity is unknown.
@@ -1720,6 +1793,9 @@ public sealed class ClientNet : IDisposable
         // Drop the per-player physics override this session may have installed — it's session state, and a
         // later session (or a local GameDemo) must not predict with a stale preset.
         MovementParameters.PredictionOverride = null;
+        // The connection is over: the server's mod stops and everything about this connection's offer is forgotten.
+        OwnedModLayer()?.EndServerSession();
+        _modSession = false;
         _transport.Dispose();
     }
 }

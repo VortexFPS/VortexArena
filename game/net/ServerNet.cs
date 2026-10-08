@@ -320,6 +320,13 @@ public sealed class ServerNet : IDisposable
         public byte[]? PendingPublicKey;   // the client's identity key, held until it signs the challenge
         public string PendingName = "";    // the requested name, applied on successful auth
         public string IdentityFingerprint = "";
+
+        /// <summary>True for the host's own in-process client (see <see cref="SetLocalClient"/>).</summary>
+        public bool IsLocalHost;
+
+        /// <summary>Set once this peer has been told why it is being dropped and is only waiting for its link to
+        /// close (<see cref="RejectAndDropLater"/>). Nothing it sends is acted on any more.</summary>
+        public bool Rejected;
     }
 
     public ServerNet(NetTransport.Server transport, GameWorld world, string serverName = "VortexArena Server")
@@ -426,7 +433,101 @@ public sealed class ServerNet : IDisposable
         // exactly as before — receive, sim, send. _simGate is null so no lock and the inbound queue is empty.
         TransportReceive(realDelta);
         int ticksRan = StepWorld(realDelta);
+        PumpMods();
+        PumpPendingDrops();
         TransportSend(realDelta, ticksRan > 0);
+    }
+
+    // =====================================================================================
+    //  Client mods: this server's offer (planning/specs/modding.md, section 9.6)
+    // =====================================================================================
+
+    /// <summary>
+    /// The mod this server offers, or null - the default - when sv_mod_module and sv_mod_packs are empty. With
+    /// null, nothing in this section runs: no peer state, no frames, and an incoming
+    /// <see cref="NetControl.ModFrame"/> is dropped like any other id this server does not act on.
+    ///
+    /// Owned by whichever thread owns the world (the same rule as <c>_peers</c>): every call into it comes from
+    /// the handshake, the packet dispatch, the disconnect handler or <see cref="PumpMods"/>, all of which run on
+    /// the sim worker when the server is threaded and inline otherwise.
+    /// </summary>
+    private VortexArena.Game.Modding.ModServerBridge? _mods;
+    private Action<int, byte[]>? _modSend;
+    private Action<int, string>? _modDrop;
+
+    /// <summary>Hands the server its mod offer (built by the host from the sv_mod_* cvars). Call once, before any
+    /// client connects; the server disposes it. Null is allowed and means "no mod".</summary>
+    public void AttachMods(VortexArena.Game.Modding.ModServerBridge? bridge)
+    {
+        // Delegates first: on a threaded server the sim worker may already be stepping, and PumpMods uses them
+        // the moment it sees a bridge.
+        _modSend = SendModFrame;
+        _modDrop = DropForMod;
+        _mods = bridge;
+    }
+
+    /// <summary>True when this server offers a mod.</summary>
+    public bool OffersMod => _mods is not null;
+
+    private volatile string? _localClientFingerprint;
+
+    /// <summary>
+    /// Names the host's own client - the one this same process connects to its own server - by the fingerprint
+    /// of the identity key it is about to authenticate with. Call before that client connects.
+    ///
+    /// It is offered the mod like everybody else, and its own cl_allow_mods decides whether it runs it; but a
+    /// REQUIRED mod is never enforced against it. The operator cannot be thrown off their own server by a cvar
+    /// they set, and on a dedicated host that client is only a loopback observer whose disconnection would
+    /// take the whole server process down with it. The fingerprint is proven by a signature during the
+    /// handshake, so no other client can claim it.
+    /// </summary>
+    public void SetLocalClient(string identityFingerprint) => _localClientFingerprint = identityFingerprint;
+
+    /// <summary>False while a REQUIRED mod keeps this peer out of the match. Always true without a mod, for an
+    /// optional one, and for the host's own client.</summary>
+    private bool ModAllowsPlay(PeerState st) => _mods is null || st.IsLocalHost || _mods.MayPlay(st.PeerId);
+
+    // Wall time, not world time: a download must keep moving and a timeout must keep counting while the sim
+    // is paused or slowed (slowmo 0), and the offer flow's rate limits are per real second.
+    private static double WallSeconds =>
+        System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
+
+    /// <summary>Once per host step: send the offer frames and file pieces that are due, apply the offer
+    /// timeouts, and drop the peers the offer flow says must go. A no-op without a mod.</summary>
+    private void PumpMods()
+    {
+        if (_mods is null) return;
+        using (Prof.Sample("net.mods")) _mods.Tick(WallSeconds, _modSend!, _modDrop!);
+    }
+
+    private void SendModFrame(int peerId, byte[] frame)
+    {
+        _scratchWriter.Reset();
+        _scratchWriter.WriteByte((byte)NetControl.ModFrame);
+        _scratchWriter.WriteBytes(frame);
+        SendPacket(peerId, _scratchWriter.WrittenSpan, reliable: true);
+    }
+
+    /// <summary>The offer flow wants this peer gone: it broke the offer protocol, or the mod is required and the
+    /// client is not running it. The reason goes out first, as the same reject message a refused handshake
+    /// uses, so the player is told why instead of watching a link time out.</summary>
+    private void DropForMod(int peerId, string reason)
+    {
+        if (_peers.TryGetValue(peerId, out PeerState? st) && st.IsLocalHost)
+        {
+            GD.Print($"[ServerNet] the host's own client stays connected although: {reason}");
+            return;
+        }
+        GD.Print($"[ServerNet] peer {peerId} dropped: {reason}");
+        RejectAndDropLater(peerId, reason);
+    }
+
+    private void HandleModFrame(int peerId, byte[] data)
+    {
+        // Only from a client that passed the handshake; the hub itself drops frames from a peer it was never
+        // told about, and validates everything else.
+        if (_mods is null || !_peers.TryGetValue(peerId, out PeerState? st) || !st.Accepted) return;
+        _mods.HandleFrame(peerId, data.AsSpan(1), WallSeconds);
     }
 
     // =====================================================================================
@@ -469,6 +570,8 @@ public sealed class ServerNet : IDisposable
                 }
             }
             while (_inbound.TryDequeue(out Action? a)) a();
+            PumpMods(); // under the gate, with the peers this thread just processed
+            PumpPendingDrops();
         }
         int ticksRan = StepWorld(realDelta); // each tick locks the gate itself (SimulationLoop.TickGate)
         if (ticksRan > 0)
@@ -827,6 +930,10 @@ public sealed class ServerNet : IDisposable
         foreach (PeerState st in _peers.Values)
         {
             if (!st.Accepted || st.Player is not { IsObserver: true } observer)
+                continue;
+            // A REQUIRED mod (sv_mod_required 1): the client watches until it is running the mod. For an
+            // optional mod MayPlay is true from the moment the offer is made, so this never holds anyone.
+            if (!ModAllowsPlay(st))
                 continue;
 
             bool jump = false, attack = false, attack2 = false;
@@ -1274,6 +1381,7 @@ public sealed class ServerNet : IDisposable
 
     private void OnPeerDisconnectedCore(int peerId)
     {
+        _mods?.PeerDisconnected(peerId);
         if (_peers.Remove(peerId, out PeerState? st) && st.Player is not null)
         {
             _byPlayer.Remove(st.Player);
@@ -1295,6 +1403,10 @@ public sealed class ServerNet : IDisposable
 
     private void OnPacketCore(int from, int channel, byte[] data)
     {
+        // A peer that has been told why it is being dropped is only waiting for its link to close
+        // (RejectAndDropLater). The list is empty on a server without a mod, so this costs it nothing.
+        if (_pendingDrops.Count > 0 && _peers.TryGetValue(from, out PeerState? sender) && sender.Rejected)
+            return;
         var r = new BitReader(data);
         var control = (NetControl)r.ReadByte();
         switch (control)
@@ -1310,6 +1422,9 @@ public sealed class ServerNet : IDisposable
                 break;
             case NetControl.ClientCommand:
                 HandleClientCommand(from, ref r);
+                break;
+            case NetControl.ModFrame:
+                HandleModFrame(from, data);
                 break;
             default:
                 // unknown / not-server-bound control byte — ignore (a malformed or out-of-phase packet).
@@ -1366,6 +1481,13 @@ public sealed class ServerNet : IDisposable
         // The exemption test + budget math live in ClientCommandRegistry (the testable Server assembly); this
         // method supplies the per-client cursor, the sim frame-start time, and the antispam cvar reads.
         string verb = FirstToken(line);
+        // The command form of the same hold DriveObserverJoins applies: with a REQUIRED mod not yet running,
+        // `join` waits. Never true for an optional mod or a server without one.
+        if (verb == "join" && !ModAllowsPlay(st))
+        {
+            SendPrint(peerId, "^3This server requires its mod; you can join once your client is running it.");
+            return;
+        }
         if (!ClientCommandRegistry.IsCommandFloodExempt(verb, SecondToken(line)))
         {
             float antispamTime = Cvars.FloatOr("sv_clientcommand_antispam_time", 1f);
@@ -2026,6 +2148,64 @@ public sealed class ServerNet : IDisposable
         DisconnectPeer(peerId);
     }
 
+    /// <summary>
+    /// Tell a peer why it is being dropped, and drop it a moment AFTER the reason, not with it. Used when the
+    /// mod offer drops a client (<see cref="DropForMod"/>).
+    ///
+    /// <see cref="Reject"/> sends the two together, and done that way the reason did not arrive: in a
+    /// two-process run on 2026-10-08 the client showed "Lost connection to the server" and never logged the
+    /// reject. Two things eat it. ENet's disconnect discards whatever is still queued for the peer
+    /// (enet_peer_disconnect resets its queues), so the reason is thrown away before it is sent; and when it
+    /// was flushed first, it reached the client in the same network poll as the disconnect, where Godot's
+    /// ENet client closes itself and clears its received packets before the game has read them. So here the
+    /// reason is sent now and the link is closed <see cref="RejectLingerSeconds"/> later; until then nothing
+    /// the peer sends is acted on.
+    ///
+    /// The handshake's own rejects still go through <see cref="Reject"/> unchanged - this change was made for
+    /// the mod offer, and a server without a mod must behave as it did. They very probably lose their reason
+    /// the same way (it is the same two calls); that was not tested, and moving them here is a one-line change.
+    /// </summary>
+    private void RejectAndDropLater(int peerId, string reason)
+    {
+        if (_peers.TryGetValue(peerId, out PeerState? st))
+        {
+            if (st.Rejected) return;
+            st.Rejected = true;
+        }
+        _scratchWriter.Reset();
+        _scratchWriter.WriteByte((byte)NetControl.HandshakeReject);
+        _scratchWriter.WriteString(reason);
+        SendPacket(peerId, _scratchWriter.WrittenSpan, reliable: true);
+        _pendingDrops.Add((peerId, WallSeconds + RejectLingerSeconds));
+    }
+
+    /// <summary>How long a rejected peer stays connected so that the reason can reach it. Long enough for a
+    /// retransmission on a poor link; short enough that it does not matter that the peer is still there.</summary>
+    private const double RejectLingerSeconds = 1.0;
+
+    // Owned by the thread that owns _peers (Reject and PumpPendingDrops both run there).
+    private readonly List<(int Peer, double At)> _pendingDrops = new();
+
+    /// <summary>Once per host step: close the links of peers whose reason has had time to arrive. Nothing is
+    /// ever queued on a server without a mod.</summary>
+    private void PumpPendingDrops()
+    {
+        if (_pendingDrops.Count == 0) return;
+        double now = WallSeconds;
+        for (int i = _pendingDrops.Count - 1; i >= 0; i--)
+        {
+            if (now < _pendingDrops[i].At) continue;
+            int peerId = _pendingDrops[i].Peer;
+            _pendingDrops.RemoveAt(i);
+            if (!_peers.ContainsKey(peerId)) continue;                 // it left by itself meanwhile
+            DisconnectPeer(peerId);
+            // Forget the peer now rather than when the transport reports the link closed: ENet frees a peer's
+            // channels the moment a disconnect is requested, and every snapshot sent to it until the close is
+            // confirmed logs an engine error. The transport's own event, when it comes, finds nothing to do.
+            OnPeerDisconnectedCore(peerId);
+        }
+    }
+
     private void HandleHandshake(int peerId, ref BitReader r)
     {
         if (!_peers.TryGetValue(peerId, out PeerState? st) || st.Accepted)
@@ -2069,6 +2249,7 @@ public sealed class ServerNet : IDisposable
         }
         st.IdentityFingerprint = PlayerIdentity.ComputeFingerprint(st.PendingPublicKey);
         st.AuthChallenge = null;
+        st.IsLocalHost = _localClientFingerprint is { Length: > 0 } local && local == st.IdentityFingerprint;
 
         // DP SV_ConnectClient's full-server check. `maxplayers` counts humans AND bots in ONE budget (host_cmd.c
         // :3070 "how many players (or bots) may be connected"), but bots are not ENet peers — so the transport's
@@ -2109,6 +2290,9 @@ public sealed class ServerNet : IDisposable
         // gameplay-constant bundle (the welcome/accept handshake leg) so a pure remote client has the constants the
         // hook/arc/trueaim/damagepush/armor/fog paths read.
         SendClientInit(peerId);
+
+        // Offer this server's mod, if it has one. The offer itself goes out on the next PumpMods.
+        _mods?.PeerAccepted(peerId, WallSeconds);
 
         GD.Print($"[ServerNet] peer {peerId} accepted as '{info.Player.NetName}' (netId {peerId}, id {st.IdentityFingerprint[..8]}).");
     }
@@ -4174,6 +4358,8 @@ public sealed class ServerNet : IDisposable
         // map change that tears this down mid-announce does not race the socket out from under the worker.
         _announce?.Dispose();
         _master?.Dispose();
+        _mods?.Dispose();
+        _mods = null;
         _transport.Dispose();
     }
 }

@@ -20,27 +20,44 @@ template, compiler `10.0.0-rc.1.26357.1`, WASI SDK 29.0, on Windows x64):
 |---|---|
 | Module size | 2.15 MB |
 | Imports | 3 from `vortex_1`; 13 from `wasi_snapshot_preview1`, all answered by the sandbox without granting anything |
-| Load, compile and instantiate | about 220 ms |
-| Start-up (`_initialize` + `mod_init`) | 25 ms |
+| Compile | about 160 ms the first time, on a worker thread; 7 ms afterwards, read back from the client's cache of compiled modules |
+| Start-up (`_initialize` + `mod_init`) | 10 ms once the client has started a mod before; 25 ms and more the first time |
 | One frame | about 6 microseconds on average, 148 at worst over 20,000 frames |
 | Memory after start-up | 50.5 MiB, flat afterwards (the .NET runtime's own heap; the mod allocates nothing per frame) |
 
 `tests/VortexArena.Tests/Modding/CSharpGuestTests.cs` runs these checks wherever the template has been
 built; the module itself is a build output and is not committed.
 
-**How a server offers a mod to a client is built and tested** (2026-10-08) as a library with both ends in
-it - manifest, consent, download with SHA-256 verification, loading, the message channel, and stopping the
-mod again - and the `hello-hud` module has travelled that whole path in a test, from a file on a "server" to
-draw commands on a "client". It is **not connected to the game's network code yet**, so no real server can
-offer a mod today. Section 9 of the modding spec has the protocol and the list of what is left.
+**A server can offer a mod to a client, in the real game** (2026-10-08). A native host with `sv_mod_module`
+set offered the `hello-hud` module to a native client in a second process on the same machine: the client
+asked its player, downloaded the 2.1 MB file over the game connection, verified its SHA-256, compiled it,
+ran it and drew the speedometer, which followed the player's speed. On the next connection it did not ask
+or download again. Refusing, running with `cl_allow_mods 0`, a mod that hangs, and a mod the server
+requires were all tried too; section 12 of the modding spec lists what was seen and what was not.
 
-Not yet done: that connection, a mod drawing in the real game window, and mounting a mod's own asset packs
-(until then a mod can only use pictures and sounds the base game already has). The sandbox stays off in the
-client (`cl_allow_mods 0`) until the checklist in the modding spec is complete.
+Not yet done: mounting a mod's own asset packs (until then a mod can only use pictures and sounds the base
+game already has), a server half for a mod to talk to (the message channel exists and is tested, but no
+game code sends on it), any platform other than Windows x64, and a release build. The sandbox stays off in
+the client (`cl_allow_mods 0`) until the checklist in the modding spec is complete.
 
-## Offering a mod from a server (once it is connected)
+## Trying a mod without a server
 
-The server operator sets cvars; the server hashes the files and writes the manifest itself:
+Put the module in the `mods` folder of your user directory (`~/XonData/mods/hello-hud.wasm`) and, in the
+console of a running match:
+
+```
+cl_allow_mods 1
+mod_load hello-hud
+mod_status
+mod_unload
+```
+
+`mod_status` says what the mod is doing - or why it was disabled.
+
+## Offering a mod from a server
+
+The server operator sets cvars before the map starts (a `--cvar` on the command line, or the server's
+config); the server hashes the files and writes the manifest itself:
 
 | Cvar | Meaning |
 |---|---|
@@ -49,7 +66,10 @@ The server operator sets cvars; the server hashes the files and writes the manif
 | `sv_mod_id`, `sv_mod_version` | Short id (letters, digits, `.`, `-`, `_`) and version. |
 | `sv_mod_title`, `sv_mod_description`, `sv_mod_author` | What the player is shown before agreeing. |
 | `sv_mod_capabilities` | `net` and/or `sound` (see `ABI.md`). |
-| `sv_mod_required` | 1 = players who do not end up running the mod are disconnected. 0 (default) = they play without it. |
+| `sv_mod_required` | 1 = players who do not end up running the mod are disconnected, with the reason shown to them, and cannot join the match before it runs. 0 (default) = they play without it. Never applied to the host's own client. |
+
+The server log has a line for each player's answer (`mod: peer N is running the mod`, `... is not running
+the mod (ConsentDenied)`), which is how an operator sees whether the mod is reaching anyone.
 
 Players are asked before anything is downloaded, unless they already said yes to *exactly this mod* (any
 change to a file or to the text above is a new question). With `cl_allow_mods 0` - the default - the offer

@@ -1,5 +1,3 @@
-// NOT BUILT IN THE GODOT HOST as of 2026-10-08, and never run. It type-checks against GodotSharp 4.6.3 in a
-// scratch project with stand-ins for the host classes it uses; the real build (source generators) is untried.
 using System;
 using System.Text;
 using Godot;
@@ -35,10 +33,14 @@ public partial class ModConsentPrompt : PanelContainer
     {
         Visible = false;
         MouseFilter = MouseFilterEnum.Ignore;
-        SetAnchorsPreset(LayoutPreset.CenterTop);
-        GrowHorizontal = GrowDirection.Both;
-        OffsetTop = 48f;
+        // Top centre, growing downwards as the text needs. The minimum size goes first and the offsets are set
+        // WITH the anchors: SetAnchorsPreset alone keeps the control where it was (the top-left corner) and
+        // only re-expresses that position against the new anchors, which left the panel half off the screen.
         CustomMinimumSize = new Vector2(560f, 0f);
+        GrowHorizontal = GrowDirection.Both;
+        SetAnchorsAndOffsetsPreset(LayoutPreset.CenterTop, LayoutPresetMode.Minsize);
+        OffsetTop = 48f;
+        OffsetBottom = 48f;
 
         MarginContainer margin = new() { MouseFilter = MouseFilterEnum.Ignore };
         foreach (string side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })

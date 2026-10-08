@@ -27,6 +27,7 @@ public sealed class ModClientSession : IDisposable
     private readonly Action<string> _log;
     private readonly GatedHost _gate;
     private ModLoadPlan? _loadedPlan;
+    private PendingLoad? _pending;
     private double _now;
 
     public ModClientSession(ModClientOptions options, ModCache cache, ModConsentStore consent, IModHost host, Action<string>? log = null)
@@ -44,6 +45,30 @@ public sealed class ModClientSession : IDisposable
     public WasmModSandbox? Sandbox { get; private set; }
     /// <summary>The plan whose module (and packs) the host currently has in use, or null.</summary>
     public ModLoadPlan? LoadedPlan => _loadedPlan;
+
+    /// <summary>Where compiled modules are kept between sessions, or null to compile every time.</summary>
+    public ModCompileCache? CompileCache { get; init; }
+
+    /// <summary>
+    /// True to read, re-hash and compile a verified module on a worker thread, so the thread that calls
+    /// <see cref="Update"/> (the game's main thread) does not stall for the compiler. The mod then starts
+    /// a few calls to <see cref="Update"/> later instead of inside the one that finished the download;
+    /// until then <see cref="IsPreparing"/> is true and the offer stays in
+    /// <see cref="ModClientState.ReadyToLoad"/>. Instantiating the module and running its start-up still
+    /// happen on the calling thread, because they call into the host. False - the default - does it all
+    /// inline, as before.
+    /// </summary>
+    public bool CompileOffThread { get; init; }
+
+    /// <summary>True while a worker thread is compiling the module of the current offer.</summary>
+    public bool IsPreparing => _pending is not null;
+
+    /// <summary>How long the last module took to compile (or to read back from the compile cache), in milliseconds.</summary>
+    public double LastCompileMs { get; private set; }
+    /// <summary>True when the last module's machine code came from the compile cache.</summary>
+    public bool LastCompileFromCache { get; private set; }
+    /// <summary>How long the last module took to instantiate and start on the calling thread, in milliseconds.</summary>
+    public double LastStartMs { get; private set; }
 
     /// <summary>Raised after a plan's module started (or, for an assets-only mod, was accepted). The host mounts the packs here.</summary>
     public event Action<ModLoadPlan>? Loaded;
@@ -137,6 +162,7 @@ public sealed class ModClientSession : IDisposable
     public void Dispose()
     {
         Offer.Dispose();
+        AbandonPending();
         Unload();
     }
 
@@ -146,26 +172,75 @@ public sealed class ModClientSession : IDisposable
     private void Reconcile()
     {
         if (_loadedPlan is not null && !ReferenceEquals(_loadedPlan, Offer.Plan)) Unload();
-        if (_loadedPlan is null && Offer.State == ModClientState.ReadyToLoad && Offer.Plan is { } plan) Load(plan);
+        // A compile that was started for an offer which has since been replaced, declined or withdrawn.
+        if (_pending is not null && !ReferenceEquals(_pending.Plan, Offer.Plan)) AbandonPending();
+        if (_loadedPlan is not null || Offer.State != ModClientState.ReadyToLoad || Offer.Plan is not { } plan) return;
+
+        if (_pending is { } pending)
+        {
+            if (!pending.Work.IsCompleted) return;
+            _pending = null;
+            Finish(plan, pending.Work.Result);
+        }
+        else if (CompileOffThread && plan.ModulePath is not null)
+        {
+            ModCompileCache? compileCache = CompileCache;
+            _pending = new PendingLoad(plan, Task.Run(() => Prepare(plan, compileCache)));
+        }
+        else
+        {
+            Finish(plan, Prepare(plan, CompileCache));
+        }
     }
 
-    private void Load(ModLoadPlan plan)
+    private sealed record PendingLoad(ModLoadPlan Plan, Task<Prepared> Work);
+
+    /// <summary>What the slow half of loading produced: a compiled module, nothing (an assets-only mod), or a reason it failed.</summary>
+    private readonly record struct Prepared(ModCompiledModule? Module, string? Error, bool RemoveCachedFile);
+
+    /// <summary>
+    /// Reads the plan's module back from the download cache, hashes it again and compiles it. Touches
+    /// nothing but the two caches and its arguments, and never throws, so it can run on any thread.
+    /// </summary>
+    private static Prepared Prepare(ModLoadPlan plan, ModCompileCache? compileCache)
+    {
+        if (plan.ModulePath is null) return default;
+        try
+        {
+            if (!TryReadVerified(plan.ModulePath, plan.Manifest.ClientModule!, out byte[] module))
+                return new Prepared(null, "the cached module no longer matches its SHA-256", RemoveCachedFile: true);
+            return new Prepared(WasmModSandbox.Compile(plan.Manifest.ModId, module, plan.Limits, compileCache), null, false);
+        }
+        catch (ModLoadException e)
+        {
+            return new Prepared(null, e.Message, false);
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            return new Prepared(null, "the module could not be compiled", false);
+        }
+    }
+
+    /// <summary>The fast half, on the caller's thread: bind the host, instantiate, run the guest's start-up.</summary>
+    private void Finish(ModLoadPlan plan, Prepared prepared)
     {
         string name = plan.Manifest.ModId;
         WasmModSandbox? sandbox = null;
         if (plan.ModulePath is not null)
         {
-            ModArtifact artifact = plan.Manifest.ClientModule!;
-            if (!TryReadVerified(plan.ModulePath, artifact, out byte[] module))
+            if (prepared.Module is not { } compiled)
             {
                 // The cache held the right bytes when they were stored; if it does not now, someone
                 // else changed the file. Drop it so the next offer downloads it again.
-                Cache.Remove(artifact);
-                Fail(ModDeclineReason.LoadFailed, "the cached module no longer matches its SHA-256");
+                if (prepared.RemoveCachedFile) Cache.Remove(plan.Manifest.ClientModule!);
+                Fail(ModDeclineReason.LoadFailed, prepared.Error ?? "the module could not be loaded");
                 return;
             }
 
-            try { sandbox = WasmModSandbox.Load(name, module, _gate, plan.Limits); }
+            LastCompileMs = compiled.Milliseconds;
+            LastCompileFromCache = compiled.FromCache;
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            try { sandbox = WasmModSandbox.Load(compiled, _gate); }
             catch (ModLoadException e)
             {
                 Fail(ModDeclineReason.LoadFailed, e.Message);
@@ -178,12 +253,15 @@ public sealed class ModClientSession : IDisposable
                 Fail(ModDeclineReason.LoadFailed, reason);
                 return;
             }
+            LastStartMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         }
 
         Sandbox = sandbox;
         _loadedPlan = plan;
         Offer.ReportLoaded();
-        _log($"mod '{name}' {plan.Manifest.ModVersion} running");
+        _log(sandbox is null
+            ? $"mod '{name}' {plan.Manifest.ModVersion} running"
+            : $"mod '{name}' {plan.Manifest.ModVersion} running ({(LastCompileFromCache ? "machine code from the compile cache" : "compiled")} in {LastCompileMs:0} ms{(CompileOffThread ? " off the main thread" : "")}, started in {LastStartMs:0} ms)");
         Loaded?.Invoke(plan);
 
         void Fail(ModDeclineReason reason, string text)
@@ -191,6 +269,14 @@ public sealed class ModClientSession : IDisposable
             _log($"mod '{name}' not started: {text}");
             Offer.ReportFailure(reason, text);
         }
+    }
+
+    /// <summary>Lets go of a compile nobody is waiting for any more; its result is disposed when it arrives.</summary>
+    private void AbandonPending()
+    {
+        if (_pending is not { } pending) return;
+        _pending = null;
+        pending.Work.ContinueWith(static done => done.Result.Module?.Dispose(), TaskScheduler.Default);
     }
 
     private void Unload()

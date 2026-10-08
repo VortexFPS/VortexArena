@@ -901,6 +901,36 @@ building it and the layout contract across the two repositories. The design is
 
 ---
 
+## Client mods (the WebAssembly sandbox)
+
+Off by default (`cl_allow_mods 0`). Design, protocol and what has been seen running:
+`planning/specs/modding.md`; the author's side: `modding-sdk/README.md`.
+
+```bash
+# a module of your own, no server involved: put it in <user dir>/mods/ first
+"$GODOT" --path . --host stormkeep --port 26711 --cvar cl_allow_mods 1 --cvar cl_autopause 0 \
+         "+defer 40 mod_load hello-hud" "+defer 45 mod_status"
+
+# a host that offers a mod (headless), and a client that joins it
+"$GODOT" --headless --path . --host stormkeep --port 26712 \
+         --cvar sv_mod_module "$PWD/modding-sdk/csharp/templates/hello-hud/bin/Release/net10.0/wasi-wasm/publish/hello-hud.wasm" \
+         --cvar sv_mod_id hello-hud --cvar sv_mod_title "Hello HUD"
+"$GODOT" --path . --connect 127.0.0.1:26712 --cvar cl_allow_mods 1 --cvar cl_autopause 0
+```
+
+- The client is asked before anything is downloaded: F1-F4 on the prompt, or `mod_allow [once|server|everywhere]`
+  / `mod_deny [once|mod|server]` in the console. `mod_consent_list` and `mod_consent_forget` manage what is
+  remembered (`<user dir>/mod-consent.json`).
+- Downloads land in `<user dir>/modcache/` (named by SHA-256); compiled modules in `<user dir>/modcompiled/`.
+  Deleting either only costs a download or a recompile.
+- The host logs each client's answer as `[mods] mod: peer N ...`.
+- **Scripting a run (agents):** a `+command` argument that itself contains a `+` or `-` button must be one
+  quoted argument - `"+defer 44 +forward"`, `"+defer 46 -forward"`. `screenshot name.png` writes into the
+  user directory. A pure `--connect` client stays on the loading screen until it joins the match; `cmd join`
+  joins without a key press, and `cmd impulse 1` selects a weapon (a bare `impulse 1` did nothing on a pure
+  client, and `weapon_group_1` typed into the console did nothing on a listen host - it is a key-bind
+  command). Give every process its own `VORTEX_USERDIR` and `--port`.
+
 ## Joining a stock Xonotic server (legacy compatibility mode)
 
 The client can join an unmodified Xonotic (DarkPlaces) server by speaking its protocol and running the

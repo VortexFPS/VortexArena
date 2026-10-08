@@ -62,7 +62,9 @@ public static class NetProtocol
     ///         per the append-at-END lockstep contract; see the markers in ServerNet.WriteOwnerState and the
     ///         ClientNet owner read). Absent until T57's snippets land.</item>
     /// </list>
-    /// Any new top-level frame kind starts at <see cref="NetControl"/> id 20 (Waypoints=19 is the last used).
+    /// A new top-level frame kind takes the next free <see cref="NetControl"/> id - one past the last member of
+    /// the enum below (ModFrame = 25 as of v21). Ids 20-24 went to ItemsTime, ClientInit, MapVote, RadarLinks
+    /// and EditorOp; the note that used to stand here still said "starts at 20" long after they were taken.
     ///
     /// v8: added the match-clock channel (<see cref="NetControl.MatchState"/>) — a global S2C push of
     /// GAMESTARTTIME / TIMELIMIT / warmup so the TIMER panel works on the play path. Additive (old clients drop
@@ -137,7 +139,15 @@ public static class NetProtocol
     /// advertising the same version with different entity layouts, where the handshake passes and ReadDelta
     /// corrupt-decodes. That worked as designed: weapon-item-colors merged first, so this change lands as 18.
     /// Keep using the skip trick for concurrent wire branches; never reuse 16.
-    public const uint ProtocolVersion = 20; // v20: NetControl.EditorOp — map-editor op replication (design doc §11.7)
+    ///
+    /// v20: added the map-editor op channel (<see cref="NetControl.EditorOp"/>, design doc §11.7).
+    ///
+    /// v21: added the mod-offer envelope (<see cref="NetControl.ModFrame"/>, planning/specs/modding.md §9) - one
+    /// reliable message id, both directions, whose payload is a <c>VortexArena.Modding.ModWire</c> frame. A
+    /// server with no mod configured (the default) never sends one and a client never sends one unprompted, so
+    /// apart from this number the traffic of such a pair is unchanged. Additive, but bumped so that a server
+    /// offering a mod is never talking to a build that would silently drop the offer.
+    public const uint ProtocolVersion = 21;
 
     /// <summary>Ordered, reliable ENet channel — handshake, spawns/removes, notifications, scores.</summary>
     public const int ReliableChannel = 0;
@@ -304,4 +314,13 @@ public enum NetControl : byte
     /// readable text line costs nothing and shows up plainly in a packet log when co-editing misbehaves. Only
     /// emitted in the editor gametype; unknown to old clients (dispatch falls through harmlessly).</summary>
     EditorOp = 24,
+
+    // ---- client mods (planning/specs/modding.md, section 9) ----
+    /// <summary>Both directions (reliable): the envelope for one mod-offer frame. Everything after this byte is
+    /// a <c>VortexArena.Modding.ModWire</c> frame (<c>u8 kind, u8 offerSequence, body</c>) - offer, file request,
+    /// file piece, ready, decline, abort and the two mod-channel messages - passed untouched to
+    /// <c>ModServerBridge.HandleFrame</c> on the server and <c>ModLayer.HandleServerFrame</c> on the client, which
+    /// do all the validation. Only a server with <c>sv_mod_module</c>/<c>sv_mod_packs</c> set ever sends the first
+    /// one; a client only ever answers. A server without a mod ignores the id.</summary>
+    ModFrame = 25,
 }

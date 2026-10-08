@@ -37,7 +37,7 @@ cvar behaviour to the extent the client program depends on it; the in-band `cspr
   built-in menu without it, and the client program only issues a handful of `menu_cmd` commands, which
   become no-ops.
 - `d0_blind_id` encryption and player identity.
-- HTTP map downloads (`curl` commands from the server). Without it the player needs the map already.
+- ~~HTTP map downloads~~ - done 2026-10-08, see §15.
 - Protocols older than DP7, QuakeWorld, and demo recording.
 
 ## 2. Why the client program must run unmodified
@@ -399,7 +399,7 @@ This table is the plan of record; [`TODO.md`](../TODO.md) carries the same IDs.
 | LC-7 | Godot bridge: scene submission, view properties, 2D draw list, fonts, sound, particles, lights | **Partial** — seen in a window and matched against DarkPlaces screenshots for HUD, view model, scoreboard, chat and player colours; several features built but unseen, extra views not built; sound checked by log only |
 | LC-8 | Join flow: browser → `LegacyGame`, loading screen, disconnect, error surfacing | **Done, unverified** — console command, command-line flags and browser routing exist and the failure paths were exercised windowless; no one has clicked through it |
 | LC-9 | `d0_blind_id` identity and encryption | Not started (open question Q8) |
-| LC-10 | HTTP map download | Not started |
+| LC-10 | HTTP map download | **Done** - §15: seen in a window against a local stock dedicated server (map and server package over HTTP, the in-band fallback, the refusal when nothing delivers the map, the cache on a second join); `LegacyDownloadTests` |
 | LC-11 | Xonotic 0.9 / current DarkPlaces master compatibility (extended opcodes, protocol changes) | Not started |
 | LC-12 | Menu program (`menu.dat`) and server program (`progs.dat`) hosting | **Working in the game window**: Xonotic's menu, server and client programs run in one process; a local game starts from the menu or `--legacy-map`, plays, changes level and shuts down cleanly, and a real DarkPlaces client has joined it. Gaps are listed under LC-19 to LC-21 in `TODO.md`. |
 
@@ -596,3 +596,89 @@ sight so that its pipelines exist. Measured then: 1.4 GB less memory in play and
   on the main thread when its files arrive: 16 to 19 ms. A second instance of a multi-frame MD3 (2.2 ms for a muzzle
   flash, 10 ms for a weapon): `ModelAnimator` uploads a mesh per instance. A burst of `bloodshower` effects: 0.3 to
   0.6 ms a call, fifteen calls when a player is gibbed.
+
+## 15. Package downloads, the map requirement, the session log (added 2026-10-08)
+
+**What went wrong.** A player joined a modded community server from the browser. The server's map was not in his
+Xonotic data. The client ignored the server's `curl` commands, loaded an empty world, and entered the game: a grey
+level with no collision (the client's prediction fell while the server said he stood). With no map, the level's
+precache was never started either, so every model was read, decoded and - with `gl_texturecompression 2` -
+BC7-compressed on first sight on the frame thread: frames of 3 to 17 seconds.
+
+**What a DarkPlaces server sends** (`libcurl.c Curl_SendRequirements`, from `SV_SendServerinfo`, ahead of
+`svc_serverinfo` in the same message): `curl --clear_autodownload`, then for the map and for every file in
+`sv_curl_serverpackages` (Xonotic adds its versioned `csprogs-<version>.dat` and every `*-serverpackage.txt`) one
+`curl --pak --forthismap --as <pack> [--maxspeed=N] --for <file> <url><pack>`, then `curl --finish_autodownload`.
+The stock `sv_curl_defaulturl` is `http://www.xonotic.org/contentdownload/getmap.php?file=`. The client waits in
+`cl_begindownloads` while a for-this-map download runs, then goes on whether they worked or not.
+
+**What this client does** (`src/VortexArena.Legacy/Downloads/`, `DpSignon`, `LegacyClientSession`):
+
+1. `curl` lines are read by the signon (`DpCurlCommand` is `Curl_Curl_f`'s argument loop). `--for` skips a
+   download whose files the game data has. A level that announces downloads does not load its world at
+   `svc_serverinfo` (`CsqcClientState.LevelLoadDeferred`): the world, the collision and the precache are loaded
+   when the downloads are done (`ILegacyPresentation.LevelFilesArrived`), as DarkPlaces orders it.
+2. Each package is fetched on a worker (`HttpPackageFetcher`), written under `dlcache/<name>.part-*`, checked
+   (`LegacyPackValidator`), renamed to `dlcache/<name>` and mounted with `VirtualFileSystem.MountBelowDirectories`
+   - DarkPlaces' `FS_AddPack(keep_plain_dirs)`: under the loose directories, over the other packages. The mount
+   lives on the session's own file system and ends with the session (`fs_unload_dlcache`). A package already in
+   `dlcache/` is checked and mounted without a request.
+3. The client program is then looked for as before - so a `csprogs-<version>.dat` that arrived inside a server
+   package is found in the game data (verified by size and CRC) and is not downloaded in-band.
+4. If the map is still missing, it is asked for through the game connection: first the package the server named
+   for it (`download <pack>`), then `download maps/<map>.bsp`. DarkPlaces switches this off for Xonotic, and a
+   stock Xonotic server refuses both (`sv_allowdownloads 0`); a server that allows it is served.
+5. If nothing delivered the map, the signon stops (`DpSignon.MissingWorld`), the client disconnects and the menu
+   shows why: "Map maps/x.bsp not found: ...", with each download's failure and each refused request. **This is a
+   deliberate deviation**: DarkPlaces prints "Map %s not found" and enters the empty world.
+
+**Limits** (the server and every address it names are hostile input). The player's own cvars, which nothing a
+server sends can reach: `legacy_curl_enabled` (1), `legacy_curl_maxsize` (512 MiB a package; four times that a
+connection), `legacy_curl_maxspeed` (0 = none; a server's `--maxspeed` can only lower it), `legacy_curl_timeout`
+(45 s without a byte, libcurl's low-speed time), `legacy_download_inband` (1). Fixed: only `--pak`; only a plain
+`*.pk3` / `*.dpk` name (no directory, no leading dot, no device name); http and https only (no ftp, no file, no
+credentials in the address); 5 redirects, each target checked again; no proxy; no `Accept-Encoding`; 15 s to
+connect; 3 transfers at once; 32 downloads a level; no request to a loopback, private, link-local or carrier-NAT
+address unless the game server is at one itself; a package is a zip with at most 16,384 files, 256 MiB a file,
+2 GiB unpacked, no file over 8 MiB claiming more than 200:1, no path leaving the package. In-band: 64 MiB, and
+only a file that was asked for. A transfer is never resumed. Textures block-compressed while downloaded packages
+are mounted go to `legacy/texcache-dl/<hash of the package set>/`, not into the cache Xonotic's own textures use.
+
+**Display.** The loading screen and the log show DarkPlaces' lines: `Downloading dlcache/x.pk3 ...  43.0% @ 1530.0
+KiB/s` with the byte counts, `Still in queue: ...`, `(will enter the game when done)`, and for the in-band
+download `Downloading csprogs.dat  35% (199198/562653) at 84716 bytes/s`.
+
+**In-band speed**, measured against one local stock dedicated server (`sys_ticrate 0.015625`, 804,748 deflated
+bytes of client program): DarkPlaces 10.5 and 10.7 s (75 to 77 KB/s); this client 11.4 to 13.5 s over six runs
+(60 to 71 KB/s). The server sends at most one block of 1,393 bytes a tick. Not explained: the block count was the
+same (578, no repeats) and neither the client's packet rate (64 a second against every frame) nor its process
+priority changed it. What was fixed on the way: DarkPlaces keeps four pending acknowledgements and drops the rest,
+so a frame longer than four ticks costs a round of repeats; this client keeps 64 (`DpDownload.MaxPendingAcks`).
+
+**The hitches** (first minute of play after the loading screen came down, Debug build, 1280x720, cold legacy texture
+cache, `gl_texturecompression 2`, five players with different models; before / after): frames shown 46 / 8,107;
+worst frame 14,070 ms / 68 ms; frames over 33 ms 45 / 8; over 100 ms 42 / 0; over 1 s 18 / 0. What changed:
+
+- The level's precache runs for a remote join whose map had to be downloaded (it never started without a map).
+- A model no precache list named is read on a worker like a player model, never on the frame thread
+  (`ModelAvailable`).
+- Slow texture compression is not done where a texture is loaded (`AssetSystem.DeferCompression`, off for the
+  native game): BC7 on any thread, and any compression on the frame thread, uploads the texture uncompressed and
+  hands its name to `LegacyTextureBank`, which compresses it into the cache **only while a loading screen is up**.
+  Godot's BC7 encoder runs on the engine's worker pool and holds the frame thread for the 0.6 to 2 s a texture
+  takes; that is also why it cannot run during play. A first visit therefore uses more video memory than later ones.
+- Textures uploaded by workers during play go up one at a time; the end of a load waits up to 8 s (was 1.25 s) for
+  the level's files, so the uploads happen behind the loading screen.
+- The native menu's background asset warm rests while a legacy session runs.
+- A frame profiler "ms" of about 800 for a multi-second frame is the engine's clamped delta, not a pipeline
+  compile: the "SYNC surface ~790 ms" readings in the first report were these.
+
+**The log.** `<user directory>/logs/legacy-<stamp>.log` (`LegacyLog`): connection, signon stages, downloads once a
+second, precache, errors, what the server printed, a status line every ten seconds, the builtins a server's
+program called that this client lacks. Written by a pool thread, 400 lines a second and 16 MB at most, newest 20
+files kept, and no line that names rcon, a password or a key.
+
+**Not done.** Resuming a transfer. DarkPlaces' reconnect when `--finish_autodownload` arrives after loading began
+(packages are mounted when they arrive instead). `--cachepic` / `--skinframe` downloads. An in-game infobar for
+downloads that continue during play (console and log only). Compressing deferred textures outside loading screens.
+A pack's override of a texture whose stock version is already in the compressed cache shows the stock one.

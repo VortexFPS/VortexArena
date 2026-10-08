@@ -95,6 +95,19 @@ no step at all, with every job still green.
   has no binary marker and could not have one. A genuine upstream candidate; drop it if Godot takes it.
   See `planning/ppc64le-port-2026-08-19.md`.
 
+- **godot-4.6.3-hinted-glyph-advance.patch** (2026-10-08, **not yet in a published template**) - in both
+  text servers' `_ensure_glyph` (`modules/text_server_adv`, `modules/text_server_fb`), a fully hinted
+  outline glyph takes its horizontal advance from the glyph FreeType just loaded instead of from
+  `FT_Get_Advance`. For a CFF font (Xolonium, the game's main face) `FT_Get_Advance` takes FreeType's
+  advance-only path, which skips the outline and so returns the *unhinted* advance, while the glyph
+  that is drawn was fitted to the pixel grid and can be a pixel wider or narrower. DarkPlaces uses the
+  loaded glyph's advance, so Xonotic's text is laid out with it; before the patch 7,270 of 10,314
+  Xolonium Regular size x glyph cells matched DarkPlaces and whole lines came out 3-5% narrow. Unhinted
+  and lightly hinted fonts are untouched. Cross-platform (it is in `modules/`). No binary marker: it
+  adds no symbol or string. Verify behaviourally: run the game once with `VORTEX_FONT_PROBE=<file>`
+  (`game/text/DpText.cs` writes every advance the engine returns) and compare against DarkPlaces'
+  FreeType. A real upstream bug candidate.
+
 ## Rebuilding the template
 
 **Use `tools/build-engine.sh`** (`./vx build-engine`). It is the executable copy of

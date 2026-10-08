@@ -77,6 +77,31 @@
         "runs in GodotTools, which lives in the editor. It therefore has NO binary marker and could not",
         "have one - see binary_markers below for why an unfindable required marker is worse than none."
       ]
+    },
+    {
+      "file": "godot-4.6.3-hinted-glyph-advance.patch",
+      "sha256": "96c5b2ddf62e5b1d580cece2bf4762af002d8a4f7afbd0d0985daa36bc9ac0f6",
+      "bytes": 2438,
+      "upstream": "none yet - a candidate to submit as a bug: for hinting NORMAL on a CFF font, FT_Get_Advance takes FreeType's advance-only path, which returns the unhinted advance while the glyph drawn afterwards was fitted to the pixel grid.",
+      "drop_at_engine": "whenever upstream takes the advance from the loaded glyph (check _ensure_glyph in modules/text_server_adv and modules/text_server_fb on every engine upgrade)",
+      "$comment": [
+        "In both text servers' _ensure_glyph: after FT_Load_Glyph succeeds, a fully hinted outline glyph takes",
+        "its horizontal advance from the loaded glyph (glyph->advance.x) instead of from FT_Get_Advance.",
+        "Unhinted and lightly hinted fonts, bitmap glyphs and the vertical advance are untouched.",
+        "",
+        "WHY: the DarkPlaces text look (game/text/DpText.cs) reproduces Xonotic's text widths, and DarkPlaces",
+        "uses the loaded glyph's advance (ft2.c Font_LoadMap). Measured before the patch against DarkPlaces'",
+        "own FreeType: Unifont (TrueType) 10,314 of 10,314 size x glyph cells equal, Xolonium Regular (CFF)",
+        "7,270 of 10,314, Xolonium Bold 7,044 of 10,314 - lines 3-5% narrow. No Godot API returns the hinted",
+        "value, so it cannot be corrected from C#.",
+        "",
+        "CROSS-PLATFORM, like the etcpak patch: it touches modules/, so every template built from this set",
+        "has it. NO binary marker: the change adds no symbol or string to find. What verifies it is",
+        "behavioural - run with VORTEX_FONT_PROBE=<file> and compare against DarkPlaces' FreeType (README).",
+        "",
+        "NOT YET IN A PUBLISHED TEMPLATE: template.platforms still pins the build made before this patch",
+        "existed. Until a new template tag is built and pinned, release exports do not carry this change."
+      ]
     }
   ],
   "unpinned_presets": {

@@ -1,0 +1,36 @@
+diff --git a/modules/text_server_adv/text_server_adv.cpp b/modules/text_server_adv/text_server_adv.cpp
+index 550f4b8..59e8396 100644
+--- a/modules/text_server_adv/text_server_adv.cpp
++++ b/modules/text_server_adv/text_server_adv.cpp
+@@ -1300,6 +1300,13 @@ bool TextServerAdvanced::_ensure_glyph(FontAdvanced *p_font_data, const Vector2i
+ 			return false;
+ 		}
+ 
++		// vortex: hinted-glyph-advance. A glyph hinted to whole pixels advances by what the hinter made of
++		// it, not by FT_Get_Advance's advance-only answer (for a CFF font: the unhinted advance, rounded).
++		// Unhinted and lightly hinted glyphs are unchanged (FreeType's fast path already is their advance).
++		if (!(flags & FT_LOAD_NO_HINTING) && FT_LOAD_TARGET_MODE(flags) != FT_RENDER_MODE_LIGHT && fd->face->glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
++			h = (FT_Fixed)fd->face->glyph->advance.x * 1024; // 26.6 -> 16.16, as FT_Get_Advance returns it.
++		}
++
+ 		if (!p_font_data->msdf) {
+ 			if ((p_font_data->subpixel_positioning == SUBPIXEL_POSITIONING_ONE_QUARTER) || (p_font_data->subpixel_positioning == SUBPIXEL_POSITIONING_AUTO && p_size.x <= SUBPIXEL_POSITIONING_ONE_QUARTER_MAX_SIZE * 64)) {
+ 				FT_Pos xshift = (int)((p_glyph >> 27) & 3) << 4;
+diff --git a/modules/text_server_fb/text_server_fb.cpp b/modules/text_server_fb/text_server_fb.cpp
+index 9d99c3a..9803469 100644
+--- a/modules/text_server_fb/text_server_fb.cpp
++++ b/modules/text_server_fb/text_server_fb.cpp
+@@ -718,6 +718,13 @@ bool TextServerFallback::_ensure_glyph(FontFallback *p_font_data, const Vector2i
+ 			return false;
+ 		}
+ 
++		// vortex: hinted-glyph-advance. A glyph hinted to whole pixels advances by what the hinter made of
++		// it, not by FT_Get_Advance's advance-only answer (for a CFF font: the unhinted advance, rounded).
++		// Unhinted and lightly hinted glyphs are unchanged (FreeType's fast path already is their advance).
++		if (!(flags & FT_LOAD_NO_HINTING) && FT_LOAD_TARGET_MODE(flags) != FT_RENDER_MODE_LIGHT && fd->face->glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
++			h = (FT_Fixed)fd->face->glyph->advance.x * 1024; // 26.6 -> 16.16, as FT_Get_Advance returns it.
++		}
++
+ 		if (!p_font_data->msdf) {
+ 			if ((p_font_data->subpixel_positioning == SUBPIXEL_POSITIONING_ONE_QUARTER) || (p_font_data->subpixel_positioning == SUBPIXEL_POSITIONING_AUTO && p_size.x <= SUBPIXEL_POSITIONING_ONE_QUARTER_MAX_SIZE * 64)) {
+ 				FT_Pos xshift = (int)((p_glyph >> 27) & 3) << 4;

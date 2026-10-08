@@ -118,8 +118,13 @@ public static class LegacyData
             $"video {Godot.Performance.GetMonitor(Godot.Performance.Monitor.RenderVideoMemUsed) / mb:0} MB, " +
             $"objects {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectCount):0}, nodes {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectNodeCount):0}, " +
             $"resources {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectResourceCount):0}, orphan nodes {Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectOrphanNodeCount):0}, " +
-            $"threads {threads} (legacy server {VortexArena.Legacy.Local.LegacyLocalServer.LiveThreads}, legacy precache {GodotLegacyPresentation.LivePrecacheWorkers})");
+            $"threads {threads} (legacy server {VortexArena.Legacy.Local.LegacyLocalServer.LiveThreads}, legacy precache {GodotLegacyPresentation.LivePrecacheWorkers})")
+            + (LegacyMemoryMap.Enabled ? "\n[legacy] " + LegacyMemoryMap.Report() + (LevelReport is { } level ? "\n[legacy] memmap level: " + level() : "") : "");
     }
+
+    /// <summary>Set by a session's presentation while its level is loaded: one more line for the memory report
+    /// (what the level's textures are). Read only under VORTEX_LEGACY_MEMMAP.</summary>
+    public static Func<string>? LevelReport { get; set; }
 
     private static long PrivateBytes()
     {

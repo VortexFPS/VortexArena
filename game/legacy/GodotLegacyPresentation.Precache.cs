@@ -44,6 +44,10 @@ public sealed partial class GodotLegacyPresentation
         public required AssetLoader Loader;
         public readonly CancellationTokenSource Cancel = new();
         public readonly BlockingCollection<(bool Sound, string Name)> Work = new();
+        /// <summary>Models of <see cref="Work"/> that an entity is waiting for: taken before anything else.</summary>
+        public readonly ConcurrentQueue<string> Urgent = new();
+        /// <summary>Models a worker has taken (from either queue), so that each is read once.</summary>
+        public readonly ConcurrentDictionary<string, byte> Claimed = new(StringComparer.Ordinal);
         /// <summary>Models whose parse, textures and materials are in memory: the main thread builds their nodes.</summary>
         public readonly ConcurrentQueue<string> Ready = new();
         // A texture or a material is shared by many models (a player model's three levels of detail): the
@@ -52,12 +56,22 @@ public sealed partial class GodotLegacyPresentation
         public readonly ConcurrentDictionary<string, Lazy<bool>> Materials = new(StringComparer.Ordinal);
         /// <summary>Models queued and not yet ready.</summary>
         public int PendingModels;
+        /// <summary>Worker threads of an on-demand run that are alive (see StartDeferredWorkers).</summary>
+        public int Alive;
         public readonly List<Thread> Threads = new();
         // Main thread only: what has been queued already.
         public readonly HashSet<string> Models = new(StringComparer.Ordinal), Sounds = new(StringComparer.Ordinal);
     }
 
     private PrecacheRun? _run;
+    // A level's precache that was still reading when the wait for it ran out (see EndLevelLoad): its workers go
+    // on behind the game, and an entity whose model they have not reached waits for it (ModelAvailable).
+    private bool _runInBackground;
+    private readonly HashSet<string> _runDone = new(StringComparer.Ordinal), _urgentAsked = new(StringComparer.Ordinal);
+    // The longest the end of a level's load waits for files still being read. A warm load is done long before
+    // (0.3 s on stormkeep); the first load after an install block-compresses every texture it reads (3.6 s
+    // here, 11 s with every player model read ahead) and goes on doing so behind the game instead.
+    private const double MaxPrecacheWaitSeconds = 1.25;
     private readonly List<string> _precacheModels = new(), _precacheSounds = new();
     // One built node per precached model, waiting for the first entity that shows it (skin 0 only).
     private readonly Dictionary<string, PrebuiltModel> _prebuilt = new(StringComparer.Ordinal);
@@ -84,6 +98,13 @@ public sealed partial class GodotLegacyPresentation
     /// </summary>
     public bool SceneSettled => !_warmPending && _framesWithoutBuilds >= 3;
 
+    // Entities whose model is still being read (on demand, or by a precache that outlasted its wait) hold the
+    // loading screen for this long at most: on a warm cache a player model is in memory within a tenth of a
+    // second and so appears with the level; on a cold one it arrives a moment after it.
+    private const double ReadGraceSeconds = 0.6;
+    private int _readsWaiting;
+    private long _readsWaitingSince;
+
     /// <summary>Set while the loading screen covers the scene: entities are given their models without the
     /// per-frame bound that keeps a frame short during play.</summary>
     public bool Loading { get; set; }
@@ -109,6 +130,7 @@ public sealed partial class GodotLegacyPresentation
     {
         if (_preloadStarted || Headless) return;
         _preloadStarted = true;
+        MarkAllocationStart();
         long started = LegacyPerfLog.Stamp();
         (List<string> models, List<string> sounds) = LegacyPrecacheHint.Load();
         if (models.Count > 0 || sounds.Count > 0)
@@ -150,6 +172,7 @@ public sealed partial class GodotLegacyPresentation
         if (run.Work.IsAddingCompleted) return;
         foreach (string model in models)
         {
+            if (IsDeferredModel(model)) continue;   // read when an entity first shows it (RequestDeferred)
             if (run.Models.Count >= MaxPrecachedModels || !run.Models.Add(model)) continue;
             Interlocked.Increment(ref run.PendingModels);
             run.Work.Add((false, model));
@@ -164,6 +187,28 @@ public sealed partial class GodotLegacyPresentation
     }
 
     private static int s_liveWorkers;
+    // Developer aid: managed bytes the worker threads allocated, by what they were doing (0 model parse,
+    // 1 textures, 2 materials, 3 sounds), reported when a level's load ends.
+    private static readonly long[] s_allocated = new long[4];
+    private long _allocatedAtStart = -1, _mainAllocatedAtStart;
+
+    private void MarkAllocationStart()
+    {
+        if (_allocatedAtStart >= 0) return;
+        _allocatedAtStart = GC.GetTotalAllocatedBytes(false);
+        _mainAllocatedAtStart = GC.GetAllocatedBytesForCurrentThread();
+        Array.Clear(s_allocated);
+    }
+
+    private void ReportAllocations()
+    {
+        if (_allocatedAtStart < 0) return;
+        const double mb = 1024.0 * 1024.0;
+        _note(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"managed memory allocated by the load: {(GC.GetTotalAllocatedBytes(false) - _allocatedAtStart) / mb:0} MB in all; this thread {(GC.GetAllocatedBytesForCurrentThread() - _mainAllocatedAtStart) / mb:0} MB; " +
+            $"precache workers: model files {Volatile.Read(ref s_allocated[0]) / mb:0} MB, textures {Volatile.Read(ref s_allocated[1]) / mb:0} MB, materials {Volatile.Read(ref s_allocated[2]) / mb:0} MB, sounds {Volatile.Read(ref s_allocated[3]) / mb:0} MB"));
+        _allocatedAtStart = -1;
+    }
 
     /// <summary>Precache worker threads alive in this process right now, over every session. A diagnostic, as
     /// <see cref="VortexArena.Legacy.Local.LegacyLocalServer.LiveThreads"/>: back at the menu it has to read 0.</summary>
@@ -174,13 +219,23 @@ public sealed partial class GodotLegacyPresentation
         Interlocked.Increment(ref s_liveWorkers);
         try
         {
-            foreach ((bool sound, string name) in run.Work.GetConsumingEnumerable(run.Cancel.Token))
+            for (;;)
             {
+                bool sound = false;
+                if (!run.Urgent.TryDequeue(out string? name))
+                {
+                    if (run.Work.TryTake(out (bool Sound, string Name) item, 20, run.Cancel.Token)) (sound, name) = item;
+                    else if (run.Work.IsCompleted && run.Urgent.IsEmpty) break;
+                    else continue;
+                }
                 if (sound)
                 {
+                    long before = GC.GetAllocatedBytesForCurrentThread();
                     run.Loader.WarmSoundOffThread(name);
+                    Interlocked.Add(ref s_allocated[3], GC.GetAllocatedBytesForCurrentThread() - before);
                     continue;
                 }
+                if (!run.Claimed.TryAdd(name, 0)) continue;   // read already, out of its turn
                 try { WarmModel(run, name); }
                 catch (Exception e) when (e is not OutOfMemoryException) { }
                 finally
@@ -202,6 +257,7 @@ public sealed partial class GodotLegacyPresentation
     {
         AssetLoader loader = run.Loader;
         long started = LegacyPerfLog.Stamp();
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         List<string> materials = new(loader.PrepareModel(model, 0));
         // The model's other skins ("<model>_1.skin", ...: a gib's blood colours, a team's flag): their parse
         // and textures too, so the first entity to wear one does not stop the game to decode them. No node
@@ -210,6 +266,7 @@ public sealed partial class GodotLegacyPresentation
             foreach (string material in loader.PrepareModel(model, skin))
                 if (!materials.Contains(material)) materials.Add(material);
         LegacyPerfLog.Event("warm parse " + model, started);
+        Interlocked.Add(ref s_allocated[0], GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
         foreach (string material in materials)
         {
             if (run.Cancel.IsCancellationRequested) return;
@@ -217,23 +274,262 @@ public sealed partial class GodotLegacyPresentation
                 _ = run.Textures.GetOrAdd(texture, static (name, assets) => new Lazy<bool>(() =>
                 {
                     long began = LegacyPerfLog.Stamp();
+                    long before = GC.GetAllocatedBytesForCurrentThread();
                     assets.WarmTextureForLoad(name);
+                    Interlocked.Add(ref s_allocated[1], GC.GetAllocatedBytesForCurrentThread() - before);
                     LegacyPerfLog.Event("warm texture " + name, began);
                     return true;
                 }), loader.Assets).Value;
             _ = run.Materials.GetOrAdd(material, static (name, assets) => new Lazy<bool>(() =>
             {
                 long began = LegacyPerfLog.Stamp();
+                long before = GC.GetAllocatedBytesForCurrentThread();
                 try { assets.ResolveModelMaterial(name); }
                 catch (Exception e) when (e is not OutOfMemoryException) { return false; }
+                finally { Interlocked.Add(ref s_allocated[2], GC.GetAllocatedBytesForCurrentThread() - before); }
                 LegacyPerfLog.Event("warm material " + name, began);
                 return true;
             }), loader.Assets).Value;
         }
     }
 
+    // ---- models read on demand ---------------------------------------------------------------------------
+
+    // A Xonotic server precaches every player model there is (and every monster, vehicle and turret when
+    // those are enabled), whatever the level and whoever is playing: some twenty player models with three
+    // levels of detail each, every one with seven 2048 x 2048 textures. Reading all of them ahead was two
+    // thirds of the level's texture memory (measured on stormkeep: 620 of 756 MB, 349 of 774 textures) for
+    // the four or five that a match shows. These wait until an entity shows one: its files are then read on a
+    // worker thread exactly as the precache would have read them, and the entity is drawn when they are in
+    // memory - a moment later, with no frame held up for it. The models that appear in the middle of a fight
+    // without warning (weapons, projectiles, gibs, items, effects) are all still read ahead.
+    // VORTEX_LEGACY_EAGERPLAYERS=1 reads everything ahead again (the other arm of a comparison).
+    private static readonly string[] s_deferredPrefixes = { "models/player/", "models/monsters/", "models/vehicles/", "models/turrets/" };
+    private static readonly bool s_eagerActors = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_EAGERPLAYERS"));
+    private static int DeferredWorkers => Math.Clamp(System.Environment.ProcessorCount / 4, 2, 4);
+    // A worker with nothing to read for this long ends (and with it its file buffer, sixteen megabytes for a
+    // player's skin); the next request starts another.
+    private const int DeferredIdleMilliseconds = 4000;
+
+    private static bool IsDeferredModel(string model)
+    {
+        if (s_eagerActors || s_noPrecache) return false;
+        foreach (string prefix in s_deferredPrefixes)
+            if (model.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private PrecacheRun? _deferred;
+    // Main thread only: what has been asked for, and what has come back.
+    private readonly HashSet<string> _deferredAsked = new(StringComparer.Ordinal), _deferredReady = new(StringComparer.Ordinal);
+
+    /// <summary>Models being read on demand right now (asked for and not yet back).</summary>
+    public int DeferredPending => _deferredAsked.Count - _deferredReady.Count;
+
+    // Whether an entity's model can be built this frame without reading files on this thread. A model that is
+    // not read on demand always can (it was read ahead, or loads the way it always did).
+    private bool ModelAvailable(string model)
+    {
+        if (model[0] == '*' || Headless) return true;
+        if (IsDeferredModel(model))
+        {
+            if (_deferredReady.Contains(model)) return true;
+            RequestDeferred(model);
+            _readsWaiting++;
+            return false;
+        }
+        if (!_runInBackground || _run is not { } run || !run.Models.Contains(model) || _runDone.Contains(model)) return true;
+        // Still in the queue of a precache that is finishing behind the game: read it next.
+        if (_urgentAsked.Add(model)) run.Urgent.Enqueue(model);
+        _readsWaiting++;
+        return false;
+    }
+
+    // Once a frame while a precache is finishing behind the game: note what its workers have read (an entity
+    // waiting for one of those models gets it on its next submission), and let go of the run when it is done.
+    private void ServiceBackgroundPrecache()
+    {
+        if (!_runInBackground || _run is not { } run) return;
+        while (run.Ready.TryDequeue(out string? model)) _runDone.Add(model);
+        if (Volatile.Read(ref run.PendingModels) > 0) return;
+        foreach (Thread thread in run.Threads)
+            if (thread.IsAlive) return;   // the sounds at the tail of the queue
+        _run = null;
+        _runInBackground = false;
+        _runDone.Clear();
+        _urgentAsked.Clear();
+        run.Work.Dispose();
+        run.Cancel.Dispose();
+        LegacyPerfLog.Mark("precache: the files still being read when the level began are all read");
+    }
+
+    private void RequestDeferred(string model)
+    {
+        if (!_deferredAsked.Add(model)) return;
+        if (!LegacyQcHost.IsSafePath(model) || !_vfs.Exists(model))
+        {
+            _deferredReady.Add(model);   // nothing to read: the build will fail as it would have
+            return;
+        }
+        if (_deferred is not { } run)
+        {
+            _assets.Assets.PrimeSharedSingletons();
+            _deferred = run = new PrecacheRun { Loader = _assets };
+        }
+        Interlocked.Increment(ref run.PendingModels);
+        run.Work.Add((false, model));
+        StartDeferredWorkers(run, 1);
+        // The other levels of detail of the same model share its textures and are a small file each: asked for
+        // now, so that walking towards a player does not find the next one unread.
+        int dot = model.LastIndexOf('.');
+        if (dot <= 0) return;
+        string stem = model[..dot], extension = model[dot..];
+        if (stem.EndsWith("_lod1", StringComparison.Ordinal) || stem.EndsWith("_lod2", StringComparison.Ordinal)) stem = stem[..^5];
+        foreach (string sibling in new[] { stem + extension, stem + "_lod1" + extension, stem + "_lod2" + extension })
+            if (sibling != model && _deferredAsked.Add(sibling))
+            {
+                if (!_vfs.Exists(sibling))
+                {
+                    _deferredReady.Add(sibling);
+                    continue;
+                }
+                Interlocked.Increment(ref run.PendingModels);
+                run.Work.Add((false, sibling));
+                StartDeferredWorkers(run, 1);
+            }
+    }
+
+    // One more worker per item queued, up to the bound: the threads are started when there is work and end
+    // when there has been none for a while.
+    private static void StartDeferredWorkers(PrecacheRun run, int wanted)
+    {
+        for (int i = 0; i < wanted; i++)
+        {
+            if (Interlocked.Increment(ref run.Alive) > DeferredWorkers)
+            {
+                Interlocked.Decrement(ref run.Alive);
+                return;
+            }
+            Thread thread = new(() => DeferredWorker(run)) { IsBackground = true, Name = "legacy-deferred" };
+            lock (run.Threads) run.Threads.Add(thread);
+            thread.Start();
+        }
+    }
+
+    private static void DeferredWorker(PrecacheRun run)
+    {
+        Interlocked.Increment(ref s_liveWorkers);
+        try
+        {
+            for (;;)
+            {
+                if (!run.Work.TryTake(out (bool Sound, string Name) item, DeferredIdleMilliseconds, run.Cancel.Token))
+                {
+                    // Idle: end, unless something was queued between the timeout and here.
+                    Interlocked.Decrement(ref run.Alive);
+                    if (run.Work.Count == 0 || run.Work.IsAddingCompleted) return;
+                    if (Interlocked.Increment(ref run.Alive) > DeferredWorkers)
+                    {
+                        Interlocked.Decrement(ref run.Alive);
+                        return;
+                    }
+                    continue;
+                }
+                try { WarmModel(run, item.Name); }
+                catch (Exception e) when (e is not OutOfMemoryException) { }
+                finally
+                {
+                    run.Ready.Enqueue(item.Name);
+                    Interlocked.Decrement(ref run.PendingModels);
+                }
+            }
+        }
+        catch (OperationCanceledException) { Interlocked.Decrement(ref run.Alive); }
+        catch (ObjectDisposedException) { Interlocked.Decrement(ref run.Alive); }
+        catch (InvalidOperationException) { Interlocked.Decrement(ref run.Alive); }
+        finally { Interlocked.Decrement(ref s_liveWorkers); }
+    }
+
+    // Once a frame: the models the workers have finished may be built from now on.
+    private void CollectDeferredModels()
+    {
+        ServiceBackgroundPrecache();
+        if (_deferred is not { } run) return;
+        while (run.Ready.TryDequeue(out string? model))
+        {
+            _deferredReady.Add(model);
+            // Under the loading screen: built now and drawn once out of sight with the others, so that the
+            // pipelines of a player model are compiled there and not on the frame the player is first seen.
+            if (!Loading || _prebuilt.ContainsKey(model)) continue;
+            long started = LegacyPerfLog.Stamp();
+            Node3D? node = CreateModelNode(model, 0, out ModelAnimator? animator);
+            LegacyPerfLog.Event("prebuild (on demand) " + model, started);
+            if (node is null) continue;
+            _prebuilt[model] = new PrebuiltModel { Node = node, Animator = animator };
+            _prebuiltUnwarmed.Add(node);
+        }
+        if (Loading && !_warmPending && _prebuiltUnwarmed.Count > 0 && DeferredPending == 0) StartWarmPass();
+    }
+
+    // The models built ahead are drawn out of sight twice: as they are, and once more half transparent. The
+    // client program fades most of what it shows (a gib, a casing, an item that has just been taken, a
+    // player who picked up invisibility) by the entity's alpha, and a faded instance is drawn by a different
+    // pipeline from an opaque one - compiled, without this, on the frame of the first fade: the 40 to 80 ms
+    // frames a few seconds into a fight, with nothing in the client's own time to account for them.
+    private void StartWarmPass()
+    {
+        _warmPending = true;
+        List<Node3D> warm = new(_prebuiltUnwarmed);
+        _prebuiltUnwarmed.Clear();
+        _warmPass = GpuWarmPass.WarmNodes(_sceneRoot, warm, () =>
+        {
+            _warmPass = null;
+            List<GeometryInstance3D> faded = new();
+            List<Node3D> again = new();
+            foreach (Node3D node in warm)
+                if (GodotObject.IsInstanceValid(node) && node.GetParent() is null)
+                {
+                    again.Add(node);
+                    CollectGeometry(node, faded);
+                }
+            if (again.Count == 0 || !_warmPending)
+            {
+                _warmPending = false;
+                return;
+            }
+            foreach (GeometryInstance3D geometry in faded) geometry.Transparency = 0.5f;
+            _warmPass = GpuWarmPass.WarmNodes(_sceneRoot, again, () =>
+            {
+                // Handed back out of the tree: they wait in _prebuilt, hidden, for an entity to take them.
+                foreach (GeometryInstance3D geometry in faded)
+                    if (GodotObject.IsInstanceValid(geometry)) geometry.Transparency = 0f;
+                _warmPending = false;
+                _warmPass = null;
+            });
+        });
+    }
+
+    private void CancelDeferred()
+    {
+        if (_deferred is not { } run) return;
+        _deferred = null;
+        run.Cancel.Cancel();
+        if (!run.Work.IsAddingCompleted) run.Work.CompleteAdding();
+        long deadline = System.Environment.TickCount64 + 10_000;
+        Thread[] threads;
+        lock (run.Threads) threads = run.Threads.ToArray();
+        foreach (Thread thread in threads)
+            thread.Join((int)Math.Max(1, deadline - System.Environment.TickCount64));
+        // What was asked for and never came back is asked for again when something shows it.
+        _deferredAsked.IntersectWith(_deferredReady);
+    }
+
     private void CancelPrecache()
     {
+        CancelDeferred();
+        _runInBackground = false;
+        _runDone.Clear();
+        _urgentAsked.Clear();
         if (_run is not { } run) return;
         _run = null;
         run.Cancel.Cancel();
@@ -255,6 +551,7 @@ public sealed partial class GodotLegacyPresentation
     /// </summary>
     private void BeginPrecache(CsqcClientState state)
     {
+        MarkAllocationStart();
         _precacheModels.Clear();
         HashSet<string> seen = new(StringComparer.Ordinal);
         foreach (string? candidate in state.ModelNames)
@@ -281,11 +578,12 @@ public sealed partial class GodotLegacyPresentation
     /// </summary>
     public int PrebuildReady(double budgetSeconds)
     {
-        if (_run is not { } run || Headless) return 0;
+        if (_run is not { } run || Headless || _runInBackground) return 0;
         long began = System.Diagnostics.Stopwatch.GetTimestamp();
         int built = 0;
         while (run.Ready.TryDequeue(out string? model))
         {
+            _runDone.Add(model);
             if (!_prebuilt.ContainsKey(model))
             {
                 long started = LegacyPerfLog.Stamp();
@@ -328,23 +626,46 @@ public sealed partial class GodotLegacyPresentation
             QueueSounds(run, sounds);
             run.Work.CompleteAdding();
 
-            // Build what is ready; wait for what is not (CL_KeepaliveMessage while the files are still being read).
+            // Build what is ready; wait for what is not (CL_KeepaliveMessage while the files are still being
+            // read) - but not for long: what is still unread after MaxPrecacheWaitSeconds is read behind the game.
             int built = 0, waits = 0;
+            bool finished = false;
+            long waitBegan = System.Diagnostics.Stopwatch.GetTimestamp();
             for (;;)
             {
                 built += PrebuildReady(0.05);
                 if (!run.Ready.IsEmpty) continue;
-                if (Volatile.Read(ref run.PendingModels) <= 0 && run.Ready.IsEmpty) break;
+                if (Volatile.Read(ref run.PendingModels) <= 0 && run.Ready.IsEmpty)
+                {
+                    finished = true;
+                    break;
+                }
+                if (System.Diagnostics.Stopwatch.GetElapsedTime(waitBegan).TotalSeconds >= MaxPrecacheWaitSeconds) break;
                 Thread.Sleep(1);
                 if ((++waits & 31) == 0) ModelData.Working?.Invoke();
             }
             // The sounds are the tail of the queue; the threads end when it is empty.
-            foreach (Thread thread in run.Threads)
-                while (!thread.Join(50)) ModelData.Working?.Invoke();
-            LegacyPerfLog.Event($"precache: {built} models built here; {_prebuilt.Count} in all; {run.Models.Count} models and {run.Sounds.Count} sounds read", started);
-            _run = null;
-            run.Work.Dispose();
-            run.Cancel.Dispose();
+            if (finished)
+                foreach (Thread thread in run.Threads)
+                    while (finished && !thread.Join(20))
+                    {
+                        ModelData.Working?.Invoke();
+                        if (System.Diagnostics.Stopwatch.GetElapsedTime(waitBegan).TotalSeconds >= MaxPrecacheWaitSeconds) finished = false;
+                    }
+            LegacyPerfLog.Event($"precache: {built} models built here; {_prebuilt.Count} in all; {run.Models.Count} models and {run.Sounds.Count} sounds queued; " +
+                (finished ? "all read" : $"{Volatile.Read(ref run.PendingModels)} models still being read: they finish behind the game"), started);
+            if (finished)
+            {
+                _run = null;
+                _runDone.Clear();
+                run.Work.Dispose();
+                run.Cancel.Dispose();
+            }
+            else
+            {
+                _runInBackground = true;
+                _note($"the level began with {Volatile.Read(ref run.PendingModels)} of its {run.Models.Count} precached models still being read (the first load of this data compresses its textures); they finish behind the game");
+            }
 
             // What the next session can start on before its server has said anything.
             started = LegacyPerfLog.Stamp();
@@ -362,18 +683,7 @@ public sealed partial class GodotLegacyPresentation
             LegacyPerfLog.Event("precache: effect catalogue", started);
             started = LegacyPerfLog.Stamp();
             GpuWarmPass.Run(_sceneRoot, _effects, null);
-            if (_prebuiltUnwarmed.Count > 0)
-            {
-                _warmPending = true;
-                List<Node3D> warm = new(_prebuiltUnwarmed);
-                _prebuiltUnwarmed.Clear();
-                _warmPass = GpuWarmPass.WarmNodes(_sceneRoot, warm, () =>
-                {
-                    // Handed back out of the tree: they wait in _prebuilt, hidden, for an entity to take them.
-                    _warmPending = false;
-                    _warmPass = null;
-                });
-            }
+            if (_prebuiltUnwarmed.Count > 0) StartWarmPass();
             LegacyPerfLog.Event("precache: pipeline passes started", started);
         }
         catch (Exception e) when (e is not OutOfMemoryException)
@@ -384,6 +694,7 @@ public sealed partial class GodotLegacyPresentation
         {
             PrecacheSeconds = System.Diagnostics.Stopwatch.GetElapsedTime(began).TotalSeconds;
             _framesWithoutBuilds = 0;
+            ReportAllocations();
         }
     }
 

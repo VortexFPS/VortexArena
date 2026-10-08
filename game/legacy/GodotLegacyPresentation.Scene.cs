@@ -47,6 +47,11 @@ public sealed partial class GodotLegacyPresentation
     {
         public Node3D? Node;
         public bool Built, Failed;
+        // What the node was built for. A proxy whose entity has since changed to a model that is still being
+        // read (Stale) goes on showing this one until the new one can be built.
+        public string Model = "";
+        public int Skin;
+        public bool Stale;
         public Skeleton3D? Skeleton;
         public int[]? BoneParents;
         public ModelAnimator? Animator;
@@ -102,8 +107,14 @@ public sealed partial class GodotLegacyPresentation
     private void BeginSceneFrame()
     {
         _debugEntities.Clear();
-        // "Settled" is a run of frames in which every entity submitted already had its model.
-        _framesWithoutBuilds = _mainRendered && _buildsThisFrame == 0 && _buildsWaiting == 0 ? _framesWithoutBuilds + 1 : 0;
+        // "Settled" is a run of frames in which every entity submitted already had its model - or was waiting
+        // for one that is still being read and has been for longer than the screen is held for that.
+        // (Counted once per level, from the first such wait: bots that respawn as other models one after
+        // another would otherwise each start the wait again, to the full bound of the loading screen.)
+        if (_readsWaiting > 0 && _readsWaitingSince == 0) _readsWaitingSince = System.Diagnostics.Stopwatch.GetTimestamp();
+        bool heldForReads = _readsWaiting > 0 && System.Diagnostics.Stopwatch.GetElapsedTime(_readsWaitingSince).TotalSeconds < ReadGraceSeconds;
+        _framesWithoutBuilds = _mainRendered && _buildsThisFrame == 0 && _buildsWaiting == 0 && !heldForReads ? _framesWithoutBuilds + 1 : 0;
+        _readsWaiting = 0;
         _mainRendered = false;
         _viewsThisFrame = 0;
         _oneOffs = 0;
@@ -115,6 +126,7 @@ public sealed partial class GodotLegacyPresentation
         _polygonVertices = 0;
         _lights.Clear();
         _oneOffsOfModel.Clear();
+        CollectDeferredModels();
         _polygonMesh.ClearSurfaces();
         _ledger.BeginFrame();
         _refdef.BeginFrame();
@@ -134,7 +146,82 @@ public sealed partial class GodotLegacyPresentation
                 hidden.Shown = false;
                 node.Visible = false;
             }
-        foreach (int key in _release) FreeProxy(key);
+        foreach (int key in _release) RetireProxy(key);
+    }
+
+    // ---- nodes kept for the next entity that shows the same model ---------------------------------------
+    //
+    // Xonotic's client program shows most short-lived things (a muzzle flash, a shell casing, a gib, the
+    // weapon in the selection strip) by reusing a few edicts, each for a different model every time. Every
+    // change threw the node away and built another: 3 to 20 ms for uziflash.md3, several times a second in a
+    // fight, and 15 to 60 ms for a gib. A node that an entity has finished with is kept instead, hidden, with
+    // everything this class last told it (so the next entity's state is applied as a difference, as always),
+    // and handed to the next entity that shows that model and skin. Bounded per model and in all.
+    private const int MaxPooledPerModel = 12, MaxPooled = 384;
+    private readonly Dictionary<(string Model, int Skin), Stack<Proxy>> _pool = new();
+    private int _pooled;
+
+    /// <summary>Nodes waiting for another entity of their model, and how many builds they have saved.</summary>
+    public int PooledNodes => _pooled;
+    public long PoolHits { get; private set; }
+
+    private bool HasPooled(string model, int skin) => _pool.TryGetValue((model, skin), out Stack<Proxy>? stack) && stack.Count > 0;
+
+    private Proxy? TakePooled(string model, int skin)
+    {
+        if (_pooled == 0 || !_pool.TryGetValue((model, skin), out Stack<Proxy>? stack)) return null;
+        while (stack.Count > 0)
+        {
+            Proxy proxy = stack.Pop();
+            _pooled--;
+            if (proxy.Node is not { } node || !GodotObject.IsInstanceValid(node))
+            {
+                _proxyNodes--;
+                continue;
+            }
+            PoolHits++;
+            return proxy;
+        }
+        return null;
+    }
+
+    // The proxy of a key whose entity is gone or shows something else now: kept for reuse if there is room.
+    private void RetireProxy(int key)
+    {
+        if (!_proxies.TryGetValue(key, out Proxy? proxy) || proxy.Node is not { } node || !GodotObject.IsInstanceValid(node)
+            || proxy.IsSubmodel || proxy.Failed || proxy.Model.Length == 0 || _pooled >= MaxPooled)
+        {
+            FreeProxy(key);
+            return;
+        }
+        if (!_pool.TryGetValue((proxy.Model, proxy.Skin), out Stack<Proxy>? stack))
+        {
+            stack = new Stack<Proxy>();
+            _pool[(proxy.Model, proxy.Skin)] = stack;
+        }
+        if (stack.Count >= MaxPooledPerModel)
+        {
+            FreeProxy(key);
+            return;
+        }
+        _proxies.Remove(key);
+        if (proxy.Shown)
+        {
+            proxy.Shown = false;
+            node.Visible = false;
+        }
+        proxy.Stale = false;
+        stack.Push(proxy);
+        _pooled++;
+    }
+
+    private void FreePool()
+    {
+        foreach (Stack<Proxy> stack in _pool.Values)
+            foreach (Proxy proxy in stack)
+                if (proxy.Node is { } node && GodotObject.IsInstanceValid(node)) node.QueueFree();
+        _pool.Clear();
+        _pooled = 0;
     }
 
     private void FreeProxy(int key)
@@ -153,6 +240,7 @@ public sealed partial class GodotLegacyPresentation
         foreach (int key in _release) FreeProxy(key);
         // Anything the ledger did not know (it should know all of them).
         foreach (int key in new List<int>(_proxies.Keys)) FreeProxy(key);
+        FreePool();
         _proxyNodes = 0;
         // The variants hold duplicates of the level's materials; a new level makes its own.
         _materialVariants.Clear();
@@ -230,7 +318,7 @@ public sealed partial class GodotLegacyPresentation
         ApplyTint(proxy, entity.Colormap,
             new QcVector(entity.ColorMod0 / 32f, entity.ColorMod1 / 32f, entity.ColorMod2 / 32f),
             new QcVector(entity.GlowMod0 / 32f, entity.GlowMod1 / 32f, entity.GlowMod2 / 32f));
-        if (proxy.Animator is { } animator && proxy.LastFrame != entity.Frame)
+        if (proxy.Animator is { } animator && proxy.LastFrame != entity.Frame && !proxy.Stale)
         {
             animator.SetRawFrame(entity.Frame);
             proxy.LastFrame = entity.Frame;
@@ -313,7 +401,7 @@ public sealed partial class GodotLegacyPresentation
         lap = Lap(profile, 4, lap);
         ApplyTint(proxy, entity.ColorMap, entity.ColorMod, entity.GlowMod);
         lap = Lap(profile, 5, lap);
-        ApplyPose(proxy, entity);
+        if (!proxy.Stale) ApplyPose(proxy, entity);
         Lap(profile, 6, lap);
         return true;
     }
@@ -351,20 +439,50 @@ public sealed partial class GodotLegacyPresentation
             proxy = new Proxy();
             _proxies[key] = proxy;
         }
-        else if (result is LegacySceneLedger.TouchResult.Create or LegacySceneLedger.TouchResult.Rebuild)
-        {
-            FreeProxy(key);
-            proxy = new Proxy();
-            _proxies[key] = proxy;
-        }
         // One build always; more only while the frame has spent little on them. A level's first frames have
         // seventy models to build, and six a frame made each of those frames take half a second.
         // Under the loading screen nobody is watching the frame rate: the first frames' entities all get their
         // models at once. And while the models built ahead are still parked in the pipeline pass, nothing is
         // built at all - a few frames later each entity takes its model from there for nothing.
-        if (!proxy.Built && !proxy.Failed && !_warmPending
+        bool budget = !_warmPending
             && (Loading ? _buildSecondsThisFrame < LoadingBuildBudgetSeconds
-                        : _buildsThisFrame < MaxModelBuildsPerFrame && (_buildsThisFrame == 0 || _buildSecondsThisFrame < ModelBuildBudgetSeconds)))
+                        : _buildsThisFrame < MaxModelBuildsPerFrame && (_buildsThisFrame == 0 || _buildSecondsThisFrame < ModelBuildBudgetSeconds));
+        if (proxy.Built && (proxy.Skin != skin || !string.Equals(proxy.Model, model, StringComparison.Ordinal)))
+        {
+            // The entity shows another model now. Between two models that are read on demand (a player
+            // changing level of detail, or model) the new one may not be in memory yet, or not affordable in
+            // this frame: the old node stays - a player drawn at the wrong level of detail for a moment rather
+            // than not drawn - until the new one can be built. Anything else is replaced at once, as before.
+            if (proxy.Node is not null && IsDeferredModel(model) && IsDeferredModel(proxy.Model))
+            {
+                if (!ModelAvailable(model))
+                {
+                    proxy.Stale = true;
+                    return proxy;
+                }
+                if (!budget && !HasPooled(model, skin))
+                {
+                    proxy.Stale = true;
+                    _buildsWaiting++;
+                    return proxy;
+                }
+            }
+            RetireProxy(key);
+            proxy = new Proxy();
+            _proxies[key] = proxy;
+        }
+        else if (proxy.Stale) proxy.Stale = false;   // it went back to the model it still shows
+        if (proxy.Built || proxy.Failed) return proxy;
+        // A node of this model that an earlier entity has finished with (a muzzle flash, a gib, a casing, a
+        // player's other level of detail): taken back as it is, for nothing.
+        if (TakePooled(model, skin) is { } pooled)
+        {
+            _proxies[key] = pooled;
+            return pooled;
+        }
+        // Being read on a worker thread: nothing to draw for it yet, and no stall either.
+        if (!ModelAvailable(model)) return proxy;
+        if (budget)
         {
             _buildsThisFrame++;
             long started = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -372,7 +490,7 @@ public sealed partial class GodotLegacyPresentation
             LegacyPerfLog.Event(ahead ? "model (built ahead) " + model : "model " + model, started);
             _buildSecondsThisFrame += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds;
         }
-        else if (!proxy.Built && !proxy.Failed) _buildsWaiting++;
+        else _buildsWaiting++;
         return proxy;
     }
 
@@ -383,6 +501,8 @@ public sealed partial class GodotLegacyPresentation
     private bool Build(Proxy proxy, string model, int skin)
     {
         proxy.Built = true;
+        proxy.Model = model;
+        proxy.Skin = skin;
         if (model[0] == '*')
         {
             BuildSubmodel(proxy, model);
@@ -393,7 +513,9 @@ public sealed partial class GodotLegacyPresentation
         if (node is null)
         {
             ahead = false;
+            long step0 = LegacyPerfLog.Stamp();
             node = CreateModelNode(model, skin, out animator);
+            if (LegacyPerfLog.Enabled && System.Diagnostics.Stopwatch.GetElapsedTime(step0).TotalMilliseconds >= 2) LegacyPerfLog.Event("model step: node " + model, step0);
         }
         if (node is null)
         {
@@ -402,12 +524,16 @@ public sealed partial class GodotLegacyPresentation
         }
         proxy.Animator = animator;
         node.Visible = false;
+        long step = LegacyPerfLog.Stamp();
         _sceneRoot.AddChild(node);
+        if (LegacyPerfLog.Enabled && System.Diagnostics.Stopwatch.GetElapsedTime(step).TotalMilliseconds >= 2) LegacyPerfLog.Event("model step: into the scene " + model, step);
         _proxyNodes++;
         proxy.Node = node;
         CollectGeometry(node, proxy.Geometry);
         // DarkPlaces lights every model from the map's light grid; the request is honoured while a grid is bound.
+        step = LegacyPerfLog.Stamp();
         ModelTint.EnableGridLight(node, true);
+        if (LegacyPerfLog.Enabled && System.Diagnostics.Stopwatch.GetElapsedTime(step).TotalMilliseconds >= 2) LegacyPerfLog.Event("model step: grid light " + model, step);
 
         proxy.Skeleton = IqmBuilder.FindSkeleton(node);
         if (proxy.Skeleton is { } skeleton)
@@ -444,6 +570,9 @@ public sealed partial class GodotLegacyPresentation
             {
                 animator = ModelAnimator.Create(md3, null, _assets.Assets);
                 animator.SetRawFrame(0);
+                // The client program sets every frame itself (SetRawFrame / SetRawFrameBlend apply at once):
+                // the animator's own per-frame step has nothing to play, for some seventy nodes in a fight.
+                animator.SetProcess(false);
                 return animator;
             }
             return _assets.LoadModel(model, Math.Clamp(skin, 0, 255));
@@ -503,8 +632,15 @@ public sealed partial class GodotLegacyPresentation
                 _levelMaps.Add(view);
                 // The lightmap pages are decoded once for all of the level's submodels, not once for each.
                 _assets.Assets.LoadImageCache = _submodelImages;
+                MapLoader.SharedLightmapAtlases = _levelAtlases;
+                MapLoader.PieceBuild = true;
                 try { node = MapLoader.BuildMap(view, _assets.Assets, _levelName); }
-                finally { _assets.Assets.LoadImageCache = null; }
+                finally
+                {
+                    _assets.Assets.LoadImageCache = null;
+                    MapLoader.SharedLightmapAtlases = null;
+                    MapLoader.PieceBuild = false;
+                }
             }
         }
         catch (Exception e) when (e is not OutOfMemoryException)

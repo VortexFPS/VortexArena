@@ -98,7 +98,13 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
 
         InitializeScene();
         InitializeSound();
+        if (LegacyMemoryMap.Enabled) LegacyData.LevelReport = _memoryLine = MemoryLine;
     }
+
+    // Developer aid (VORTEX_LEGACY_MEMMAP): what this session's level holds, for the review scripts' "mem".
+    private Func<string>? _memoryLine;
+    private string MemoryLine() =>
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"proxies {_proxies.Count}, nodes {_proxyNodes}, built ahead and waiting {_prebuilt.Count}; ") + _assets.Assets.TextureGroups();
 
     /// <summary>The level: collision, visibility, the area grid of the program's entities.</summary>
     public BspLegacyWorld Map { get; }
@@ -154,6 +160,7 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         Loading = true;
+        _readsWaitingSince = 0;
         string map = state.WorldModel;
         // The first level of a session may find its map already loaded (BeginPreload, a local game) and its
         // files already on the worker threads; a later level starts from nothing but the loader's caches.
@@ -222,7 +229,11 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
             _levelBsp = bsp;
             _levelMaps.Add(bsp);
             _levelName = levelName;
-            _mapRoot = MapLoader.BuildMap(bsp, _assets.Assets, levelName, submodels);
+            // The world's lightmap atlas is kept for the level: every door and platform built later draws from
+            // the same texture instead of packing and uploading its own copy of the pages it touches.
+            MapLoader.SharedLightmapAtlases = _levelAtlases;
+            try { _mapRoot = MapLoader.BuildMap(bsp, _assets.Assets, levelName, submodels); }
+            finally { MapLoader.SharedLightmapAtlases = null; }
             _sceneRoot.AddChild(_mapRoot);
             // Particles collide with the same world the game does.
             if (Map.Collision is { } collision) _effects.SetCollisionWorld(collision);
@@ -322,6 +333,8 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         _drawLayer.Present(Canvas);
         ModelLighting.Clear();
         _host = null;
+        if (_memoryLine is not null && LegacyData.LevelReport == _memoryLine) LegacyData.LevelReport = null;
+        _memoryLine = null;
     }
 
     // The map loader keeps the lightmap pages it uploaded in a process-wide cache keyed by the parsed map - and
@@ -333,12 +346,14 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         foreach (BspData map in _levelMaps) pages += MapLoader.ReleaseLightmaps(map);
         if (_levelMaps.Count > 0) _note($"level released: {_levelMaps.Count} map views, {pages} lightmap pages forgotten");
         _levelMaps.Clear();
+        _levelAtlases.Clear();
         _levelBsp = null;
         foreach (Image image in _submodelImages.Values) image.Dispose();
         _submodelImages.Clear();
     }
 
     private readonly List<BspData> _levelMaps = new();
+    private readonly List<object> _levelAtlases = new();
 
     // ---- small conversions shared by the partial files ------------------------------------------------
 

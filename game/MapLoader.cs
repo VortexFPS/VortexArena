@@ -267,7 +267,7 @@ public static class MapLoader
         // Built unconditionally (cheap, load-time only) so the cvar can A/B-toggle without a map reload.
         Occluder3D? worldOccluder;
         using (LoadTimeline.Phase("map.occluder"))
-            worldOccluder = BuildWorldOccluder(bsp, assets, surfaces);
+            worldOccluder = PieceBuild ? null : BuildWorldOccluder(bsp, assets, surfaces);
 
         // --- (§12.5 R5b) lightmap atlas: pack every USED page (+ its deluxe pair) into one gutter-padded
         // texture so lightmapped surfaces no longer split per page — materials (and with the regroup below,
@@ -294,7 +294,7 @@ public static class MapLoader
         using (LoadTimeline.Phase("map.pvs+regroup"))
         {
             pvs = new VortexArena.Formats.Bsp.BspPvs(bsp);
-            int[][]? faceClusters = pvs.HasVis ? pvs.BuildFaceClusterSets() : null;
+            int[][]? faceClusters = pvs.HasVis && !PieceBuild ? pvs.BuildFaceClusterSets() : null;
             cellSize = ResolveCellSize(bsp);
             cells = RegroupIntoCells(surfaces, atlas, faceClusters, cellSize, out cellClusters);
         }
@@ -384,7 +384,7 @@ public static class MapLoader
         // (§12.8) PVS-driven cell visibility: the map's own precomputed vis hides cells behind walls — true
         // occlusion culling, conservative by construction (q3map2 vis is a superset of real visibility),
         // exactly the data DP culls with. Only wired when the map actually carries vis.
-        if (pvs.HasVis && pvsCells.Count > 0)
+        if (pvs.HasVis && pvsCells.Count > 0 && !PieceBuild)
             root.AddChild(new WorldPvsCuller(pvs, pvsCells));
 
         // (§12.8 A/B) Godot-native occlusion culling — orthogonal to the PVS culler, off by default
@@ -394,6 +394,7 @@ public static class MapLoader
 
         // Surface-material summary — guards the external-lightmap wiring (lightmapped=0 or a non-zero
         // lightmapMissing on a stock map means lightmaps stopped binding; see LoadLightmap / the map-name thread).
+        if (!PieceBuild)
         GD.Print($"[MapLoader] '{mapName}' materials: lightmapped={nLit} vertexLit={nVtx} plain={nPlain}" +
                  (nLitMissing > 0 ? $" lightmapMissing={nLitMissing}" : string.Empty) +
                  (nTrans > 0 ? $" translucent={nTrans}" : string.Empty) +
@@ -403,7 +404,8 @@ public static class MapLoader
         // One line when a texture the map references will not render — the port's answer to DP's per-texture
         // `could not load texture` spam, which loses the count and says nothing about a shader whose stage
         // image is missing. Silent on a clean map; `r_missingtextures` prints the detail.
-        MissingTextures.LogLoadSummary(bsp, assets, mapName);
+        if (!PieceBuild)
+            MissingTextures.LogLoadSummary(bsp, assets, mapName);
 
         // Build the warpzone/portal "window" meshes (no-op when the map has none).
         BuildPortalSurfaces(root, bsp, assets, mapName, deluxe, portalFaces, decorFaces);
@@ -466,6 +468,7 @@ public static class MapLoader
         int decor = BuildPortalGroup(portalsRoot, bsp, assets, mapName, deluxe, decorFaces, decor: true, built);
         if (built + decor > 0)
             root.AddChild(portalsRoot);
+        if (!PieceBuild)
         GD.Print($"[MapLoader] '{mapName}' portal surfaces: {built} (from {portalFaces.Count} faces)"
             + (decor > 0 ? $", pocket decor: {decor} (from {decorFaces.Count} faces)" : ""));
     }
@@ -848,6 +851,28 @@ public static class MapLoader
     /// paired light-direction pages into a SECOND atlas with the identical layout) and record each page's
     /// UV2 offset+scale. Returns null when no page loads (the caller then keeps today's degrade path).
     /// </summary>
+    /// <summary>
+    /// Main-thread only, and null by default (every build packs its own atlas; the native game never sets it).
+    /// While an owner has a list here, a build whose surfaces touch only pages that an atlas already in the
+    /// list holds draws from that atlas, and an atlas a build has to pack is added to the list. For a caller
+    /// that builds one map as many pieces - legacy compatibility mode builds the world and then each door and
+    /// platform as its own mesh, and every one of those packed and uploaded its own copy of the two or three
+    /// 2048 x 2048 pages it touches (25 to 110 ms and tens of megabytes of video memory a door). The entries
+    /// are opaque to the owner, which clears the list when the level is over.
+    /// </summary>
+    public static List<object>? SharedLightmapAtlases { get; set; }
+
+    /// <summary>
+    /// Main-thread only, and false by default (the native game never sets it). True while an owner builds one
+    /// PIECE of a map that it will move about as an entity (legacy compatibility mode's doors and platforms,
+    /// each built from a view of the level in which only that piece's faces have geometry): the work that
+    /// belongs to a level as a whole is left out - the occluder, the visibility clusters and their culler
+    /// (the owner removed both nodes again anyway), the audit of every texture the level names, and the
+    /// summary line. Measured on stormkeep, a door cost 12 to 53 ms with them and the shared atlas, most of it
+    /// the per-level work done again for every door.
+    /// </summary>
+    public static bool PieceBuild { get; set; }
+
     private static LightmapAtlas? BuildLightmapAtlas(BspData bsp, AssetSystem assets, string mapName,
         bool deluxe, IEnumerable<SurfaceKey> usedKeys)
     {
@@ -859,6 +884,20 @@ public static class MapLoader
         if (pages.Count == 0)
             return null;
         pages.Sort();
+
+        if (SharedLightmapAtlases is { } shared)
+        {
+            foreach (object candidate in shared)
+            {
+                if (candidate is not LightmapAtlas held)
+                    continue;
+                bool covers = true;
+                foreach (int k in pages)
+                    if (!held.PageUv.ContainsKey(k)) { covers = false; break; }
+                if (covers)
+                    return held;
+            }
+        }
 
         // Load every page as a CPU Image (internal lump bytes or the external lm_NNNN file).
         var pageImages = new Dictionary<int, Image>();
@@ -923,6 +962,7 @@ public static class MapLoader
         atlas.Lightmap = ImageTexture.CreateFromImage(atlasImg);
         if (deluxeImg is not null)
             atlas.Deluxe = ImageTexture.CreateFromImage(deluxeImg);
+        SharedLightmapAtlases?.Add(atlas);
         return atlas;
     }
 

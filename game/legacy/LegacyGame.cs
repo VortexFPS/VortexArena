@@ -10,6 +10,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using Godot;
 using VortexArena.Common.Config;
 using VortexArena.Engine.Console;
@@ -465,7 +466,7 @@ public partial class LegacyGame : Node
             string line = _serverPrintLine.ToString();
             _serverPrintLine.Clear();
             if (line.Length == 0) continue;
-            ConsolePrint?.Invoke(line);
+            PostConsoleLine(ConsolePrint, line);
             if (_serverPrintsLogged++ < MaxLoggedPrints && (Headless || !string.IsNullOrEmpty(s_shotDirectory))) Log("server print: " + Printable(line, 300));
         }
     }
@@ -773,6 +774,51 @@ public partial class LegacyGame : Node
         if (_inGame) _clientMeter.Add(System.Diagnostics.Stopwatch.GetElapsedTime(began).TotalMilliseconds);
     }
 
+    // A line for the console is handed over on a pool thread, in order. The console's own work is small, but
+    // the line also goes to the process's standard output, and a write there is not always quick: with the
+    // output redirected to a file, the first line after a few quiet seconds held the frame for 14 ms
+    // (measured: every kill message was a dropped frame). The log facade the console prints through is
+    // made for calls from any thread.
+    private static readonly System.Collections.Concurrent.ConcurrentQueue<(Action<string> Sink, string Line)> s_consoleLines = new();
+    private static int s_consolePumping;
+
+    private static void PostConsoleLine(Action<string>? sink, string line)
+    {
+        if (sink is null) return;
+        s_consoleLines.Enqueue((sink, line));
+        if (Interlocked.CompareExchange(ref s_consolePumping, 1, 0) == 0) System.Threading.Tasks.Task.Run(PumpConsoleLines);
+    }
+
+    private static void PumpConsoleLines()
+    {
+        do
+        {
+            while (s_consoleLines.TryDequeue(out (Action<string> Sink, string Line) item))
+            {
+                try { item.Sink(item.Line); }
+                catch (Exception e) when (e is not OutOfMemoryException) { }
+            }
+            Volatile.Write(ref s_consolePumping, 0);
+        }
+        while (!s_consoleLines.IsEmpty && Interlocked.CompareExchange(ref s_consolePumping, 1, 0) == 0);
+    }
+
+    private bool _traceInstalled;
+    private int _tracedCommand = -1;
+    private long _tracedSince;
+
+    private void CloseTracedCommand(int next)
+    {
+        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+        QcProfile? profile = _session?.Host?.Vm.Profile;
+        if (_tracedCommand >= 0 && _inGame && System.Diagnostics.Stopwatch.GetElapsedTime(_tracedSince, now).TotalMilliseconds >= 2)
+            LegacyPerfLog.Event("server command " + ((VortexArena.Legacy.Protocol.Svc)_tracedCommand).ToString()
+                + (profile is null ? "" : string.Create(CultureInfo.InvariantCulture, $" (longest builtin call #{profile.WorstBuiltin}: {QcProfile.ToMilliseconds(profile.WorstTicks):0.00} ms)")), _tracedSince);
+        profile?.ResetWorst();
+        _tracedCommand = next;
+        _tracedSince = now;
+    }
+
     // What a run is measured by: the whole frame as Godot reports it (delta), and this node's own share of it.
     private struct Meter
     {
@@ -800,7 +846,29 @@ public partial class LegacyGame : Node
             return sorted[Math.Clamp((int)(p * (n - 1)), 0, n - 1)];
         }
         public void Reset() { _count = 0; Total = 0; Sum = Max = 0; }
+
+        /// <summary>Copies the samples kept (at most 4096) into <paramref name="into"/>; returns how many.</summary>
+        public readonly int CopyTo(float[] into)
+        {
+            int n = Math.Min(Math.Min(_count, 4096), into.Length);
+            if (n > 0 && _samples is not null) Array.Copy(_samples, into, n);
+            return n;
+        }
+
+        /// <summary>A percentile of <paramref name="n"/> samples, which are sorted in place.</summary>
+        public static double PercentileOf(float[] samples, int n, double p, bool sort)
+        {
+            if (n <= 0) return 0;
+            if (sort) Array.Sort(samples, 0, n);
+            return samples[Math.Clamp((int)(p * (n - 1)), 0, n - 1)];
+        }
     }
+
+    // The status line's percentiles and the process's working set are worked out on a pool thread: sorting two
+    // times 4096 samples twice over and asking the operating system about the process took the frame that did
+    // it some 40 ms, once a second. The frame only copies the samples.
+    private readonly float[] _statusFrames = new float[4096], _statusClient = new float[4096];
+    private int _statusBusy;
     private Meter _frameMeter, _clientMeter;
 
     private void Frame(LegacyClientSession session, ILegacyTransport transport, GodotLegacyPresentation presentation, double delta)
@@ -808,9 +876,17 @@ public partial class LegacyGame : Node
         double now = Now;
         // --- the clock runs on, then the network is read (and may correct the clock) ---
         session.BeginFrame(now);
+        if (LegacyPerfLog.Enabled && !_traceInstalled)
+        {
+            // Developer aid (VORTEX_LEGACY_PERFLOG): a server command that took over two milliseconds to act on
+            // is named in the perf log - what a slow "receive" was.
+            _traceInstalled = true;
+            session.Client.Parser.CommandTrace = (svc, _) => CloseTracedCommand(svc);
+        }
         for (int i = 0; i < MaxDatagramsPerFrame && transport.TryReceive(out byte[] datagram); i++)
         {
             session.Receive(datagram, now);
+            if (_traceInstalled) CloseTracedCommand(-1);
             if (_shutDown || _failed) return;
         }
         // Loading a level inside Receive can take seconds; everything after it uses the time it is now.
@@ -1198,6 +1274,8 @@ public partial class LegacyGame : Node
             && (_presentation is not { } settling || settling.SceneSettled || now - _enteredAt > MaxSettleSeconds))
         {
             if (_presentation is { } shown) shown.Loading = false;
+            CollectAfterLoad();
+            now = Now;   // the collection is part of the load
             LegacyPerfLog.Mark("loading screen down");
             Log(string.Create(CultureInfo.InvariantCulture, $"the loading screen came down {now - _startedAt:0.00} s after the session was started ({now - _enteredAt:0.00} s after entering the game)"));
             _loadingDismissed = true;
@@ -1206,6 +1284,37 @@ public partial class LegacyGame : Node
             DismissLoadingScreen?.Invoke();
         }
         return true;
+    }
+
+    // A level's load leaves most of a gigabyte of garbage behind it (file buffers, decoded images, the parsers'
+    // scratch arrays), much of it in large objects, which the collector does not compact on its own and is in no
+    // hurry to collect at all: without this the managed heap in play was two to four times what the level keeps.
+    // One blocking, compacting collection while the loading screen still covers the pause.
+    // VORTEX_LEGACY_LOADGC: 0 none, 1 blocking and compacting, 2 a background collection, 3 (default) blocking,
+    // compacting and "aggressive", which is the one that also hands the emptied heap back to the operating
+    // system - measured in play on stormkeep: heap committed 2179 MB with none, 1529 with 1, 1581 with 2, 785 with 3,
+    // for a pause of half a second (0.48 s for 1, 0.56 s for 3).
+    private static readonly int s_loadCollect = int.TryParse(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_LOADGC"), out int loadCollect) ? loadCollect : 3;
+
+    private static void CollectAfterLoad()
+    {
+        if (s_loadCollect <= 0) return;
+        long began = LegacyPerfLog.Stamp();
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        long before = GC.GetTotalMemory(false);
+        if (s_loadCollect == 2) GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, blocking: false);
+        else if (s_loadCollect == 3)
+        {
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        }
+        else
+        {
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        }
+        LegacyPerfLog.Event("collection after the load", began);
+        Log(string.Create(CultureInfo.InvariantCulture, $"collection after the load: managed {before / (1024 * 1024)} MB -> {GC.GetTotalMemory(false) / (1024 * 1024)} MB in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms"));
     }
 
     // Developer aid, with VORTEX_LEGACY_PERFLOG: VORTEX_LEGACY_QCPROFILE times every builtin the client program
@@ -1429,7 +1538,7 @@ public partial class LegacyGame : Node
                 _chatLines.Add((Now, line[1..]));
                 line = line[1..];
             }
-            ConsolePrint?.Invoke(line);
+            PostConsoleLine(ConsolePrint, line);
             if (Headless && _printsLogged++ < MaxLoggedPrints) Log("print: " + Printable(line, 300));
         }
     }
@@ -1453,17 +1562,33 @@ public partial class LegacyGame : Node
         if (!_inGame) return;
         if (!Headless && (PlayerCvars is not { } player || player.GetFloat(LegacyData.StatusCvar) == 0)) return;
         CsqcHost? host = session.Host;
-        if (_server is { } server)
+        if (_server is { } server && Interlocked.CompareExchange(ref _statusBusy, 1, 0) == 0)
         {
             LegacyLocalServerStats stats = server.TakeStats();
-            Log(string.Create(CultureInfo.InvariantCulture,
-                $"t+{now - _inGameAt:0}: timing: frame mean {_frameMeter.Mean:0.00} ms p50 {_frameMeter.Percentile(0.5):0.00} p99 {_frameMeter.Percentile(0.99):0.00} max {_frameMeter.Max:0.0}, " +
-                $"legacy (client) mean {_clientMeter.Mean:0.00} ms p99 {_clientMeter.Percentile(0.99):0.00} max {_clientMeter.Max:0.0}, " +
-                $"legacy-server {(server.Threaded ? "(own thread)" : "(main thread)")} mean {stats.MeanFrameMilliseconds:0.00} ms/frame max {stats.LongestFrameMilliseconds:0.0}, {stats.TicksPerSecond:0.0} ticks/s, " +
-                $"players {server.ActiveClients}, server faults {server.Faults}, map {server.Map} ({server.GameType}), loopback sent {_transport?.Sent ?? 0} received {_transport?.Received ?? 0}, " +
-                $"working set {System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024)} MB"));
+            int frames = _frameMeter.CopyTo(_statusFrames), client = _clientMeter.CopyTo(_statusClient);
+            double frameMean = _frameMeter.Mean, frameMax = _frameMeter.Max, clientMean = _clientMeter.Mean, clientMax = _clientMeter.Max, at = now - _inGameAt;
+            string threaded = server.Threaded ? "(own thread)" : "(main thread)", map = server.Map, gameType = server.GameType;
+            long players = server.ActiveClients, faults = server.Faults;
+            long sent = _transport?.Sent ?? 0, received = _transport?.Received ?? 0;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    double p50 = Meter.PercentileOf(_statusFrames, frames, 0.5, sort: true), p99 = Meter.PercentileOf(_statusFrames, frames, 0.99, sort: false);
+                    double clientP99 = Meter.PercentileOf(_statusClient, client, 0.99, sort: true);
+                    long workingSet;
+                    using (System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess()) workingSet = process.WorkingSet64;
+                    Log(string.Create(CultureInfo.InvariantCulture,
+                        $"t+{at:0}: timing: frame mean {frameMean:0.00} ms p50 {p50:0.00} p99 {p99:0.00} max {frameMax:0.0}, " +
+                        $"legacy (client) mean {clientMean:0.00} ms p99 {clientP99:0.00} max {clientMax:0.0}, " +
+                        $"legacy-server {threaded} mean {stats.MeanFrameMilliseconds:0.00} ms/frame max {stats.LongestFrameMilliseconds:0.0}, {stats.TicksPerSecond:0.0} ticks/s, " +
+                        $"players {players}, server faults {faults}, map {map} ({gameType}), loopback sent {sent} received {received}, " +
+                        $"working set {workingSet / (1024 * 1024)} MB"));
+                }
+                finally { Volatile.Write(ref _statusBusy, 0); }
+            });
         }
-        Log(string.Create(CultureInfo.InvariantCulture,
+        string second = string.Create(CultureInfo.InvariantCulture,
             $"t+{now - _inGameAt:0}: signon {session.State.Signon}, entity frames {session.EntityFrames}, csqc frames {session.FramesDrawn} ({session.FramesFaulted} faulted), " +
             $"faults {host?.FaultCount ?? 0}, desyncs {host?.DesyncCount ?? 0}, undecoded {session.MessagesNotDecoded}, " +
             $"scene entities {presentation.LastSceneEntities} (submodels {presentation.SubmodelSubmissions} total, {presentation.SubmodelsBuilt} built in {presentation.SubmodelBuildSeconds:0.00} s), proxy nodes {presentation.ProxyNodes}, " +
@@ -1472,7 +1597,8 @@ public partial class LegacyGame : Node
             $"dynamic lights {presentation.LastDynamicLights}, extra views skipped {presentation.ExtraViewsSkipped}, polygons {presentation.PolygonsDrawn}, " +
             $"nodes {Performance.GetMonitor(Performance.Monitor.ObjectNodeCount):0}, objects {Performance.GetMonitor(Performance.Monitor.ObjectCount):0}, " +
             $"managed {GC.GetTotalMemory(false) / (1024 * 1024)} MB, native {OS.GetStaticMemoryUsage() / (1024 * 1024)} MB, " +
-            $"view '{presentation.View.Origin.X:0.0} {presentation.View.Origin.Y:0.0} {presentation.View.Origin.Z:0.0}' fovy {presentation.View.VerticalFovDegrees:0.0}"));
+            $"view '{presentation.View.Origin.X:0.0} {presentation.View.Origin.Y:0.0} {presentation.View.Origin.Z:0.0}' fovy {presentation.View.VerticalFovDegrees:0.0}");
+        System.Threading.Tasks.Task.Run(() => Log(second));
     }
 
     // =====================================================================================================
@@ -1578,6 +1704,9 @@ public partial class LegacyGame : Node
                 tree.CreateTimer(0.5, processAlways: true, processInPhysics: false, ignoreTimeScale: true).Timeout += Pass;
                 return;
             }
+            // (The large object heap is compacted only when asked: without this line a level's freed arrays left
+            // it a third of a gigabyte of holes that stayed committed at the menu.)
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
             Log(string.Create(CultureInfo.InvariantCulture,
                 $"memory after the level was released (the last pass took {System.Diagnostics.Stopwatch.GetElapsedTime(began).TotalMilliseconds:0} ms): {LegacyData.MemoryReport()}"));

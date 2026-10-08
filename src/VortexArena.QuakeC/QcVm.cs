@@ -969,6 +969,22 @@ public sealed class QcProfile
         _calls[number]++;
         BuiltinTicks += ticks;
         BuiltinCalls++;
+        if (ticks > WorstTicks)
+        {
+            WorstTicks = ticks;
+            WorstBuiltin = number;
+        }
+    }
+
+    /// <summary>The longest single builtin call since <see cref="ResetWorst"/>: which builtin, and for how long.
+    /// For naming what a slow frame was (the totals above cannot).</summary>
+    public int WorstBuiltin { get; private set; }
+    public long WorstTicks { get; private set; }
+
+    public void ResetWorst()
+    {
+        WorstBuiltin = 0;
+        WorstTicks = 0;
     }
 
     /// <summary>Builtins by time spent, largest first: (number, calls, ticks).</summary>

@@ -174,6 +174,46 @@ public sealed class AssetSystem
     }
 
     /// <summary>
+    /// One line for a memory report: the resident textures' estimated GPU bytes grouped by the first
+    /// <paramref name="depth"/> directories of their path (the texture cache directory's own prefix dropped),
+    /// largest first. A diagnostic, like <see cref="VramCensus"/>; it changes nothing.
+    /// </summary>
+    public string TextureGroups(int depth = 2, int top = 14)
+    {
+        var groups = new Dictionary<string, (long Bytes, int Count)>(StringComparer.Ordinal);
+        long total = 0;
+        int count = 0;
+        string cachePrefix = Formats.Vfs.VirtualFileSystem.DdsCacheDir + "/";
+        lock (_textureCacheGate)
+        {
+            foreach (var kv in _textureCache)
+            {
+                if (kv.Value is not Texture2D t || !GodotObject.IsInstanceValid(t))
+                    continue;
+                long bytes = EstimateTextureBytes(t, out _);
+                string path = kv.Key.StartsWith(cachePrefix, StringComparison.OrdinalIgnoreCase) ? kv.Key[cachePrefix.Length..] : kv.Key;
+                int cut = -1;
+                for (int i = 0; i < depth; i++)
+                {
+                    int next = path.IndexOf('/', cut + 1);
+                    if (next < 0) break;
+                    cut = next;
+                }
+                string group = cut > 0 ? path[..cut] : "(root)";
+                groups.TryGetValue(group, out (long Bytes, int Count) agg);
+                groups[group] = (agg.Bytes + bytes, agg.Count + 1);
+                total += bytes;
+                count++;
+            }
+        }
+        var sb = new System.Text.StringBuilder();
+        sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"textures resident {count}, est {total / (1024.0 * 1024.0):F0} MB:");
+        foreach (var kv in groups.OrderByDescending(k => k.Value.Bytes).Take(top))
+            sb.Append(System.Globalization.CultureInfo.InvariantCulture, $" {kv.Key} {kv.Value.Bytes / (1024.0 * 1024.0):F0} MB x{kv.Value.Count};");
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Estimated GPU bytes for a cached texture (format bpp × pixels, ×4/3 for mips).
     ///
     /// <para>Reads format and mip-ness from <see cref="_texMeta"/> — recorded at upload — rather than from the

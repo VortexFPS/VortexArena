@@ -43,6 +43,7 @@ public sealed partial class ParticleSim
     public bool SpawnDirect(in DirectParticle d)
     {
         if (!CvBool(ParticleCvars.Particles)) return false;                                            // (702)
+        _spawnParticlesOn = true;   // NewParticle tests the value its caller read (see SpawnEffect); this caller just read it
         if ((uint)d.Type >= DirectTypeCount || (uint)d.Texture >= DirectMaxTextures) return false;       // (705)
         int stainTex = d.StainTexture >= DirectMaxTextures ? -1 : d.StainTexture;                      // (707)
         if (d.Type == 0) return true;                 // pt_dead: DP's slot stays "free" and is never drawn

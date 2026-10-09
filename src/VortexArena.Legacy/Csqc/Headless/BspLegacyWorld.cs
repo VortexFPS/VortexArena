@@ -158,8 +158,18 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
     public string? MapName { get; private set; }
     /// <summary>The parsed map, for whoever else needs it (surface queries, a renderer). Null without a map.</summary>
     public BspData? Bsp { get; private set; }
+    /// <summary>The parsed map when it is a Quake 1 format one (BSP 29, BSP2, 2PSB, Half-Life): then
+    /// <see cref="Bsp"/> is null, and so is every Quake 3 notion (brushes, patches, a light grid).</summary>
+    public Q1BspData? Q1Bsp { get; private set; }
+    /// <summary>The clipping hulls of a Quake 1 format map: what its traces go through. Null otherwise.</summary>
+    public Q1HullCollision? Hulls { get; private set; }
+    /// <summary>True when a map of either kind is loaded.</summary>
+    public bool HasMap => Bsp is not null || Q1Bsp is not null;
     /// <summary>Why the last <see cref="LoadMap"/> failed, or null.</summary>
     public string? LoadError { get; private set; }
+    /// <summary>True when the last <see cref="LoadMap"/> failed on a file that IS in the game data: a map of a
+    /// kind this client cannot read, or a damaged one. (A missing map is the other failure.)</summary>
+    public bool LoadFailedOnPresentFile { get; private set; }
     /// <summary>The static collision world, for a caller that traces on its own account.</summary>
     public CollisionWorld? Collision { get; private set; }
     /// <summary>Traces that ran into the <see cref="MaxTouchedEdicts"/> bound.</summary>
@@ -187,6 +197,11 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         try
         {
             byte[] file = _files.ReadBytes(worldModel);
+            if (Q1BspReader.IsQ1Format(file))
+            {
+                UseQ1Map(worldModel, ReadQ1(_files, worldModel, file));
+                return true;
+            }
             BspData bsp = BspReader.Read(file);
             UseMap(worldModel, bsp, BuildCollision(bsp, file));
             return true;
@@ -196,8 +211,57 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
             // A map from a server's download directory is as untrusted as anything else it sends.
             Unload();
             LoadError = $"map \"{worldModel}\" could not be loaded: {e.Message}";
+            LoadFailedOnPresentFile = true;
             return false;
         }
+    }
+
+    /// <summary>
+    /// A Quake 1 format map with the two files DarkPlaces reads beside it (Mod_Q1BSP_LoadLighting): "maps/x.lit"
+    /// for coloured light and "maps/x.dlit" for light directions. Either is used only if it fits the map.
+    /// </summary>
+    public static Q1BspData ReadQ1(VirtualFileSystem files, string worldModel, byte[] file)
+    {
+        string stem = worldModel.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase) ? worldModel[..^4] : worldModel;
+        byte[] lit = Array.Empty<byte>(), dlit = Array.Empty<byte>();
+        try
+        {
+            if (files.Exists(stem + ".lit")) lit = files.ReadBytes(stem + ".lit");
+            if (lit.Length > 0 && files.Exists(stem + ".dlit")) dlit = files.ReadBytes(stem + ".dlit");
+        }
+        catch (IOException) { /* white light */ }
+        return Q1BspReader.Read(file, lit, dlit);
+    }
+
+    /// <summary>
+    /// Takes a Quake 1 format map that is already parsed, in place of <see cref="LoadMap"/>: its clipping
+    /// hulls are the collision (there is nothing to build), its node tree and visibility rows answer checkpvs.
+    /// </summary>
+    public void UseQ1Map(string worldModel, Q1BspData q1)
+    {
+        ArgumentNullException.ThrowIfNull(q1);
+        Unload();
+        Q1Bsp = q1;
+        Hulls = new Q1HullCollision(q1);
+        CollisionWorld world = new() { Hulls = Hulls };
+        world.BuildGrid();
+        Collision = world;
+        // "*N": bounds only - the trace goes through the hulls (TryGetEntityHullModel), there are no brushes
+        for (int i = 1; i < q1.Models.Length; i++)
+        {
+            string name = "*" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            _submodels[name] = new BspCollisionBuilder.Submodel(name, q1.Models[i].Mins, q1.Models[i].Maxs, Array.Empty<Brush>());
+        }
+        _pvs = new BspPvs(Q1BspTreeView.Create(q1));
+        _worldMins = q1.Models[0].Mins;
+        _worldMaxs = q1.Models[0].Maxs;
+        _worldTrace = new TraceService(world) { DarkPlacesArithmetic = true };
+        _trace = new TraceService(world, this) { DarkPlacesArithmetic = true };
+        CollisionWorld empty = new();
+        empty.BuildGrid();
+        _entityTrace = new TraceService(empty, this) { DarkPlacesArithmetic = true };
+        MapName = worldModel;
+        SetupGrid();
     }
 
     /// <summary>
@@ -281,8 +345,11 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
     {
         MapName = null;
         Bsp = null;
+        Q1Bsp = null;
+        Hulls = null;
         Collision = null;
         LoadError = null;
+        LoadFailedOnPresentFile = false;
         _worldTrace = _trace = _entityTrace = null;
         _models.Clear();
         _pvs = null;
@@ -331,7 +398,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
 
     /// <summary>VM_CL_droptofloor: "if (cl.worldmodel->brush.isq3bsp) end[2] -= 4096". Only Quake 3
     /// maps are read here; the answer for no map at all is the same, since nothing will be hit.</summary>
-    public float DropToFloorDistance => 4096;
+    public float DropToFloorDistance => Hulls is not null ? 256 : 4096; // "else end[2] -= 256; // Quake, QuakeWorld"
 
     // ---- ILegacyWorld: traces ------------------------------------------------------------------------
 
@@ -351,8 +418,8 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         if (!(realLength > 0) || !float.IsFinite(realLength)) return TraceUnextended(start, mins, maxs, end, moveType, ignoreEdict, hitContentsMask, isLine);
         TraceExtension extension = TraceExtension.Prepare(realStart, realEnd, TraceExtend);
         LegacyTrace trace = TraceUnextended(start, mins, maxs, Q(extension.ExtendEnd), moveType, ignoreEdict, hitContentsMask, isLine);
-        // Collision_ClipExtendFinish
-        double fraction = extension.FinishFraction(trace.Fraction, out bool cleared);
+        // Collision_ClipExtendFinish (on the fraction as the sweep computed it: a Quake 1 format map's is a double)
+        double fraction = Hulls is not null ? extension.FinishFraction(_lastFraction, out bool cleared) : extension.FinishFraction(trace.Fraction, out cleared);
         if (cleared)
         {
             trace.Entity = 0;
@@ -368,6 +435,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
     }
 
     private const float TraceExtend = 1;
+    private double _lastFraction = 1; // TraceService.LastFraction of the sweep TraceUnextended last ran
 
     // One trace, as asked. (Until the collision world found its candidates the way DarkPlaces does - by
     // walking a hierarchy along the move - a long move was cut into 384-unit pieces here, because the
@@ -380,6 +448,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         // (model_brush.c Mod_Q1BSP_RecursiveHullCheck) writes them, and Collision_CombineTraces
         // copies inwater alone. So both stay false, which is what the program sees in DarkPlaces.
         LegacyTrace result = new() { Fraction = 1, EndPos = end };
+        _lastFraction = 1;
         if (_trace is null || _worldTrace is null) return result;
 
         Vector3 vStart = V(start), vEnd = V(end), vMins = V(mins), vMaxs = V(maxs);
@@ -409,6 +478,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         {
             hit = worldService.Trace(vStart, vMins, vMaxs, vEnd, MoveFilter.WorldOnly, _passMirror);
             startContents = worldService.LastStartContents;
+            _lastFraction = worldService.LastFraction;
         }
         else if (moveType == MoveMissile)
         {
@@ -419,6 +489,8 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
             hit = service.Trace(vStart, vMins, vMaxs, vEnd, MoveFilter.Normal, _passMirror);
             hitEdict = EdictOf(hit.Ent);
             startContents = service.LastStartContents;
+            _lastFraction = service.LastFraction;
+            bool inOpen = hit.InOpen, inWater = hit.InWater;
             // (Always run: the first pass looked for candidates along the thin box, so it cannot say
             // whether a monster lies within the margin. Over an empty world this costs one grid query.)
             if (_entityTrace is not null)
@@ -434,9 +506,14 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
                 {
                     hit = monster;
                     hitEdict = EdictOf(monster.Ent);
+                    _lastFraction = _entityTrace.LastFraction;
                 }
                 hit.StartSolid = startSolid;
                 hit.AllSolid = allSolid;
+                // inopen is the world's; inwater is anyone's (Collision_CombineTraces)
+                inWater |= monster.InWater && Hulls is not null;
+                hit.InOpen = inOpen;
+                hit.InWater = inWater;
             }
         }
         else
@@ -446,9 +523,16 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
             hit = service.Trace(vStart, vMins, vMaxs, vEnd, filter, _passMirror);
             hitEdict = EdictOf(hit.Ent);
             startContents = service.LastStartContents;
+            _lastFraction = service.LastFraction;
         }
         // trace.startsupercontents: the contents of everything the box starts inside, whatever the mask
         result.StartContents = ContentsFromEngine(startContents);
+        if (Hulls is not null)
+        {
+            // Mod_Q1BSP_RecursiveHullCheck is what writes these two
+            result.InOpen = hit.InOpen;
+            result.InWater = hit.InWater;
+        }
 
         result.Fraction = hit.Fraction;
         result.EndPos = Q(hit.EndPos);
@@ -694,6 +778,28 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
         localBrushes = submodel.Brushes;
         toWorld = EntityMatrix.FromQuakeEntity(e.Origin, e.Angles);
         return true;
+    }
+
+    // The same for a model of a Quake 1 format map: its clipping hulls.
+    bool TraceService.IEntityProvider.TryGetEntityHullModel(Entity e, out Q1HullCollision? hulls, out int model, out EntityMatrix toWorld)
+    {
+        hulls = null;
+        model = 0;
+        toWorld = EntityMatrix.Identity;
+        if (Hulls is null || _host is not { } host || e.Solid != Solid.Bsp) return false;
+        if (!Q1SubmodelIndex(host.ModelNameOf(e.Index), Hulls.ModelCount, out model)) return false;
+        hulls = Hulls;
+        toWorld = EntityMatrix.FromQuakeEntity(e.Origin, e.Angles);
+        return true;
+    }
+
+    /// <summary>"*N" as a model number of the map, when N is one of its submodels.</summary>
+    public static bool Q1SubmodelIndex(string? name, int modelCount, out int index)
+    {
+        index = 0;
+        return name is { Length: >= 2 and <= 8 } && name[0] == '*'
+            && int.TryParse(name.AsSpan(1), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out index)
+            && index >= 1 && index < modelCount;
     }
 
     // CL_TraceBox: "if (solid == SOLID_BSP || type == MOVE_HITMODEL) model = CL_GetModelFromEdict(touch)"

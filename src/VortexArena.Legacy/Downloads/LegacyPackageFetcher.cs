@@ -195,7 +195,7 @@ public sealed class HttpPackageFetcher : ILegacyPackageFetcher
         return null;
     }
 
-    private static async ValueTask<Stream> Connect(DnsEndPoint endPoint, bool allowPrivate, CancellationToken cancel)
+    internal static async ValueTask<Stream> Connect(DnsEndPoint endPoint, bool allowPrivate, CancellationToken cancel)
     {
         // Resolved here and connected to by number, so the address that was checked is the address that is used.
         IPAddress[] addresses = IPAddress.TryParse(endPoint.Host, out IPAddress? literal)

@@ -112,6 +112,7 @@ public partial class LegacyGame : Node
     private CvarService? _cvars;
     private ConfigInterpreter? _interpreter;
     private LegacyClientOptions? _options;
+    private VortexArena.Legacy.Downloads.LegacyUriRequests? _uriRequests;
     private LegacyClientSession? _session;
     private ILegacyTransport? _transport;
     // The server of a local game; null on a remote one. Owned here: it starts with the session and ends with it.
@@ -297,10 +298,15 @@ public partial class LegacyGame : Node
         };
         bool forceDownload = PlayerCvars is { } player && player.GetFloat(LegacyData.ForceDownloadCvar) != 0;
         string dataDirectory = DataDirectory;
+        // HTTP for the client program (uri_get), for a server somebody else runs and for a local game; a
+        // recording has no use for it. Every limit comes from the player's own settings, and the session owns it.
+        _uriRequests = string.IsNullOrEmpty(DemoPath)
+            ? new VortexArena.Legacy.Downloads.LegacyUriRequests(LegacyData.UriLimits(PlayerCvars)) { Print = text => Log(Printable(text.TrimEnd(), 300)) }
+            : null;
         _options = new LegacyClientOptions
         {
             AlwaysDownloadProgram = forceDownload,
-            Host = new CsqcHostOptions { KeyBinding = KeyBinding, FindKeysForCommand = FindKeysForCommand, CenterPrint = text => ConsolePrint?.Invoke(text) },
+            Host = new CsqcHostOptions { KeyBinding = KeyBinding, FindKeysForCommand = FindKeysForCommand, CenterPrint = text => ConsolePrint?.Invoke(text), UriRequests = _uriRequests },
             ProgramCache = (name, size, crc) => LegacyData.ReadCachedProgram(dataDirectory, name, size, crc),
             ProgramDownloaded = LegacyData.WriteCachedProgram,
         };
@@ -405,6 +411,18 @@ public partial class LegacyGame : Node
             }
         }
         _transport = new DpUdpTransport(new IPEndPoint(ip, port));
+        if (_uriRequests is { } uri)
+        {
+            // As for package downloads: "http:///x" means the game server, and a request may go to this
+            // machine or a private network only if the game server is at one.
+            uri.ServerHost = ip.ToString();
+            uri.ServerPort = port;
+            uri.ServerIsPrivate = VortexArena.Legacy.Downloads.LegacyPackageDownloads.IsPrivateServer(ip);
+            VortexArena.Legacy.Downloads.LegacyUriLimits u = uri.Limits;
+            Log(string.Create(CultureInfo.InvariantCulture, $"client program HTTP (uri_get): {(u.Enabled ? "on" : "OFF (legacy_uri_get_enabled 0)")}, replies of at most {u.MaxResponseBytes} bytes, posts of at most {u.MaxPostBytes >> 10} KiB, ") +
+                string.Create(CultureInfo.InvariantCulture, $"{u.MaxConcurrent} at once, {u.MaxPending} unanswered, {u.Burst} in a burst then one every {u.RefillSeconds:0.#} s, {u.MaxRedirects} redirects, {u.TotalTimeoutSeconds:0} s a request, ") +
+                $"private addresses {(uri.ServerIsPrivate ? "allowed (the server is at one)" : "refused")}");
+        }
         if (_options.Packages is { } downloads)
         {
             // "http:///x.pk3" means "on the game server"; a download may be on a private network only if the server is.
@@ -1572,6 +1590,13 @@ public partial class LegacyGame : Node
         if (session.ProgramError is { } programError)
         {
             Fail("The server's game code could not be started: " + Printable(programError, 300));
+            return false;
+        }
+        if (session.WorldError is { } worldError)
+        {
+            // The map is there and cannot be used (a format this client does not read, a damaged file).
+            // DarkPlaces would print the loader's error and go on into an empty world. This client leaves.
+            Fail("The map could not be loaded: " + Printable(worldError, 400));
             return false;
         }
         if (client.Signon.MissingWorld is { } missingWorld)

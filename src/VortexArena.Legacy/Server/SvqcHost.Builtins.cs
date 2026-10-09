@@ -175,8 +175,8 @@ public sealed partial class SvqcHost
         Vm.GlobalFloat(G.TraceStartSolid) = trace.StartSolid ? 1 : 0;
         Vm.GlobalFloat(G.TraceFraction) = trace.Fraction;
         // Neither is ever set on a Quake 3 map: only the Quake 1 hull code writes them.
-        Vm.GlobalFloat(G.TraceInWater) = 0;
-        Vm.GlobalFloat(G.TraceInOpen) = 0;
+        Vm.GlobalFloat(G.TraceInWater) = trace.InWater ? 1 : 0;
+        Vm.GlobalFloat(G.TraceInOpen) = trace.InOpen ? 1 : 0;
         Vm.GlobalVector(G.TraceEndPos) = trace.EndPos;
         Vm.GlobalVector(G.TracePlaneNormal) = trace.PlaneNormal;
         Vm.GlobalFloat(G.TracePlaneDist) = trace.PlaneDist;

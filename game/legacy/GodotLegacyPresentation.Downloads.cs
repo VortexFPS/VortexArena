@@ -17,7 +17,7 @@ public sealed partial class GodotLegacyPresentation
     public void GameDataChanged() => _dataChanged = true;
 
     /// <summary>True when the level's map is loaded: there is a world to draw and to collide with.</summary>
-    public bool WorldLoaded => _levelBsp is not null && _mapRoot is not null;
+    public bool WorldLoaded => (_levelBsp is not null || _levelQ1 is not null) && _mapRoot is not null;
 
     // The tail of BeginLevel: the map's files and the level's precache lists.
     private void LoadLevelFiles(CsqcClientState state)
@@ -26,6 +26,7 @@ public sealed partial class GodotLegacyPresentation
         // The name is the server's. It has to be a plain path inside the game data and nothing else.
         if (!LegacyQcHost.IsSafePath(map) || !map.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase) || !_vfs.Exists(map))
         {
+            _worldError = null;
             Map.LoadMap(map);   // records why (LoadError) and leaves an empty world
             _note($"map \"{map}\" is not in the Xonotic data: the world is empty ({Map.LoadError})");
             return;

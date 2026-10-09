@@ -76,9 +76,19 @@ public sealed class CsqcHostOptions
     /// key, which gives the same answer (1.3 ms a call; a HUD that shows ten key hints asked ten times in a frame).</summary>
     public CsqcFindKeys? FindKeysForCommand { get; init; }
 
-    /// <summary>The uri_get builtin (#513): (url, id) to "request started". Null: no HTTP, as when
-    /// DarkPlaces runs without libcurl.</summary>
+    /// <summary>The uri_get builtin (#513) for an owner with an HTTP client of its own: (url, id) to
+    /// "request started", GET only. Used when <see cref="UriRequests"/> is null; the extension is then not
+    /// advertised. Null with that null too: no HTTP, as when DarkPlaces runs without libcurl.</summary>
     public Func<string, int, bool>? UriGet { get; init; }
+
+    /// <summary>
+    /// HTTP for the program (libcurl.c as prvm_cmds.c VM_uri_get uses it): GET and POST requests with the
+    /// outcome delivered to URI_Get_Callback. While it is <see cref="VortexArena.Legacy.Downloads.LegacyUriRequests.Available"/>
+    /// when the program is loaded, checkextension answers yes to DP_QC_URI_GET and DP_QC_URI_POST. The owner
+    /// calls <see cref="CsqcHost.DeliverUriReplies"/> once a frame; the program's requests are cancelled when
+    /// it is unloaded. Null: see <see cref="UriGet"/>.
+    /// </summary>
+    public VortexArena.Legacy.Downloads.LegacyUriRequests? UriRequests { get; init; }
 
     /// <summary>Seed for the program's random() and randomvec(). Null (the default): unseeded, as in play.
     /// A measuring or comparing run sets it so that two runs of one build do the same thing.</summary>
@@ -123,7 +133,8 @@ public sealed partial class CsqcHost : IDisposable
     private readonly Dictionary<string, (bool Exists, QcVector Mins, QcVector Maxs)> _modelBounds = new(StringComparer.Ordinal);
 
     private readonly int _fnInit, _fnShutdown, _fnUpdateView, _fnInputEvent, _fnConsoleCommand, _fnParseStuffCmd,
-        _fnParsePrint, _fnParseCenterPrint, _fnParseTempEntity, _fnEntUpdate, _fnEntRemove, _fnEntSpawn, _fnGameCommand;
+        _fnParsePrint, _fnParseCenterPrint, _fnParseTempEntity, _fnEntUpdate, _fnEntRemove, _fnEntSpawn, _fnGameCommand, _fnUriGetCallback;
+    private readonly QcStringBuiltins _strings;
 
     private string _printBuffer = "";
     private DpMessageReader? _message;
@@ -175,6 +186,9 @@ public sealed partial class CsqcHost : IDisposable
     /// <summary>Builtins the program called that nothing implements: (number, name) to call count.
     /// Each such call returned 0.</summary>
     public Dictionary<(int Number, string Name), long> UnimplementedBuiltins { get; } = new();
+
+    /// <summary>Every extension name the program has passed to checkextension, with the answer it got.</summary>
+    public IReadOnlyDictionary<string, bool> ExtensionChecks => _core.ExtensionAnswers;
 
     /// <summary>Network reads made while no message was being parsed. They return -1, as in DarkPlaces.</summary>
     public long ReadsOutsideMessage { get; internal set; }
@@ -247,12 +261,17 @@ public sealed partial class CsqcHost : IDisposable
         _fnEntRemove = Vm.FindFunction("CSQC_Ent_Remove");
         _fnEntSpawn = Vm.FindFunction("CSQC_Ent_Spawn");
         _fnGameCommand = Vm.FindFunction("GameCommand");
+        _fnUriGetCallback = Vm.FindFunction("URI_Get_Callback");
 
         // Engine fields first: they can only be appended while the world is the only entity.
         Fields = new CsqcFieldOffsets(Vm);
         Globals = new CsqcGlobalOffsets(Vm);
 
-        _core = new QcCoreBuiltins(Vm, services, new HashSet<string>(CsqcExtensions.All, StringComparer.OrdinalIgnoreCase))
+        HashSet<string> extensions = new(CsqcExtensions.All, StringComparer.OrdinalIgnoreCase);
+        // prvm_cmds.c checkextension: "special shreck for libcurl ... return Curl_Available()".
+        if (_options.UriRequests is { Available: true })
+            foreach (string name in CsqcExtensions.Http) extensions.Add(name);
+        _core = new QcCoreBuiltins(Vm, services, extensions)
         {
             ReservedEdicts = 0,
             EdictFreeing = UnlinkEdict,
@@ -263,8 +282,8 @@ public sealed partial class CsqcHost : IDisposable
         if (_options.RandomSeed is int seed) _core.Random = new Random(seed);
         if (_options.DirtyTime is not null) _core.DirtyTime = _options.DirtyTime;
         _core.Register();
-        QcStringBuiltins strings = new(Vm, services) { OpenFile = _core.FileStream };
-        strings.Register();
+        _strings = new QcStringBuiltins(Vm, services) { OpenFile = _core.FileStream };
+        _strings.Register();
         Builtins = new CsqcBuiltins(this, _core);
         Builtins.Register();
         Vm.UnknownBuiltin = (_, number, name) =>
@@ -518,6 +537,8 @@ public sealed partial class CsqcHost : IDisposable
         _disposed = true;
         Services.CvarChanged -= OnCvarChanged;
         if (ReferenceEquals(Console.Host, this)) Console.Host = null;
+        // "curl reply came too late... so just drop it": nothing a program started outlives it.
+        _options.UriRequests?.CancelAll();
         _core.Dispose();
     }
 
@@ -655,7 +676,48 @@ public sealed partial class CsqcHost : IDisposable
     internal string? KeyBinding(int key, int bindMap) => _options.KeyBinding?.Invoke(key, bindMap);
     internal bool HasKeyBindings => _options.KeyBinding is not null;
     internal CsqcFindKeys? FindKeysForCommand => _options.FindKeysForCommand;
-    internal bool UriGet(string url, int id) => _options.UriGet?.Invoke(url, id) ?? false;
+    internal int UriGetCallbackFunction => _fnUriGetCallback;
+
+    // Curl_Begin_ToMemory_POST: true if the request was taken and URI_Get_Callback will hear of it.
+    internal bool UriBegin(string url, float id, string? postContentType, byte[]? postBody)
+    {
+        if (_options.UriRequests is { } requests) return requests.Begin(url, id, postContentType, postBody);
+        return postContentType is null && (_options.UriGet?.Invoke(url, QcVm.FloatToInt(id)) ?? false);
+    }
+
+    // The "implode" of VM_uri_get: a string buffer's strings joined by the separator, or null if there is no such buffer.
+    internal string? ImplodeStringBuffer(float handle, string separator, int maxLength) => _strings.Implode(handle, separator, maxLength);
+
+    /// <summary>
+    /// uri_to_string_callback: the outcome of a uri_get the program started. URI_Get_Callback(id, status,
+    /// data) with the status DarkPlaces passes: 0 with the reply, the HTTP status of a 4xx or 5xx reply, or
+    /// a negative libcurl.h CURLCBSTATUS (-1 failed, -2 aborted, -3 server error without a status, -4
+    /// unknown). Neither time nor self is set, as in the C. Must not be called while the program runs.
+    /// </summary>
+    public void UriGetCallback(float id, int status, string data)
+    {
+        if (_fnUriGetCallback == 0 || !CanRun) return;
+        // The reply came from a web server: cut to what a tempstring holds.
+        if (data.Length >= Vm.MaxStringLength) data = data[..(Vm.MaxStringLength - 1)];
+        int mark = Vm.TempStringMark;
+        try
+        {
+            Vm.SetArgFloat(0, id);
+            Vm.SetArgFloat(1, status);
+            Vm.SetArgInt(2, Vm.TempString(data));
+            Run(_fnUriGetCallback, 3, "URI_Get_Callback");
+        }
+        catch (QcRuntimeException e) { RecordFault("URI_Get_Callback", e.Message); }
+        Vm.ReleaseTempStrings(mark);
+    }
+
+    /// <summary>
+    /// Curl_Frame for the program's requests: every one that has finished is given to URI_Get_Callback.
+    /// For the owner of the frame to call once a frame, between the program's entry points. Returns how
+    /// many were delivered.
+    /// </summary>
+    public int DeliverUriReplies() =>
+        _options.UriRequests is { } requests && CanRun ? requests.Deliver(UriGetCallback) : 0;
 
     // ---- the message being parsed ------------------------------------------------------------------
 

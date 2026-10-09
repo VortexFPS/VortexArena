@@ -1,27 +1,30 @@
 using System;
 using System.Buffers.Binary;
 using System.Numerics;
+using VortexArena.Formats.Images;
 
 namespace VortexArena.Formats.Mdl;
 
 /// <summary>
 /// Parses a Quake1 MDL ("IDPO", <see cref="Version"/> 6) alias model from a raw byte buffer into
-/// <see cref="MdlData"/>. Faithful to <c>Mod_IDP0_Load</c> (Darkplaces <c>model_alias.c</c>) and the on-disk
-/// structs in <c>modelgen.h</c>: a fixed 84-byte header, then N skins, then the shared texcoord (stvert) and
-/// triangle tables, then N frames of byte-quantized vertices.
+/// <see cref="MdlData"/>. Faithful to <c>Mod_IDP0_Load</c> / <c>Mod_MDL_LoadFrames</c> /
+/// <c>Mod_Alias_CalculateBoundingBox</c> (Darkplaces <c>model_alias.c</c>) and the on-disk structs in
+/// <c>modelgen.h</c>: a fixed 84-byte header, then N skins, then the shared texcoord (stvert) and triangle
+/// tables, then N frames of byte-quantized vertices.
 ///
-/// <para><b>Skin</b>: the first skin is decoded from 8-bit palette indices straight through the Quake palette
-/// (<see cref="QuakePalette"/> = DP's <c>host_quakepal</c> fallback, which is what applies because Xonotic
-/// ships no external <c>gfx/palette.lmp</c>) to opaque RGBA — the single-texture equivalent of DP's
-/// <c>R_SkinFrame_LoadInternalQuake</c>. <b>Texcoords</b>: MDL stores one st per vertex plus an "on seam"
-/// flag; a back-facing triangle's seam vertex uses U+0.5 (DP's <c>vertonseam</c>/<c>facesfront</c> butcher),
-/// so we expand triangles to non-indexed corners with their resolved UV rather than compact a vertex set.
-/// <b>Normals</b>: each vertex carries a byte index into the shared Quake vertex-normal table
-/// (<see cref="ByteNormals"/> = DP's <c>m_bytenormals</c>), decoded to a unit normal.</para>
+/// <para><b>Skins</b>: every skin picture is kept as raw palette indices (<see cref="MdlData.Skins"/>), with
+/// the skin groups as <see cref="MdlData.SkinScenes"/>; the first is also decoded through the built-in Quake
+/// palette to opaque RGBA (<see cref="MdlData.SkinRgba"/>). <b>Texcoords</b>: MDL stores one st per vertex
+/// plus an "on seam" flag; a back-facing triangle's seam vertex uses U+0.5 (DP's
+/// <c>vertonseam</c>/<c>facesfront</c> butcher). Both forms are produced: non-indexed corners with their
+/// resolved UV, and DarkPlaces' compacted vertex set with an element array. <b>Normals</b>: each vertex
+/// carries a byte index into the shared Quake vertex-normal table (<see cref="ByteNormals"/> = DP's
+/// <c>m_bytenormals</c>), decoded to a unit normal. <b>Frames</b>: a frame group's poses are flattened into
+/// <see cref="MdlData.Frames"/> and described by <see cref="MdlData.Scenes"/>.</para>
 ///
-/// <para>Group skins/frames (the animated variants) are parsed to walk the file correctly and each group
-/// sub-frame becomes a plain frame; the shipped models that reach this loader are all single-frame. All reads
-/// are bounds-checked; malformed input throws <see cref="AssetParseException"/>.</para>
+/// <para>All reads are bounds-checked; malformed input throws <see cref="AssetParseException"/>. Where
+/// DarkPlaces is lenient this is too: bytes after the last frame are ignored, a triangle index outside the
+/// vertex table draws vertex 0, a group interval below 0.01 becomes 0.1.</para>
 /// </summary>
 public static class MdlReader
 {
@@ -42,7 +45,10 @@ public static class MdlReader
     private const int Int32Size = 4;            // daliasskintype_t / aliasframetype_t / interval
 
     private const int FrameNameLen = 16;        // daliasframe_t name[16]
-    private const int MaxDim = 1 << 16;         // DP BOUNDI(...,0,65536) guard on every count
+    private const int MaxDim = 65535;           // DP BOUNDI(VALUE,0,65536): VALUE >= 65536 is an error
+
+    /// <summary>What DarkPlaces plays a single frame or single skin at, and a group whose interval is invalid.</summary>
+    private const float DefaultInterval = 0.1f;
 
     public static MdlData Read(byte[] data)
     {
@@ -72,6 +78,8 @@ public static class MdlReader
         int numVerts = BinaryUtil.ReadInt32(data, 60);
         int numTris = BinaryUtil.ReadInt32(data, 64);
         int numFrames = BinaryUtil.ReadInt32(data, 68);
+        int syncType = BinaryUtil.ReadInt32(data, 72);
+        int flags = BinaryUtil.ReadInt32(data, 76);
 
         Bound(numSkins, "numskins");
         Bound(skinWidth, "skinwidth");
@@ -79,31 +87,39 @@ public static class MdlReader
         Bound(numVerts, "numverts");
         Bound(numTris, "numtris");
         Bound(numFrames, "numframes");
+        if (syncType < 0 || syncType >= 2)
+            throw new AssetParseException($"MDL synctype {syncType} is out of range (0..1).");
         if (numVerts == 0 || numTris == 0 || numFrames == 0)
             throw new AssetParseException($"MDL is empty (verts={numVerts}, tris={numTris}, frames={numFrames}).");
 
         int p = HeaderSize;
 
-        // ── Skins: walk every skin so the offset lands on the stverts; keep the first skin's pixels ──────
+        // ── Skins: every picture, and one scene per header skin ─────────────────────────────────────────
         long skinTexels = (long)skinWidth * skinHeight;
-        byte[]? firstSkinIndices = null;
+        var skins = new System.Collections.Generic.List<byte[]>(numSkins);
+        var skinScenes = new MdlScene[numSkins];
         for (int i = 0; i < numSkins; i++)
         {
             int skinType = BinaryUtil.ReadInt32(data, p);
             p += Int32Size;
             int groupSkins = 1;
+            float interval = DefaultInterval;
             if (skinType != AliasSingle)
             {
                 groupSkins = BinaryUtil.ReadInt32(data, p);
                 p += SkinGroupHeaderSize;
                 Bound(groupSkins, "skin group count");
-                p = AdvanceChecked(p, (long)groupSkins * Int32Size, data.Length, "skin intervals"); // floats
+                Need(data, p, (long)groupSkins * Int32Size, "skin intervals");
+                // "interval = LittleFloat(pinskinintervals[0].interval)": the first one, for the whole group.
+                if (groupSkins > 0)
+                    interval = ValidInterval(BinaryUtil.ReadFloat(data, p));
+                p += groupSkins * Int32Size;
             }
+            skinScenes[i] = new MdlScene($"skin {i}", skins.Count, groupSkins, 1.0f / interval, true);
             for (int g = 0; g < groupSkins; g++)
             {
                 Need(data, p, skinTexels, "skin pixels");
-                if (firstSkinIndices is null && skinTexels > 0)
-                    firstSkinIndices = data.Slice(p, (int)skinTexels).ToArray();
+                skins.Add(data.Slice(p, (int)skinTexels).ToArray());
                 p = AdvanceChecked(p, skinTexels, data.Length, "skin pixels");
             }
         }
@@ -111,55 +127,93 @@ public static class MdlReader
         // ── Shared stverts (texcoord + seam flag) ────────────────────────────────────────────────────
         Need(data, p, (long)numVerts * StVertSize, "stverts");
         var onseam = new int[numVerts];
-        var stS = new int[numVerts];
-        var stT = new int[numVerts];
+        // vertst: [0, numVerts) the vertex's own st, [numVerts, 2 * numVerts) its seam copy (s + 0.5).
+        float scaleS = (float)(1.0 / skinWidth);        // "scales = 1.0 / skinwidth" (a float holding a double division)
+        float scaleT = (float)(1.0 / skinHeight);
+        var vertSt = new Vector2[numVerts * 2];
         for (int v = 0; v < numVerts; v++)
         {
             int o = p + v * StVertSize;
             onseam[v] = BinaryUtil.ReadInt32(data, o);
-            stS[v] = BinaryUtil.ReadInt32(data, o + 4);
-            stT[v] = BinaryUtil.ReadInt32(data, o + 8);
+            float s = BinaryUtil.ReadInt32(data, o + 4) * scaleS;
+            float t = BinaryUtil.ReadInt32(data, o + 8) * scaleT;
+            vertSt[v] = new Vector2(s, t);
+            vertSt[v + numVerts] = new Vector2((float)(s + 0.5), t);
         }
         p += numVerts * StVertSize;
 
-        // ── Shared triangles → expand to seam-resolved, non-indexed render corners ──────────────────────
+        // ── Shared triangles: DarkPlaces' butchered, compacted element array, and plain corners ─────────
         Need(data, p, (long)numTris * TriangleSize, "triangles");
-        float invW = skinWidth > 0 ? 1f / skinWidth : 0f;
-        float invH = skinHeight > 0 ? 1f / skinHeight : 0f;
-        var corners = new MdlCorner[numTris * 3];
+        var elements = new int[numTris * 3];
         for (int t = 0; t < numTris; t++)
         {
             int o = p + t * TriangleSize;
-            int facesFront = BinaryUtil.ReadInt32(data, o);
+            bool backFace = BinaryUtil.ReadInt32(data, o) == 0;
             for (int j = 0; j < 3; j++)
             {
                 int vi = BinaryUtil.ReadInt32(data, o + 4 + j * 4);
+                // Mod_ValidateElements: an index outside the table is reported and drawn as the first vertex.
                 if (vi < 0 || vi >= numVerts)
-                    throw new AssetParseException($"MDL triangle index {vi} out of range (0..{numVerts - 1}).");
-                // DP: a back-facing triangle's on-seam vertex samples the far half of the skin (U += 0.5).
-                float u = stS[vi] * invW;
-                if (facesFront == 0 && onseam[vi] != 0)
-                    u += 0.5f;
-                corners[t * 3 + j] = new MdlCorner(vi, new Vector2(u, stT[vi] * invH));
+                    vi = 0;
+                // "now butcher the elements according to vertonseam and tri->facesfront": a back-facing
+                // triangle's on-seam vertex samples the far half of the skin (its copy, U + 0.5).
+                if (backFace && onseam[vi] != 0)
+                    vi += numVerts;
+                elements[t * 3 + j] = vi;
             }
         }
         p += numTris * TriangleSize;
 
-        // ── Frames: decode each pose's byte-quantized vertices + anorms normals ─────────────────────────
+        // "count the usage ... build remapping table and compact array"
+        var remap = new int[numVerts * 2];
+        foreach (int e in elements)
+            remap[e]++;
+        int meshVertexCount = 0;
+        for (int i = 0; i < remap.Length; i++)
+            remap[i] = remap[i] != 0 ? meshVertexCount++ : -1;
+        var meshVertices = new int[meshVertexCount];
+        var meshTexCoords = new Vector2[meshVertexCount];
+        for (int i = 0; i < remap.Length; i++)
+        {
+            if (remap[i] < 0)
+                continue;
+            meshVertices[remap[i]] = i < numVerts ? i : i - numVerts;
+            meshTexCoords[remap[i]] = vertSt[i];
+        }
+        var corners = new MdlCorner[elements.Length];
+        for (int i = 0; i < elements.Length; i++)
+        {
+            int e = elements[i];
+            corners[i] = new MdlCorner(e < numVerts ? e : e - numVerts, vertSt[e]);
+            elements[i] = remap[e];
+        }
+
+        // ── Frames: one scene per header frame; decode each pose's byte-quantized vertices + normals ────
         var frames = new System.Collections.Generic.List<MdlFrame>(numFrames);
+        var scenes = new MdlScene[numFrames];
         for (int i = 0; i < numFrames; i++)
         {
             int frameType = BinaryUtil.ReadInt32(data, p);
             p += Int32Size;
             int groupFrames = 1;
+            float interval = DefaultInterval;       // "a single frame is still treated as a group"
             if (frameType != AliasSingle)
             {
                 // daliasgroup_t { numframes; bboxmin; bboxmax; } then groupFrames intervals (floats).
                 groupFrames = BinaryUtil.ReadInt32(data, p);
                 p += FrameGroupHeaderSize;
                 Bound(groupFrames, "frame group count");
-                p = AdvanceChecked(p, (long)groupFrames * Int32Size, data.Length, "frame intervals");
+                Need(data, p, (long)groupFrames * Int32Size, "frame intervals");
+                // "interval = LittleFloat (intervals->interval); // FIXME: support variable framerate groups"
+                if (groupFrames > 0)
+                    interval = ValidInterval(BinaryUtil.ReadFloat(data, p));
+                p += groupFrames * Int32Size;
             }
+
+            // "get scene name from first frame" - of whatever follows, even for an empty group.
+            string sceneName = p + FrameHeaderSize <= data.Length ? BinaryUtil.ReadFixedString(data, p + 8, FrameNameLen) : string.Empty;
+            scenes[i] = new MdlScene(sceneName, frames.Count, groupFrames, 1.0f / interval, true);
+
             for (int g = 0; g < groupFrames; g++)
             {
                 // daliasframe_t { bboxmin; bboxmax; name[16]; } then numVerts trivertx_t.
@@ -173,14 +227,48 @@ public static class MdlReader
                 {
                     int o = p + v * TriVertSize;
                     var pos = new Vector3(
-                        data[o] * scale.X + origin.X,
-                        data[o + 1] * scale.Y + origin.Y,
-                        data[o + 2] * scale.Z + origin.Z);
+                        origin.X + data[o] * scale.X,
+                        origin.Y + data[o + 1] * scale.Y,
+                        origin.Z + data[o + 2] * scale.Z);
                     int ni = data[o + 3];
                     verts[v] = new MdlVertex(pos, ByteNormals[ni < ByteNormals.Length ? ni : 0]);
                 }
                 p += numVerts * TriVertSize;
                 frames.Add(new MdlFrame { Name = name, Vertices = verts });
+            }
+        }
+        if (frames.Count == 0)
+            throw new AssetParseException("MDL has no poses (every frame is an empty group).");
+
+        // ── Mod_Alias_CalculateBoundingBox: every used vertex of every pose ─────────────────────────────
+        Vector3 mins = Vector3.Zero, maxs = Vector3.Zero;
+        float yawRadius2 = 0, radius2 = 0;
+        bool first = true, animated = false;
+        MdlVertex[] reference = frames[0].Vertices;
+        foreach (MdlFrame frame in frames)
+        {
+            MdlVertex[] verts = frame.Vertices;
+            foreach (int source in meshVertices)
+            {
+                Vector3 v = verts[source].Position;
+                if (first)
+                {
+                    first = false;
+                    mins = maxs = v;
+                }
+                else
+                {
+                    mins = Vector3.Min(mins, v);
+                    maxs = Vector3.Max(maxs, v);
+                }
+                float dist = v.X * v.X + v.Y * v.Y;
+                if (yawRadius2 < dist)
+                    yawRadius2 = dist;
+                dist += v.Z * v.Z;
+                if (radius2 < dist)
+                    radius2 = dist;
+                if (!animated && v != reference[source].Position)
+                    animated = true;
             }
         }
 
@@ -189,30 +277,28 @@ public static class MdlReader
             Name = frames[0].Name,
             SkinWidth = skinWidth,
             SkinHeight = skinHeight,
-            SkinRgba = DecodeSkin(firstSkinIndices, skinWidth, skinHeight),
+            SkinRgba = skins.Count > 0 && skinTexels > 0 ? QuakePalette.Default.ToRgba(skins[0]) : Array.Empty<byte>(),
+            Skins = skins.ToArray(),
+            SkinScenes = skinScenes,
+            Flags = flags,
+            SyncType = syncType,
             VertexCount = numVerts,
             Corners = corners,
+            MeshElements = elements,
+            MeshVertices = meshVertices,
+            MeshTexCoords = meshTexCoords,
             Frames = frames.ToArray(),
+            Scenes = scenes,
+            Mins = mins,
+            Maxs = maxs,
+            YawRadius = MathF.Sqrt(yawRadius2),
+            Radius = MathF.Sqrt(radius2),
+            IsAnimated = animated,
         };
     }
 
-    /// <summary>Expand 8-bit palette indices to opaque RGBA8 via the Quake palette; empty when no skin.</summary>
-    private static byte[] DecodeSkin(byte[]? indices, int width, int height)
-    {
-        if (indices is null || width <= 0 || height <= 0)
-            return Array.Empty<byte>();
-        int count = width * height;
-        var rgba = new byte[count * 4];
-        for (int i = 0; i < count; i++)
-        {
-            int c = indices[i] * 3;
-            rgba[i * 4 + 0] = QuakePalette[c];
-            rgba[i * 4 + 1] = QuakePalette[c + 1];
-            rgba[i * 4 + 2] = QuakePalette[c + 2];
-            rgba[i * 4 + 3] = 255;
-        }
-        return rgba;
-    }
+    /// <summary>"has an invalid interval %f, changing to 0.1" (a NaN is invalid too).</summary>
+    private static float ValidInterval(float interval) => interval >= 0.01f ? interval : DefaultInterval;
 
     private static void Bound(int value, string what)
     {
@@ -238,15 +324,7 @@ public static class MdlReader
         return (int)next;
     }
 
-    // ── Embedded Quake constants (public domain; sourced verbatim from Darkplaces) ──────────────────────
-
-    /// <summary>
-    /// The Quake palette (256 RGB triples, 768 bytes) — DP's <c>host_quakepal</c> from <c>palette.c</c>, the
-    /// fallback used when no external <c>gfx/palette.lmp</c> is mounted (Xonotic ships none, so this is what
-    /// MDL skins decode through). id/Carmack placed this palette in the public domain.
-    /// </summary>
-    private static readonly byte[] QuakePalette = Convert.FromBase64String(
-        "AAAADw8PHx8fLy8vPz8/S0tLW1tba2tre3t7i4uLm5ubq6uru7u7y8vL29vb6+vrDwsHFw8LHxcLJxsPLyMTNysXPy8XSzcbUzsbW0MfY0sfa1Mfc1cfe18jg2cjj28jCwsPExMbGxsnJyczLy8/NzdLPz9XR0dnT09zW1t/Y2OLa2uXc3Oje3uvg4O7i4vLAAAABwcACwsAExMAGxsAIyMAKysHLy8HNzcHPz8HR0cHS0sLU1MLW1sLY2MLa2sPBwAADwAAFwAAHwAAJwAALwAANwAAPwAARwAATwAAVwAAXwAAZwAAbwAAdwAAfwAAExMAGxsAIyMALysANy8AQzcASzsHV0MHX0cHa0sLd1MPg1cTi1sTl18bo2Mfr2cjIxMHLxcLOx8PSyMTVysXYy8fczcjfzsrj0Mzn08zr2Mvv3cvz48r36sn78sf//MbCwcAGxMAKyMPNysTRzMbUzcjYz8rb0czf1M/i19Hm2tTp3tft4drw5N706OL47OXq4ujn3+Xk3OHi2d7f1tvd1Nja0tXXz9LVzdDSy83QycvNx8jKxcbIxMTFwsLDwcHu3Ofr2uPo1+Dl1d3i09rf0tfc0NTaztLXzM/Uys3RyMrOx8jLxcbIxMTFwsLDwcH28O7y7Onv6Obr5eLo4d7l3tvh29fe2NTa1dHX0s7Uz8zQzMnNysfJx8XGxMPDwsHb4N7Z3tvX3NnV2tfT2NXR1tPP1NHN0s/L0M3KzsvIzMnHysfFyMXDxsTCxMLBwsH//Mb798X28sTy7cPu6cPq5cLm4MHi3MHe2MHa1MAW0cASzcAOysAKx8AGw8ACwcAAAD/CwvvExPfGxvPIyO/KyuvLy+fLy+PLy9/Ly9vLy9fKytPIyM/GxsvExMfCwsPKwAAOwAASwcAXwcAbw8AfxcHkx8HoycLtzMPw0sbz2Mr238745dP56tf779399OLp3s7t5s3x8M35+NXf7//q+f/1///ZwAAiwAAswAA1wAA/wAA//OT//fH////n1tT");
+    // ── Embedded Quake constants (sourced verbatim from Darkplaces) ───────────────────────────────────
 
     /// <summary>
     /// The 162-entry Quake vertex-normal table — DP's <c>m_bytenormals</c> (<c>mathlib.c</c>), stored here as

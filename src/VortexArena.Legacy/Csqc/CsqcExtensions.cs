@@ -3,12 +3,16 @@
 namespace VortexArena.Legacy.Csqc;
 
 /// <summary>
-/// The extension names DarkPlaces answers true for in checkextension. Five are left out because their
+/// The extension names DarkPlaces answers true for in checkextension. Three are left out because their
 /// answer in the C depends on a library this client does not have: DP_CRYPTO and DP_QC_DIGEST_SHA256
-/// (d0_blind_id), DP_QC_URI_GET and DP_QC_URI_POST (libcurl), DP_PHYSICS_ODE (ODE).
+/// (d0_blind_id) and DP_PHYSICS_ODE (ODE). The two whose answer is "is libcurl there" are in
+/// <see cref="Http"/>: the host adds them when the program has an HTTP client (CsqcHostOptions.UriRequests).
 /// </summary>
 public static class CsqcExtensions
 {
+    /// <summary>checkextension's "special shreck for libcurl": true only while HTTP requests can be made.</summary>
+    public static readonly string[] Http = { "DP_QC_URI_GET", "DP_QC_URI_POST" };
+
     public static readonly string[] All =
     {
         "BX_WAL_SUPPORT", "DP_BUTTONCHAT", "DP_BUTTONUSE", "DP_CL_LOADSKY", "DP_CON_ALIASPARAMETERS",

@@ -9,15 +9,22 @@ namespace VortexArena.Game.Audio;
 /// <summary>
 /// The Godot end of DarkPlaces' sound system (<see cref="DpSoundSystem"/>, src/VortexArena.Engine/Audio):
 /// one node for the process, holding the channel table and one <see cref="AudioStreamPlayer"/> on the Master
-/// bus that plays what the mixer paints (an <see cref="AudioStreamGenerator"/> fed by a thread of its own).
+/// bus that plays what the mixer paints.
 /// Every sound of the native game and of legacy compatibility mode is a channel in that table; the engine
 /// sees a single stereo stream at its own rate, so none of its spatialisation (panning law, distance
 /// low-pass, Doppler, reverb, attenuation curves, polyphony limits, resampler) is involved.
 ///
-/// The mixer runs on its own thread, not in the game's frame: a stalled frame does not starve it. It keeps
-/// <see cref="TargetFrames"/> frames queued ahead of the audio server, which is latency DarkPlaces does not
-/// have (its mixer is called by the device); the engine does not let a C# class be the stream itself
-/// (AudioStreamPlayback._mix is not bound for C#), which is what would remove it.
+/// The mixer is called by the engine's audio thread, as DarkPlaces' is called by the device
+/// (snd_sdl.c Buffer_Callback, "snd_usethreadedmixing"): <see cref="DpMixerPlayback"/> is the stream, and
+/// the audio server asks it for each block (512 frames) at the moment it mixes that block. Nothing is queued
+/// in between, so a sound started now is in the very next block the server mixes. A stalled game frame does
+/// not starve it either: the audio thread is not the game's.
+///
+/// The previous arrangement is kept as the fallback (<see cref="Direct"/> false): an
+/// <see cref="AudioStreamGenerator"/> fed by a thread of our own that keeps <see cref="TargetFrames"/> frames
+/// (32 ms and more) queued ahead of the audio server. It is used when the engine turns out not to call a C#
+/// stream's mixer (checked at start: no call within two seconds), and when VORTEX_AUDIO_QUEUE=1 asks for it
+/// (the other arm of a latency comparison).
 ///
 /// Why a mixer of our own rather than AudioStreamPlayer3D nodes with everything switched off: DarkPlaces'
 /// output differs from the engine's in things a node cannot be configured into - the stereo law (each ear
@@ -44,6 +51,25 @@ public sealed partial class DpAudio : Node
     /// sound per picture), so the two files can be compared sample for sample.
     /// </summary>
     public static readonly int OfflineFrames = int.TryParse(System.Environment.GetEnvironmentVariable("VORTEX_AUDIO_OFFLINE"), out int offline) && offline > 0 ? offline : 0;
+
+    /// <summary>
+    /// VORTEX_AUDIO_QUEUE=1 (or a queue depth in frames): the queued generator instead of mixing on the engine's
+    /// audio thread. VORTEX_AUDIO_QUEUE=fallback behaves like an engine that never calls the stream, to exercise
+    /// the check that then returns to the queue.
+    /// </summary>
+    private static readonly bool s_noCallback = System.Environment.GetEnvironmentVariable("VORTEX_AUDIO_QUEUE") is "fallback";
+    private static readonly bool s_forceQueue = !s_noCallback && NonEmpty(System.Environment.GetEnvironmentVariable("VORTEX_AUDIO_QUEUE")) is not null;
+    /// <summary>
+    /// VORTEX_AUDIO_SILENT=1: everything is mixed and measured as usual, but what is handed to the engine is
+    /// silence and the Master bus is muted. For timing a real output device without making a sound.
+    /// </summary>
+    private static readonly bool s_silent = NonEmpty(System.Environment.GetEnvironmentVariable("VORTEX_AUDIO_SILENT")) is not null;
+    /// <summary>
+    /// VORTEX_AUDIO_LATENCY_TEST=1: once a second a click is started on the mixer (right side only) and the
+    /// same click on a plain engine player (left side only) in the same instant. In a capture of the Master
+    /// bus the distance between the two is what this path adds to the engine's own shortest path.
+    /// </summary>
+    private static readonly bool s_latencyTest = NonEmpty(System.Environment.GetEnvironmentVariable("VORTEX_AUDIO_LATENCY_TEST")) is not null;
 
     private static string? NonEmpty(string? text) => string.IsNullOrEmpty(text) ? null : text;
 
@@ -139,10 +165,98 @@ public sealed partial class DpAudio : Node
             try { _dump = new BufferedStream(new FileStream(s_dumpPath, FileMode.Create, System.IO.FileAccess.Write, FileShare.Read), 1 << 16); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { _dump = null; }
         }
+        if (s_silent)
+        {
+            // Three ways silent: the mixer hands over zeros (MixInto), the Master bus ends in an 80 dB cut
+            // (after the capture's recorder, so a capture still sees engine-node sounds), and the bus is
+            // muted - again every frame, because applying the audio settings un-mutes it.
+            AudioServer.AddBusEffect(0, new AudioEffectAmplify { VolumeDb = -80f });
+            AudioServer.SetBusMute(0, true);
+        }
+        if (s_latencyTest) MakeLatencyTest();
+        if (OfflineFrames > 0 || s_forceQueue) StartQueue();
+        else StartDirect();
+    }
+
+    /// <summary>True while the engine's audio thread calls the mixer itself; false on the queued generator.</summary>
+    public bool Direct { get; private set; }
+    private DpMixerStream? _directStream;
+    private bool _directConfirmed;
+    private long _directStarted, _directCalls, _directLast, _directGapTicks, _directLate25, _directLate50;
+    /// <summary>Calls the engine's audio thread has made to the mixer.</summary>
+    public long DirectCalls => Interlocked.Read(ref _directCalls);
+
+    // The stream is the mixer: the audio server calls DpMixerPlayback._mix for each block it mixes.
+    private void StartDirect()
+    {
+        _directStream = new DpMixerStream { Owner = this };
+        _player = new AudioStreamPlayer { Name = "DpMixer", Bus = "Master", Stream = _directStream, ProcessMode = ProcessModeEnum.Always, VolumeDb = 0 };
+        AddChild(_player);
+        Direct = true;
+        _directStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+        _player.Play();
+    }
+
+    /// <summary>
+    /// The audio thread's call: paint <paramref name="frames"/> stereo frames into the server's own buffer.
+    /// Nothing here allocates; a collection that stops managed threads holds this call up for its length,
+    /// and the output device then plays what it still has buffered.
+    /// </summary>
+    internal int MixDirect(IntPtr buffer, int frames)
+    {
+        if (frames <= 0 || buffer == IntPtr.Zero || s_noCallback) return 0;
+        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+        long last = _directLast;
+        _directLast = now;
+        if (last != 0)
+        {
+            long gap = now - last, second = System.Diagnostics.Stopwatch.Frequency;
+            if (gap > Interlocked.Read(ref _directGapTicks)) Interlocked.Exchange(ref _directGapTicks, gap);
+            if (gap > second / 40) Interlocked.Increment(ref _directLate25);
+            if (gap > second / 20) Interlocked.Increment(ref _directLate50);
+        }
+        if (_directFirstCount < _directFirst.Length) _directFirst[_directFirstCount++] = now;
+        Interlocked.Increment(ref _directCalls);
+        // Painted into an array of our own and copied across: the project builds without unsafe code.
+        for (int done = 0; done < frames;)
+        {
+            int block = Math.Min(frames - done, DirectBlock);
+            MixInto(_directBuffer, block, 0);
+            System.Runtime.InteropServices.Marshal.Copy(_directBuffer, 0, buffer + done * 2 * sizeof(float), block * 2);
+            done += block;
+        }
+        return frames;
+    }
+
+    private const int DirectBlock = 2048;
+    // When the audio thread's first calls came (ticks): how the output takes its frames - a burst that fills
+    // the device's buffer, then one call a period.
+    private readonly long[] _directFirst = new long[96];
+    private volatile int _directFirstCount;
+    private bool _directFirstTold;
+    private readonly float[] _directBuffer = new float[DirectBlock * 2];
+
+    // The engine did not call the stream (an engine whose script dispatch does not reach a C# "_mix"): the queue.
+    private void FallBackToQueue()
+    {
+        Direct = false;
+        if (_player is { } old)
+        {
+            old.Stop();
+            old.QueueFree();
+            _player = null;
+        }
+        _directStream = null;
+        GD.Print("[audio] the engine does not call a C# stream's mixer; using the queued generator (about 32 ms more latency)");
+        StartQueue();
+    }
+
+    private void StartQueue()
+    {
         // The generator runs at the server's own rate: its resampler then steps exactly one frame at a time
         // and hands the mixer's frames on unchanged.
         AudioStreamGenerator generator = new() { MixRate = MixRate, BufferLength = 0.2f };
-        _player = new AudioStreamPlayer { Name = "DpMixer", Bus = "Master", Stream = generator, ProcessMode = ProcessModeEnum.Always, VolumeDb = 0 };
+        _player = new AudioStreamPlayer { Name = "DpMixerQueue", Bus = "Master", Stream = generator, ProcessMode = ProcessModeEnum.Always, VolumeDb = 0 };
         AddChild(_player);
         _player.Play();
         _playback = _player.GetStreamPlayback() as AudioStreamGeneratorPlayback;
@@ -153,7 +267,68 @@ public sealed partial class DpAudio : Node
         _thread.Start();
     }
 
-    private const int BaseTargetFrames = 1536;
+    // ---------------------------------------------------------------------------------------------------
+    //  Measuring (VORTEX_AUDIO_TRACE, VORTEX_AUDIO_LATENCY_TEST)
+    // ---------------------------------------------------------------------------------------------------
+
+    private long _probeSeen, _probeCount, _probeSumTicks, _probeMaxTicks;
+    private long _gcPauseTicksSeen;
+    private int _gc0Seen, _gc1Seen, _gc2Seen;
+
+    /// <summary>
+    /// What the output path did since this was last called, for the once-a-second trace line: which path,
+    /// the longest wait between two calls of the audio thread and how many exceeded 25 and 50 ms, the time
+    /// from a sound's start to the block that first carries it reaching the audio server (count, mean, worst),
+    /// the queue's under-runs and depth, and the collections the runtime ran with their total pause.
+    /// </summary>
+    public string TraceText()
+    {
+        double perMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        long n = Interlocked.Exchange(ref _probeCount, 0), sum = Interlocked.Exchange(ref _probeSumTicks, 0), worst = Interlocked.Exchange(ref _probeMaxTicks, 0);
+        long gap = Interlocked.Exchange(ref _directGapTicks, 0), late25 = Interlocked.Exchange(ref _directLate25, 0), late50 = Interlocked.Exchange(ref _directLate50, 0);
+        int g0 = GC.CollectionCount(0), g1 = GC.CollectionCount(1), g2 = GC.CollectionCount(2);
+        long pause = GC.GetTotalPauseDuration().Ticks;
+        string text = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"path {(Direct ? "direct" : "queue")} calls {DirectCalls} gapmax {gap * perMs:0.0} late25 {late25} late50 {late50} latency n {n} mean {(n > 0 ? sum * perMs / n : 0):0.0} max {worst * perMs:0.0} underruns {Underruns} target {TargetFrames} of {QueueCapacity} loopgap {TakeWorstLoopGapMilliseconds():0.0} mix ms {MixSeconds * 1000:0.0} worst {MixWorstMilliseconds:0.00} gc {g0 - _gc0Seen}/{g1 - _gc1Seen}/{g2 - _gc2Seen} pause {(pause - _gcPauseTicksSeen) / (double)TimeSpan.TicksPerMillisecond:0.00}");
+        if (!_directFirstTold && _directFirstCount == _directFirst.Length)
+        {
+            _directFirstTold = true;
+            System.Text.StringBuilder first = new(" first calls at ms");
+            for (int i = 0; i < _directFirst.Length; i++)
+                first.Append(' ').Append(((_directFirst[i] - _directFirst[0]) * perMs).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+            text += first.ToString();
+        }
+        _gc0Seen = g0;
+        _gc1Seen = g1;
+        _gc2Seen = g2;
+        _gcPauseTicksSeen = pause;
+        return text;
+    }
+
+    private AudioStreamPlayer? _clickPlayer;
+    private DpSfx? _clickSfx;
+    private long _clickNext;
+
+    private void MakeLatencyTest()
+    {
+        // 256 frames at half scale: on the left for the engine's player, on the right for the mixer.
+        const int length = 256;
+        short[] right = new short[length * 2];
+        byte[] left = new byte[length * 4];
+        for (int i = 0; i < length; i++)
+        {
+            right[i * 2 + 1] = 16384;
+            left[i * 4 + 1] = 0x40;
+        }
+        _clickSfx = new DpSfx("*latencyclick", right, 2, MixRate);
+        AudioStreamWav wav = new() { Format = AudioStreamWav.FormatEnum.Format16Bits, Stereo = true, MixRate = MixRate, Data = left };
+        _clickPlayer = new AudioStreamPlayer { Name = "DpLatencyClick", Bus = "Master", Stream = wav, ProcessMode = ProcessModeEnum.Always, VolumeDb = 0 };
+        AddChild(_clickPlayer);
+        _clickNext = System.Diagnostics.Stopwatch.GetTimestamp() + 3 * System.Diagnostics.Stopwatch.Frequency;
+    }
+
+    // VORTEX_AUDIO_QUEUE=<frames> (256 and up) sets the depth the queue starts from, for measuring how short it can be.
+    private static readonly int BaseTargetFrames = int.TryParse(System.Environment.GetEnvironmentVariable("VORTEX_AUDIO_QUEUE"), out int asked) && asked >= 256 ? asked : 1536;
     // An output that takes its frames in large bites needs more queued than one bite: the engine's Dummy driver
     // (no device; headless runs and captures) takes 4096 at a time.
     private const int MaxTargetFrames = 12288;
@@ -198,9 +373,10 @@ public sealed partial class DpAudio : Node
                 // The queue's size is the most free space ever seen (the ring is empty when the player has just started or has run dry).
                 int free = playback.GetFramesAvailable();
                 if (free > _capacity) _capacity = free;
-                while (_running && guard-- > 0 && _capacity - playback.GetFramesAvailable() < TargetFrames && playback.CanPushBuffer(Block))
+                int queued;
+                while (_running && guard-- > 0 && (queued = _capacity - playback.GetFramesAvailable()) < TargetFrames && playback.CanPushBuffer(Block))
                 {
-                    MixInto(mixed, Block);
+                    MixInto(mixed, Block, queued);
                     for (int i = 0; i < Block; i++) frames[i] = new Vector2(mixed[i * 2], mixed[i * 2 + 1]);
                     playback.PushBuffer(frames);
                 }
@@ -252,10 +428,11 @@ public sealed partial class DpAudio : Node
     {
         if (OfflineFrames <= 0 || frames <= 0) return;
         if (_offline.Length < frames * 2) _offline = new float[frames * 2];
-        MixInto(_offline, frames);
+        MixInto(_offline, frames, 0);
     }
 
-    private void MixInto(Span<float> output, int frames)
+    // queuedAhead: frames already waiting between this block and the audio server (0 when the server itself asks).
+    private void MixInto(Span<float> output, int frames, int queuedAhead)
     {
         if (Blocked)
         {
@@ -263,6 +440,19 @@ public sealed partial class DpAudio : Node
             return;
         }
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        // A sound started since the last block is in this one: from its start to here, plus what is queued ahead.
+        long started = Sound.LastStartTicks;
+        if (started != _probeSeen)
+        {
+            _probeSeen = started;
+            long waited = t0 - started + queuedAhead * System.Diagnostics.Stopwatch.Frequency / MixRate;
+            if (started != 0 && waited >= 0)
+            {
+                Interlocked.Increment(ref _probeCount);
+                Interlocked.Add(ref _probeSumTicks, waited);
+                if (waited > Interlocked.Read(ref _probeMaxTicks)) Interlocked.Exchange(ref _probeMaxTicks, waited);
+            }
+        }
         Sound.Mix(output, frames, MixRate);
         long ticks = System.Diagnostics.Stopwatch.GetTimestamp() - t0;
         Interlocked.Increment(ref _mixCalls);
@@ -276,6 +466,7 @@ public sealed partial class DpAudio : Node
             System.Runtime.InteropServices.MemoryMarshal.AsBytes(output[..(frames * 2)]).CopyTo(_dumpBytes);
             lock (_dumpLock) dump.Write(_dumpBytes, 0, bytes);
         }
+        if (s_silent) output[..(frames * 2)].Clear();
     }
 
     public override void _ExitTree()
@@ -308,6 +499,19 @@ public sealed partial class DpAudio : Node
     private double _sinceSave;
     public override void _Process(double delta)
     {
+        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (s_silent && !AudioServer.IsBusMute(0)) AudioServer.SetBusMute(0, true);
+        if (Direct && !_directConfirmed)
+        {
+            if (DirectCalls > 0) _directConfirmed = true;
+            else if (now - _directStarted > 2 * System.Diagnostics.Stopwatch.Frequency) FallBackToQueue();
+        }
+        if (_clickPlayer is { } click && _clickSfx is { } sfx && now >= _clickNext)
+        {
+            _clickNext = now + System.Diagnostics.Stopwatch.Frequency;
+            click.Play();
+            Sound.StartSound(DpSoundSystem.MaxEdicts, 0, sfx, System.Numerics.Vector3.Zero, 1f, 0f, 0f, DpSoundSystem.ChannelFlagFullVolume, 1f);
+        }
         if (_dump is null) return;
         _sinceSave += delta;
         if (_sinceSave < 2.0) return;

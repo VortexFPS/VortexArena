@@ -81,6 +81,13 @@ public sealed class DpSoundSystem
     public int MixedSounds { get; private set; }
     public int StaticChannels { get { lock (_lock) return _totalChannels - MaxDynamicChannels; } }
 
+    private long _lastStartTicks;
+    /// <summary>
+    /// When a sound was last started on a channel (System.Diagnostics.Stopwatch ticks; 0 = never). The host
+    /// measures its output latency with it: the time from here to the mixer call that first paints the sound.
+    /// </summary>
+    public long LastStartTicks => System.Threading.Interlocked.Read(ref _lastStartTicks);
+
     // ---------------------------------------------------------------------------------------------------
     //  Starting and stopping
     // ---------------------------------------------------------------------------------------------------
@@ -208,7 +215,9 @@ public sealed class DpSoundSystem
                     }
                 }
 
-            return PlaySfxOnChannel(sfx, target, flags, origin, volume, attenuation, false, entnum, entchannel, startPos, speed) ? index : -1;
+            if (!PlaySfxOnChannel(sfx, target, flags, origin, volume, attenuation, false, entnum, entchannel, startPos, speed)) return -1;
+            System.Threading.Interlocked.Exchange(ref _lastStartTicks, System.Diagnostics.Stopwatch.GetTimestamp());
+            return index;
         }
     }
 

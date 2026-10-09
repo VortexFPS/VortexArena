@@ -216,17 +216,43 @@ public sealed class ConfigInterpreter
     }
 
     /// <summary>Execute a whole config script (a <c>.cfg</c> file's text): split into commands and run each.</summary>
-    public void ExecuteScript(string text)
-    {
-        foreach (string command in SplitIntoCommands(text))
-            ExecuteCommandLine(command, null);
-    }
+    public void ExecuteScript(string text) => RunCommands(SplitIntoCommands(text), null);
 
     /// <summary>Execute a single console line (may contain <c>;</c>-separated commands and a trailing comment).</summary>
-    public void ExecuteLine(string line)
+    public void ExecuteLine(string line) => RunCommands(SplitIntoCommands(line), null);
+
+    /// <summary>
+    /// Execute ONE already-separated command with an alias's argument vector (or null) - how a command buffer
+    /// resumes the rest of an alias body that <see cref="HeldCommandSink"/> handed back to it.
+    /// </summary>
+    public void ExecuteCommand(string command, IReadOnlyList<string>? aliasArguments) => ExecuteCommandLine(command, aliasArguments);
+
+    /// <summary>
+    /// DP <c>wait</c> support for a host that owns a command buffer (cmd.c Cbuf_Execute / Cmd_Wait_f). In
+    /// DarkPlaces an alias's body and an exec'd file are INSERTED at the front of the buffer, so a
+    /// <c>wait</c> in the middle of one holds the rest of it until the next frame. This interpreter runs a
+    /// body in place; with both hooks set it asks <see cref="HoldRequested"/> before every command of a body,
+    /// file or line, and once the answer is true it runs nothing more of it: each remaining command goes to
+    /// <see cref="HeldCommandSink"/> with the alias arguments it has to be expanded with (null outside an
+    /// alias), innermost body first, for the buffer to run next frame through <see cref="ExecuteCommand"/>.
+    /// Both null (the default, and the native game): bodies always run to their end, as before.
+    /// </summary>
+    public Func<bool>? HoldRequested { get; set; }
+
+    /// <summary>See <see cref="HoldRequested"/>.</summary>
+    public Action<string, IReadOnlyList<string>?>? HeldCommandSink { get; set; }
+
+    private void RunCommands(List<string> commands, IReadOnlyList<string>? args)
     {
-        foreach (string command in SplitIntoCommands(line))
-            ExecuteCommandLine(command, null);
+        for (int i = 0; i < commands.Count; i++)
+        {
+            if (HeldCommandSink is { } sink && HoldRequested?.Invoke() == true)
+            {
+                for (; i < commands.Count; i++) sink(commands[i], args);
+                return;
+            }
+            ExecuteCommandLine(commands[i], args);
+        }
     }
 
     // =============================================================================================
@@ -401,8 +427,7 @@ public sealed class ConfigInterpreter
         _aliasDepth++;
         try
         {
-            foreach (string command in SplitIntoCommands(body))
-                ExecuteCommandLine(command, callArgs);
+            RunCommands(SplitIntoCommands(body), callArgs);
         }
         finally
         {

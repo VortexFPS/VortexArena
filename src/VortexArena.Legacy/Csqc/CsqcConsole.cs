@@ -1,6 +1,7 @@
 // Port of the console plumbing a client program depends on: Base/darkplaces/cmd.c Cbuf_AddText /
-// Cbuf_Execute and Cmd_CL_Callback (commands created by QuakeC), prvm_edict.c PRVM_GameCommand
-// (cl_cmd, menu_cmd) and cl_cmd.c CL_ForwardToServer_f (cmd).
+// Cbuf_Execute / Cmd_Wait_f / Cmd_Defer_f (through Protocol/DpCommandBuffer.cs) and Cmd_CL_Callback
+// (commands created by QuakeC), prvm_edict.c PRVM_GameCommand (cl_cmd, menu_cmd) and cl_cmd.c
+// CL_ForwardToServer_f (cmd).
 using System.Text;
 using VortexArena.Common.Config;
 using VortexArena.Legacy.Protocol;
@@ -13,7 +14,9 @@ namespace VortexArena.Legacy.Csqc;
 /// Text reaches it from three places - svc_stufftext, the program's localcmd builtin, and the host -
 /// and none of it runs at once: DarkPlaces appends to a buffer and executes the buffer between
 /// frames, so that a command issued from inside QuakeC never re-enters QuakeC. <see cref="Execute"/>
-/// is that step. Each complete command line is first offered to <see cref="EngineCommand"/> (the
+/// is that step, and a <c>wait</c> ends it for the frame: what is left runs after the next
+/// <see cref="NewFrame"/> (<see cref="DpCommandBuffer"/> is the buffer, the same one the Xonotic menu's
+/// console uses). Each complete command line is first offered to <see cref="EngineCommand"/> (the
 /// handful the engine itself owns: csqc_progcrc, cl_downloadbegin, ...) and otherwise handed to the
 /// <see cref="ConfigInterpreter"/>, where the three commands that lead back into the program live:
 /// <c>cl_cmd</c> (GameCommand), anything the program created with registercommand
@@ -22,8 +25,8 @@ namespace VortexArena.Legacy.Csqc;
 public sealed class CsqcConsole
 {
     private readonly LegacyQcHost _services;
-    private readonly DpStuffTextBuffer _buffer = new();
-    private readonly List<string> _lines = new();
+    private readonly DpCommandBuffer _buffer;
+    private bool _frameDriven;
     private readonly HashSet<string> _qcCommands = new(StringComparer.OrdinalIgnoreCase);
     // cl_cmd, cmd and whatever the program creates: through a relay, so that an interpreter which outlives
     // this console (the Xonotic menu's) does not hold it - and through it the session - after Detach.
@@ -33,6 +36,18 @@ public sealed class CsqcConsole
     {
         Interpreter = interpreter ?? throw new ArgumentNullException(nameof(interpreter));
         _services = services ?? throw new ArgumentNullException(nameof(services));
+        // localcmd: "Cbuf_AddText" the moment the builtin runs, so behind whatever is already waiting.
+        _buffer = new DpCommandBuffer(interpreter) { MoreText = TakeProgramText };
+
+        // wait and defer are the ENGINE's commands (cmd.c). On the Xonotic menu's console that console has
+        // registered them already (they act on whichever buffer is running); a session's own interpreter
+        // gets them here. Without them "wait" was an unknown command, and unknown commands went to the server.
+        if (!interpreter.CommandNames.Contains("wait"))
+        {
+            DpCommandBuffer.Handlers(_buffer, text => _services.Print(text), out Action<IReadOnlyList<string>> wait, out Action<IReadOnlyList<string>> defer);
+            _commands.Register(interpreter, "wait", wait, DpCommandBuffer.WaitHelp);
+            _commands.Register(interpreter, "defer", defer, DpCommandBuffer.DeferHelp);
+        }
 
         _commands.Register(interpreter, "cl_cmd", argv =>
         {
@@ -94,11 +109,62 @@ public sealed class CsqcConsole
     /// <summary>Names the program created with registercommand.</summary>
     public IReadOnlyCollection<string> QcCommands => _qcCommands;
 
+    /// <summary>Command lines that were no command, alias or cvar and that DarkPlaces would not forward either
+    /// ("Unknown command"): they went nowhere.</summary>
+    public long UnknownCommands { get; private set; }
+    /// <summary>Told the name of each such command.</summary>
+    public Action<string>? UnknownCommand { get; set; }
+
+    /// <summary>
+    /// The end of cmd.c Cmd_ExecuteString for a console of the session's own: the interpreter found no
+    /// command, alias or cvar of this name. A DarkPlaces client forwards a fixed list of commands to the
+    /// server (<see cref="DpClientCommands"/>: say, kill, status, ...; "cmd" is a command of its own) and
+    /// prints <c>Unknown command "x"</c> for everything else. It never forwards what it does not know.
+    /// Hook it up with <see cref="ForwardAsDarkPlaces"/>.
+    /// </summary>
+    public void HandleUnknownCommand(string name, IReadOnlyList<string> argv)
+    {
+        if (DpClientCommands.IsForwarded(name))
+        {
+            ForwardedToServer++;
+            SendToServer?.Invoke(JoinArguments(argv, 0));
+            return;
+        }
+        UnknownCommands++;
+        UnknownCommand?.Invoke(name);
+    }
+
+    /// <summary>Makes <see cref="HandleUnknownCommand"/> the interpreter's answer to a command it does not
+    /// know. For an interpreter that is the session's own; the Xonotic menu's console has its own handler.</summary>
+    public void ForwardAsDarkPlaces() => Interpreter.UnknownCommandHandler = HandleUnknownCommand;
+
+    /// <summary>The command buffer (for its counters: commands waiting, waits, deferred commands).</summary>
+    public DpCommandBuffer Buffer => _buffer;
+
     /// <summary>Cbuf_AddText: queue text. It runs at the next <see cref="Execute"/>; a last line
     /// without a terminator waits for the text that completes it.</summary>
-    public void AddText(string text)
+    public void AddText(string text) => _buffer.AddText(text);
+
+    /// <summary>Cbuf_InsertText: queue text in front of what is waiting (a key's bind).</summary>
+    public void InsertText(string text) => _buffer.InsertText(text);
+
+    private void TakeProgramText()
     {
-        if (!string.IsNullOrEmpty(text)) _buffer.Add(text, _lines);
+        foreach (string text in _services.TakePendingCommands()) _buffer.AddText(text);
+    }
+
+    /// <summary>
+    /// A client frame begins (host.c Host_Frame's Cbuf_Frame, as far as time goes): deferred commands that have
+    /// come due are appended, and what a <c>wait</c> held in the frame before may run again. The owner calls it
+    /// once a frame with its clock; the buffer itself runs at the <see cref="Execute"/> calls that follow.
+    /// An owner that never calls it (a replay that has no frames) gets a console on which <c>wait</c> ends
+    /// one Execute and the next one carries on.
+    /// </summary>
+    public void NewFrame(double realTime)
+    {
+        _frameDriven = true;
+        _buffer.RunDeferred(realTime);
+        _buffer.ReleaseHold();
     }
 
     /// <summary>Cmd_ExecuteString: run one command now, bypassing the buffer.</summary>
@@ -158,19 +224,14 @@ public sealed class CsqcConsole
 
     /// <summary>
     /// Cbuf_Execute: run everything queued, including what the program's localcmd added, and whatever
-    /// running that queues in turn. Bounded, so a command that re-queues itself costs one frame of
-    /// work rather than a hang (DarkPlaces relies on its <c>wait</c> command for the same thing).
+    /// running that queues in turn - until the buffer is empty or a <c>wait</c> ran, which leaves the rest
+    /// for the next frame. Bounded, so a command that re-queues itself costs one frame of work rather
+    /// than a hang.
     /// </summary>
     public void Execute()
     {
-        for (int round = 0; round < 16; round++)
-        {
-            foreach (string text in _services.TakePendingCommands()) AddText(text);
-            if (_lines.Count == 0) return;
-            string[] lines = _lines.ToArray();
-            _lines.Clear();
-            foreach (string line in lines) ExecuteNow(line);
-        }
+        if (!_frameDriven) _buffer.ReleaseHold();
+        _buffer.Execute(ExecuteNow);
     }
 
     /// <summary>

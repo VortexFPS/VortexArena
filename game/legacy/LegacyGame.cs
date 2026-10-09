@@ -111,6 +111,7 @@ public partial class LegacyGame : Node
     private VirtualFileSystem? _vfs;
     private CvarService? _cvars;
     private ConfigInterpreter? _interpreter;
+    private LegacyCommandLog? _commandLog;
     private LegacyClientOptions? _options;
     private VortexArena.Legacy.Downloads.LegacyUriRequests? _uriRequests;
     private LegacyClientSession? _session;
@@ -348,18 +349,25 @@ public partial class LegacyGame : Node
         _session.Client.Download.MaxPendingAcks = 64;
         if (_cvars.Has("cl_nettimesyncboundmode")) _session.Clock.BoundMode = (int)_cvars.GetFloat("cl_nettimesyncboundmode");
         _session.Event += text => Log("event: " + Printable(text, 600));
-        int commandsLogged = 0;
-        _session.Client.CommandSent += command =>
+        // What is sent to the server as console commands, for the log file: each level's first commands in
+        // full, then counted by name once a second (LegacyCommandLog; a chat line's words are never written).
+        int commandLinesShown = 0;
+        _commandLog = new LegacyCommandLog(line =>
         {
-            // The signon's own commands, for the log file; never a player's chat, and LegacyLog drops anything that names rcon or a password.
-            if (commandsLogged++ >= 40) return;
-            if (Headless && commandsLogged <= 12) Log("cmd> " + Printable(command));
-            else LegacyLog.Write("cmd> " + Printable(command));
-        };
-        // Cmd_ForwardToServer: a command the client does not know is the server's to answer. Set after the
-        // defaults ran, so a typo in a configuration file is not sent anywhere. (On the menu's console the
-        // menu already forwards unknown commands to its session; its handler stays.)
-        if (_shared is null) _interpreter.UnknownCommandHandler = (_, argv) => _session?.Client.SendStringCommand(JoinArguments(argv));
+            if (Headless && commandLinesShown++ < 12) Log(Printable(line));
+            else LegacyLog.Write(Printable(line));
+        }, () => Now);
+        _session.Client.CommandSent += _commandLog.OnSent;
+        // cmd.c Cmd_ExecuteString: what is no command, alias or cvar is "Unknown command" - a DarkPlaces client
+        // forwards "cmd ..." and a short list of its own (say, kill, status, ...: DpClientCommands), never a word
+        // it does not know. ("wait" was such a word here once, and the server's flood control counted every one.)
+        // Set after the defaults ran, so a configuration file's typos are not listed. On the menu's console the
+        // menu's handler stays.
+        if (_shared is null)
+        {
+            _session.Console.UnknownCommand = _commandLog.OnUnknown;
+            _session.Console.ForwardAsDarkPlaces();
+        }
         // CL_KeepaliveMessage: starting the client program parses a few hundred model files in one call.
         _presentation.ModelData.Working = () =>
         {
@@ -939,6 +947,14 @@ public partial class LegacyGame : Node
     public void ConsoleCommand(string line)
     {
         if (_session is null || string.IsNullOrWhiteSpace(line) || line.Length > 2048) return;
+        // The chat line (keys.c Key_Message: "say %s" / "say_team %s" straight to the server) and a typed
+        // "say ...": the words are the player's, not console text. Through the buffer a ";" ended the message
+        // and ran the rest as a command (";)" is common in chat), "//" cut it off, a "$" was a cvar.
+        if (IsChatLine(line))
+        {
+            SendToServer(line.Trim());
+            return;
+        }
         // On the menu's console a typed line is the player's, not the session's: it goes into the menu's buffer.
         if (_shared is not null) _shared.AddText(line + "\n");
         else
@@ -950,6 +966,13 @@ public partial class LegacyGame : Node
                 server.SetCvar(cvar, value);
             _session.Console.AddText(line + "\n");
         }
+    }
+
+    private static bool IsChatLine(string line)
+    {
+        ReadOnlySpan<char> text = line.AsSpan().TrimStart();
+        return (text.StartsWith("say ", StringComparison.OrdinalIgnoreCase) || text.StartsWith("say_team ", StringComparison.OrdinalIgnoreCase))
+            && text.IndexOfAny('\n', '\r') < 0;
     }
 
     /// <summary>
@@ -1217,6 +1240,7 @@ public partial class LegacyGame : Node
             Log("legacy_autojoin: sent \"join\"");
         }
         if (now >= _nextStatus) Status(session, presentation, now);
+        _commandLog?.Tick();
         CaptureForReview(now);
         LegacyPerfLog.Part(LegacyPerfLog.Present);
     }
@@ -1466,8 +1490,36 @@ public partial class LegacyGame : Node
                     session.State.ViewAngles = new QcVector(pitch, yaw, 0);
             }
             else if (command.StartsWith("server ", StringComparison.Ordinal)) session.Client.SendStringCommand(command[7..]);
+            else if (command.StartsWith("key ", StringComparison.Ordinal)) ScriptKey(session, command[4..].Trim());
+            // "chat <text>" / "teamchat <text>": what the chat line does when Enter is pressed.
+            else if (command.StartsWith("chat ", StringComparison.Ordinal)) ConsoleCommand("say " + command[5..]);
+            else if (command.StartsWith("teamchat ", StringComparison.Ordinal)) ConsoleCommand("say_team " + command[9..]);
             else ConsoleCommand(command);   // as if typed
         }
+    }
+
+    // "key <name>" in a review script: one key pressed and released as Key_Event does it with key_dest ==
+    // key_game - the client program is offered the key first (CSQC_InputEvent), and if it does not take it the
+    // player's bind for it runs. <name> is DarkPlaces' key name (F3, ENTER, MOUSE1, a, 1, ...).
+    private void ScriptKey(LegacyClientSession session, string name)
+    {
+        int key = VortexArena.Legacy.Csqc.CsqcKeys.StringToKeynum(name);
+        if (key < 0 || session.Host is not { Initialized: true } host)
+        {
+            Log($"script key {name}: {(key < 0 ? "not a key name" : "no client program is running")}");
+            return;
+        }
+        int character = name.Length == 1 ? name[0] : 0;
+        bool taken = host.InputEvent(0, key, character);
+        string? bind = taken ? null : KeyBinding(key, 0);
+        if (bind is { Length: > 0 })
+        {
+            RunBoundCommand(bind);
+            if (bind[0] == '+') RunBoundCommand("-" + bind[1..]);
+        }
+        host.InputEvent(1, key, character);
+        string outcome = taken ? "taken by the client program" : bind is { Length: > 0 } ? "bind: " + Printable(bind, 80) : "not bound";
+        Log($"script key {name} (number {key}): {outcome}");
     }
 
     private static void CountProcessing(Node node, Dictionary<string, int> into, ref int all)
@@ -2106,6 +2158,10 @@ public partial class LegacyGame : Node
                     $"csqc frames {session.FramesDrawn} ({session.FramesFaulted} faulted), undecoded messages {session.MessagesNotDecoded}, " +
                     $"datagrams sent {_transport?.Sent ?? 0} received {_transport?.Received ?? 0} over {_transport?.Peer ?? "nothing"}; " +
                     string.Create(CultureInfo.InvariantCulture, $"frame mean {_frameMeter.Mean:0.00} ms p99 {_frameMeter.Percentile(0.99):0.00} max {_frameMeter.Max:0.0}, legacy (client) mean {_clientMeter.Mean:0.00} ms p99 {_clientMeter.Percentile(0.99):0.00}"));
+                _commandLog?.End();
+                DpCommandBuffer buffer = session.Console.Buffer;
+                Log($"console: {session.Console.LinesExecuted} commands run, {buffer.Waits} waits held the buffer for a frame, {session.Console.ForwardedToServer} commands forwarded, " +
+                    $"{session.Console.UnknownCommands} unknown and not sent, {buffer.Pending} still waiting, {buffer.Dropped} dropped");
                 session.Dispose();
             }
         }

@@ -1102,3 +1102,85 @@ and it holds 64 frames of look-ahead (1.3 ms); and the mixer is managed code, so
 threads holds the audio thread for its length. In these runs the collections of a level load (57 of them,
 258 ms of pauses in all) never made a call more than 12 ms late. Not measured: the device's own buffer, which
 both engines write into, and anything after it.
+
+- *Native only:* a loop its emitter stops refreshing ends after half a second (the native netcode's rule),
+  and vehicle engine and alarm sounds are still engine nodes.
+
+## 19. After a level change; the command buffer; what is forwarded to a server (added 2026-10-09)
+
+**What went wrong.** A player joined a public server from the native browser late in a match. The level changed,
+and from then on nothing he did reached the server - no chat, no "join", no movement - while he saw the game and
+the chat as before.
+
+**Cause 1: the connection kept its input history across the level change.** `cl_input.c CL_SendMove` measures
+each command against the last one sent (`cl.cmd.frametime = bound(0.0, cl.cmd.time - cl.movecmd[1].time, 0.255)`)
+and holds the whole packet back when that is zero ("do not send 0ms packets because they mess up physics",
+`cl.cmd.msec == 0 && cl.mtime[0] > cl.mtime[1] && cls.signon == SIGNONS`). The reliable stream only travels in
+those packets. DarkPlaces wipes `cl` at `svc_serverinfo` (`cl_parse.c CL_ParseServerInfo` -> `cl_main.c
+CL_ClearState`, a memset), so a new level starts with an empty history. `DpClient` kept `_moves`: a new level's
+clock starts over, so every command of the new level measured zero until that clock had passed the old level's
+last command - twenty minutes on a server joined twenty minutes into a match. It healed itself only when the
+frame that entered the game held exactly one server update (then `cl.mtime[0] == cl.mtime[1]` and one command
+went out), which is why short private tests had passed. `DpClient.ClearLevelState` now clears the history and the
+two time stamps at `svc_serverinfo`. The connection, its sequences, its reliable stream and
+`cls.servermovesequence` are `cls` and go on, as in DarkPlaces. (`cl.timesincepacket` and
+`cl.opt_inputs_since_update` are part of `cl` too and are NOT cleared here: they only shift the phase of the next
+packet, but the pacing has two stable rates - one packet a server tick or two - and which one a session settles
+into depends on that phase. `ServerClientsTests.A_moving_clients_prediction_agrees_with_the_server_every_frame`
+sees 1,285 samples in one and 2,559 in the other, and in the first the seven commands after the player starts to
+move are predicted up to 5.6 units off. That is open.)
+
+Reproduced against a private stock dedicated server (`_scratch/lc/`): with the old build, chat sent on the second
+level arrived on the server only during the signon of the third; with the fix every level's chat, join and
+movement arrive on that level.
+
+**Cause 2 (found in the same log, not the cause of the report): `wait` was sent to the server.** `wait` and
+`defer` are the engine's commands (`cmd.c Cmd_Wait_f`, `Cmd_Defer_f`). A session started from the native browser
+has a console of its own, which did not know them, and a command that console did not know was forwarded. Xonotic's
+client program queues `curl --pak ...; wait; cl_cmd mv_download N` for every map of a vote, so each vote sent a
+burst of `wait` to the server - where an older server program's command flood control answered `CMD FLOOD CONTROL:
+wait ... command was: wait` and dropped the player's real commands for as long as the burst lasted.
+
+**The command buffer** is now one class, `Protocol/DpCommandBuffer.cs`, used by the Xonotic menu's console
+(`LegacyConsole`) and by a session's (`CsqcConsole`):
+
+- `wait` ends the buffer's run for the frame; what is left runs next frame (`Cbuf_Execute`, `cbuf->wait`).
+- An alias's body and an executed file are inserted at the front in DarkPlaces, so a `wait` inside one holds the
+  rest of it. `ConfigInterpreter` runs a body in place and hands the commands a `wait` left over back to the buffer
+  (`HoldRequested` / `HeldCommandSink`), innermost alias first, with the alias's arguments.
+- `defer <seconds> <command>`, `defer clear`, `defer` (`Cbuf_Execute_Deferred`).
+- A session on the Xonotic menu's console has a buffer of its own on the shared interpreter: a server's `wait` holds
+  the server's text, and what a server defers comes back as the server's text. (Before, it came back as the
+  player's, past the refusals `LegacyConsole.RegisterPlayerCommand` makes for a server's text.)
+- A session's buffer runs after each server message and around `CSQC_UpdateView`; `CsqcConsole.NewFrame` (from
+  `LegacyClientSession.BeginFrame`) is the frame boundary for `wait` and the clock for `defer`.
+
+**What is forwarded** (`cmd.c Cmd_ExecuteString`, `Cmd_CL_Callback`; `DpClientCommands`): `cmd <text>`; the
+commands DarkPlaces registers with `CF_SERVER_FROM_CLIENT` (say, say_team, tell, kill, status, pause, ping, pings,
+prespawn, spawn, begin, god, notarget, fly, noclip, give, ent_create, ent_remove, ent_remove_all, download,
+sv_startdownload); the player's settings a server keeps (name, color, rate, rate_burstsize, pmodel, playermodel,
+playerskin). Everything else that is no command, alias or cvar is `Unknown command "x"` and goes nowhere - this
+DarkPlaces does not forward unknown words as Quake did. Xonotic's own client commands (join, spectate, ready,
+selectteam, ...) are aliases of `cmd ...` in its `commands.cfg`, which a session executes.
+
+**The chat line** (and a typed `say ...` / `say_team ...`) goes to the server as written (`keys.c Key_Message`). It
+used to pass through the console: `;` ended the message and ran the rest as a command, `//` cut it off.
+
+**The log.** Each level's first 80 commands to the server are written in full (`cmd> ...`), then counted by name
+once a second (`cmds sent in the last second: ...`), with a total per level; unknown commands are named, then
+counted. The words of a chat line are never written, only their number. (It was the first 40 commands of a
+session, which a signon and a map vote use up.)
+
+**Review script** (`VORTEX_LEGACY_SCRIPT`): `key <DarkPlaces key name>` presses and releases a key as `Key_Event`
+does with the game in front (the client program first, then the player's bind); `chat <text>` and `teamchat <text>`
+are the chat line's Enter; `sync level` waits for the next level.
+
+**Ruled out by test** (the scripted two-level-change session test and the private server run): the client
+program's input events, its registered commands and `cl_cmd` after a second `CSQC_Init` (the console is detached
+only when the session ends; a registered name leads to whichever program is loaded), the binds, the reliable
+stream (it was intact - it simply never left, and went out with the next level's signon), the signon gating, the
+move sequence numbers (the channel's, which go on; the server starts its own count over).
+
+**Not done.** `Cmd_ExecuteString` runs an alias of the same name AFTER a command the client program registered and
+did not handle; here a registered command hides the alias. `cl_locs_enable`'s `%` codes in `say`. A level change
+while a package download is running was not exercised.

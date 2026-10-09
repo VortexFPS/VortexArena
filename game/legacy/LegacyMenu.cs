@@ -444,12 +444,14 @@ public partial class LegacyMenu : Node
     // (Cmd_ForwardToServer); without one it is "unknown command" - logged once per name, so the gaps show.
     private void OnUnknownCommand(string name, IReadOnlyList<string> argv)
     {
-        if (_session is { } session && !session.Ended)
+        // cmd.c Cmd_ExecuteString: a DarkPlaces client forwards its own short list (say, kill, status, ...:
+        // DpClientCommands; "cmd" is a command of its own) and prints "Unknown command" for the rest.
+        if (_session is { } session && !session.Ended && VortexArena.Legacy.Protocol.DpClientCommands.IsForwarded(name))
         {
             session.SendToServer(CommandLine(argv));
             return;
         }
-        if (_session is null && _unknownLogged.Count < 256 && _unknownLogged.Add(name)) Log($"unknown command \"{Printable(name, 60)}\" ({Printable(CommandLine(argv), 120)})");
+        if (_unknownLogged.Count < 256 && _unknownLogged.Add(name)) Log($"Unknown command \"{Printable(name, 60)}\" ({Printable(CommandLine(argv), 120)})");
     }
 
     /// <summary>A line typed into the developer console that the shell's own interpreter did not claim.</summary>

@@ -32,7 +32,9 @@ public sealed class LegacyClientOptions
     public float ViewHeight { get; set; } = 768;
     /// <summary>cl_movement: whether input commands are marked as predicted (Xonotic's configuration sets it).</summary>
     public bool PredictMovement { get; set; } = true;
-    /// <summary>Options for each client program loaded. Null for the defaults.</summary>
+    /// <summary>Options for each client program loaded. Null for the defaults. Its
+    /// <see cref="CsqcHostOptions.UriRequests"/> (the program's HTTP requests), if any, is the session's
+    /// from here on: the session delivers the replies each frame and disposes of it.</summary>
     public CsqcHostOptions? Host { get; set; }
     /// <summary>
     /// DarkPlaces' download cache (cl_parse.c CL_BeginDownloads looks for "dlcache/csprogs.dat.SIZE.CRC"
@@ -360,6 +362,8 @@ public sealed class LegacyClientSession : IDisposable
         // CL_Frame begins with CL_VM_PreventInformationLeaks.
         host.PreventInformationLeaks();
         Console.Execute();
+        // Curl_Frame: the replies to the program's uri_get requests, between its entry points and before it draws.
+        host.DeliverUriReplies();
         int faults = host.FaultCount;
         host.UpdateView(_options.ViewWidth, _options.ViewHeight, frameTime);
         FramesDrawn++;
@@ -393,6 +397,7 @@ public sealed class LegacyClientSession : IDisposable
         UnloadProgram();
         Console.Detach();
         _options.Packages?.Dispose();
+        _options.Host?.UriRequests?.Dispose();
     }
 
     // CL_UpdateMoveVars: Xonotic publishes its physics settings as stats; the two that matter to the

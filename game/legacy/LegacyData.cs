@@ -40,6 +40,22 @@ public static class LegacyData
     public const string CurlMaxSpeedCvar = "legacy_curl_maxspeed";
     public const string CurlTimeoutCvar = "legacy_curl_timeout";
     public const string InBandCvar = "legacy_download_inband";
+    /// <summary>0 gives a server's client program no HTTP at all (the uri_get builtin): it is then told the
+    /// engine lacks DP_QC_URI_GET and DP_QC_URI_POST, and says so itself. Default 1.</summary>
+    public const string UriGetEnabledCvar = "legacy_uri_get_enabled";
+    /// <summary>Seconds one such request may take in all. Default 30, 1 to 120.</summary>
+    public const string UriGetTimeoutCvar = "legacy_uri_get_timeout";
+
+    /// <summary>The limits for the HTTP requests of a session's client program, from the player's own settings.</summary>
+    public static VortexArena.Legacy.Downloads.LegacyUriLimits UriLimits(CvarService? player)
+    {
+        VortexArena.Legacy.Downloads.LegacyUriLimits limits = new() { UserAgent = "VortexArena (legacy compatibility; DarkPlaces protocol)" };
+        if (player is null) return limits;
+        limits.Enabled = !player.Has(UriGetEnabledCvar) || player.GetFloat(UriGetEnabledCvar) != 0;
+        float timeout = player.GetFloat(UriGetTimeoutCvar);
+        if (float.IsFinite(timeout) && timeout >= 1) limits.TotalTimeoutSeconds = Math.Min(timeout, 120);
+        return limits;
+    }
 
     /// <summary>The limits for a session's package downloads, from the player's own settings.</summary>
     public static VortexArena.Legacy.Downloads.LegacyDownloadLimits DownloadLimits(CvarService? player)

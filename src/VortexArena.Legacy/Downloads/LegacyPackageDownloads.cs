@@ -192,7 +192,7 @@ public sealed class LegacyPackageDownloads : IDpPackageDownloads, IDisposable
 
     private void Begin(DpCurlCommand command)
     {
-        string urlText = InsertServerAddress(command.Url);
+        string urlText = InsertServerAddress(command.Url, ServerHost);
         string shown = LegacyPackValidator.Printable(CleanUrl(urlText), 200);
         if (command.LoadType != DpCurlLoadType.Pak)
         {
@@ -272,13 +272,13 @@ public sealed class LegacyPackageDownloads : IDpPackageDownloads, IDisposable
     }
 
     // "if URL is protocol:///* or protocol://:port/*, insert the IP of the current server"
-    private string InsertServerAddress(string url)
+    internal static string InsertServerAddress(string url, string serverHost)
     {
         int colon = url.IndexOf(':');
-        if (colon <= 0 || ServerHost.Length == 0) return url;
+        if (colon <= 0 || serverHost.Length == 0) return url;
         ReadOnlySpan<char> rest = url.AsSpan(colon);
         if (!rest.StartsWith(":///", StringComparison.Ordinal) && !rest.StartsWith("://:", StringComparison.Ordinal)) return url;
-        string host = ServerHost.Contains(':') && !ServerHost.StartsWith('[') ? "[" + ServerHost + "]" : ServerHost;
+        string host = serverHost.Contains(':') && !serverHost.StartsWith('[') ? "[" + serverHost + "]" : serverHost;
         return string.Concat(url.AsSpan(0, colon), "://", host, url.AsSpan(colon + 3));
     }
 

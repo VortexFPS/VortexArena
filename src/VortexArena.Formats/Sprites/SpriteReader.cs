@@ -17,13 +17,14 @@ namespace VortexArena.Formats.Sprites;
 ///
 /// Pixel handling:
 /// <list type="bullet">
-///   <item><b>spr32</b>: source is BGRA; we swap to RGBA (DP does the same B↔R swap).</item>
+///   <item><b>spr32</b>: the file stores R, G, B, A, which is kept. (DarkPlaces swaps bytes 0 and 2 because
+///         the texture it uploads is BGRA - <c>R_SkinFrame_LoadInternalBGRA</c> - not because the file is.)</item>
 ///   <item><b>sprhl</b>: source is 8-bit indices into the file's embedded 256-color palette; we expand to RGBA
 ///         using that palette and the rendermode's alpha rules.</item>
 ///   <item><b>spr</b> (Quake v1): source is 8-bit indices into the *external* Quake palette, which is NOT in the
 ///         file. We do not embed a palette here, so frames keep their raw indices in
-///         <see cref="SpriteFrame.Indices"/>. TODO(host): colour these through gfx/palette.lmp
-///         (palette_bgra_complete) when building the texture.</item>
+///         <see cref="SpriteFrame.Indices"/>. The host colours them with <see cref="SpriteFrame.ToRgba"/>
+///         (DarkPlaces' <c>palette_bgra_transparent</c>: index 255 is a hole).</item>
 ///   <item><b>sp2</b>: no pixels; each frame carries an external image name to resolve via the VFS.</item>
 /// </list>
 /// </summary>
@@ -52,6 +53,7 @@ public static class SpriteReader
     private const int Sp2NameLen = 64;
 
     private const int MaxReasonableFrames = 1 << 20; // guard against hostile counts
+    private const int MaxFrameSize = 8192;           // model_sprite.c SPRITE_MAXFRAMESIZE
 
     public static SpriteData Read(byte[] data)
     {
@@ -88,7 +90,7 @@ public static class SpriteReader
         };
     }
 
-    /// <summary>Reads an "IDSP" v1 (paletted) or v32 (BGRA) sprite via the shared frame walker.</summary>
+    /// <summary>Reads an "IDSP" v1 (paletted) or v32 (RGBA) sprite via the shared frame walker.</summary>
     private static SpriteData ReadQuakeSprite(ReadOnlySpan<byte> data, int version)
     {
         // dsprite_t header.
@@ -98,7 +100,8 @@ public static class SpriteReader
         int type = BinaryUtil.ReadInt32(data, 8);
         // [12] boundingradius, [16] width, [20] height -- not needed (per-frame sizes are authoritative).
         int numFrames = BinaryUtil.ReadInt32(data, 24);
-        // [28] beamlength, [32] synctype -- unused here.
+        // [28] beamlength -- unused.
+        int syncType = BinaryUtil.ReadInt32(data, 32);
 
         (var frames, var groups) = ReadIdspFrames(data, DSpriteHeaderSize, numFrames, version, palette: null,
             additive: false, format: version == Sprite32Version ? SpriteFormat.Spr32 : SpriteFormat.Spr);
@@ -111,6 +114,9 @@ public static class SpriteReader
             Additive = false,
             Frames = frames,
             GroupRanges = groups,
+            Scenes = ScenesOf(groups),
+            SyncType = syncType,
+            Radius = RadiusOf(frames),
         };
     }
 
@@ -123,6 +129,7 @@ public static class SpriteReader
         int type = BinaryUtil.ReadInt32(data, 8);
         int rendermode = BinaryUtil.ReadInt32(data, 12);
         int numFrames = BinaryUtil.ReadInt32(data, 28);
+        int syncType = BinaryUtil.ReadInt32(data, 36);
 
         int p = DSpriteHlHeaderSize;
         // Palette color count: 2-byte little-endian, must be 256.
@@ -149,6 +156,9 @@ public static class SpriteReader
             Additive = additive,
             Frames = frames,
             GroupRanges = groups,
+            Scenes = ScenesOf(groups),
+            SyncType = syncType,
+            Radius = RadiusOf(frames),
         };
     }
 
@@ -195,11 +205,13 @@ public static class SpriteReader
                 intervals = new float[groupFrames];
                 for (int k = 0; k < groupFrames; k++)
                 {
-                    // DP treats an interval < 0.01 as corrupt (Host_Error). We store the raw value verbatim
-                    // and leave that policy to the host, so a slightly-off interval doesn't reject the whole file.
                     intervals[k] = BinaryUtil.ReadFloat(data, o);
                     o += 4;
                 }
+                // DarkPlaces reads the FIRST interval only, plays the whole group at it, and refuses the
+                // sprite when it is below 0.01 ("Mod_Sprite_SharedSetup: invalid interval").
+                if (!(intervals[0] >= 0.01f))
+                    throw new AssetParseException($"IDSP sprite: invalid interval {intervals[0]} in the group at slot {i} (must be at least 0.01).");
             }
 
             int firstFlat = frames.Count;
@@ -212,8 +224,8 @@ public static class SpriteReader
                 int height = BinaryUtil.ReadInt32(data, o + 12);
                 o += DSpriteFrameSize;
 
-                if (width < 0 || height < 0)
-                    throw new AssetParseException($"IDSP sprite: negative frame size {width}x{height} at slot {i}.");
+                if (width < 0 || height < 0 || width > MaxFrameSize || height > MaxFrameSize)
+                    throw new AssetParseException($"IDSP sprite: invalid frame size {width}x{height} at slot {i} (0..{MaxFrameSize}).");
 
                 long byteCount = (long)width * height * bytesPerTexel;
                 // Bounds-check the pixel block up-front, comparing in long to avoid int overflow on hostile sizes.
@@ -233,7 +245,7 @@ public static class SpriteReader
         return (frames.ToArray(), groups);
     }
 
-    /// <summary>Decodes one frame's pixels per the format (BGRA→RGBA, HL palette expand, or raw indices).</summary>
+    /// <summary>Decodes one frame's pixels per the format (spr32 RGBA as stored, HL palette expand, or raw indices).</summary>
     private static SpriteFrame DecodeFrame(
         ReadOnlySpan<byte> data, int pixelOffset, int originX, int originY, int width, int height,
         int version, uint[]? palette, SpriteFormat format)
@@ -242,16 +254,11 @@ public static class SpriteReader
 
         if (version == Sprite32Version)
         {
-            // Source BGRA -> RGBA (swap byte 0 and 2). DP: pixels[x*4+0]=src[+2], +1=+1, +2=+0, +3=+3.
-            var rgba = new byte[pixelCount * 4];
-            for (int x = 0; x < pixelCount; x++)
-            {
-                int s = pixelOffset + x * 4;
-                rgba[x * 4 + 0] = data[s + 2]; // R <- B
-                rgba[x * 4 + 1] = data[s + 1]; // G
-                rgba[x * 4 + 2] = data[s + 0]; // B <- R
-                rgba[x * 4 + 3] = data[s + 3]; // A
-            }
+            // The file is R, G, B, A. DarkPlaces: "pixels[x*4+2] = datapointer[x*4+0]; ... pixels[x*4+0] =
+            // datapointer[x*4+2]" into a buffer it uploads as BGRA, so file byte 0 is what the screen shows as
+            // red. (This reader used to swap bytes 0 and 2, which exchanged red and blue; Xonotic's own
+            // spr32 files are grey, so it did not show.)
+            var rgba = data.Slice(pixelOffset, pixelCount * 4).ToArray();
             return new SpriteFrame { OriginX = originX, OriginY = originY, Width = width, Height = height, Rgba = rgba };
         }
 
@@ -271,7 +278,7 @@ public static class SpriteReader
         }
 
         // Plain Quake spr (v1): the palette lives outside the file. Keep raw indices for the host to colour.
-        // TODO(host): expand through the Quake palette (gfx/palette.lmp) when building the texture.
+        // SpriteFrame.ToRgba expands them through the session's Quake palette.
         var indices = new byte[pixelCount];
         data.Slice(pixelOffset, pixelCount).CopyTo(indices);
         return new SpriteFrame { OriginX = originX, OriginY = originY, Width = width, Height = height, Indices = indices };
@@ -297,7 +304,12 @@ public static class SpriteReader
                 }
                 break;
             case (int)SpriteHlRenderMode.IndexAlpha:
-                // Color is the last palette entry; alpha ramps with the index.
+                // Colour is the last palette entry; alpha ramps with the index. (DarkPlaces' loop advances
+                // its input pointer as well as indexing from it - "palette[i][2] = in[765]; ... in += 3" -
+                // so only entry 0 reads the last palette colour and entry i reads three bytes 3*i further
+                // on, past the palette, in the frame data. That is a defect, not a rule: the intended
+                // colour is used for every entry here. No sprite of this mode ships with Xonotic or with the
+                // Quake packages surveyed.)
                 {
                     byte r = data[offset + 765];
                     byte g = data[offset + 766];
@@ -379,10 +391,44 @@ public static class SpriteReader
             Additive = false,
             Frames = frames,
             GroupRanges = groups,
+            Scenes = ScenesOf(groups),
+            Radius = RadiusOf(frames),
         };
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /// <summary>
+    /// The <c>animscenes</c> of <c>Mod_Sprite_SharedSetup</c>: "frame N", the slot's run of frames, at
+    /// <c>1 / interval</c> of the group's first interval (0.1 for a single image), looping.
+    /// </summary>
+    private static SpriteScene[] ScenesOf(SpriteGroup[] groups)
+    {
+        var scenes = new SpriteScene[groups.Length];
+        for (int i = 0; i < groups.Length; i++)
+        {
+            float interval = groups[i].Intervals.Length > 0 ? groups[i].Intervals[0] : 0.1f;
+            scenes[i] = new SpriteScene($"frame {i}", groups[i].FirstFrame, groups[i].FrameCount, 1.0f / interval);
+        }
+        return scenes;
+    }
+
+    /// <summary>
+    /// <c>modelradius</c>: for each frame, the larger of left² and right² plus the larger of up² and down²
+    /// (integer arithmetic, as in the C); the square root of the largest.
+    /// </summary>
+    private static float RadiusOf(SpriteFrame[] frames)
+    {
+        float radius2 = 0;
+        foreach (SpriteFrame f in frames)
+        {
+            int x = Math.Max(unchecked(f.QuadLeft * f.QuadLeft), unchecked(f.QuadRight * f.QuadRight));
+            int y = Math.Max(unchecked(f.QuadUp * f.QuadUp), unchecked(f.QuadDown * f.QuadDown));
+            if (radius2 < unchecked(x + y))
+                radius2 = unchecked(x + y);
+        }
+        return MathF.Sqrt(radius2);
+    }
 
     private static SpriteType ToSpriteType(int t) =>
         t is >= 0 and <= 7 ? (SpriteType)t : SpriteType.VpParallel;

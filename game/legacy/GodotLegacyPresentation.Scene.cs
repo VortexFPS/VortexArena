@@ -146,7 +146,7 @@ public sealed partial class GodotLegacyPresentation
         CollectDeferredModels();
         _polygonMesh.ClearSurfaces();
         _ledger.BeginFrame();
-        _sceneFrame++;
+        _idleFrame++;
         _refdef.BeginFrame();
         _listenerOverridden = false;
     }
@@ -183,7 +183,7 @@ public sealed partial class GodotLegacyPresentation
     // difference as always). Should that entity come back after all, it takes a node the same way.
     private const int IdleStealFrames = 45;
     private readonly Dictionary<(string Model, int Skin), Queue<(int Key, long HiddenAt)>> _idle = new();
-    private long _sceneFrame;
+    private long _idleFrame;
 
     /// <summary>Nodes taken from an entity that had stopped being submitted, instead of being built.</summary>
     public long IdleNodesTaken { get; private set; }
@@ -191,14 +191,14 @@ public sealed partial class GodotLegacyPresentation
     private void NoteIdle(int key, Proxy proxy)
     {
         if (!proxy.Built || proxy.Failed || proxy.IsSubmodel || proxy.Node is null || proxy.Model.Length == 0) return;
-        proxy.HiddenAt = _sceneFrame;
+        proxy.HiddenAt = _idleFrame;
         if (!_idle.TryGetValue((proxy.Model, proxy.Skin), out Queue<(int, long)>? queue))
         {
             if (_idle.Count >= 1024) return;
             queue = new Queue<(int, long)>();
             _idle[(proxy.Model, proxy.Skin)] = queue;
         }
-        if (queue.Count < 256) queue.Enqueue((key, _sceneFrame));
+        if (queue.Count < 256) queue.Enqueue((key, _idleFrame));
     }
 
     // Moves one long-unsubmitted node of that model and skin into the spare pool, if there is one.
@@ -208,7 +208,7 @@ public sealed partial class GodotLegacyPresentation
         while (queue.Count > 0)
         {
             (int key, long hiddenAt) = queue.Peek();
-            if (_sceneFrame - hiddenAt < IdleStealFrames) return;   // the oldest is too fresh, so are the rest
+            if (_idleFrame - hiddenAt < IdleStealFrames) return;   // the oldest is too fresh, so are the rest
             queue.Dequeue();
             // Submitted again since (and perhaps hidden again: that is a later entry), rebuilt, or gone.
             if (!_proxies.TryGetValue(key, out Proxy? idle) || idle.HiddenAt != hiddenAt || idle.Shown || !idle.Built || idle.Stale || idle.Node is null

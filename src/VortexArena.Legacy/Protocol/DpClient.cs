@@ -227,6 +227,33 @@ public sealed class DpClient
         State = DpClientState.Connected;
     }
 
+    /// <summary>Levels entered on this connection whose first input command found the history of the level
+    /// before still in place (it no longer does; counted for a test and a log line).</summary>
+    public int LevelStateClears { get; private set; }
+
+    // CL_ParseServerInfo calls CL_ClearState, which wipes the whole of "cl" (memset): of what this class
+    // keeps, that is the input history (cl.movecmd, cl.cmd), the server time stamps (cl.mtime) and the send
+    // pacing (cl.timesincepacket, cl.opt_inputs_since_update). The connection itself (cls.netcon, its
+    // sequences and its reliable stream) and cls.servermovesequence live in "cls" and go on.
+    //
+    // It matters for more than tidiness. CL_SendMove measures a command's length against the last one sent,
+    // "cl.cmd.frametime = bound(0.0, cl.cmd.time - cl.movecmd[1].time, 0.255)", and "do not send 0ms packets
+    // because they mess up physics" holds the WHOLE packet back - the reliable stream with it. A new level's
+    // clock starts over, so with the old level's last command still in the history every command of the new
+    // level measured zero until its clock had passed the old level's: on a server joined twenty minutes into
+    // a match, nothing the player did - chat, "join", movement - reached the server for twenty minutes.
+    private void ClearLevelState()
+    {
+        if (_moves[1].Time != 0 || _moves[0].Time != 0) LevelStateClears++;
+        Array.Clear(_moves);
+        _moveQueued = false;
+        _mtime0 = _mtime1 = 0;
+        _timeSincePacket = 0;
+        _optInputsSinceUpdate = 0;
+        _commandSequence = 0;
+        LastUpdateSentMove = false;
+    }
+
     private void ProcessMessage(byte[] message)
     {
         // An entity frame is remembered against cl.cmd.sequence as it stood when the frame arrived:
@@ -605,6 +632,7 @@ public sealed class DpClient
 
         public void OnServerInfo(DpServerInfo info)
         {
+            _c.ClearLevelState();
             _c.Signon.OnServerInfo(info.WorldModel);
             H.OnServerInfo(info);
         }

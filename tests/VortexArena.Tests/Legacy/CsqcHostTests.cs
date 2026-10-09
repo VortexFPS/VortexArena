@@ -20,7 +20,7 @@ namespace VortexArena.Tests.Legacy;
 /// does around the VM (entry points, the entity map, the message hand-off, faults) and the builtins of
 /// clvm_cmds.c that need no renderer. The real program and real network data are CsqcDemoReplayTests.
 /// </summary>
-public class CsqcHostTests
+public partial class CsqcHostTests
 {
     /// <summary>A global or constant passed as a builtin argument: one cell, or three for a vector.</summary>
     private readonly record struct Arg(int Offset, bool IsVector)

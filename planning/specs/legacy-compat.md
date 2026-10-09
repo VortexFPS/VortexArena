@@ -597,6 +597,67 @@ sight so that its pipelines exist. Measured then: 1.4 GB less memory in play and
   flash, 10 ms for a weapon): `ModelAnimator` uploads a mesh per instance. A burst of `bloodshower` effects: 0.3 to
   0.6 ms a call, fifteen calls when a player is gibbed.
 
+### Round five in the window (added 2026-10-08)
+
+**Where it started.** Re-measured on the tree that had since taken the DarkPlaces colour pipeline, reflective
+water, realtime lights and the simulated map emitters (same recording, same method, the owner using the machine:
+other processes took 31 to 52 % of its 24 logical cores throughout): 4.04 to 4.49 ms a frame against DarkPlaces'
+3.37 to 3.80 - 17 to 25 % behind. Scripts and raw files: `_scratch/perf5/` (`run-legacy.ps1`, `dp.ps1`, `sum.py`,
+`batch2.ps1` to `batch4.ps1`). The perf log has six more columns (particle simulation, cull/sort/pack, upload, 2D
+replay, wait for the particle worker).
+
+**What was changed.**
+
+- *Particles left the frame thread.* Measured in place: 0.38 ms a frame in `ParticleSim.Update`, 0.06 ms in the
+  renderer's cull, sort and pack (the buffer upload, suspected of being most of it, was 0.02 ms once the upload
+  stopped being 640 KB a frame). `ParticleSimRunner` runs the frame's spawns, the update and the pack on a thread
+  of its own and joins when the frame is about to be drawn (`frame_pre_draw`); a spawn is recorded with the cvars
+  it would have read and applied by the worker in order; marks and beams are delivered at the join in the order
+  raised. The simulation traces through `CollisionWorld.ShareForThread()` (same brushes and broadphase, scratch of
+  its own). Legacy mode starts the step as soon as the client program has run. The particles are the same:
+  `ParticleSimRunnerTests` compares the pool with an in-place twin's byte for byte after every frame. The frame
+  thread waits 0.05 ms a frame at the join. `VORTEX_PARTICLES_WORKER=0` is the in-place path. The native game uses
+  the same code: its `particles.cpu` scope went from 0.2 - 0.4 ms a frame to under the profiler's listing.
+- *A splat's triangles are refused on their corners* before being clipped (`DecalSplats`): a gib's burst of blood
+  marks was a 12 to 16 ms message; now under 4.
+- *A hidden entity's node is lent on* (`StealIdle`): node builds in play on the recording 17 and 18, now 4.
+- *stringwidth measures without rasterising* (`LegacyGlyphAtlas.Advance`): the 12 ms frame when a scoreboard or
+  centre print first appears is gone.
+- *findradius walks the linked entities; a cvar read looks its name up once* (same program digest).
+- *Textures are compressed during play* (`gl_texturecompression 2`): `Bc7Mode6Encoder`, a managed BC7 encoder
+  (mode 6 only: one line through each block's colours, 8-bit endpoints, sixteen steps), on the texture bank's own
+  thread (which takes the frame thread's priority for the one call that hands a texture to the renderer: at the
+  lowest priority, on a busy machine, it was put aside holding the renderer's lock and the frame doubled); the
+  frame thread swaps each result in with one command. Cold cache, stormkeep, four bots: 406 textures
+  (617 megapixels) in 107 s; the renderer's texture memory 3,681 MB without, 1,112 MB with; mean frame during the
+  encoding 3.28 ms against 3.06 without. Not yet right: the operating system's dedicated-memory counter does not
+  fall within the session (the allocator keeps its blocks; the next load starts at 1,650 MB), and the managed heap
+  stays committed at 2.4 GB until the next collection (each texture's pixels pass through one large array).
+  What mode 6 gives up against the engine's encoder is a block with two unrelated colour groups.
+- *A later level of a session forgets the level before* (`TrimCachesAfterLevelChange`, F3 first step): the
+  renderer's texture memory over five levels alternating two maps is 782, 941, 946, 959, 948 MB where it was
+  753, 980, 982, 1,057, 1,058; three distinct maps end at 1,006 MB instead of 1,232. A first visit to a second
+  map still adds 110 to 160 MB that a fresh session would not hold: the rest of a left level is still referred
+  to by something not yet found.
+
+**Measured** (three interleaved triples, the recording's seconds 15 to 80, mean / p50 / p99 / p99.9 / worst in ms,
+frames over 16.7 and 33.3 ms; other processes 40 to 45 % of the machine in every run):
+
+| | mean | p50 | p99 | p99.9 | worst | >16.7 | >33.3 |
+|---|---|---|---|---|---|---|---|
+| before (median of 4.33, 4.35, 4.42) | 4.35 | 4.24 | 7.56 | 12.13 | 39 | 6 | 1 |
+| after (3.40, 3.42, 3.43) | 3.42 | 3.40 | 5.98 | 9.94 | 43 | 2 | 2 |
+| DarkPlaces (3.56, 3.59, 3.82) | 3.59 | 3.41 | 7.33 | 17.22 | 234 | 22 | 2 |
+
+Of the 3.42 ms: the client program 2.29 (interpreter 1.22, builtins 1.1 of which addentities 0.44), receiving 0.07,
+the 2D list and the rest of the node 0.15, the 2D replay 0.17, the particle join and upload 0.07, the engine's own
+frame 0.67.
+
+**What is left, by size.** The interpreter. Submitting entities (0.44 ms: the skeletal pose 0.13, network
+entities 0.07, transforms 0.06). A burst of some thousand `gettaginfo` calls when a player changes level of detail
+(3 to 5 ms in one message, about every second in a fight). The frame in which the watched player changes (20 to
+40 ms: the program's own work plus HUD pictures loaded on first use). The level-change trim (above).
+
 ## 15. Colour: the picture is computed the way DarkPlaces computes it (added 2026-10-08)
 
 **What was wrong.** Legacy compatibility mode drew Xonotic's data with the native game's shaders, and the picture

@@ -159,7 +159,14 @@ internal sealed class LegacyTextureBank : IDisposable
                 if (Swap)
                 {
                     long bytes = image.GetDataSize();
-                    Ready ready = new(vpath, RenderingServer.Texture2DCreate(image), image.GetFormat(), image.HasMipmaps(), image.GetWidth(), image.GetHeight(), bytes, was);
+                    // At the frame thread's own priority for this one call: the renderer's locks are held in
+                    // it, and a thread of the lowest priority that is put aside while holding one keeps the
+                    // frame thread waiting for as long as the machine has something better to do.
+                    Thread.CurrentThread.Priority = ThreadPriority.Normal;
+                    Rid made;
+                    try { made = RenderingServer.Texture2DCreate(image); }
+                    finally { Thread.CurrentThread.Priority = ThreadPriority.Lowest; }
+                    Ready ready = new(vpath, made, image.GetFormat(), image.HasMipmaps(), image.GetWidth(), image.GetHeight(), bytes, was);
                     Interlocked.Add(ref _readyBytes, bytes);
                     _ready.Enqueue(ready);
                 }

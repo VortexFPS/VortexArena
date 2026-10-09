@@ -982,3 +982,32 @@ progress, and a join whose map cannot be had ends at the menu with the reason. L
 started without a console. A local test set-up (a stock dedicated server bound to 127.0.0.1 with a renamed map, a
 server package and an HTTP listener) is scripted under `_scratch/join/` (`mkcontent.py`, `sv.ps1`, `http.ps1`,
 `run.ps1`, `dpc.ps1`); a stock server's default `sv_curl_defaulturl` points at xonotic.org, so set it yourself.
+
+## Sound: DarkPlaces' mixer
+
+Every sound of the native game and of legacy compatibility mode is a channel of a port of DarkPlaces'
+software mixer (`src/VortexArena.Engine/Audio`: `DpSoundSystem`, Godot-free and unit-tested;
+`game/audio/DpAudio.cs` plays what it paints through one `AudioStreamGenerator` on the Master bus, from a
+thread of its own). The engine's own spatialisation is not involved, so volume, panning, resampling, loops,
+the limiter and channel stealing are DarkPlaces': `planning/specs/legacy-compat.md` section 18 has the table of
+rules, what differed before, and the measurements.
+
+- **`snd_darkplaces 0`** (native game; read when the audio settings are applied) returns to the previous
+  engine-node path for one release. Legacy mode's previous path is the environment variable
+  `VORTEX_AUDIO_ENGINE_NODES=1` (a comparison arm, not a setting).
+- The cvars are DarkPlaces': `mastervolume`, `volume`, `bgmvolume`, `snd_staticvolume`, `snd_channelNvolume`,
+  `snd_soundradius`, `snd_attenuation_exponent`, `snd_attenuation_decibel`, `snd_spatialization_occlusion`,
+  `snd_softclip`, `snd_maxchannelvolume`, `snd_identicalsoundrandomization_time` / `_tics`, `snd_swapstereo`,
+  `snd_mutewhenidle` (1 = silent while the window is not the active one, as in DarkPlaces).
+- The audio server runs at 48 kHz (`project.godot`, `audio/driver/mix_rate`), DarkPlaces' `snd_speed`.
+- **Capturing without speakers.** `VORTEX_AUDIO_CAPTURE=<file.wav>` records the Master bus (any path);
+  `VORTEX_AUDIO_MIXDUMP=<file.f32>` writes the mixer's own output (raw float32 stereo, 48 kHz);
+  `VORTEX_AUDIO_OFFLINE=750` mixes that many frames per server tick into the dump instead of playing, which
+  with `VORTEX_LEGACY_TIMEDEMO=1` is sample-aligned with DarkPlaces' own `cl_capturevideo` capture at 64
+  pictures a second; `VORTEX_AUDIO_TRACE=1` logs the listener and channel counts once a second;
+  `VORTEX_AUDIO_NOIDLEMUTE=1` keeps an unfocused (or windowless) run audible; `VORTEX_SND_SCENE=<script>`
+  plays a scripted scene through the native game's own sound entry points (`ClientWorld.DpSound.cs`).
+  Run both with `--headless --audio-driver Dummy` (a native listen host also needs `--cvar sv_dedicated_slim 0`
+  to load its client side). DarkPlaces: `-simsound` (the mixer runs, no device) with `cl_capturevideo 1`.
+  The scripts of the comparison are under `_scratch/audio/tools/` (`mkassets.py`, `mkall.py`, `mkscene.py`,
+  `run.py`, `compare.py`, `realcmp.py`, `dropouts.py`, `perfsum.py`).

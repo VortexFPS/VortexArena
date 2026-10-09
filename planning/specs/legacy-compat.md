@@ -920,3 +920,83 @@ files kept, and no line that names rcon, a password or a key.
 (packages are mounted when they arrive instead). `--cachepic` / `--skinframe` downloads. An in-game infobar for
 downloads that continue during play (console and log only). Compressing deferred textures outside loading screens.
 A pack's override of a texture whose stock version is already in the compressed cache shows the stock one.
+
+## 18. Sound: mixed the way DarkPlaces mixes it (added 2026-10-09)
+
+**What was wrong.** Both client stacks played each sound on an engine audio node (`AudioStreamPlayer3D`) with
+the engine's attenuation switched off and DarkPlaces' distance formula applied to the node's volume. That
+matched DarkPlaces in one respect, the fall-off with distance, and in little else. Measured on the same
+scripted scenes and on the stormkeep recording (digital captures, nothing through the speakers):
+
+- *Legacy mode was muffled.* A node with its attenuation model disabled still applies the engine's distance
+  low-pass, by an amount that follows the node's own volume: on the 92 s recording the energy above 5 kHz was
+  20 dB below DarkPlaces' and above 10 kHz 30 dB below, and the whole was 3 dB quieter. (The native game had
+  already set the filter's cut-off out of the way.)
+- *The stereo law.* DarkPlaces gives each ear `0.5 + 0.5 * (the source's direction towards that ear)`: a sound
+  straight ahead is at half volume in both ears, a sound at one ear at full volume there and silent in the
+  other. The engine's panner put a sound straight ahead 6.0 dB louder than DarkPlaces, a sound hard left 2.2 dB
+  louder in the near ear and only 5 dB down (not silent) in the far ear.
+- *No limiter.* Xonotic turns on DarkPlaces' limiter (`snd_softclip 1`; the output is 16 bit, so it is active):
+  the mix is divided by its recent peak. Four full-scale sounds came out 4.2 dB hotter, forty at once 4 dB.
+- *Channels.* 64 voices in legacy mode and an unbounded pool natively, against DarkPlaces' 512 dynamic channels
+  with its rules for which one a new sound takes; `svc_stopsound` stopped nothing but loops natively; a sample
+  with a loop point (WAV `cue `) played once; static sounds of one sample were mixed separately; identical
+  sounds started in one frame were not offset.
+- *Things that did nothing in a legacy game:* `cd loop` and `svc_cdtrack` (so no level music), `play` / `play2` /
+  `playvol`, `stopsound`, the empty-sample volume change that fades Xonotic's `target_music`,
+  `snd_spatialization_occlusion`, `snd_mutewhenidle`. The Master bus also applied the native `mastervolume` on
+  top of the session's own.
+- *Resampling.* The engine resamples with cubic interpolation, DarkPlaces with linear interpolation and a
+  16.16 fixed-point step, at 48 kHz; the audio server ran at 44.1 kHz on drivers that take the project setting.
+
+**What it is now.** `src/VortexArena.Engine/Audio` is a port of `snd_main.c`, `snd_mix.c`, the loop-point
+reading of `snd_wav.c` and `snd_ogg.c`, and `cd_shared.c`: the channel table (`SND_PickChannel`: an entity
+channel 1..127 replaces what plays on it, 0 and below stack; when all 512 are busy the channel with the least
+left to play goes, never a looping one, and never the view entity's for another entity's sound), the per-frame
+spatialisation (`SND_Spatialize_WithSfx`: the volume cvars by entity class, `volume`, `mastervolume`,
+ReplayGain, the distance factor `(1 - min(1, d * attenuation / radius))^exponent * 0.1^(0.1 * decibel * ...)`,
+halving behind the potentially visible set, the stereo law, full volume for the view entity and for
+attenuation 0), the mixer (`S_MixToBuffer`: linear resampling, loops, the limiter, the under-water filter, the
+16 bit clamp), static sounds (attenuation / 64, one voice per sample), the "change volume" sample, and music as
+a full-volume looping channel that `bgmvolume` scales and a volume of zero pauses. Both stacks start their
+sounds on it; `game/audio/DpAudio.cs` plays its output through one generator stream. Samples are decoded to
+16 bit PCM at their own rate (WAV here; Ogg Vorbis by the engine's decoder run at the file's rate), as
+DarkPlaces holds them.
+
+**How it was measured.** A script of 75 scenes (`_scratch/audio/tools/mkall.py`: distance, direction,
+attenuation classes, volume, noise, sample rates and pitch, stereo samples, channel replacement, loops, a
+turning listener, the limiter, forty and 532 simultaneous sounds, Ogg samples, console commands, occlusion,
+music) is turned into a DarkPlaces recording (`mkscene.py`: the first seconds of a real one, then synthetic
+`svc_sound` / `svc_spawnstaticsound2` / `svc_stopsound` / `svc_stufftext` messages). DarkPlaces plays it with
+`-simsound` and writes its mix with `cl_capturevideo` (64 pictures a second: 750 frames of sound each); legacy
+mode plays the same file one message a frame and mixes 750 frames a message into a file; the native game plays
+the script through its own entry points the same way. `compare.py` aligns the files on a click train and
+compares each scene.
+
+| | legacy mode | native game |
+|---|---|---|
+| scenes whose samples are identical to DarkPlaces' (difference below -180 dB) | 53 of 75 | (its listener stands 0.05 units from the recording's, and it is not fed 8 bit volumes: -50 to -115 dB) |
+| level, every scene | within 0.00 dB, except: the first frame after a stuffed command (below) | within 0.03 dB, except the same |
+| resampled samples (22.05, 44.1 kHz), Ogg samples, the turning listener, the limiter | -73 to -106 dB: DarkPlaces' output depends on where its mix blocks fall at that level | the same |
+| the stormkeep recording, 10 s windows | within 0.3 dB (mean -0.16 dB); energy above 5 kHz +0.2 dB | not applicable |
+
+Through the engine's bus in real time (the Dummy driver) the native game's scenes measure the same levels, and
+where a scene lines up within the search window the samples are the mixer's own (-180 dB): the generator
+passes them through untouched at 48 kHz.
+
+**What still differs.**
+
+- *A command a server stuffs* (`play2`, `cd`, `stopsound`) runs here in the frame it arrives; DarkPlaces runs it
+  in the next one. One frame.
+- *Latency.* The mixer keeps about 32 ms (1536 frames) queued ahead of the audio server and more if the output
+  takes bigger bites (the Dummy driver takes 4096 at once; the queue grows by itself and shrinks back).
+  DarkPlaces' mixer is called by the device and has no such queue. The engine does not let a C# class be the
+  stream itself (`AudioStreamPlayback._mix` is not bound for C#); a GDExtension stream, or that binding, would
+  remove the queue. Not measured on a real device.
+- *Not ported:* the four leaf ambient channels of a Quake 1 map, speaker layouts other than stereo, Dolby Pro
+  Logic encoding, the line-of-sight occlusion method (bit 2; Xonotic uses bit 1), `music_playlist_*`,
+  `CSQC_Event_Sound`, the under-water filter's trigger (the filter is there; nothing tells it the view is
+  under water yet), `snd_channellayout`. Long music is decoded whole into memory rather than streamed.
+- *Random choices differ run to run in both engines:* the offset of identical sounds started together.
+- *Native only:* a loop its emitter stops refreshing ends after half a second (the native netcode's rule),
+  and vehicle engine and alarm sounds are still engine nodes.

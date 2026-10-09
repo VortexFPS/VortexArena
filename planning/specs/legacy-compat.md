@@ -959,7 +959,7 @@ halving behind the potentially visible set, the stereo law, full volume for the 
 attenuation 0), the mixer (`S_MixToBuffer`: linear resampling, loops, the limiter, the under-water filter, the
 16 bit clamp), static sounds (attenuation / 64, one voice per sample), the "change volume" sample, and music as
 a full-volume looping channel that `bgmvolume` scales and a volume of zero pauses. Both stacks start their
-sounds on it; `game/audio/DpAudio.cs` plays its output through one generator stream. Samples are decoded to
+sounds on it; `game/audio/DpAudio.cs` plays its output as one stream of the engine. Samples are decoded to
 16 bit PCM at their own rate (WAV here; Ogg Vorbis by the engine's decoder run at the file's rate), as
 DarkPlaces holds them.
 
@@ -988,15 +988,117 @@ passes them through untouched at 48 kHz.
 
 - *A command a server stuffs* (`play2`, `cd`, `stopsound`) runs here in the frame it arrives; DarkPlaces runs it
   in the next one. One frame.
-- *Latency.* The mixer keeps about 32 ms (1536 frames) queued ahead of the audio server and more if the output
-  takes bigger bites (the Dummy driver takes 4096 at once; the queue grows by itself and shrinks back).
-  DarkPlaces' mixer is called by the device and has no such queue. The engine does not let a C# class be the
-  stream itself (`AudioStreamPlayback._mix` is not bound for C#); a GDExtension stream, or that binding, would
-  remove the queue. Not measured on a real device.
+- *Latency.* As first written the mixer kept about 32 ms (1536 frames) queued ahead of the audio server.
+  It is called by the engine's audio thread now, as DarkPlaces' is by the device: the second round, below.
 - *Not ported:* the four leaf ambient channels of a Quake 1 map, speaker layouts other than stereo, Dolby Pro
   Logic encoding, the line-of-sight occlusion method (bit 2; Xonotic uses bit 1), `music_playlist_*`,
-  `CSQC_Event_Sound`, the under-water filter's trigger (the filter is there; nothing tells it the view is
-  under water yet), `snd_channellayout`. Long music is decoded whole into memory rather than streamed.
+  `CSQC_Event_Sound`, `snd_channellayout`. Long music is decoded whole into memory rather than streamed.
 - *Random choices differ run to run in both engines:* the offset of identical sounds started together.
-- *Native only:* a loop its emitter stops refreshing ends after half a second (the native netcode's rule),
-  and vehicle engine and alarm sounds are still engine nodes.
+- *Native only:* a loop its emitter stops refreshing ends after half a second (the native netcode's rule).
+
+### Second round (2026-10-09): the under-water trigger, vehicle sounds, output latency
+
+**Under water.** DarkPlaces decides it in `view.c` `V_CalcViewBlend`: `supercontents =
+CL_PointSuperContents(vieworigin)`, `cl.view_underwater = supercontents & SUPERCONTENTS_LIQUIDSMASK` (water,
+slime or lava), where `vieworigin` is the origin of `r_refdef.view.matrix` and the point test is a zero-size
+trace against the world and the server's brush models, never the client program's entities
+(`cl_collision.h`). It runs at the end of `CSQC_RelinkAllEntities`, so inside every `addentities` of the
+client program with the view the program has set so far, and only once connected. `S_Update` then calls
+`S_SetUnderwaterIntensity` (`snd_mix.c`): the intensity moves towards `bound(0, snd_waterfx, 2)` (0 out of
+water) at 4 a second of real frame time, and the filter is one pole a side, `accum += alpha * (sample -
+accum)` with `alpha = exp(-intensity * ln 12)`: at `snd_waterfx 1` (Xonotic leaves the default) a low-pass at
+about 700 Hz, in over a quarter of a second. Legacy mode sets the flag in `addentities` from the program's
+view origin through the same point test its `pointcontents` builtin uses; the native game tests the contents
+of the listener's place each frame.
+
+Measured with a recording made for it: a DarkPlaces listen server on solarium (127.0.0.1, no device), the
+observer put at the bottom of the pool with `prvm_edictset` (`_scratch/audio2/tools/dprec.py`), then noise and
+a 1 kHz tone, not attenuated, while `snd_waterfx` is stuffed 0, 1, 2 (`mkuw.py`). Offline captures against
+DarkPlaces' own, both stacks:
+
+| listener in the pool | DarkPlaces | legacy mode | native game |
+|---|---|---|---|
+| noise, `snd_waterfx 0` | -13.9 dB | -13.9, identical samples | -13.9, identical |
+| noise, `snd_waterfx 1` | -27.6 dB | -27.6, difference -103 dB | -27.6 |
+| noise, `snd_waterfx 2` | -38.2 dB | -38.2, difference -94 dB | -38.2 |
+| 1 kHz, 0 / 1 / 2 | -12.1 / -17.3 / -37.6 dB | the same, identical samples | the same levels |
+| while the filter moves (0.25 to 0.5 s) | | 0.1 to 0.9 dB off | the same |
+
+The last row is the one-frame difference of a stuffed command noted above (the cvar changes a frame earlier
+here), not the ramp. The 75 scenes of the first round, whose listener stands in air, are unchanged: 53
+identical.
+
+**Vehicle sounds.** The client-side engine voice of a vehicle model (`game/client/VehicleVisuals.cs`: idle,
+moving and boost loops cross-faded by speed), its blow-up, and the pilot's low-health and low-shield alarms
+(`game/hud/VehicleHud.cs`) were engine audio nodes. They are channels of the mixer now, with what Xonotic's
+QuakeC gives them (`src/VortexArena.Engine/Audio/DpVehicleSounds.cs`): an engine sound is
+`sound(vehic, CH_TRIGGER_SINGLE, SND_VEH_*, VOL_VEHICLEENGINE, ATTEN_NORM)` - volume 1, attenuation 0.5, and
+never a pitch (plain `sound`, not `sound7`); the blow-up `CH_SHOTS`, `VOL_BASE`, `ATTEN_NORM`; an alarm
+`sound(NULL, CH_PAIN_SINGLE or CH_TRIGGER_SINGLE, ..., VOL_BASEVOICE, ATTEN_NONE)`, a single channel of the
+world entity that each repeat replaces and `SND_Null` stops. No stock map has a vehicle and nothing can board
+one from a script, so there is no DarkPlaces capture; the calls are checked numerically
+(`DpVehicleSoundTests`) and by a capture of a scripted racer (`mkveh.py`): 600 units ahead equal in both
+ears, at one side that ear 6.0 dB up and the other silent (the engine nodes: 5 to 6 dB between the ears),
+1200 units 5.3 dB below 600 (the formula: 5.36), the alarms equal in both ears.
+
+Found on the way and fixed: the native game's sound registry names samples without an extension, the mixer's
+sample bank looked them up as DarkPlaces would (which wants one), and so about a fifth of the native game's
+sounds (90 of 473 in a 40 second match with four bots; the item respawn countdown, for one) silently stayed
+on engine nodes. The native bank now gives such a name `.wav` first.
+
+What this did not change, and differs from Xonotic: there the engine sounds are the SERVER's, restarted at
+the sample's length while someone drives (racer: move or idle, and boost on the turret head; raptor: one
+sample; spiderbot: idle, walk, strafe, jump, land; the bumblebee has none), stopped when the pilot leaves.
+The native server issues the racer's and the raptor's as well as the client voice playing them, the client
+voice also hums for a parked vehicle and for the bumblebee, and its blow-up doubles the server's.
+
+**Output latency.** DarkPlaces' own: its SDL back end has the device call the mixer (`snd_sdl.c`
+`Buffer_Callback`, `snd_usethreadedmixing`; `_snd_mixahead` 0.15 belongs to the other, unthreaded path and is
+not used). It asks for `snd_bufferlength` 20 ms = 960 frames rounded up to 1024, and SDL's WASAPI back end
+(2.32 here) makes the callback the device's period instead, which on this machine's device is 480 frames
+(10 ms). So a sound waits for the next callback, 0 to 10 ms, and is then written behind what the device still
+holds. (Read from the sources; DarkPlaces was not run with a device, which would have meant sound.)
+
+Ours, measured on this machine's output device with the mixer handing over silence
+(`VORTEX_AUDIO_SILENT=1`; the engine's WASAPI driver reports a period of 480 frames, the smallest and the
+largest the device offers, so `audio/driver/output_latency` cannot shorten it):
+
+| | queue (before) | on the audio thread (now) |
+|---|---|---|
+| from a sound's start to its block reaching the audio server, 4 bots | mean 27 ms, worst 38 | mean 5.5 ms, worst 20 |
+| the same with 512 voices sounding | mean 27 ms | mean 5 ms, worst 18 |
+| under-runs, level load + 512 voices + 4 bots (Debug build) | 12 | none: no wait between two calls above 25 ms (longest 21.9; they come 10 or 20 ms apart) |
+| the mixer's worst single call, 512 voices | 5.6 ms | 5.8 ms of the 10.7 a block lasts |
+| a click on the mixer against the same click on a plain engine player (Dummy driver, bus capture) | 4224 frames late (88 ms: that driver takes 4096 at once) | 2 frames EARLY |
+
+What was looked at, and why the last one was taken:
+
+- *A shorter queue.* A depth of 640 frames grew to 896 by itself and under-ran 6 times in 40 s; 1024 under-ran
+  4 times; both left a mean of 15 to 18 ms. The audio server mixes 512 frames at a time and our thread wakes
+  every 1 to 2 ms (17 to 19 ms now and then under load), so one block plus that margin is the floor.
+- *Project settings.* `audio/driver/output_latency` (default 15 ms; this device clamps it to 10) and
+  `mix_rate` (48000, set) do not touch the queue. The server's 512-frame block is fixed in the engine
+  (`servers/audio/audio_server.cpp`, a TODO there).
+- *A C# AudioEffect on a bus, or a C# stream.* Godot's C# API declares neither `AudioEffectInstance._Process`
+  nor `AudioStreamPlayback._Mix`: its generator leaves out every method with a pointer parameter
+  (`modules/mono/editor/bindings_generator.cpp`, "Pointers are not supported"). But the ENGINE's call does
+  not need the declaration. A virtual of a scripted object is offered to its script by name first, with the
+  arguments as Variants, and a pointer travels as an integer (`core/object/make_virtuals.py`,
+  `core/variant/native_ptr.h`), so a C# method named exactly `_mix(long, float, int)` on an
+  `AudioStreamPlayback` IS called, on the audio thread, without an allocation. Tested, not assumed:
+  thousands of calls in every run, on the Dummy driver and on WASAPI. This is what is used. It is engine behaviour rather than a documented
+  contract, hence the check at start and the fallback.
+- *An engine patch binding `_mix` for C#.* It would arrive at the same call on the same thread; nothing to
+  gain. Not written.
+- *A GDExtension stream fed from a ring by our thread.* Still a queue. With the mixer itself moved into the
+  native library it would be free of the runtime's collections, at the price of a second mixer to keep equal
+  to this one and a native build for every platform (Windows, Linux, macOS, ppc64le; MSVC and cargo are on
+  this machine, nothing in the repository builds native code).
+- *Our own device (WASAPI, ALSA, CoreAudio).* The same latency as the audio thread gives, and the loss of
+  the engine's device selection, its buses and capture, and four back ends to own.
+
+What remains against DarkPlaces: the audio server's block is 512 frames where the device's period is 480,
+and it holds 64 frames of look-ahead (1.3 ms); and the mixer is managed code, so a collection that stops all
+threads holds the audio thread for its length. In these runs the collections of a level load (57 of them,
+258 ms of pauses in all) never made a call more than 12 ms late. Not measured: the device's own buffer, which
+both engines write into, and anything after it.

@@ -987,10 +987,18 @@ server package and an HTTP listener) is scripted under `_scratch/join/` (`mkcont
 
 Every sound of the native game and of legacy compatibility mode is a channel of a port of DarkPlaces'
 software mixer (`src/VortexArena.Engine/Audio`: `DpSoundSystem`, Godot-free and unit-tested;
-`game/audio/DpAudio.cs` plays what it paints through one `AudioStreamGenerator` on the Master bus, from a
-thread of its own). The engine's own spatialisation is not involved, so volume, panning, resampling, loops,
-the limiter and channel stealing are DarkPlaces': `planning/specs/legacy-compat.md` section 18 has the table of
-rules, what differed before, and the measurements.
+`game/audio/DpAudio.cs` plays what it paints as one stream on the Master bus). The engine's own
+spatialisation is not involved, so volume, panning, resampling, loops, the limiter, the under-water filter
+and channel stealing are DarkPlaces': `planning/specs/legacy-compat.md` section 18 has the table of rules,
+what differed before, and the measurements.
+
+- **The mixer runs on the engine's audio thread**, called for each 512-frame block the audio server mixes
+  (`game/audio/DpMixerStream.cs`), as DarkPlaces' is called by the sound device: nothing is queued between
+  the two, and a sound started now is in the next block. If an engine does not call a C# stream (checked at
+  start: no call within two seconds, said once in the log) the previous arrangement takes over, a generator
+  stream fed from a thread of our own with about 32 ms queued. `VORTEX_AUDIO_QUEUE=1` asks for that
+  arrangement (a number of 256 or more sets its queue depth in frames, `fallback` simulates the engine that
+  never calls). `VORTEX_AUDIO_TRACE=1` says which is in use (`path direct` or `path queue`).
 
 - **`snd_darkplaces 0`** (native game; read when the audio settings are applied) returns to the previous
   engine-node path for one release. Legacy mode's previous path is the environment variable
@@ -1004,10 +1012,22 @@ rules, what differed before, and the measurements.
   `VORTEX_AUDIO_MIXDUMP=<file.f32>` writes the mixer's own output (raw float32 stereo, 48 kHz);
   `VORTEX_AUDIO_OFFLINE=750` mixes that many frames per server tick into the dump instead of playing, which
   with `VORTEX_LEGACY_TIMEDEMO=1` is sample-aligned with DarkPlaces' own `cl_capturevideo` capture at 64
-  pictures a second; `VORTEX_AUDIO_TRACE=1` logs the listener and channel counts once a second;
+  pictures a second; `VORTEX_AUDIO_TRACE=1` logs once a second the listener, the channel counts, whether
+  the view is under water, sounds started on the mixer and sounds whose sample it did not find (`missed`:
+  those play on an engine node), and the output path's figures: `gapmax` / `late25` / `late50` (the longest
+  wait between two calls of the audio thread, and how many exceeded 25 and 50 ms), `latency n mean max`
+  (milliseconds from a sound's start to the block that carries it reaching the audio server), the queue's
+  `underruns` and `target`, the mixer's cost, and the collections the runtime ran with their total pause;
   `VORTEX_AUDIO_NOIDLEMUTE=1` keeps an unfocused (or windowless) run audible; `VORTEX_SND_SCENE=<script>`
-  plays a scripted scene through the native game's own sound entry points (`ClientWorld.DpSound.cs`).
+  plays a scripted scene through the native game's own sound entry points (`ClientWorld.DpSound.cs`; the
+  listener stands at `VORTEX_SND_SCENE_EAR="x y z"`, and besides sounds a script can place a vehicle's
+  client-side voice and sound the pilot's alarms); `VORTEX_AUDIO_LATENCY_TEST=1` starts a click on the mixer
+  (right side) and on a plain engine player (left side) in the same instant once a second, so a capture
+  shows what the mixer's path adds; `VORTEX_AUDIO_SILENT=1` mixes and measures as usual but hands the
+  engine silence and mutes the Master bus, for timing a real output device without making a sound.
   Run both with `--headless --audio-driver Dummy` (a native listen host also needs `--cvar sv_dedicated_slim 0`
   to load its client side). DarkPlaces: `-simsound` (the mixer runs, no device) with `cl_capturevideo 1`.
   The scripts of the comparison are under `_scratch/audio/tools/` (`mkassets.py`, `mkall.py`, `mkscene.py`,
-  `run.py`, `compare.py`, `realcmp.py`, `dropouts.py`, `perfsum.py`).
+  `run.py`, `compare.py`, `realcmp.py`, `dropouts.py`, `perfsum.py`), and those of the second round (vehicles,
+  under water, output latency) under `_scratch/audio2/tools/` (`run2.py`, `dprec.py`, `mkuw.py`, `mkveh.py`,
+  `veh.py`, `mkstress.py`, `latclicks.py`).

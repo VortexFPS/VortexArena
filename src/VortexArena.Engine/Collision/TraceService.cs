@@ -57,6 +57,21 @@ public sealed class TraceService : ITraceService
             toWorld = EntityMatrix.Identity;
             return false;
         }
+
+        /// <summary>
+        /// For a SOLID_BSP entity showing a model of a Quake 1 format map ("*N": a door, a platform): the
+        /// map's clipping hulls, the model's number in them and the entity's local-to-world transform. Such a
+        /// model has no brushes; the trace goes through its hulls (<see cref="Q1HullCollision"/>), as DP's
+        /// <c>Collision_ClipToGenericEntity</c> does through <c>Mod_Q1BSP_TraceBox</c>. Asked before
+        /// <see cref="TryGetEntityBrushModel"/>. The default - and the native game's answer - is false.
+        /// </summary>
+        bool TryGetEntityHullModel(Entity e, out Q1HullCollision? hulls, out int model, out EntityMatrix toWorld)
+        {
+            hulls = null;
+            model = 0;
+            toWorld = EntityMatrix.Identity;
+            return false;
+        }
     }
 
     private readonly IEntityProvider? _entities;
@@ -172,6 +187,11 @@ public sealed class TraceService : ITraceService
     /// for it, so it is kept here; valid until the next trace on this service.)
     /// </summary>
     public int LastStartContents { get; private set; }
+
+    /// <summary>The fraction of the last trace in double precision, as DarkPlaces' <c>trace_t.fraction</c>
+    /// holds it. Differs from <see cref="TraceResult.Fraction"/> only on a Quake 1 format map
+    /// (<see cref="CollisionWorld.Hulls"/>), whose hull code computes it in doubles.</summary>
+    public double LastFraction { get; private set; } = 1;
 
     /// <summary>The cached read-only moving-box brush for a hull (allocated once per distinct mins/maxs).</summary>
     private Brush BoxBrush(Vector3 mins, Vector3 maxs)
@@ -294,6 +314,9 @@ public sealed class TraceService : ITraceService
                 TraceBrushVsBrush(ref trace, box, start, end, candidate, worldBrush: true, hitEnt: null);
         }
 
+        // A Quake 1 format map: the world is clipping hulls, not brushes (Collision_ClipToWorld, Mod_Q1BSP_TraceBox).
+        if (_world.Hulls is { } worldHulls) Q1HullClip.World(ref trace, worldHulls, start, mins, maxs, end);
+
         bool worldStartSolid = trace.StartSolid;
 
         // MOVE_WORLDONLY stops at the world.
@@ -320,6 +343,7 @@ public sealed class TraceService : ITraceService
         }
 
         LastStartContents = trace.StartContents;
+        LastFraction = trace.HasExactFraction ? trace.ExactFraction : trace.Fraction < 0f ? 0f : trace.Fraction;
         return BuildResult(trace, start, end, worldStartSolid);
     }
 
@@ -359,6 +383,8 @@ public sealed class TraceService : ITraceService
                 contents |= b.Contents;
         }
 
+        if (_world.Hulls is { } pointHulls) contents |= pointHulls.PointContents(0, point);
+
         // SV_PointSuperContents (sv_phys.c:611) also ORs each SOLID_BSP entity's brush-model contents at the
         // point — sv_gameplayfix_swiminbmodels, default 1, so you can swim inside a (possibly moving) water
         // bmodel. For each SOLID_BSP entity we transform the point into its local space (inverse matrix) and
@@ -375,6 +401,11 @@ public sealed class TraceService : ITraceService
                 if (touch.IsFreed || touch.Solid != Solid.Bsp) continue;
                 if (!CollisionWorld.BoxesOverlap(point, point, touch.Origin + touch.Mins, touch.Origin + touch.Maxs))
                     continue;
+                if (_entities.TryGetEntityHullModel(touch, out Q1HullCollision? entHulls, out int hullModel, out EntityMatrix hullToWorld) && entHulls is not null)
+                {
+                    contents |= entHulls.PointContents(hullModel, hullToWorld.Inverted().TransformPoint(point));
+                    continue;
+                }
                 if (!_entities.TryGetEntityBrushModel(touch, out IReadOnlyList<Brush> localBrushes, out EntityMatrix toWorld))
                     continue;
 
@@ -444,6 +475,22 @@ public sealed class TraceService : ITraceService
             // SV_ClipMoveToEntity → Collision_ClipToGenericEntity. We only take this path when the entity
             // really has brush-model geometry; everything else (SOLID_BBOX/CORPSE, alias-model SOLID_BSP
             // without brushes) keeps the AABB sweep below.
+            // A model of a Quake 1 format map: its clipping hulls (see IEntityProvider.TryGetEntityHullModel).
+            if (touch.Solid == Solid.Bsp &&
+                _entities.TryGetEntityHullModel(touch, out Q1HullCollision? entHulls, out int hullModel, out EntityMatrix hullToWorld) && entHulls is not null)
+            {
+                Vector3 hullMins = pointMins, hullMaxs = pointMaxs;
+                if (filter == MoveFilter.Missile && (monsterBox is null || (touch.Flags & EntFlags.Monster) != 0))
+                {
+                    hullMins -= new Vector3(15f, 15f, 15f);
+                    hullMaxs += new Vector3(15f, 15f, 15f);
+                }
+                SweepState own = new() { Fraction = 1f, HitMask = trace.HitMask };
+                Q1HullClip.Entity(ref own, entHulls, hullModel, hullToWorld, start, hullMins, hullMaxs, end, touch);
+                CombineTraces(ref trace, own, touch);
+                continue;
+            }
+
             if (touch.Solid == Solid.Bsp &&
                 _entities.TryGetEntityBrushModel(touch, out IReadOnlyList<Brush> localBrushes, out EntityMatrix toWorld))
             {
@@ -891,8 +938,15 @@ public sealed class TraceService : ITraceService
     {
         if (trace.AllSolid) clip.AllSolid = true;
         if (trace.StartSolid) clip.StartSolid = true;
-        if (trace.Fraction < clip.Fraction && DotExact(trace.PlaneNormal, trace.PlaneNormal) > 0)
+        // (Mod_Q1BSP_RecursiveHullCheck is the one clip that sets inwater; inopen is the world's alone)
+        if (trace.InWater) clip.InWater = true;
+        bool nearer = trace.HasExactFraction || clip.HasExactFraction
+            ? (trace.HasExactFraction ? trace.ExactFraction : trace.Fraction) < (clip.HasExactFraction ? clip.ExactFraction : clip.Fraction)
+            : trace.Fraction < clip.Fraction;
+        if (nearer && DotExact(trace.PlaneNormal, trace.PlaneNormal) > 0)
         {
+            clip.HasExactFraction = trace.HasExactFraction;
+            clip.ExactFraction = trace.ExactFraction;
             clip.Fraction = trace.Fraction;
             clip.PlaneNormal = trace.PlaneNormal;
             clip.PlaneDist = trace.PlaneDist;
@@ -1353,6 +1407,18 @@ public sealed class TraceService : ITraceService
         }
         // InOpen/InWater are classified by start contents; the engine fills waterlevel separately.
         r.InOpen = !s.StartSolid;
+        if (s.HullWorld)
+        {
+            // a Quake 1 format map says both itself, and names what the last leaf held even after a miss
+            r.InOpen = s.InOpen;
+            r.InWater = s.InWater;
+            if (!s.Hit)
+            {
+                r.DpHitContents = s.HitContents;
+                r.DpHitQ3SurfaceFlags = s.HitSurfaceFlags;
+                r.DpHitTextureName = s.HitTexture;
+            }
+        }
         return r;
     }
 
@@ -1371,5 +1437,65 @@ public sealed class TraceService : ITraceService
         public string? HitTexture;
         public int HitMask;
         public int StartContents;
+        // Quake 1 format maps (Q1HullClip): the fraction as the hull code computed it, and what only it reports
+        public double ExactFraction;
+        public bool HasExactFraction;
+        public bool HullWorld, InOpen, InWater;
+    }
+
+    /// <summary>The two places a move meets clipping hulls: Collision_ClipToWorld and Collision_ClipToGenericEntity
+    /// with a model whose TraceBox is Mod_Q1BSP_TraceBox. (Nested for access to <see cref="SweepState"/>.)</summary>
+    private static class Q1HullClip
+    {
+        public static void World(ref SweepState trace, Q1HullCollision hulls, Vector3 start, Vector3 mins, Vector3 maxs, Vector3 end)
+        {
+            hulls.TraceBox(0, start, mins, maxs, end, trace.HitMask, out Q1HullTrace hit);
+            trace.HullWorld = true;
+            trace.InOpen = hit.InOpen;
+            trace.InWater = hit.InWater;
+            trace.StartContents |= hit.StartContents;
+            if (hit.StartSolid) trace.StartSolid = true;
+            if (hit.AllSolid) trace.AllSolid = true;
+            // the world's answer is the trace the entities are then combined into
+            trace.HitContents = hit.HitContents;
+            trace.HitSurfaceFlags = hit.HitSurfaceFlags;
+            trace.HitTexture = hit.HitTexture;
+            if (hit.Fraction < trace.Fraction)
+            {
+                trace.ExactFraction = hit.Fraction;
+                trace.HasExactFraction = true;
+                trace.Fraction = (float)hit.Fraction;
+                trace.PlaneNormal = hit.PlaneNormal;
+                trace.PlaneDist = hit.PlaneDist;
+                trace.Hit = true;
+                trace.Ent = null;
+            }
+        }
+
+        public static void Entity(ref SweepState own, Q1HullCollision hulls, int model, EntityMatrix toWorld, Vector3 start, Vector3 mins, Vector3 maxs, Vector3 end, Entity touch)
+        {
+            // "this is only approximate if rotated, quite useless": the move's ends go into the model's space, the box does not turn
+            EntityMatrix inv = toWorld.Inverted();
+            hulls.TraceBox(model, inv.TransformPoint(start), mins, maxs, inv.TransformPoint(end), own.HitMask, out Q1HullTrace hit);
+            own.StartSolid = hit.StartSolid;
+            own.AllSolid = hit.AllSolid;
+            own.InWater = hit.InWater;
+            own.StartContents = hit.StartContents;
+            own.ExactFraction = hit.Fraction;
+            own.HasExactFraction = true;
+            own.Fraction = (float)hit.Fraction;
+            own.HitContents = hit.HitContents;
+            own.HitSurfaceFlags = hit.HitSurfaceFlags;
+            own.HitTexture = hit.HitTexture;
+            own.Ent = touch;
+            // "transform plane" (a miss leaves the zero normal, which CombineTraces never takes)
+            if (hit.PlaneNormal != Vector3.Zero)
+            {
+                (Vector3 wn, float wd) = toWorld.TransformPositivePlane(hit.PlaneNormal, hit.PlaneDist);
+                own.PlaneNormal = wn;
+                own.PlaneDist = wd;
+                own.Hit = hit.Fraction < 1;
+            }
+        }
     }
 }

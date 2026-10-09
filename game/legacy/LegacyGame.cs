@@ -1565,6 +1565,13 @@ public partial class LegacyGame : Node
             Fail("The server's game code could not be started: " + Printable(programError, 300));
             return false;
         }
+        if (session.WorldError is { } worldError)
+        {
+            // The map is there and cannot be used (a format this client does not read, a damaged file).
+            // DarkPlaces would print the loader's error and go on into an empty world. This client leaves.
+            Fail("The map could not be loaded: " + Printable(worldError, 400));
+            return false;
+        }
         if (client.Signon.MissingWorld is { } missingWorld)
         {
             // DarkPlaces prints "Map %s not found" and goes on into an empty world. This client leaves instead.

@@ -138,6 +138,15 @@ public sealed class LegacyClientSession : IDisposable
     /// <summary>Why the server's client program could not be started, or null. The connection goes on
     /// without it, but nothing the program was to decode can be decoded.</summary>
     public string? ProgramError { get; private set; }
+
+    /// <summary>
+    /// Why this level cannot be entered although the game data has its map: the presentation could not load
+    /// the file (<see cref="ILegacyPresentation.WorldLoadError"/>: an unsupported or damaged map). Set when the
+    /// level's program would have been started; the program is then not started and nothing more is sent for
+    /// this level. The owner leaves the server and shows the reason, exactly as for a map that is missing
+    /// (<see cref="DpSignon.MissingWorld"/>). DarkPlaces would enter an empty world.
+    /// </summary>
+    public string? WorldError { get; private set; }
     /// <summary>Client programs started on this session (one per level).</summary>
     public int ProgramsStarted { get; private set; }
     /// <summary>Calls of CSQC_UpdateView, and how many of them faulted.</summary>
@@ -429,6 +438,7 @@ public sealed class LegacyClientSession : IDisposable
             UnloadProgram();
             _programPending = true;
             ProgramError = null;
+            WorldError = null;
             Clock.Reset();
             _lastSentMoveTime = 0;
             _mountsAtLevelStart = _options.Packages?.MountedCount ?? 0;
@@ -449,6 +459,14 @@ public sealed class LegacyClientSession : IDisposable
             long started = System.Diagnostics.Stopwatch.GetTimestamp();
             Presentation.LevelFilesArrived(State);
             Note($"the level's files were loaded after its downloads ({System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} s)");
+        }
+        if (Presentation.WorldLoadError is { Length: > 0 } worldError)
+        {
+            // Never a level without its world: no program, no "prespawn" answered by play.
+            _programPending = false;
+            WorldError = worldError;
+            Note($"the level is not entered: {worldError}");
+            return;
         }
         StartProgram();
     }

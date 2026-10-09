@@ -115,6 +115,8 @@ public static class LegacyModelLoader
             else if (data.StartsWith("IDPO"u8)) model = FromMdl(name, MdlReader.Read(data));
             else if (data.StartsWith("IDSP"u8) || data.StartsWith("IDS2"u8)) model = FromSprite(name, SpriteReader.Read(data));
             else if (data.StartsWith("IBSP"u8)) model = FromBsp(name, BspReader.Read(data));
+            // Quake's ammunition and health boxes are small maps ("maps/b_bh25.bsp")
+            else if (name.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase) && Q1BspReader.IsQ1Format(data)) model = FromQ1Bsp(name, Q1BspReader.Read(data));
             // A format DarkPlaces loads and this does not (ZYM, PSK, OBJ, MD2): it exists, its size is unknown.
             else model = new LegacyModel { Name = name, Kind = LegacyModelKind.Alias };
             return model is not null && frameGroups is not null ? FrameGroupify(model, frameGroups) : model;
@@ -333,6 +335,12 @@ public static class LegacyModelLoader
         Name = name, Kind = LegacyModelKind.Brush, Format = "bsp",
         NormalMins = bsp.Models.Length > 0 ? bsp.Models[0].Mins : default,
         NormalMaxs = bsp.Models.Length > 0 ? bsp.Models[0].Maxs : default,
+    };
+
+    private static LegacyModel FromQ1Bsp(string name, Q1BspData bsp) => new()
+    {
+        Name = name, Kind = LegacyModelKind.Brush, Format = "q1bsp",
+        NormalMins = bsp.Models[0].Mins, NormalMaxs = bsp.Models[0].Maxs,
     };
 
     // "always less than this joint's own index" is the format's promise; a file that breaks it would

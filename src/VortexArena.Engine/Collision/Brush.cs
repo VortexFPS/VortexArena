@@ -405,6 +405,13 @@ public sealed class CollisionWorld
 
     public IReadOnlyList<Brush> Brushes => _brushes;
 
+    /// <summary>
+    /// The clipping hulls of a Quake 1 format map, when this is the world of one: the format has no brushes,
+    /// so <see cref="TraceService"/> clips a move against model 0 of this in addition to (in practice,
+    /// instead of) the brushes above. Null for every other kind of map.
+    /// </summary>
+    public Q1HullCollision? Hulls { get; set; }
+
     public Vector3 WorldMins => _worldMins;
     public Vector3 WorldMaxs => _worldMaxs;
 

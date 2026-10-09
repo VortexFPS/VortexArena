@@ -253,17 +253,28 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         LoadLevelFiles(state);
     }
 
+    // Why the level's map, which the game data has, could not be loaded or drawn; null when it could.
+    private string? _worldError;
+
+    /// <summary>See <see cref="ILegacyPresentation.WorldLoadError"/>: a session that reads a reason here leaves the server with it.</summary>
+    public string? WorldLoadError => _worldError;
+
     // The level's map: parsed once and used three ways (see BeginLevel). False if it could not be drawn - the
     // world is then collision only, or empty, and the reason has been noted.
     private bool LoadWorld(string map, string levelName)
     {
+        _worldError = null;
         try
         {
+            // A Quake 1 format map (BSP 29, BSP2, 2PSB, Half-Life) has its own loader: GodotLegacyPresentation.Q1.cs.
+            if (IsQ1Map(map)) return LoadQ1World(map, levelName);
             BspData? bsp = _assets.ReadBsp(map);
             if (bsp is null)
             {
                 Map.LoadMap(map);
                 _note($"map \"{map}\" could not be parsed: {Map.LoadError}");
+                // The file is there and is not a map this client reads: the level is not entered (WorldLoadError).
+                _worldError = Map.LoadError ?? $"map \"{map}\" could not be parsed";
                 return false;
             }
             // One collision build, the DarkPlaces-exact one (curved surfaces as coarse triangles, as a
@@ -302,6 +313,7 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
             // A map from a server's download directory is as untrusted as anything else it sends.
             _note($"map \"{map}\" failed to build ({e.GetType().Name}: {e.Message}); falling back to collision only");
             Map.LoadMap(map);
+            _worldError = $"map \"{map}\" could not be built for drawing ({e.GetType().Name}: {e.Message})";
             return false;
         }
     }

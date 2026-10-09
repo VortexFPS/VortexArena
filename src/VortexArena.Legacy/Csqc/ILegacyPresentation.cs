@@ -43,6 +43,17 @@ public interface ILegacyPresentation
     /// done. An implementation with a world loads it now if it has not. The default does nothing.</summary>
     void LevelFilesArrived(CsqcClientState state) { }
 
+    /// <summary>
+    /// Why the level's map could not be used although the game data HAS the file: a format this client does
+    /// not read, a damaged file, a world that could not be built for drawing. Null when the world is loaded,
+    /// when there is no world to load, and when the map is simply missing (the signon handles that:
+    /// <see cref="Protocol.DpSignon.MissingWorld"/>). Read after <see cref="BeginLevel"/> and after
+    /// <see cref="LevelFilesArrived"/>; a session that sees a reason here does not start the level's program
+    /// and leaves the server with it (<see cref="LegacyClientSession.WorldError"/>) - DarkPlaces would enter
+    /// an empty world. The default is null.
+    /// </summary>
+    string? WorldLoadError => null;
+
     /// <summary>Called once per level when its program has been loaded and CSQC_Init has returned (or the
     /// server named no program): the end of cl_parse.c CL_BeginDownloads, by which point DarkPlaces has every
     /// model and sound of the level in memory. An implementation that draws finishes loading what the server

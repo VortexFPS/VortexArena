@@ -345,6 +345,7 @@ public sealed partial class GodotLegacyPresentation
     {
         long began = SceneProfile is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         AddEngineEntitiesCore(drawMask);
+        DpCalcViewUnderwater();   // "update view blend": V_CalcViewBlend
         Lap(SceneProfile, 0, began);
     }
 

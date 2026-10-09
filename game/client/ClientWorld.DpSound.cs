@@ -53,7 +53,10 @@ public partial class ClientWorld
     private DpWorldAdapter? _dpWorld;
     private static readonly bool s_dpNoIdleMute = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("VORTEX_AUDIO_NOIDLEMUTE"));
     private static readonly bool s_dpTrace = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("VORTEX_AUDIO_TRACE"));
-    private double _dpTraceAt;
+    private double _dpTraceAt, _dpTraceClock;
+    // For the trace: sounds started on the mixer, and sounds whose sample the mixer's bank did not find (they play on an engine node).
+    private int _dpStarts, _dpMisses;
+    private string _dpLastMiss = "";
 
     private DpSoundSystem DpSound()
     {
@@ -75,7 +78,13 @@ public partial class ClientWorld
     {
         if (DpNative.Bank(AudioLoader) is not { } bank) return false;
         // Not in the mounted game data: the engine-node path may still know it as a project resource.
-        if (bank.Get(bare, forPlay: true) is not { Failed: false } sfx) return false;
+        if (bank.Get(bare, forPlay: true) is not { Failed: false } sfx)
+        {
+            _dpMisses++;
+            _dpLastMiss = bare;
+            return false;
+        }
+        _dpStarts++;
         DpSoundSystem sound = DpSound();
         int entnum = sourceNetId > 0 ? sourceNetId : 0;
         if (entnum == 0 && channel > 0) channel = 0;
@@ -154,7 +163,11 @@ public partial class ClientWorld
         sound.World = _dpWorld;
         sound.ServerTickSeconds = 1.0 / Math.Max(1.0, Godot.Engine.PhysicsTicksPerSecond);
         DpListener listener = DpListenerNow();
-        sound.Update(listener, Math.Clamp(delta, 0f, 0.25f), underwater: false);
+        // cl.view_underwater (view.c V_CalcViewBlend): "CL_PointSuperContents(vieworigin) & SUPERCONTENTS_LIQUIDSMASK",
+        // the contents of the point the view is drawn from - water, slime or lava. It drives snd_waterfx.
+        bool underwater = Api.Services is not null
+            && (Api.Trace.PointContents(listener.Origin) & VortexArena.Engine.Collision.SuperContents.LiquidsMask) != 0;
+        sound.Update(listener, Math.Clamp(delta, 0f, 0.25f), underwater);
 
         // A loop its emitter stopped refreshing ends (the keep-alive of the native netcode, as before).
         if (_dpLoops.Count > 0)
@@ -169,11 +182,11 @@ public partial class ClientWorld
         }
 
         if (DpAudio.OfflineFrames > 0 && _dpSceneRunning) audio.MixOffline(DpAudio.OfflineFrames);
-        if (s_dpTrace && _dpSceneClock >= _dpTraceAt)
+        if (s_dpTrace && (_dpTraceClock += delta) >= _dpTraceAt)
         {
-            _dpTraceAt = _dpSceneClock + 1.0;
+            _dpTraceAt = _dpTraceClock + 1.0;
             GD.Print(string.Create(CultureInfo.InvariantCulture,
-                $"[audio] native: scene t {_dpSceneClock:0.00} ear {listener.Origin.X:0.0} {listener.Origin.Y:0.0} {listener.Origin.Z:0.0} channels {sound.TotalSounds} mixed {sound.MixedSounds} volume {DpNative.Settings.Volume:0.##} master {DpNative.Settings.MasterVolume:0.##} radius {DpNative.Settings.SoundRadius:0} exponent {DpNative.Settings.AttenuationExponent:0.#} softclip {DpNative.Settings.SoftClip} maxchannel {DpNative.Settings.MaxChannelVolume:0.#} occlusion {DpNative.Settings.Occlusion} random {DpNative.Settings.IdenticalSoundRandomizationTime:0.##}/{DpNative.Settings.IdenticalSoundRandomizationTics:0.#} underruns {audio.Underruns} target {audio.TargetFrames} of {audio.QueueCapacity} gap {audio.TakeWorstLoopGapMilliseconds():0.0} mix ms {audio.MixSeconds * 1000:0.0} worst {audio.MixWorstMilliseconds:0.00}"));
+                $"[audio] native: scene t {_dpSceneClock:0.00} ear {listener.Origin.X:0.0} {listener.Origin.Y:0.0} {listener.Origin.Z:0.0} channels {sound.TotalSounds} mixed {sound.MixedSounds} volume {DpNative.Settings.Volume:0.##} master {DpNative.Settings.MasterVolume:0.##} radius {DpNative.Settings.SoundRadius:0} exponent {DpNative.Settings.AttenuationExponent:0.#} softclip {DpNative.Settings.SoftClip} maxchannel {DpNative.Settings.MaxChannelVolume:0.#} occlusion {DpNative.Settings.Occlusion} random {DpNative.Settings.IdenticalSoundRandomizationTime:0.##}/{DpNative.Settings.IdenticalSoundRandomizationTics:0.#} underwater {underwater} started {_dpStarts} missed {_dpMisses} \"{_dpLastMiss}\" {audio.TraceText()}"));
         }
     }
 
@@ -191,7 +204,18 @@ public partial class ClientWorld
     private DpListener? _dpSceneListener;
     private Dictionary<int, NVec3>? _dpSceneOrigins;
     private readonly List<(double time, NVec3 angles, bool sweep)> _dpSceneAngles = new();
-    private static readonly NVec3 s_dpSceneEar = new(-1155.1f, 792.7f, 80.6f);
+    // Where the scripted listener stands: the comparison recording's place on stormkeep, or VORTEX_SND_SCENE_EAR="x y z"
+    // (another level, or a place under water).
+    private static readonly NVec3 s_dpSceneEar = SceneEar();
+
+    private static NVec3 SceneEar()
+    {
+        string[] parts = (System.Environment.GetEnvironmentVariable("VORTEX_SND_SCENE_EAR") ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 3 && float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)
+            && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y)
+            && float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z)) return new NVec3(x, y, z);
+        return new NVec3(-1155.1f, 792.7f, 80.6f);
+    }
 
     private void DpSceneLoad()
     {
@@ -266,6 +290,7 @@ public partial class ClientWorld
             _lastListener = Coords.ToGodot(s_dpSceneEar);
         }
 
+        if (_dpSceneVehicle is not null && GodotObject.IsInstanceValid(_dpSceneVehicle)) _dpSceneVehicle.Apply(_dpSceneVehicleState, delta);
         while (_dpSceneNext < _dpScene.Count && _dpScene[_dpSceneNext].time <= _dpSceneClock + 1e-9)
         {
             (_, string kind, string[] a) = _dpScene[_dpSceneNext++];
@@ -311,12 +336,44 @@ public partial class ClientWorld
                     else if (a[0] is "play" or "play2" && a.Length > 1)
                         OnSound(a[1], s_dpSceneEar, 1f, a[0] == "play2" ? 0f : 1f, 0, 0, 1f);
                     break;
+                // A vehicle's client-side sounds, through the code that plays them in a game:
+                //   vehicle <classname> <f> <l> <u>     the vehicle's model and engine voice at a place (parked: idle)
+                //   vehiclestate <speed 0..1> <boost 0|1> its engine load from here on
+                //   vehicleat <f> <l> <u>                it is moved
+                //   vehicledie                           it blows up
+                //   alarm <health|shield|stophealth|stopshield>   the pilot's low-health / low-shield alarm
+                case "vehicle":
+                    if (_dpSceneVehicle is not null && GodotObject.IsInstanceValid(_dpSceneVehicle)) _dpSceneVehicle.QueueFree();
+                    _dpSceneVehicle = NewVehicleVisuals("sceneVehicle", a[0]);
+                    _dpSceneVehicle.Position = Coords.ToGodot(s_dpSceneEar + new NVec3(F(a[1]), F(a[2]), F(a[3])));
+                    _dpSceneVehicleState = VehicleVisuals.State.Default;
+                    break;
+                case "vehiclestate":
+                    _dpSceneVehicleState.Speed01 = F(a[0]);
+                    _dpSceneVehicleState.Boosting = a.Length > 1 && a[1] == "1";
+                    break;
+                case "vehicleat":
+                    if (_dpSceneVehicle is not null && GodotObject.IsInstanceValid(_dpSceneVehicle))
+                        _dpSceneVehicle.Position = Coords.ToGodot(s_dpSceneEar + new NVec3(F(a[0]), F(a[1]), F(a[2])));
+                    break;
+                case "vehicledie": _dpSceneVehicleState.Alive = false; break;
+                case "alarm":
+                    switch (a[0])
+                    {
+                        case "health": VortexArena.Game.Hud.VehicleHud.AlarmOnMixer(AudioLoader, "vehicles/alarm", shield: false); break;
+                        case "shield": VortexArena.Game.Hud.VehicleHud.AlarmOnMixer(AudioLoader, "vehicles/alarm_shield", shield: true); break;
+                        case "stophealth": DpVehicleSounds.StopAlarm(DpSound(), shield: false); break;
+                        case "stopshield": DpVehicleSounds.StopAlarm(DpSound(), shield: true); break;
+                    }
+                    break;
                 case "end": GD.Print("[audio] AUDIOTEST-END"); break;
             }
         }
     }
 
     private AudioListener3D? _dpSceneEars;
+    private VehicleVisuals? _dpSceneVehicle;
+    private VehicleVisuals.State _dpSceneVehicleState;
 
     private AudioListener3D MakeSceneEars()
     {

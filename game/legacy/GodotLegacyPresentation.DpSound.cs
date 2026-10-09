@@ -215,6 +215,23 @@ public sealed partial class GodotLegacyPresentation
     public string MusicTrack => _dpCd?.Track ?? "";
 
     private bool _dpPaused;
+
+    // cl.view_underwater: what S_SetUnderwaterIntensity (snd_waterfx) reads.
+    private bool _dpViewUnderwater;
+
+    /// <summary>
+    /// view.c V_CalcViewBlend, the part the sound system uses. DarkPlaces runs it at the end of
+    /// CSQC_RelinkAllEntities, that is inside every "addentities" of the client program and once a frame
+    /// without one: "supercontents = CL_PointSuperContents(vieworigin); cl.view_underwater = supercontents &amp;
+    /// SUPERCONTENTS_LIQUIDSMASK" with vieworigin the origin of r_refdef.view.matrix as it stands at that
+    /// moment - the view the program has set so far (VF_ORIGIN), not the listener it may name later.
+    /// </summary>
+    private void DpCalcViewUnderwater()
+    {
+        if (!_dpSound) return;
+        _dpViewUnderwater = _state is not null
+            && (Map.PointSuperContents(View.Origin) & BspLegacyWorld.ContentsLiquidsMask) != 0;
+    }
     private double _dpOfflineTime = double.NaN;
 
     // S_Update, once a frame.
@@ -248,7 +265,7 @@ public sealed partial class GodotLegacyPresentation
         audio.GameFrame = Godot.Engine.GetProcessFrames();
         audio.Sound.Settings = _dpSettings;
         long t1 = LegacyPerfLog.Stamp();
-        audio.Sound.Update(listener, Math.Clamp(_time - _oldTime, 0, 0.25), underwater: false);
+        audio.Sound.Update(listener, Math.Clamp(_time - _oldTime, 0, 0.25), _dpViewUnderwater);
         long t2 = LegacyPerfLog.Stamp();
         _dpCd!.Update(DpCvar("bgmvolume", 1f));   // CDAudio_Update
         if (LegacyPerfLog.Enabled)
@@ -277,7 +294,7 @@ public sealed partial class GodotLegacyPresentation
         {
             _dpTraceAt = _time + 1.0;
             _note(string.Create(CultureInfo.InvariantCulture,
-                $"audio: t {_time:0.00} ear {listener.Origin.X:0.0} {listener.Origin.Y:0.0} {listener.Origin.Z:0.0} forward {listener.Forward.X:0.000} {listener.Forward.Y:0.000} {listener.Forward.Z:0.000} channels {audio.Sound.TotalSounds} mixed {audio.Sound.MixedSounds} statics {audio.Sound.StaticChannels} music \"{MusicTrack}\" blocked {audio.Blocked}"));
+                $"audio: t {_time:0.00} ear {listener.Origin.X:0.0} {listener.Origin.Y:0.0} {listener.Origin.Z:0.0} forward {listener.Forward.X:0.000} {listener.Forward.Y:0.000} {listener.Forward.Z:0.000} channels {audio.Sound.TotalSounds} mixed {audio.Sound.MixedSounds} statics {audio.Sound.StaticChannels} music \"{MusicTrack}\" blocked {audio.Blocked} underwater {_dpViewUnderwater} {audio.TraceText()}"));
         }
     }
 }

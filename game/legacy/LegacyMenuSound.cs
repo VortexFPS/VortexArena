@@ -34,6 +34,11 @@ public sealed class LegacyMenuSound : ILegacySound
     private string _track = "";
     private readonly List<string> _remap = new();
     private bool _musicPaused;
+    // The DarkPlaces mixer (game/audio/DpAudio.cs); null with VORTEX_AUDIO_ENGINE_NODES=1, the engine-node path below.
+    private readonly VortexArena.Game.Audio.DpAudio? _dp;
+    private readonly VortexArena.Game.Audio.DpSampleBank? _dpBank;
+    private readonly VortexArena.Engine.Audio.DpCdAudio? _dpCd;
+    private readonly VortexArena.Engine.Audio.DpSoundSettings _dpSettings = new();
 
     public LegacyMenuSound(Node parent, VirtualFileSystem files, AssetLoader assets, CvarService cvars, Action<string> log)
     {
@@ -42,13 +47,18 @@ public sealed class LegacyMenuSound : ILegacySound
         _assets = assets;
         _cvars = cvars;
         _log = log;
+        VortexArena.Game.Audio.DpAudio.EnsureCapture();
+        if (VortexArena.Game.Audio.DpAudio.ForceEngineNodes) return;
+        _dp = VortexArena.Game.Audio.DpAudio.Instance;
+        _dpBank = new VortexArena.Game.Audio.DpSampleBank(path => _vfs.Exists(path), path => _vfs.ReadBytes(path));
+        _dpCd = new VortexArena.Engine.Audio.DpCdAudio(_dp.Sound, path => _vfs.Exists(path), path => _dpBank.Get(path, forPlay: true)) { Log = text => _log("cd: " + text) };
     }
 
     /// <summary>Sounds started with localsound, and what the last one was: what a run without a listener can report.</summary>
     public long SoundsStarted { get; private set; }
     public string LastSound { get; private set; } = "";
     /// <summary>The music track playing (or paused), "" for none.</summary>
-    public string Track => _track;
+    public string Track => _dpCd is not null ? _dpCd.Track : _track;
 
     private AudioStream? LoadSample(string sample)
     {
@@ -63,6 +73,7 @@ public sealed class LegacyMenuSound : ILegacySound
     public bool Precache(string sample)
     {
         if (string.IsNullOrEmpty(sample) || sample.Length > 200 || !LegacyQcHost.IsSafePath(sample)) return false;
+        if (_dpBank is not null) return _dpBank.Get(sample, forPlay: false) is { Failed: false };
         if (_precached.TryGetValue(sample, out bool known)) return known;
         string stem = sample.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) || sample.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ? sample[..^4] : sample;
         string rooted = stem.StartsWith("sound/", StringComparison.Ordinal) ? stem : "sound/" + stem;
@@ -75,6 +86,17 @@ public sealed class LegacyMenuSound : ILegacySound
     /// <summary>S_LocalSoundEx: played at full volume wherever the listener is ("menu sounds must not be freed on level change").</summary>
     public bool Local(string sample, int channel, float volume)
     {
+        if (_dp is not null)
+        {
+            // S_LocalSoundEx: "S_StartSound (cl.viewentity, chan, sfx, vec3_origin, fvol, 0)", flagged a local sound.
+            if (string.IsNullOrEmpty(sample) || sample.Length > 200 || !LegacyQcHost.IsSafePath(sample)) return false;
+            if (_dpBank!.Get(sample, forPlay: true) is not { Failed: false } sfx) return false;
+            ApplyDpSettings();
+            if (_dp.Sound.LocalSound(sfx, channel, volume, 0) < 0) return false;
+            SoundsStarted++;
+            LastSound = sample;
+            return true;
+        }
         if (LoadSample(sample) is not { } stream) return false;
         AudioStreamPlayer? free = null;
         foreach (AudioStreamPlayer candidate in _voices)
@@ -100,6 +122,8 @@ public sealed class LegacyMenuSound : ILegacySound
 
     public float Length(string sample)
     {
+        if (_dpBank is not null)
+            return !string.IsNullOrEmpty(sample) && sample.Length <= 200 && LegacyQcHost.IsSafePath(sample) && _dpBank.Get(sample, forPlay: false) is { Failed: false } known ? known.LengthSeconds : -1;
         if (LoadSample(sample) is not { } stream) return -1;
         double length = stream.GetLength();
         return length > 0 ? (float)length : -1;
@@ -119,6 +143,13 @@ public sealed class LegacyMenuSound : ILegacySound
     public void CdCommand(IReadOnlyList<string> argv)
     {
         if (argv.Count < 2) return;
+        if (_dpCd is not null)
+        {
+            if (argv.Count >= 3 && (argv[2].Length > 64 || !LegacyQcHost.IsSafePath(argv[2]))) return;
+            ApplyDpSettings();
+            _dpCd.Command(argv);
+            return;
+        }
         switch (argv[1].ToLowerInvariant())
         {
             case "remap":
@@ -183,8 +214,21 @@ public sealed class LegacyMenuSound : ILegacySound
         _log($"cd: playing \"{name}\"{(loop ? " (looping)" : "")}");
     }
 
+    // While no game is running its own per-frame update, the menu's cvars are the mixer's.
+    private void ApplyDpSettings()
+    {
+        if (_dp is null || _dp.GameIsUpdating) return;
+        VortexArena.Game.Audio.DpCvars.Read(_cvars, _dpSettings);
+        _dp.Sound.Settings = _dpSettings;
+    }
+
     public void StopMusic()
     {
+        if (_dpCd is not null)
+        {
+            _dpCd.Stop();
+            return;
+        }
         _music?.Stop();
         _track = "";
         _musicPaused = false;
@@ -193,6 +237,19 @@ public sealed class LegacyMenuSound : ILegacySound
     /// <summary>bgmvolume and mastervolume, applied each frame: the Audio settings' sliders move them.</summary>
     public void UpdateMusicVolume()
     {
+        if (_dp is not null)
+        {
+            // S_Update and CDAudio_Update for a menu with no game behind it: the cvars, the spatialisation of
+            // what plays (all of it unattenuated), and bgmvolume onto the track.
+            if (!_dp.GameIsUpdating)
+            {
+                ApplyDpSettings();
+                _dp.Blocked = false;
+                _dp.Sound.Update(VortexArena.Engine.Audio.DpListener.Identity);
+            }
+            _dpCd!.Update(VortexArena.Game.Audio.DpCvars.Get(_cvars, "bgmvolume", 1f));
+            return;
+        }
         if (_music is null) return;
         float gain = Cvar("bgmvolume", 1) * Cvar("mastervolume", 1);
         _music.VolumeDb = Mathf.LinearToDb(Math.Max(gain, 0.0001f));
@@ -200,6 +257,8 @@ public sealed class LegacyMenuSound : ILegacySound
 
     public void Shutdown()
     {
+        _dpCd?.Stop();
+        if (_dp is not null) return;
         StopMusic();
         foreach (AudioStreamPlayer voice in _voices) voice.Stop();
     }

@@ -828,8 +828,12 @@ public partial class LegacyGame : Node
             foreach (string name in new[] { "bind", "unbind", "unbindall", "in_bind", "in_unbind", "in_bindmap", "in_releaseall", "bindlist" })
                 _commands.Register(interpreter, name, _ => { }, "ignored in a legacy session: the player's own binds are used, read-only");
             // Engine commands with nothing to do here, kept from reaching the server as unknown commands.
-            foreach (string name in new[] { "snd_restart", "r_restart", "vid_restart", "menu_restart", "toggleconsole", "screenshot", "stopsound", "cd" })
+            foreach (string name in new[] { "snd_restart", "r_restart", "vid_restart", "menu_restart", "toggleconsole", "screenshot" })
                 _commands.Register(interpreter, name, _ => { }, "ignored in a legacy session");
+            // snd_main.c S_Play_f / S_Play2_f / S_PlayVol_f / S_StopAllSounds_f and cd_shared.c CD_f: a server sends
+            // "play2" for announcements and "cd loop" for a level's music.
+            foreach (string name in new[] { "play", "play2", "playvol", "stopsound", "cd" })
+                _commands.Register(interpreter, name, argv => _presentation?.SoundCommand(argv), "a DarkPlaces sound command: play / play2 / playvol <sample>, stopsound, cd [play|loop|stop|pause|resume|remap] [track]");
             // libcurl.c Curl_Curl_f, when it comes through the console (typed, or the client program's localcmd:
             // Xonotic's map vote fetches its screenshot packages so). A server's own "curl" lines are read by
             // the signon before they get here.

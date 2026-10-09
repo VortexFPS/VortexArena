@@ -50,6 +50,8 @@ public sealed partial class GodotLegacyPresentation
 
     private void InitializeSound()
     {
+        InitializeDpSound();
+        if (_dpSound) return;
         _listener = new AudioListener3D { Name = "LegacyListener" };
         _sceneRoot.AddChild(_listener);
     }
@@ -66,6 +68,7 @@ public sealed partial class GodotLegacyPresentation
     /// <summary>S_PrecacheSound, as far as "does it exist": the stream is decoded when it first plays.</summary>
     bool ILegacySound.Precache(string sample)
     {
+        if (_dpSound) return DpPrecache(sample);
         if (string.IsNullOrEmpty(sample) || sample.Length > 200 || !LegacyQcHost.IsSafePath(sample)) return false;
         if (_precached.TryGetValue(sample, out bool known)) return known;
         string stem = sample.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) || sample.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ? sample[..^4] : sample;
@@ -79,6 +82,7 @@ public sealed partial class GodotLegacyPresentation
     /// <summary>#534 soundlength: seconds, or -1 if the sample cannot be loaded.</summary>
     float ILegacySound.Length(string sample)
     {
+        if (_dpSound) return DpLength(sample);
         if (LoadSample(sample) is not { } stream) return -1;
         double length = stream.GetLength();
         return length > 0 ? (float)length : -1;
@@ -86,6 +90,11 @@ public sealed partial class GodotLegacyPresentation
 
     void ILegacySound.Start(int edict, int channel, string sample, QcVector origin, float volume, float attenuation, float startPosition, int flags, float speed)
     {
+        if (_dpSound)
+        {
+            DpStart(DpOwner(edict), channel, sample, origin, volume, attenuation, startPosition, flags, speed);
+            return;
+        }
         // Entity 0 is the world (pointsound); -1 is the engine's own; anything else is the program's edict.
         int owner = edict > 0 ? ProgramEntityBase + edict : 0;
         StartVoice(owner, channel, sample, origin, volume, attenuation, startPosition, (flags & ChannelFlagForceLoop) != 0, speed, isStatic: false);
@@ -93,6 +102,11 @@ public sealed partial class GodotLegacyPresentation
 
     void ILegacySound.StartStatic(QcVector origin, string sample, float volume, float attenuation)
     {
+        if (_dpSound)
+        {
+            DpStartStatic(origin, sample, volume, attenuation);
+            return;
+        }
         if (_staticVoices >= MaxStaticVoices) return;
         // VM_CL_ambientsound passes attenuation * 64, as svc_spawnstaticsound carries it; S_StaticSound divides it back.
         if (StartVoice(0, 0, sample, origin, volume, attenuation / 64f, 0, loop: true, 1, isStatic: true)) _staticVoices++;
@@ -316,6 +330,7 @@ public sealed partial class GodotLegacyPresentation
     /// <summary>#177 localsound: not positioned, not tied to an entity.</summary>
     bool ILegacySound.Local(string sample, int channel, float volume)
     {
+        if (_dpSound) return DpLocal(sample, channel, volume);
         if (_soundsThisFrame >= MaxSoundsPerFrame || LoadSample(sample) is not { } stream) return false;
         _soundsThisFrame++;
         AudioStreamPlayer? free = null;
@@ -352,6 +367,7 @@ public sealed partial class GodotLegacyPresentation
     /// <summary>#533 getsoundtime: seconds into what is playing on that entity channel, or -1.</summary>
     float ILegacySound.ChannelPosition(int edict, int channel)
     {
+        if (_dpSound) return _dpAudio!.Sound.GetEntChannelPosition(DpOwner(edict), channel);
         int owner = edict > 0 ? ProgramEntityBase + edict : 0;
         foreach (Voice voice in _voices)
             if (voice.InUse && !voice.Static && voice.Owner == owner && voice.Channel == channel && voice.Player.Playing)
@@ -363,6 +379,11 @@ public sealed partial class GodotLegacyPresentation
     // forced loops are restarted; the falloff is recomputed against the listener.
     private void UpdateSounds()
     {
+        if (_dpSound)
+        {
+            DpUpdateSounds();
+            return;
+        }
         _soundsThisFrame = 0;
         if (!_listenerOverridden) _listenerTransform = _camera.Transform;
         _listener.Transform = _listenerTransform;
@@ -413,6 +434,12 @@ public sealed partial class GodotLegacyPresentation
 
     private void StopAllSounds()
     {
+        if (_dpSound)
+        {
+            _dpAudio?.Sound.StopAllSounds();   // S_StopAllSounds: the music too ("it may be using a faketrack")
+            _dpCd?.Stop();
+            return;
+        }
         foreach (Voice voice in _voices)
         {
             voice.Player.Stop();
@@ -431,13 +458,30 @@ public sealed partial class GodotLegacyPresentation
     {
         if (_state is not { } state || (uint)sound.SoundIndex >= (uint)state.SoundNames.Length || state.SoundNames[sound.SoundIndex] is not { } sample) return;
         if (sound.Entity < 0 || sound.Entity >= DpProtocol.MaxEdicts) return;
+        if (_dpSound)
+        {
+            // "S_StartSound_StartPosition_Flags (ent, channel, cl.sound_precache[sound_num], pos, nvolume/255.0f, attenuation, 0, fflags, speed)"
+            DpStart(sound.Entity, sound.Channel, sample, new QcVector(sound.Origin.X, sound.Origin.Y, sound.Origin.Z), sound.Volume / 255f, sound.Attenuation, 0, 0, sound.Speed);
+            return;
+        }
         StartVoice(sound.Entity, sound.Channel, sample, new QcVector(sound.Origin.X, sound.Origin.Y, sound.Origin.Z),
             sound.Volume / 255f, sound.Attenuation, 0, loop: false, sound.Speed, isStatic: false);
+    }
+
+    /// <summary>svc_cdtrack: "CDAudio_Play ((unsigned char)cl.cdtrack, true)".</summary>
+    void IDpClientHandler.OnCdTrack(int track, int loopTrack)
+    {
+        if (_dpSound) _dpCd?.Play(track & 255, true);
     }
 
     /// <summary>svc_stopsound (S_StopSound).</summary>
     void IDpClientHandler.OnStopSound(int entity, int channel)
     {
+        if (_dpSound)
+        {
+            _dpAudio!.Sound.StopSound(entity, channel);
+            return;
+        }
         foreach (Voice voice in _voices)
             if (voice.InUse && !voice.Static && voice.Owner == entity && voice.Channel == channel)
             {
@@ -451,6 +495,12 @@ public sealed partial class GodotLegacyPresentation
     void IDpClientHandler.OnSpawnStaticSound(in DpStaticSound sound)
     {
         if (_state is not { } state || (uint)sound.SoundIndex >= (uint)state.SoundNames.Length || state.SoundNames[sound.SoundIndex] is not { } sample) return;
+        if (_dpSound)
+        {
+            // "S_StaticSound (cl.sound_precache[sound_num], org, vol/255.0f, atten)": the attenuation byte as sent.
+            DpStartStatic(new QcVector(sound.Origin.X, sound.Origin.Y, sound.Origin.Z), sample, sound.Volume / 255f, sound.Attenuation);
+            return;
+        }
         if (_staticVoices >= MaxStaticVoices) return;
         if (StartVoice(0, 0, sample, new QcVector(sound.Origin.X, sound.Origin.Y, sound.Origin.Z), sound.Volume / 255f, sound.Attenuation / 64f, 0, loop: true, 1, isStatic: true))
             _staticVoices++;

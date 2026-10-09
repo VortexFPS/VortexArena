@@ -679,11 +679,12 @@ public sealed class AssetSystem
     /// r_sky.c's <c>px/nx/py/ny/pz/nz</c> convention, no flips), QUAKE axes; the skin shader converts its
     /// sample direction Godot→Quake to match. Built once and cached (null-cached on a miss so a data set
     /// without the faces never re-probes).
-    /// CURRENTLY UNWIRED BY DESIGN (playtest r8): DP evaluates dpreflectcube only in its rtlight shader
-    /// permutations and stock Xonotic ships realtime world lighting OFF, so the faithful default look has no
-    /// visible cubemap term — the always-on EMISSION add read as sky-mirror holes on the guns. Kept for a
-    /// future realtime-lighting pass (bind via <see cref="PlayerSkinShader.ReflectCubeUniform"/> +
-    /// <c>has_reflect_cube</c>).
+    /// (A note here used to say DarkPlaces evaluates dpreflectcube only in its realtime-light permutations.
+    /// It does not: USEREFLECTCUBE is set in the lightmap, light-grid and light-direction modes as well,
+    /// whenever the texture has a <c>_reflect</c> mask (gl_rmain.c R_SetupShader_Surface), and the term is
+    /// added to the texel BEFORE it is lit - not on top as an emission, which is what read as sky-mirror
+    /// holes on the guns in playtest r8. The skin shader's DarkPlaces branch and, for surfaces of the level,
+    /// <see cref="ResolveReflect"/> do it that way.)
     /// </summary>
     internal Cubemap? DefaultReflectCubemap()
     {

@@ -773,6 +773,23 @@ character columns.
   `.gdignore` so the Godot editor skips them and never spams the tree with `*.import` sidecars, and both are
   git-ignored. A root-level capture (`_*.png`) is git-ignored too but Godot will still generate a stray
   `_*.png.import` next to it, so prefer the folders.
+- **Frame comparisons against another renderer (2026-10):** five console commands for holding the native
+  picture beside DarkPlaces' (`game/client/RenderDevCommands.cs`); pair them with `--observe` (which keeps the
+  client an observer) and `+defer <seconds> "<command>"` on the command line:
+  `r_observe x y z [yaw pitch]` moves the pinned camera at run time, `r_shot <absolute path.png>` saves the next
+  drawn frame, `r_hud 0` hides every 2D layer of the match (the HUD's vignette darkens the 3D picture, so a
+  colour measurement needs it off), `r_effect <effectinfo name> x y z` spawns an effect at a point,
+  `r_frametimes <seconds> <path>` writes frame-time statistics, and `r_dumpmaterials` lists the kinds of
+  material in view. The DarkPlaces side of the same view: start a local game as an observer and set the
+  server's edict, `prvm_edictset server 1 origin "x y z-20"` (an observer's eye is 20 above its origin),
+  `angles "pitch yaw 0"` and `fixangle 1`. `_scratch/render/tools/native.py` did all of this for the
+  October 2026 colour, light and water work (planning/specs/legacy-compat.md section 16).
+  **Two traps:** DarkPlaces saves archived cvars when it quits, so a variant run (`r_shadow_gloss 0`) changes
+  every later run unless the user directory's `config.cfg` is put back first; and the native game's map packs
+  are this project's own compile, whose lightmaps are brighter than the Xonotic release's - copy the pack
+  from `data/maps/` into the DarkPlaces user directory to compare renderers rather than map builds.
+- **`r_darkplaces_colour`** (default 1): the native game's colour arithmetic is DarkPlaces' since October
+  2026; 0 is the earlier look (linear-light combine), kept for one release. Read once at start.
 - **Observer camera (verified 2026-07):** `--observe "<x y z> [yaw pitch]"` pins the rendered camera at a fixed
   Quake-space point (map-entity-lump coordinates) and keeps the local client an **observer** — no auto-join, so no
   body/viewmodel intrudes and nothing perturbs the world. Add `--look-at "<x y z>"` to aim at a target point

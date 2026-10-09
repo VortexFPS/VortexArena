@@ -19,6 +19,7 @@ namespace VortexArena.Game.Client;
 ///   <item><c>r_shot &lt;absolute path.png&gt;</c> - save the next drawn frame of the root viewport.</item>
 ///   <item><c>r_hud 0|1</c> - hide or show every 2D layer of the match (the console stays).</item>
 ///   <item><c>r_effect &lt;name&gt; x y z</c> - spawn an effectinfo effect at a point.</item>
+///   <item><c>r_frametimes &lt;seconds&gt; &lt;path&gt;</c> - frame-time statistics over a stretch of play.</item>
 ///   <item><c>r_dumpmaterials</c> - the kinds of material on visible geometry, with counts.</item>
 /// </list>
 /// </summary>
@@ -83,6 +84,32 @@ public static class RenderDevCommands
                 || !float.TryParse(args[4], System.Globalization.NumberStyles.Float, inv, out float z)) { print("r_effect: bad position"); return; }
             effects.Spawn(args[1], new System.Numerics.Vector3(x, y, z));
         }, "spawn an effectinfo effect at a point in Quake coordinates (Xonotic's 'cmd pointparticles')");
+
+        interp.RegisterCommand("r_frametimes", args =>
+        {
+            if (args.Count < 3 || !double.TryParse(args[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double seconds))
+            { print("usage: r_frametimes <seconds> <absolute path.txt>"); return; }
+            string path = args[2];
+            var deltas = new List<double>(1 << 16);
+            ulong last = Time.GetTicksUsec(), until = last + (ulong)(seconds * 1e6);
+            void Frame()
+            {
+                ulong now = Time.GetTicksUsec();
+                deltas.Add((now - last) / 1000.0);
+                last = now;
+                if (now < until) return;
+                RenderingServer.FramePostDraw -= Frame;
+                deltas.Sort();
+                double sum = 0;
+                foreach (double d in deltas) sum += d;
+                double At(double q) => deltas[Math.Clamp((int)(q * (deltas.Count - 1)), 0, deltas.Count - 1)];
+                string line = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"frames {deltas.Count} seconds {seconds:0.#} mean_ms {sum / deltas.Count:0.000} p50_ms {At(0.5):0.000} p99_ms {At(0.99):0.000} worst_ms {deltas[^1]:0.00}");
+                System.IO.File.WriteAllText(path, line + "\n");
+                GD.Print("[r_frametimes] " + line);
+            }
+            RenderingServer.FramePostDraw += Frame;
+        }, "time every frame for <seconds> and write mean / median / 99th percentile to a file");
 
         interp.RegisterCommand("r_dumpmaterials", _ => DumpMaterials(print), "list the kinds of material on visible geometry");
     }

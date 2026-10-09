@@ -4,6 +4,8 @@ namespace VortexArena.Game.Loaders;
 
 /// <summary>
 /// The lightmap-modulate spatial shader used by IBSP world geometry.
+/// (It is no longer <c>unshaded</c>: the baked result is written to EMISSION and realtime lights add to it
+/// through light(); the paragraph below describes the baked term.)
 ///
 /// Quake 3 maps ship precomputed per-surface lightmaps and feed each face's lightmap UVs as a second UV
 /// channel. Godot's <see cref="LightmapGI"/> cannot ingest these precomputed pages, so the BSP path bypasses
@@ -17,11 +19,18 @@ namespace VortexArena.Game.Loaders;
 /// while the literal stock default (<c>sRGB-disable.cfg</c>) multiplies in gamma space and displays the product
 /// directly. Godot always renders linear and re-encodes linear→sRGB on output, so this shader samples
 /// albedo/lightmap <i>raw</i> (no <c>source_color</c>) and does the color management explicitly via the
-/// <c>srgb_color</c> uniform: when set (the default) it decodes both inputs and lets Godot encode the linear
-/// product (sRGB-enable); when clear it multiplies raw and pre-encodes the product with <c>srgb_to_linear</c> to
-/// cancel Godot's output transform, reproducing DP's gamma-space displayed pixel. The default matches Xonotic's
-/// recommended mode (and looks balanced; the gamma-space mode clips highlights through Godot's linear pipeline).
-/// Either way the ×2 overbright matches DP's <c>render_lightmap_diffuse</c> (<c>gl_rmain.c</c>).</para>
+/// <c>srgb_color</c> uniform: when set it decodes both inputs and lets Godot encode the linear product; when
+/// clear it multiplies raw and pre-encodes the product with <c>srgb_to_linear</c> to cancel Godot's output
+/// transform. <b>What is actually drawn since October 2026</b> is neither: the global
+/// <c>world_gamma_space</c> (set by <c>NativeColour</c> for the native game and by a legacy session) selects
+/// DarkPlaces' own arithmetic - the stored texel times the stored lightmap texel times two, written to a 3D
+/// buffer that holds display values - which is what DarkPlaces shows with Xonotic's shipped configuration
+/// (<c>vid_sRGB 0</c>: <c>sRGB-disable.cfg</c> is what <c>xonotic-client.cfg</c> executes). The per-material
+/// <c>srgb_color</c> path is the earlier native look, reached with <c>r_darkplaces_colour 0</c>; an earlier
+/// version of this comment said that look matched Xonotic's "sRGB-enable mode" - measured against
+/// DarkPlaces it was 0.47 to 0.60 of its luminance and redder, whichever of Xonotic's two modes is meant
+/// (planning/specs/legacy-compat.md sections 15 and 16).
+/// Either way the x2 overbright matches DP's <c>render_lightmap_diffuse</c> (<c>gl_rmain.c</c>).</para>
 ///
 /// <para><b>Deluxemaps.</b> On a deluxemapped map (q3map2 <c>-light -deluxe</c>) the lump also carries a
 /// per-texel light-<i>direction</i> ("deluxe") page. We reproduce Darkplaces'
@@ -263,11 +272,14 @@ void fragment() {
     }
     // The normal-mapped normal in view space (the normal map's T runs along decreasing v), for the reflection
     // cube and the realtime lights; and the gloss texel, for the lightmap's and the realtime lights' specular.
+    // (One sample of the normal map serves the lightmap's directional term below as well.)
     vec3 rn = normalize(NORMAL);
-    if (use_normal && dp_exact) {
+    vec3 rts = vec3(0.0, 0.0, 1.0);   // the normal map's texel, tangent space, unit length
+    if (use_normal) {
         vec3 rt = texture(normal_tex, UV * albedo_uv_scale).xyz * 2.0 - 1.0;
         if (norm_rg) { rt.z = sqrt(max(0.0, 1.0 - dot(rt.xy, rt.xy))); }
-        rn = normalize(TANGENT * rt.x - BINORMAL * rt.y + NORMAL * rt.z);
+        rts = normalize(rt);
+        if (dp_exact) { rn = normalize(TANGENT * rt.x - BINORMAL * rt.y + NORMAL * rt.z); }
     }
     vec4 gtex = use_gloss ? texture(gloss_tex, UV * albedo_uv_scale) : vec4(0.0);
     v_light_gloss = (use_gloss && dp_exact && world_gamma_space < 1.5)
@@ -307,9 +319,7 @@ void fragment() {
         // reconstruct Z on the unit hemisphere. Full-channel textures keep the direct decode.
         vec3 sn = vec3(0.0, 0.0, 1.0);
         if (use_normal && !(world_gamma_space > 1.5 && world_gamma_space < 2.5)) {
-            vec3 nt = texture(normal_tex, UV * albedo_uv_scale).xyz * 2.0 - 1.0;
-            if (norm_rg) { nt.z = sqrt(max(0.0, 1.0 - dot(nt.xy, nt.xy))); }
-            sn = normalize(nt);
+            sn = rts;
         }
         float diffuse = clamp(dot(sn, lightnormal), 0.0, 1.0);
         // lightcolor = lightmap / max(0.25, lightnormal.z)  (angle-attenuation undo); reused by the specular.

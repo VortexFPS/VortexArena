@@ -631,7 +631,8 @@ more saturation. Seven causes, each measured on the same recorded frame held in 
    (`model_shared.c` Mod_BuildTextureVectorsFromNormals), the level mesh's binormal along increasing v, so a
    normal map was lit from the opposite side. (The native game has 4, 6 and 7 as well; it is not changed.)
 
-**What a legacy session does now** (the native game is not changed; every switch below is off outside a session):
+**What a legacy session does now** (when this was written the native game was not changed and every switch
+below was off outside a session; since section 16 the native game sets the same switches):
 
 - `LegacyColour` (`game/legacy/GodotLegacyPresentation.Colour.cs`) sets three global shader parameters when a
   session's scene is made and puts them back when it ends: `world_gamma_space` (the lightmap shader combines the
@@ -676,9 +677,99 @@ cache, is not a cause.
 **What still differs.** The mean absolute difference of a matched static frame is 2 to 5 units: texture filtering
 (DarkPlaces uses 8x anisotropy and no multisampling, this client its own filter and 2x multisampling), particles
 (their random numbers are not shared), the first-person weapon's sway, and the 8-bit dither. DarkPlaces' water
-shader (`dp_water`, used when `r_water` is on - Xonotic forces it on for levels with warpzones) is not ported:
-such a surface is drawn by the ordinary rules. Warpzone surfaces are the native portal placeholder. Normal and
+shader (`dp_water`, used when `r_water` is on - Xonotic forces it on for levels with warpzones) was not ported
+at this point (it is now: section 16). Warpzone surfaces are the native portal placeholder. Normal and
 gloss maps are not applied to blended or animated lightmapped surfaces. Coronas of dynamic lights are not drawn.
-`dpreflectcube` (a reflection mask times a cube map, added to the texel) is not applied; solarium's pool is 6 to 9
-units darker than DarkPlaces' (its shader names one). A dead player's view is placed differently (not a colour
+`dpreflectcube` (a reflection mask times a cube map, added to the texel) was not applied at this point (it is
+now: section 16). A dead player's view is placed differently (not a colour
 matter, but it makes such frames incomparable).
+
+## 16. The native game draws the same picture: colour, lights, shadows, water (added 2026-10-08)
+
+**The decision.** The native game (the port's own game, as opposed to legacy compatibility mode) adopts the
+DarkPlaces colour behaviour of section 15, so that a native match and DarkPlaces agree on the same view as
+closely as legacy mode does. `r_darkplaces_colour` (default 1, read once at start) keeps the earlier look at 0
+for one release.
+
+**How.** `game/client/NativeColour.cs` sets, at start, the switches a legacy session sets for itself
+(`world_gamma_space`, `model_light_gamma = 2`, the display-value frame buffer, `AssetSystem.DarkPlacesRules`,
+lightmap intensity 1.03125) and drives `dp_time`. `SceneLightingSettings.Attach` gives the level's environment
+the colour-correction table and removes the engine's ambient light; the scene's sun is hidden (every model is
+lit from the light grid by its shader). 2D is drawn after the 3D buffer is resolved and does not change.
+
+**Measured** (`_scratch/render/tools/native.py`: an observer at the same eye point and angles in both engines,
+1280x720, HUD off, view region = the middle of the frame; DarkPlaces drawing the map pack the native game ships):
+
+| View | Earlier look, luminance ratio | Now: R G B difference (of 255), luminance ratio |
+|---|---|---|
+| stormkeep, three views | x0.59 x0.61 x0.60 | -0.5 -0.6 +0.2 x0.992; -0.9 -1.0 -0.7 x0.986; -0.2 -0.4 -0.4 x0.993 |
+| stormkeep, lava | not taken | -0.6 -0.6 -0.4 x0.989 |
+| darkzone, three views | x0.59 x0.56 x0.75 | -1.5 -1.8 -1.4 x0.963; -1.3 -0.7 -0.7 x0.981; -1.1 -0.7 -1.2 x0.990 |
+| solarium, three views | x0.87 x0.61 x0.56 | -0.3 -0.5 -0.5 x0.995; -0.3 -0.5 -0.5 x0.992; -0.6 -0.7 -0.7 x0.985 |
+
+A rocket explosion's added light over its life (0.2 / 0.4 / 0.7 / 1.1 s) is x0.99 of DarkPlaces' at 0.2 s and
+within 1 of 255 afterwards; an electro impact x0.96 and x1.07: the fades of additive particles and the light of
+an effect follow DarkPlaces once the blending is on display values.
+
+**The map packs are not Xonotic's.** Against DarkPlaces drawing Xonotic's own release of the same maps the
+native picture is 2 to 14 % BRIGHTER (stormkeep x1.07 to x1.14, darkzone x1.09 to x1.13, solarium x1.02 to
+x1.04): the packs in `data/maps/` are this project's own compile (maps-2026.08) and their lightmap pages are
+brighter than the release's (darkzone `lm_0000`: mean 100.9 85.8 73.6 against 79.8 68.8 58.6). That is a
+property of the map build, not of the renderer, and is not changed here.
+
+**Kept different on purpose** (native features with no DarkPlaces counterpart, or documented choices): the HUD
+and its vignette (which darkens the 3D picture by up to a quarter at the frame's edge), the native menu, the
+team rim light, the blob shadows of `r_fakeshadows` (on at the normal preset; DarkPlaces draws no model shadow
+by default), the bloom of `r_bloom` (off at the normal preset, as in Xonotic), volumetric fog and SDFGI (off),
+warpzones through `PortalRenderer` and `r_warpzone`, item and waypoint markers, the corona occlusion by trace,
+and the light budget's cap on lights. Hero water and the hero force field are no longer used by default (a
+shader script is drawn as DarkPlaces draws it); the hero portal is.
+
+**dpreflectcube** (both modes). The texture's `_reflect` mask times the cube map the shader names, sampled along
+the reflected view vector, is added to the texel before it is lit (shader_glsl.h USEREFLECTCUBE; enabled by the
+mask's existence, against a white cube when none is named). `AssetSystem.ResolveReflect`, `LoadReflectCubemap`
+(DarkPlaces' three suffix groups), `LightmapShader` and `DpSurfaceShaderGen`.
+
+**Water** (both modes; `game/client/WaterRenderer.cs`, `DpWaterModel`). `r_water 1` draws a `dp_water` surface
+as `mix(refraction * refractcolor, reflection * reflectcolor, Fresnel)` under the ordinary material at the
+shader's water alpha. Xonotic: `r_water` 0 up to the normal preset and 1 from high ("Reflections" in the menu,
+with `r_water_resolutionmultiplier` 0.25 / 0.5 / 1 as "Blurred" / "Good" / "Sharp"), and its client program
+forces `r_water 1` and multiplier 1 on a level with warpzones. Here the refraction is the frame already drawn
+(no second render); the reflection is one render per visible plane from the mirrored eye, with the camera
+looking along the plane's normal, its near plane on the water and an off-centre frustum over the visible water
+(the engine has no oblique clip plane); at most two planes a frame; nothing is rendered unless a plane faces the
+eye in view. With `r_water 0` the surface is the plain material. On solarium's pool the whole view is x0.989 of
+DarkPlaces' and the pool itself 128 139 143 against 129 139 143. Not ported: `dp_reflect` and `dp_refract`
+alone (no stock shader uses the first; the second is the warpzone's), `dpwaterscroll` (none), `dpcamera`
+(warpzones keep `PortalRenderer`), the edge-blackening guard, `r_water_hideplayer`, `r_water_lowquality`,
+`r_water_scissormode`. The reflection's ripple is weaker than DarkPlaces'. Cost on solarium's pool view,
+uncapped at 1280x720: 1.9 to 2.5 ms a frame without, 3.5 / 3.7 / 3.7 to 4.2 ms with the multiplier at 0.25 /
+0.5 / 1.
+
+**Realtime lights and shadows.** What DarkPlaces with Xonotic's defaults draws, and what the two modes draw:
+
+| DarkPlaces setting (Xonotic default) | DarkPlaces draws | Native before | Native now | Legacy now |
+|---|---|---|---|---|
+| `r_shadow_realtime_dlight` (1; 0 at low) | effect and entity lights light walls and models per pixel, falloff `(1-d)*2/(1+d*d)` | engine falloff, texture multiplied twice in linear light, models through a per-entity probe | DarkPlaces' falloff, N.L on the normal-mapped normal, specular from the gloss map, models per pixel | as before this change (falloff and colour were done in section 15); spent lights no longer stay lit |
+| `r_shadow_realtime_dlight_shadows` (0; 1 at ultra) with `r_shadow_shadowmapping` (0; 1 at ultra) | a dynamic light's shadow map; a shadowed pixel loses that light | only with `r_shadow_dlight_shadow_budget` above 0 (0 at normal: the menu box did nothing) and `r_shadow_world_casts` | follows the two cvars; the level casts while any light does; cap of 6 casting lights when the budget cvar is 0 | dynamic lights never cast |
+| `r_shadow_realtime_world` (0; 1 at ultra) | the map's `.rtlights` lights (six stock maps ship one) added to the lightmaps (`r_shadow_realtime_world_lightmaps` is 1 in Xonotic) | lights drawn with the engine's falloff, energy clamped, ambient scale and mode flags ignored | selected by mode flag, DarkPlaces' colour, falloff, ambient / diffuse / specular scales, style value 1.03125 | no `.rtlights` support |
+| `r_shadow_realtime_world_shadows` (0; 1 at ultimate) | those lights cast | no reader | read | - |
+| `r_shadow_shadowmapping_filterquality` (-1) | one percentage-closer level (3x3) | no reader | engine filter: hard / soft-low / soft-medium for 0-1 / -1,2,3 / 4 | same call when a native match set it |
+| `r_shadow_usenormalmap` (1; 0 at low and med) | 0: a light without N.L or specular | no reader | read | follows the shared cvar store |
+| `r_shadow_gloss` (1; 0 at low and med) | 0: no specular | no reader | switches the world's specular | set by the session |
+| `r_shadows` (0, never set by Xonotic) | an orthographic shadow map of the models thrown along `r_shadows_throwdirection` (1 and 2 are the same code), darkening lit surfaces to `1 - r_shadows_darken`; needs shadow mapping | not implemented (blob shadows under another cvar) | the scene's directional light as that map; blobs stand down while on | not implemented |
+| `r_coronas` (1), on dynamic lights with a corona | a flare per light, colour x corona x 0.25 | flare shader wrote where an unshaded material does not show it; `.rtlights` lights only | DarkPlaces' scale and falloff; still `.rtlights` lights only (effect coronas are a listed intended divergence) | none |
+| `r_shadow_bouncegrid` (0, no preset) | nothing | nothing | nothing | nothing |
+| light cube-map filters | the light's colour times a cube map | a spot light with one face as projector | unchanged (approximation) | - |
+
+Sheets: `_scratch/render/sheets/a6rtl-stormkeep-v1.png` (two custom realtime lights with shadows on stormkeep:
+x1.000, mean absolute difference 3.9), `a5rt-runningman-r1..r4.png` (the richest stock `.rtlights`, x0.978 to
+x0.992), `crop-rm-r1-shadow2.png` (model shadows). Differences that remain: the engine's shadow filter is not
+DarkPlaces' tap pattern; a model shadow here is sharper and is thrown at any distance (DarkPlaces stops at
+`r_shadows_throwdistance`); the local player's own body casts in DarkPlaces and is not drawn by the native
+client; cube-map light filters. Cost on runningman, uncapped at 1280x720 with four bots: 2.3 ms a frame at the
+default preset, 3.2 ms with realtime world lights and every light shadow on, 3.5 ms with `r_shadows 2` as well.
+
+**Default-preset cost** (uncapped, the owner was using the machine): native stormkeep with four bots 1.86 and
+1.81 ms a frame before, 1.80 and 1.76 after; legacy on the stormkeep recording 3.94 4.61 3.88 4.03 before, 4.09
+4.80 4.62 3.92 after - the runs spread more than the two builds differ.

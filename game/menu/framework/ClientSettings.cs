@@ -555,6 +555,8 @@ public static class ClientSettings
         // playtest A/B (both keep the full grid shading structure — this only picks the response curve).
         // r_model_light_scale multiplies the grid sample (1 = DP's absolute 1/128 scale). NOT archived,
         // same rationale as the tints: live-tuning knobs.
+        // (Both values belong to the earlier look: with r_darkplaces_colour 1, the default below, every model
+        // takes DarkPlaces' own light-grid arithmetic and this cvar is not consulted.)
         c.Register("r_model_light_gamma", "0");
         // The colour arithmetic of the 3D picture (game/client/NativeColour.cs). 1 = DarkPlaces' (the default
         // since October 2026: stored texel times stored lightmap times two, blending on display values), 0 = the

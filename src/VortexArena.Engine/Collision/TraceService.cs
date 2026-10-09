@@ -193,6 +193,10 @@ public sealed class TraceService : ITraceService
     /// (<see cref="CollisionWorld.Hulls"/>), whose hull code computes it in doubles.</summary>
     public double LastFraction { get; private set; } = 1;
 
+    /// <summary>Whether the last trace started in solid as far as the WORLD alone goes (DarkPlaces'
+    /// <c>worldstartsolid</c>), before any entity was looked at.</summary>
+    public bool LastWorldStartSolid { get; private set; }
+
     /// <summary>The cached read-only moving-box brush for a hull (allocated once per distinct mins/maxs).</summary>
     private Brush BoxBrush(Vector3 mins, Vector3 maxs)
     {
@@ -319,6 +323,15 @@ public sealed class TraceService : ITraceService
 
         bool worldStartSolid = trace.StartSolid;
 
+        // "get adjusted box for bmodel collisions if the world is q1bsp or hlbsp" (SV_TraceBox / CL_TraceBox):
+        // a model of such a map is hit as the hull the box rounds up to, so the entities to look at are those
+        // near that larger box.
+        if (_world.Hulls is { } roundHulls && filter != MoveFilter.WorldOnly && _entities != null && mins != maxs)
+        {
+            roundHulls.RoundUpToHullSize(mins, maxs, out Vector3 hullMins, out Vector3 hullMaxs);
+            SweptBounds(start, end, Vector3.Min(mins, hullMins), Vector3.Max(maxs, hullMaxs), out sweepMins, out sweepMaxs);
+        }
+
         // MOVE_WORLDONLY stops at the world.
         if (filter != MoveFilter.WorldOnly && _entities != null)
         {
@@ -343,6 +356,7 @@ public sealed class TraceService : ITraceService
         }
 
         LastStartContents = trace.StartContents;
+        LastWorldStartSolid = worldStartSolid;
         LastFraction = trace.HasExactFraction ? trace.ExactFraction : trace.Fraction < 0f ? 0f : trace.Fraction;
         return BuildResult(trace, start, end, worldStartSolid);
     }

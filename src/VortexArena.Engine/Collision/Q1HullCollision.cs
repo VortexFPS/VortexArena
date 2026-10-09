@@ -54,6 +54,7 @@ public sealed class Q1HullCollision
     private readonly int[] _faceContents;
     private readonly int[] _faceSurfaceFlags;
     private readonly string[] _faceTexture;
+    private readonly Vector3[] _faceNormal;
 
     /// <summary>mod_q1bsp_traceoutofsolid (1): a box that starts in solid is traced on, out into the open.</summary>
     public bool TraceOutOfSolid { get; set; } = true;
@@ -64,7 +65,15 @@ public sealed class Q1HullCollision
     /// so that it can name the texture it hit, instead of through hull 0.</summary>
     public bool LineReportsTexture { get; set; } = true;
 
-    public Q1HullCollision(Q1BspData bsp)
+    /// <param name="areaWeightedNormals">
+    /// How the normal of a face is formed for the surface traceline (Mod_BuildNormals): true adds the fan's
+    /// triangle normals as they are (r_smoothnormals_areaweighting 1, what a DarkPlaces client - and a listen
+    /// server, which is one - does); false makes each a unit vector first, which is what a DEDICATED DarkPlaces
+    /// server does, because the cvar belongs to the renderer and is never registered there, so reads 0. The
+    /// two differ in the last bits of a normal, and on a face with a sliver in its fan by much more (its
+    /// normal can come out as zero, and a face with a zero normal stops every line that reaches its node).
+    /// </param>
+    public Q1HullCollision(Q1BspData bsp, bool areaWeightedNormals = true)
     {
         _bsp = bsp ?? throw new ArgumentNullException(nameof(bsp));
         _planes = bsp.Planes;
@@ -87,12 +96,39 @@ public sealed class Q1HullCollision
             TextureCollision(name, present, texture == -2, out _faceContents[i], out _faceSurfaceFlags[i]);
             _faceTexture[i] = name;
         }
+        _faceNormal = new Vector3[faces];
+        for (int i = 0; i < faces; i++) _faceNormal[i] = areaWeightedNormals ? bsp.Faces[i].Normal : UnweightedNormal(bsp, bsp.Faces[i]);
+    }
+
+    // Mod_BuildNormals with areaweighting off: "if (!areaweighting) VectorNormalize(areaNormal)" before the sum.
+    private static Vector3 UnweightedNormal(Q1BspData bsp, in Q1Face face)
+    {
+        Vector3 normal = default;
+        Vector3[] v = bsp.FaceVertices;
+        for (int t = 0; t + 2 < face.VertexCount; t++)
+        {
+            Vector3 a = v[face.FirstVertex], b = v[face.FirstVertex + t + 1], c = v[face.FirstVertex + t + 2];
+            Vector3 n = new((a.Y - b.Y) * (c.Z - b.Z) - (a.Z - b.Z) * (c.Y - b.Y), (a.Z - b.Z) * (c.X - b.X) - (a.X - b.X) * (c.Z - b.Z), (a.X - b.X) * (c.Y - b.Y) - (a.Y - b.Y) * (c.X - b.X));
+            normal += Normalized(n);
+        }
+        return Normalized(normal);
+    }
+
+    // VectorNormalize: "float ilength = (float)DotProduct(v, v); if (ilength) ilength = 1.0f / sqrt(ilength); v *= ilength"
+    private static Vector3 Normalized(Vector3 v)
+    {
+        float ilength = v.X * v.X + v.Y * v.Y + v.Z * v.Z;
+        if (ilength != 0) ilength = (float)(1.0 / Math.Sqrt(ilength));
+        return float.IsFinite(ilength) ? new Vector3(v.X * ilength, v.Y * ilength, v.Z * ilength) : default;
     }
 
     private int LeafContents(int child)
     {
         int leaf = -(child + 1);
-        return leaf < _bsp.Leafs.Length ? _bsp.Leafs[leaf].Contents : Q1Contents.Solid;
+        int contents = leaf < _bsp.Leafs.Length ? _bsp.Leafs[leaf].Contents : Q1Contents.Solid;
+        // Contents are negative. A leaf of a damaged file that says otherwise would be followed as a node
+        // (DarkPlaces does follow it, out of its array); it is taken as empty here.
+        return contents < 0 ? contents : Q1Contents.Empty;
     }
 
     /// <summary>The map this was built from.</summary>
@@ -500,7 +536,7 @@ public sealed class Q1HullCollision
             ref readonly Q1Face face = ref _bsp.Faces[faceIndex];
             // "skip faces with contents we don't care about"
             if ((t.HitMask & _faceContents[faceIndex]) == 0) continue;
-            Vector3 normal = face.Normal;
+            Vector3 normal = _faceNormal[faceIndex];
             // "skip backfaces"
             if (t.DistX * normal.X + t.DistY * normal.Y + t.DistZ * normal.Z > 0) continue;
             // "iterate edges and see if the point is outside one of them"
@@ -592,19 +628,19 @@ public sealed class Q1HullCollision
                 ref readonly Q1Face face = ref _bsp.Faces[node.FirstFace + i];
                 // "no lightmaps": not a wall (sky), or no samples
                 if ((_faceContents[node.FirstFace + i] & SuperContents.Sky) != 0) continue;
-                if (face.WhiteLight)
-                {
-                    // the block of 128 a liquid without light data was given
-                    ambient += new Vector3(styleValue(0));
-                    return true;
-                }
-                if (face.LightOffset < 0 || !face.Lightmapped) continue;
+                if (!face.WhiteLight && (face.LightOffset < 0 || !face.Lightmapped)) continue;
                 ref readonly Q1TexInfo ti = ref _bsp.TexInfo[face.TexInfoIndex];
                 float ds = (x * ti.S.X + y * ti.S.Y + mid * ti.S.Z + ti.S.W - face.TextureMinS) * 0.0625f;
                 float dt = (x * ti.T.X + y * ti.T.Y + mid * ti.T.Z + ti.T.W - face.TextureMinT) * 0.0625f;
                 int dsi = (int)MathF.Floor(ds), dti = (int)MathF.Floor(dt);
                 int lmwidth = face.LightWidth, lmheight = face.LightHeight;
                 if (dsi < 0 || dsi >= lmwidth || dti < 0 || dti >= lmheight) continue;
+                if (face.WhiteLight)
+                {
+                    // the block of 128 a liquid without light data was given: full light, on style 0
+                    ambient += new Vector3(styleValue(0));
+                    return true;
+                }
                 if (dsi > lmwidth - 2) dsi = lmwidth - 2;
                 if (dti > lmheight - 2) dti = lmheight - 2;
                 if (dsi < 0 || dti < 0) return true; // a block one sample wide: DarkPlaces reads outside it; nothing is added here

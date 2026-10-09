@@ -192,7 +192,7 @@ public sealed class SvWorld : TraceService.IEntityProvider
                 // of it that mean the same in a Quake 3 map (tree, visibility, bounds, entities) stand in as Bsp.
                 Q1BspData q1 = Q1BspReader.Read(file);
                 Q1Bsp = q1;
-                Hulls = new Q1HullCollision(q1);
+                Hulls = new Q1HullCollision(q1, areaWeightedNormals: !Q1DedicatedNormals);
                 Bsp = Q1BspTreeView.Create(q1);
                 for (int i = 1; i < q1.Models.Length; i++)
                 {
@@ -277,6 +277,10 @@ public sealed class SvWorld : TraceService.IEntityProvider
     public Q1BspData? Q1Bsp { get; private set; }
     /// <summary>The clipping hulls of a Quake 1 format map, or null.</summary>
     public Q1HullCollision? Hulls { get; private set; }
+    /// <summary>Whether a Quake 1 format map's face normals are formed as a DEDICATED DarkPlaces server forms
+    /// them (see <see cref="Q1HullCollision"/>'s constructor). Set before <see cref="LoadMap"/>; false - a
+    /// listen server, which is what a local game is - by default.</summary>
+    public bool Q1DedicatedNormals { get; set; }
 
     /// <summary>The program whose entities are linked and clipped.</summary>
     /// <param name="modelNameOf">sv.model_precache[modelindex] of an entity, or null: which map
@@ -431,7 +435,10 @@ public sealed class SvWorld : TraceService.IEntityProvider
                 // bmodelstartsolid = true; if (cliptrace->fraction == 1) cliptrace->ent = touch; }".
                 // The sweep library reports only that the move started solid, not in what, so the
                 // rare stuck case asks again: the world alone, then which entity's box holds the start.
-                TraceResult world = worldService.Trace(vStart, vMins, vMaxs, vStart, MoveFilter.WorldOnly, _passMirror);
+                // (On a Quake 1 format map the sweep itself says whether the world held the start, and asking
+                // again at rest would not: Mod_Q1BSP_TracePoint, which a line of no length becomes, tests no mask.)
+                TraceResult world = Hulls is not null ? new TraceResult { StartSolid = service.LastWorldStartSolid }
+                    : worldService.Trace(vStart, vMins, vMaxs, vStart, MoveFilter.WorldOnly, _passMirror);
                 result.WorldStartSolid = result.BModelStartSolid = world.StartSolid;
                 int stuck = StuckEntity(vm, vStart, vMins, vMaxs, type, out bool isBsp);
                 if (isBsp) result.BModelStartSolid = true;

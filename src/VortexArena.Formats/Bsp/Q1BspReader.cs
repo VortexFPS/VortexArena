@@ -193,10 +193,16 @@ public static class Q1BspReader
             for (int t = 0; t + 2 < numEdges; t++)
             {
                 Vector3 a = faceVertices[firstVertex], b = faceVertices[firstVertex + t + 1], c = faceVertices[firstVertex + t + 2];
-                normal += Vector3.Cross(a - b, c - b);
+                // TriangleNormal(a, b, c, n), term for term
+                normal.X += (a.Y - b.Y) * (c.Z - b.Z) - (a.Z - b.Z) * (c.Y - b.Y);
+                normal.Y += (a.Z - b.Z) * (c.X - b.X) - (a.X - b.X) * (c.Z - b.Z);
+                normal.Z += (a.X - b.X) * (c.Y - b.Y) - (a.Y - b.Y) * (c.X - b.X);
             }
-            float nl = normal.Length();
-            normal = nl > 0 && float.IsFinite(nl) ? normal / nl : default;
+            // VectorNormalize: "float ilength = (float)DotProduct(v, v); if (ilength) ilength = 1.0f / sqrt(ilength); v *= ilength"
+            // (a face with no area keeps a zero normal - and, in the surface traceline, stops every line that reaches its node)
+            float ilength = normal.X * normal.X + normal.Y * normal.Y + normal.Z * normal.Z;
+            if (ilength != 0) ilength = (float)(1.0 / Math.Sqrt(ilength));
+            normal = float.IsFinite(ilength) ? new Vector3(normal.X * ilength, normal.Y * ilength, normal.Z * ilength) : default;
 
             if (!float.IsFinite(minS) || !float.IsFinite(maxS) || !float.IsFinite(minT) || !float.IsFinite(maxT)) throw new AssetParseException($"Face {i}: bad surface extents.");
             double fs0 = Math.Floor(minS / 16.0) * 16, fs1 = Math.Ceiling(maxS / 16.0) * 16, ft0 = Math.Floor(minT / 16.0) * 16, ft1 = Math.Ceiling(maxT / 16.0) * 16;

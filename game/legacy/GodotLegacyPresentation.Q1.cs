@@ -44,7 +44,7 @@ public sealed partial class GodotLegacyPresentation
     // The world is cut into cells of this many units for visibility and frustum culling (0: one mesh).
     // VORTEX_Q1_CELL overrides it, for measuring.
     private static readonly float s_q1CellSize =
-        float.TryParse(System.Environment.GetEnvironmentVariable("VORTEX_Q1_CELL"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float cell) && cell >= 0 ? cell : 1024f;
+        float.TryParse(System.Environment.GetEnvironmentVariable("VORTEX_Q1_CELL"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float cell) && cell >= 0 ? cell : 0f;
 
     // True when the file starts like a Quake 1 format map. (Four bytes would do; the file system reads whole
     // files, and LoadQ1World reads it again - a map is read twice on the Quake 3 path as well.)
@@ -294,6 +294,55 @@ public sealed partial class GodotLegacyPresentation
             mesh.SetInstanceShaderParameter(PlayerSkinShader.GridLitUniform, 2f);
             mesh.SetInstanceShaderParameter(s_gridAmbient, light);
         }
+    }
+
+    // ---- developer aid (review scripts only: "colourdbg q1model <file>", "colourdbg q1light <radius>") ------
+
+    private Node3D? _q1DebugModel;
+    private OmniLight3D? _q1DebugLight;
+
+    // A Quake 1 format file as a model, 96 units in front of the camera: what an entity showing it would draw.
+    private void Q1DebugModel(string model)
+    {
+        if (_q1DebugModel is not null && GodotObject.IsInstanceValid(_q1DebugModel)) _q1DebugModel.QueueFree();
+        _q1DebugModel = null;
+        if (model.Length == 0 || !LegacyQcHost.IsSafePath(model) || !_vfs.Exists(model)) return;
+        Node3D? node = model.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase) ? CreateQ1ModelNode(model, out _) : null;
+        if (node is null)
+        {
+            _note("colourdbg q1model: " + model + " is not a Quake 1 format map that can be built");
+            return;
+        }
+        _sceneRoot.AddChild(node);
+        node.Position = _camera.Position - _camera.Basis.Z * 96f - _camera.Basis.Y * 16f;
+        _q1DebugModel = node;
+        _note("colourdbg q1model: " + model + ": " + _q1Models[model]?.Describe());
+    }
+
+    // A white dynamic light of that radius 48 units in front of the camera (0 removes it): the light pass on
+    // the level's surfaces.
+    private void Q1DebugLight(float radius)
+    {
+        if (_q1DebugLight is not null && GodotObject.IsInstanceValid(_q1DebugLight)) _q1DebugLight.QueueFree();
+        _q1DebugLight = null;
+        if (!(radius > 0)) return;
+        _q1DebugLight = new OmniLight3D
+        {
+            Name = "Q1DebugLight", ShadowEnabled = false, OmniRange = radius, LightEnergy = 1f,
+            LightColor = DisplayFramebuffer.ForEngine(Colors.White), OmniAttenuation = DisplayFramebuffer.Active ? 0f : 1f,
+        };
+        _sceneRoot.AddChild(_q1DebugLight);
+        _q1DebugLight.Position = _camera.Position - _camera.Basis.Z * 48f;
+    }
+
+    // Developer aid (VORTEX_LEGACY_DUMP): where a brush model's mesh is and whether it is shown.
+    private static string Q1DebugSubmodel(Proxy proxy)
+    {
+        if (proxy.Q1 is null || proxy.Node is not { } node || proxy.Geometry.Count == 0 || proxy.Geometry[0] is not MeshInstance3D { Mesh: { } mesh } instance) return "";
+        Aabb box = instance.GetAabb();
+        NVec3 lo = Coords.ToQuake(box.Position), hi = Coords.ToQuake(box.End);
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $" q1 box {MathF.Min(lo.X, hi.X):0} {MathF.Min(lo.Y, hi.Y):0} {MathF.Min(lo.Z, hi.Z):0} .. {MathF.Max(lo.X, hi.X):0} {MathF.Max(lo.Y, hi.Y):0} {MathF.Max(lo.Z, hi.Z):0} surfaces {mesh.GetSurfaceCount()} shown {node.Visible}/{instance.Visible} in tree {node.IsInsideTree()} at {node.GlobalPosition}");
     }
 
     // #92 getlight on a Quake 1 level: R_CompleteLightPoint's answer for a map whose light point is ambient only.

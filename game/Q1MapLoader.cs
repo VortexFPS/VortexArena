@@ -334,7 +334,21 @@ public sealed class Q1Level
         {
             using Image? image = _assets.LoadImage(candidate);
             if (image is null || image.GetWidth() != image.GetHeight() * 2) continue;
+            // image.c loadimagepixelsbgra: "jpeg can't do alpha, so let's simulate it by loading another jpeg" -
+            // an image without an alpha channel takes it from the blue channel of "<name>_alpha", if that has its size.
+            bool opaque = image.DetectAlpha() == Image.AlphaMode.None;
             if (image.GetFormat() != Image.Format.Rgba8) image.Convert(Image.Format.Rgba8);
+            if (opaque)
+            {
+                using Image? mask = _assets.LoadImage(candidate + "_alpha");
+                if (mask is not null && mask.GetWidth() == image.GetWidth() && mask.GetHeight() == image.GetHeight())
+                {
+                    if (mask.GetFormat() != Image.Format.Rgba8) mask.Convert(Image.Format.Rgba8);
+                    byte[] pixels = image.GetData(), alpha = mask.GetData();
+                    for (int i = 0; i + 3 < pixels.Length && i + 3 < alpha.Length; i += 4) pixels[i + 3] = alpha[i + 2];
+                    image.SetData(image.GetWidth(), image.GetHeight(), false, Image.Format.Rgba8, pixels);
+                }
+            }
             int w = image.GetWidth() / 2, h = image.GetHeight();
             using Image left = image.GetRegion(new Rect2I(0, 0, w, h)), right = image.GetRegion(new Rect2I(w, 0, w, h));
             _skyMaterial!.SetShaderParameter("sky_solid", ImageTexture.CreateFromImage(right));

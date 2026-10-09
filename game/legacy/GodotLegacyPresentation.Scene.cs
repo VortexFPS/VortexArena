@@ -320,7 +320,7 @@ public sealed partial class GodotLegacyPresentation
         if (Touch(key, model, entity.Skin) is not { Node: { } } proxy) return;
         if (s_debugEntities && model[0] == '*' && _debugEntities.Count < 300)
             _debugEntities.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                $"net {key - NetworkKeyBase,4} {model} ef {entity.Effects} a {entity.Alpha} org {origin.X:0.#} {origin.Y:0.#} {origin.Z:0.#} ang {angles.X:0.#} {angles.Y:0.#} {angles.Z:0.#} meshes {proxy.Geometry.Count}"));
+                $"net {key - NetworkKeyBase,4} {model} ef {entity.Effects} a {entity.Alpha} org {origin.X:0.#} {origin.Y:0.#} {origin.Z:0.#} ang {angles.X:0.#} {angles.Y:0.#} {angles.Z:0.#} meshes {proxy.Geometry.Count}{Q1DebugSubmodel(proxy)}"));
         if (!ApplyPlacement(proxy, placement)) return;
         ApplyRenderState(proxy, entity.Alpha / 255f, entity.Effects, 0);
         if (_levelQ1 is not null) ApplyQ1ModelLight(proxy, placement.Origin);

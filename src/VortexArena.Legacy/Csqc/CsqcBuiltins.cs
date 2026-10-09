@@ -69,6 +69,7 @@ public sealed partial class CsqcBuiltins
         RegisterScene();
         RegisterDraw();
         RegisterSoundAndEffects();
+        RegisterParticleSpawner();
         RegisterModels();
     }
 

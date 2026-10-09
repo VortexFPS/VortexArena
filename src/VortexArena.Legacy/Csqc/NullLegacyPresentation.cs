@@ -42,7 +42,11 @@ public sealed class NullLegacyPresentation : ILegacyPresentation, ILegacyCallCou
 
     public void Attach(CsqcHost host) => _host = host;
 
-    public void ResetCounts() => Calls.Clear();
+    public void ResetCounts()
+    {
+        Calls.Clear();
+        SpawnedParticles.Clear();
+    }
 
     private void Count([CallerMemberName] string member = "") => Calls[member] = Calls.GetValueOrDefault(member) + 1;
 
@@ -343,6 +347,21 @@ public sealed class NullLegacyPresentation : ILegacyPresentation, ILegacyCallCou
     float ILegacyModels.FrameDuration(string model, int frame) { Count(); return 0; }
 
     // ---- effects -----------------------------------------------------------------------------------
+
+    /// <summary>The particles of spawnparticle / delayedparticle handed over since the last
+    /// <see cref="ResetCounts"/> (the first 4096), for a test to look at.</summary>
+    public List<LegacySpawnParticle> SpawnedParticles { get; } = new();
+
+    /// <summary>Answer "no particle was made" to SpawnParticle, as a full pool does.</summary>
+    public bool RefuseParticles { get; set; }
+
+    bool ILegacyEffects.SpawnParticle(in LegacySpawnParticle particle)
+    {
+        Count();
+        if (RefuseParticles) return false;
+        if (SpawnedParticles.Count < 4096) SpawnedParticles.Add(particle);
+        return true;
+    }
 
     void ILegacyEffects.ParticleEffect(int effect, float count, QcVector originMin, QcVector originMax, QcVector velocityMin, QcVector velocityMax, int paletteColor) => Count();
     void ILegacyEffects.ParticleTrail(int effect, float count, QcVector start, QcVector end, QcVector velocityMin, QcVector velocityMax, int paletteColor, in LegacyParticleTint tint) => Count();

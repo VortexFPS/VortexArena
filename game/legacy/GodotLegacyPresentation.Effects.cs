@@ -28,7 +28,67 @@ public sealed partial class GodotLegacyPresentation
     /// <summary>svc_effect / effect(): a sprite animation at a point. Counted, not drawn.</summary>
     public long SpriteEffectsNotDrawn { get; private set; }
 
-    private void BeginEffectsFrame() => _effectsThisFrame = 0;
+    private void BeginEffectsFrame()
+    {
+        _effectsThisFrame = 0;
+        _directParticlesThisFrame = 0;
+    }
+
+    // spawnparticle makes one particle a call, so a program may rightly call it hundreds of times a frame;
+    // past this many in one frame the answer is the one a full pool gives (no particle, 0 to the program).
+    private const int MaxDirectParticlesPerFrame = 4096;
+
+    private int _directParticlesThisFrame;
+
+    /// <summary>Particles made for spawnparticle / delayedparticle, and how many were refused (the frame's
+    /// bound, cl_particles 0, a full pool, values that are not numbers).</summary>
+    public long DirectParticlesSpawned { get; private set; }
+    public long DirectParticlesRefused { get; private set; }
+
+    /// <summary>
+    /// CL_NewParticle for the DP_CSQC_SPAWNPARTICLE builtins: the particle goes into the faithful particle
+    /// simulation's pool as it stands (VortexArena.Engine ParticleSim.SpawnDirect), with DarkPlaces' own
+    /// type, blend and orientation numbers. See that method for what the pool cannot represent.
+    /// </summary>
+    bool ILegacyEffects.SpawnParticle(in LegacySpawnParticle particle)
+    {
+        if (s_noEffects || _effects.FaithfulParticles is not { } backend || _directParticlesThisFrame >= MaxDirectParticlesPerFrame
+            || !Finite(particle.Origin) || !Finite(particle.Velocity) || !FiniteParticle(particle))
+        {
+            DirectParticlesRefused++;
+            return false;
+        }
+        _directParticlesThisFrame++;
+        VortexArena.Engine.Particles.DirectParticle direct = new()
+        {
+            Origin = N(particle.Origin), Velocity = N(particle.Velocity),
+            Type = particle.Type, Blend = particle.Blend, Orientation = particle.Orientation,
+            Color1 = particle.Color1, Color2 = particle.Color2, Texture = particle.Texture,
+            Size = particle.Size, SizeIncrease = particle.SizeIncrease, Alpha = particle.Alpha, AlphaFade = particle.AlphaFade,
+            Gravity = particle.Gravity, Bounce = particle.Bounce, AirFriction = particle.AirFriction, LiquidFriction = particle.LiquidFriction,
+            OriginJitter = particle.OriginJitter, VelocityJitter = particle.VelocityJitter,
+            Lifetime = particle.Lifetime, Stretch = particle.Stretch,
+            StainColor1 = particle.StainColor1, StainColor2 = particle.StainColor2, StainTexture = particle.StainTexture,
+            StainAlpha = particle.StainAlpha, StainSize = particle.StainSize, Angle = particle.Angle, Spin = particle.Spin,
+            // A delay is bounded to what a level lasts: the particle holds a pool slot until it appears.
+            Delay = Math.Clamp(particle.Delay, 0f, 600f),
+        };
+        if (!backend.Sim.SpawnDirect(direct))
+        {
+            DirectParticlesRefused++;
+            return false;
+        }
+        DirectParticlesSpawned++;
+        return true;
+    }
+
+    // Every number the simulation integrates or the renderer scales by. A program can hand over NaN or
+    // infinity (a division by zero in QuakeC is not an error); such a particle is not made.
+    private static bool FiniteParticle(in LegacySpawnParticle p) =>
+        float.IsFinite(p.Size) && float.IsFinite(p.SizeIncrease) && float.IsFinite(p.Alpha) && float.IsFinite(p.AlphaFade)
+        && float.IsFinite(p.Gravity) && float.IsFinite(p.Bounce) && float.IsFinite(p.AirFriction) && float.IsFinite(p.LiquidFriction)
+        && float.IsFinite(p.OriginJitter) && float.IsFinite(p.VelocityJitter) && float.IsFinite(p.Lifetime) && float.IsFinite(p.Stretch)
+        && float.IsFinite(p.StainAlpha) && float.IsFinite(p.StainSize) && float.IsFinite(p.Angle) && float.IsFinite(p.Spin) && float.IsFinite(p.Delay);
 
     // particleeffectnum answers numbers in effectinfo.txt order; the effect system knows names. The table
     // that maps one to the other is the loaded program's (CsqcHost.Effects), built from the same file.

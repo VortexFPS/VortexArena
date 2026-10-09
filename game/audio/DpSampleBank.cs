@@ -48,6 +48,15 @@ public sealed class DpSampleBank
         _warn = warn;
     }
 
+    /// <summary>
+    /// What a name without a sound file's extension is given before it is looked up, or null to look it up
+    /// as it stands. DarkPlaces itself wants the extension (a legacy session passes the program's names
+    /// through untouched); the native game's sound registry names its samples without one, as Xonotic's
+    /// QuakeC does before _Sound_fixpath picks the file that exists - ".wav" here, and the look-up then
+    /// tries the .ogg beside it as DarkPlaces does.
+    /// </summary>
+    public string? DefaultExtension { get; init; }
+
     /// <summary>Compressed samples decoded so far, and the bytes of PCM they take.</summary>
     public int DecodedSamples => Volatile.Read(ref _decoded);
     public long DecodedBytes => Interlocked.Read(ref _decodedBytes);
@@ -60,6 +69,7 @@ public sealed class DpSampleBank
     public DpSfx? Get(string name, bool forPlay)
     {
         if (string.IsNullOrEmpty(name)) return null;
+        name = DpSoundFiles.WithDefaultExtension(name, DefaultExtension);
         Entry? entry;
         lock (_lock)
         {
@@ -96,6 +106,7 @@ public sealed class DpSampleBank
     /// <summary>Does a file stand behind this name (precache_sound's answer)? Reads nothing.</summary>
     public bool Exists(string name)
     {
+        name = DpSoundFiles.WithDefaultExtension(name, DefaultExtension);
         lock (_lock)
             if (_entries.TryGetValue(name, out Entry? entry)) return !entry.Sfx.Failed;
         foreach (string candidate in DpSoundFiles.Candidates(name))

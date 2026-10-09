@@ -49,7 +49,7 @@ public static class DpNative
     public static DpSampleBank? Bank(Delegate? audioLoader)
     {
         if (audioLoader?.Target is not AssetLoader assets) return null;
-        return s_banks.GetValue(assets, static a => new DpSampleBank(a.Vfs.Exists, a.Vfs.ReadBytes));
+        return s_banks.GetValue(assets, static a => new DpSampleBank(a.Vfs.Exists, a.Vfs.ReadBytes) { DefaultExtension = ".wav" });
     }
 
     /// <summary>

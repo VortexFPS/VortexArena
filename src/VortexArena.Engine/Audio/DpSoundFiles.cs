@@ -25,6 +25,18 @@ public static class DpSoundFiles
         foreach (string c in WithExtensions(name)) yield return c;
     }
 
+    /// <summary>
+    /// <paramref name="name"/> with <paramref name="extension"/> appended when it carries none of a sound
+    /// file's own (.wav, .ogg, .flac); unchanged when it does, or when no extension is given.
+    /// </summary>
+    public static string WithDefaultExtension(string name, string? extension)
+    {
+        if (string.IsNullOrEmpty(extension) || string.IsNullOrEmpty(name)) return name;
+        if (name.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".flac", StringComparison.OrdinalIgnoreCase)) return name;
+        return name + extension;
+    }
+
     private static IEnumerable<string> WithExtensions(string path)
     {
         if (path.Length >= 4 && path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))

@@ -22,6 +22,13 @@ run/main_scene="res://Main.tscn"
 run/delta_smooth=false
 config/features=PackedStringArray("4.6", "C#", "Forward Plus")
 
+[audio]
+
+; DarkPlaces mixes at 48 kHz (snd_speed 48000) and resamples every sample to that rate by linear
+; interpolation. The audio server runs at the same rate so that the DarkPlaces mixer (game/audio/DpAudio.cs)
+; resamples by the same ratios and its output reaches the device without a second resampling.
+driver/mix_rate=48000
+
 [dotnet]
 
 project/assembly_name="VortexArena"

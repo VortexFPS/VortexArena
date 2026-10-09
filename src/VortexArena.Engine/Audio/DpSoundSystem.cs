@@ -625,7 +625,12 @@ public sealed class DpSoundSystem
             }
 
             double posd = ch.Position;
-            double speedd = (double)ch.MixSpeed * sfx.Rate / outputRate;
+            // "speedd = ch->mixspeed * sfx->format.speed / snd_renderbuffer->format.speed": float arithmetic in C
+            // (a float times two unsigned ints), widened afterwards. Done in double, 44100 / 48000 comes out
+            // 2e-8 different and the position drifts from DarkPlaces' by a thousandth of a sample a second.
+            float speedf = ch.MixSpeed * (float)sfx.Rate;
+            speedf /= (float)outputRate;
+            double speedd = speedf;
             if (!(speedd > 0)) continue;
             float volLeft = ch.VolumeLeft, volRight = ch.VolumeRight;
             float maxvol = MathF.Max(volLeft, volRight);

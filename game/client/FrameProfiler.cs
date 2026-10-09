@@ -78,7 +78,7 @@ public partial class FrameProfiler : CanvasLayer
     // The §18 effect nodes (music/weather/decals/vehicles/damagetext) are included so they leave proc:other.
     private static readonly string[] TopLevelNodeScopes =
         { "ng.process", "cw.process", "md3.morph", "entitynode", "hud.mgr", "proj", "viewmodel", "nethud",
-          "stream.build", "particles.cpu", "particles.join", "music", "weather", "decals.splat", "vehicle.vis", "damagetext",
+          "stream.build", "particles.cpu", "particles.join", "music", "dpaudio", "weather", "decals.splat", "vehicle.vis", "damagetext",
           // (perf-investigation 2026-06-14) the previously-unscoped client _Process nodes that leaked into
           // proc:other on big/populated maps — now attributed so the residual is provably Godot-internal.
           "cev.process", "world.pvscull", "emitters", "clientmisc", "hud.trueaim",

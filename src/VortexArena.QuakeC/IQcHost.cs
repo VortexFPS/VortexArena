@@ -33,6 +33,35 @@ public interface IQcHost
     float CvarFloat(string name);
     string CvarDefaultString(string name);
     string CvarDescription(string name);
+
+    /// <summary>
+    /// The cvar builtin's whole question in one call: PRVM_Cvar_ReadOk (the cvar exists and is not private) and
+    /// then its value. The default asks the three questions one after another, as the builtin did; a host whose
+    /// answers come from name lookups overrides it to look the name up once (a program reads cvars by name
+    /// every frame, and each of the three walked the same tables).
+    /// </summary>
+    bool TryCvarFloat(string name, out float value)
+    {
+        if (CvarExists(name) && (CvarTypeFlags(name) & 4) == 0)
+        {
+            value = CvarFloat(name);
+            return true;
+        }
+        value = 0;
+        return false;
+    }
+
+    /// <summary><see cref="TryCvarFloat"/> for cvar_string.</summary>
+    bool TryCvarString(string name, out string value)
+    {
+        if (CvarExists(name) && (CvarTypeFlags(name) & 4) == 0)
+        {
+            value = CvarString(name);
+            return true;
+        }
+        value = "";
+        return false;
+    }
     /// <summary>DarkPlaces cvar_type flags (CVAR_TYPEFLAG_EXISTS = 1, SAVED = 2, PRIVATE = 4, ENGINE = 8, HASDESCRIPTION = 16, READONLY = 32), or 0.</summary>
     int CvarTypeFlags(string name);
     /// <summary>Sets a cvar on the program's behalf. The host may refuse (read-only or protected cvars).</summary>

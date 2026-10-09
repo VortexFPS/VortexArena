@@ -138,6 +138,11 @@ public sealed partial class CsqcHost : IDisposable
     // last linked with.
     private bool[] _linked = new bool[512];
     private QcVector[] _linkMins = new QcVector[512], _linkMaxs = new QcVector[512];
+    // The linked entities' numbers in ascending order. Xonotic's client program has some 3,300 entities, most
+    // of them objects that are never placed in the world; findradius and findbox walked every one of them
+    // three or four times a frame to find the few hundred that are.
+    private int[] _linkedIds = new int[256];
+    private int _linkedCount;
 
     public QcVm Vm { get; }
     public ProgsFile Program => Vm.Progs;
@@ -911,6 +916,18 @@ public sealed partial class CsqcHost : IDisposable
             Array.Resize(ref _linkMins, size);
             Array.Resize(ref _linkMaxs, size);
         }
+        if (!_linked[edict])
+        {
+            int at = Array.BinarySearch(_linkedIds, 0, _linkedCount, edict);
+            if (at < 0)
+            {
+                at = ~at;
+                if (_linkedCount == _linkedIds.Length) Array.Resize(ref _linkedIds, _linkedIds.Length * 2);
+                Array.Copy(_linkedIds, at, _linkedIds, at + 1, _linkedCount - at);
+                _linkedIds[at] = edict;
+                _linkedCount++;
+            }
+        }
         _linked[edict] = true;
         _linkMins[edict] = absMin;
         _linkMaxs[edict] = absMax;
@@ -923,6 +940,12 @@ public sealed partial class CsqcHost : IDisposable
         if ((uint)edict < (uint)_linked.Length && _linked[edict])
         {
             _linked[edict] = false;
+            int at = Array.BinarySearch(_linkedIds, 0, _linkedCount, edict);
+            if (at >= 0)
+            {
+                Array.Copy(_linkedIds, at + 1, _linkedIds, at, _linkedCount - at - 1);
+                _linkedCount--;
+            }
             Presentation.World.UnlinkEdict(edict);
         }
     }
@@ -937,9 +960,12 @@ public sealed partial class CsqcHost : IDisposable
     {
         int count = 0;
         int end = Math.Min(Vm.NumEdicts, _linked.Length);
-        for (int e = 1; e < end && count < edicts.Length; e++)
+        int[] ids = _linkedIds;
+        for (int i = 0; i < _linkedCount && count < edicts.Length; i++)
         {
-            if (!_linked[e] || Vm.IsFree(e)) continue;
+            int e = ids[i];
+            if (e >= end) break;
+            if (e < 1 || Vm.IsFree(e)) continue;
             ref QcVector lo = ref _linkMins[e];
             ref QcVector hi = ref _linkMaxs[e];
             if (maxs.X < lo.X || mins.X > hi.X || maxs.Y < lo.Y || mins.Y > hi.Y || maxs.Z < lo.Z || mins.Z > hi.Z) continue;

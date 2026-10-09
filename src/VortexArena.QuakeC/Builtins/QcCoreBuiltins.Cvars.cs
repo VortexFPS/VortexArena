@@ -67,7 +67,7 @@ public sealed partial class QcCoreBuiltins
     private void Cvar(QcVm vm)
     {
         string name = CvarNameArg("VM_cvar");
-        vm.ReturnFloat(CvarReadOk(name) ? _host.CvarFloat(name) : 0);
+        vm.ReturnFloat(_host.TryCvarFloat(name, out float value) ? value : 0);
     }
 
     // #495 float(string name, ...) cvar_type. Unlike the readers this does report a private cvar: bit 4.
@@ -81,7 +81,7 @@ public sealed partial class QcCoreBuiltins
     private void CvarString(QcVm vm)
     {
         string name = CvarNameArg("VM_cvar_string");
-        ReturnNonNullString(CvarReadOk(name) ? _host.CvarString(name) : "");
+        ReturnNonNullString(_host.TryCvarString(name, out string value) ? value : "");
     }
 
     // #482 string(string s, ...) cvar_defstring. No private check in the C; the host decides what it tells.

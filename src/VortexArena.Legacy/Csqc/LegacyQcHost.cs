@@ -121,6 +121,30 @@ public sealed class LegacyQcHost : IQcHost
     public string CvarString(string name) => Visible(name) ? _cvars.GetString(name) : "";
     public float CvarFloat(string name) => Visible(name) ? _cvars.GetFloat(name) : 0f;
     public string CvarDefaultString(string name) => Visible(name) ? _cvars.GetDefault(name) : "";
+
+    // CvarTypeFlags never reports the private bit here (a private cvar is not visible at all), so "exists and is
+    // not private, then its value" is one visibility test and one read.
+    public bool TryCvarFloat(string name, out float value)
+    {
+        if (Visible(name))
+        {
+            value = _cvars.GetFloat(name);
+            return true;
+        }
+        value = 0;
+        return false;
+    }
+
+    public bool TryCvarString(string name, out string value)
+    {
+        if (Visible(name))
+        {
+            value = _cvars.GetString(name);
+            return true;
+        }
+        value = "";
+        return false;
+    }
     public string CvarDescription(string name) => Visible(name) ? _cvars.GetDescription(name) : "";
 
     public int CvarTypeFlags(string name)

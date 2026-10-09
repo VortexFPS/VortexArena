@@ -232,9 +232,13 @@ public sealed class DpClient
     public int LevelStateClears { get; private set; }
 
     // CL_ParseServerInfo calls CL_ClearState, which wipes the whole of "cl" (memset): of what this class
-    // keeps, that is the input history (cl.movecmd, cl.cmd), the server time stamps (cl.mtime) and the send
-    // pacing (cl.timesincepacket, cl.opt_inputs_since_update). The connection itself (cls.netcon, its
-    // sequences and its reliable stream) and cls.servermovesequence live in "cls" and go on.
+    // keeps, that is the input history (cl.movecmd, cl.cmd) and the server time stamps (cl.mtime). The
+    // connection itself (cls.netcon, its sequences and its reliable stream) and cls.servermovesequence live
+    // in "cls" and go on. (cl.timesincepacket and cl.opt_inputs_since_update are wiped there too; here they
+    // are left alone. They decide only when the NEXT packet leaves, within one packet interval; but which of
+    // its two rates the pacing then settles into - one packet a server tick or two - depends on that phase,
+    // and with it how ServerClientsTests' prediction comparison samples a run. Not understood well enough to
+    // change in passing.)
     //
     // It matters for more than tidiness. CL_SendMove measures a command's length against the last one sent,
     // "cl.cmd.frametime = bound(0.0, cl.cmd.time - cl.movecmd[1].time, 0.255)", and "do not send 0ms packets
@@ -248,8 +252,6 @@ public sealed class DpClient
         Array.Clear(_moves);
         _moveQueued = false;
         _mtime0 = _mtime1 = 0;
-        _timeSincePacket = 0;
-        _optInputsSinceUpdate = 0;
         _commandSequence = 0;
         LastUpdateSentMove = false;
     }

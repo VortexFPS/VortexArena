@@ -11,6 +11,7 @@ using VortexArena.Common.Services;
 using VortexArena.Engine.Simulation;
 using VortexArena.Formats.Vfs;
 using VortexArena.Legacy.Csqc;
+using VortexArena.Legacy.Protocol;
 using VortexArena.QuakeC;
 
 namespace VortexArena.Legacy.Menu;
@@ -67,14 +68,10 @@ public sealed class LegacyConsole
     private readonly Dictionary<string, string> _aliasOf = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<string>> _aliasesFor = new(StringComparer.Ordinal);
 
-    private const int MaxQueuedCommands = 65536;
-    private const int MaxDeferred = 256;
-
     private readonly VirtualFileSystem _vfs;
     private readonly string? _userData;
     private readonly Action<string> _print;
-    private readonly List<string> _queue = new();
-    private readonly List<(double Delay, string Text)> _deferred = new();
+    private readonly DpCommandBuffer _buffer;
     private readonly HashSet<string> _archived = new(StringComparer.Ordinal);
     private readonly HashSet<string> _engineCvars = new(StringComparer.Ordinal);
     private readonly HashSet<string> _programCvars = new(StringComparer.Ordinal);
@@ -82,8 +79,6 @@ public sealed class LegacyConsole
     private Dictionary<string, string>? _sessionSnapshot;
     private readonly HashSet<string> _sessionTouched = new(StringComparer.Ordinal);
     private int _sessionDepth;
-    private bool _wait;
-    private double _deferredOldTime = double.NaN;
 
     /// <param name="files">Xonotic's game data, mounted.</param>
     /// <param name="userDataDirectory">
@@ -106,6 +101,7 @@ public sealed class LegacyConsole
             CvarDescriptionHook = Cvars.SetDescription,
         };
         Keys = new MenuKeyBindings();
+        _buffer = new DpCommandBuffer(Interpreter) { RunUnterminatedLine = true };
 
         EngineCvarCount = CsqcEngineCvars.Register(Cvars);
         Cvars.Register("pr_checkextension", "1");
@@ -413,85 +409,27 @@ public sealed class LegacyConsole
 
     // ---- the command buffer ------------------------------------------------------------------------
 
+    /// <summary>The buffer (Protocol/DpCommandBuffer.cs: DarkPlaces' cbuf, the same class a session's own console uses).</summary>
+    public DpCommandBuffer Buffer => _buffer;
+
     /// <summary>
-    /// Cbuf_AddText: append text to the end of the buffer. The text is NOT cut into commands here: DarkPlaces'
-    /// buffer is one run of characters, and a program may build a single command out of several calls -
-    /// Xonotic's menu starts a campaign level with <c>localcmd("set _campaign_name \"")</c>,
-    /// <c>localcmd(name)</c>, then a call with the closing quote and the line end. Cut up per call, that was a <c>set</c> with an
-    /// unterminated quote, an unknown command and a stray quote, and the campaign started with no name.
-    /// The buffer is cut into commands when it is run (<see cref="Execute"/>), as Cbuf_Execute does.
+    /// Cbuf_AddText: append text to the end of the buffer. A last line without a terminator stays pending
+    /// until the text that completes it arrives: DarkPlaces' buffer is one run of characters, and a program
+    /// may build a single command out of several calls - Xonotic's menu starts a campaign level with
+    /// <c>localcmd("set _campaign_name \"")</c>, <c>localcmd(name)</c>, then a call with the closing quote
+    /// and the line end. When the buffer runs, a last line still without its end runs as it stands.
     /// </summary>
-    public void AddText(string text)
-    {
-        if (string.IsNullOrEmpty(text) || _unsplit.Length + text.Length > MaxUnsplitCharacters) return;
-        _unsplit.Append(text);
-    }
-
-    // The text added since the buffer was last cut into commands.
-    private const int MaxUnsplitCharacters = 4 * 1024 * 1024;
-    private readonly StringBuilder _unsplit = new();
-
-    private void SplitAddedText()
-    {
-        if (_unsplit.Length == 0) return;
-        string text = _unsplit.ToString();
-        _unsplit.Clear();
-        foreach (string command in ConfigInterpreter.SplitIntoCommands(text))
-            if (_queue.Count < MaxQueuedCommands) _queue.Add(command);
-    }
+    public void AddText(string text) => _buffer.AddText(text);
 
     /// <summary>Cbuf_InsertText: queue text at the front (a key's bind runs before what is already waiting).</summary>
-    public void InsertText(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return;
-        List<string> commands = ConfigInterpreter.SplitIntoCommands(text);
-        if (_queue.Count + commands.Count <= MaxQueuedCommands) _queue.InsertRange(0, commands);
-    }
+    public void InsertText(string text) => _buffer.InsertText(text);
 
     /// <summary>
     /// Cbuf_Frame: move the deferred commands whose time has come into the buffer, then run the buffer
     /// until it is empty or a <c>wait</c> stops it for this frame.
     /// </summary>
     /// <param name="realTime">host.realtime.</param>
-    public void Execute(double realTime)
-    {
-        // Cbuf_Execute_Deferred.
-        if (double.IsNaN(_deferredOldTime) || realTime - _deferredOldTime < 0 || realTime - _deferredOldTime > 1800) _deferredOldTime = realTime;
-        double eat = realTime - _deferredOldTime;
-        if (eat >= 1.0 / 128.0)
-        {
-            _deferredOldTime = realTime;
-            for (int i = 0; i < _deferred.Count; i++)
-            {
-                (double delay, string text) = _deferred[i];
-                delay -= eat;
-                if (delay <= 0)
-                {
-                    // "parse deferred string and append its cmdstring(s)", with "pending = false": a deferred
-                    // string is whole commands of its own. Appended as bare text, four that came due in one
-                    // frame ran together into one unknown word - the menu's Leave button is
-                    // "defer 0.4 disconnect; defer 0.4 wait; defer 0.4 "g_campaign 0"; defer 0.4 menu_sync",
-                    // and it closed the menu and left nothing.
-                    AddText("\n" + text + "\n");
-                    _deferred.RemoveAt(i--);
-                }
-                else _deferred[i] = (delay, text);
-            }
-        }
-
-        _wait = false;
-        SplitAddedText();
-        // Bounded: a command that queues itself again costs one frame of work, not a hang.
-        for (int budget = 16384; budget > 0 && !_wait; budget--)
-        {
-            // What a command added while it ran (a program's localcmd, an alias) runs in this same pass.
-            if (_queue.Count == 0) SplitAddedText();
-            if (_queue.Count == 0) break;
-            string command = _queue[0];
-            _queue.RemoveAt(0);
-            ExecuteNow(command);
-        }
-    }
+    public void Execute(double realTime) => _buffer.Frame(realTime, ExecuteNow);
 
     /// <summary>Cmd_ExecuteString: run one command now, bypassing the buffer.</summary>
     public void ExecuteNow(string command)
@@ -502,37 +440,16 @@ public sealed class LegacyConsole
     }
 
     /// <summary>Commands waiting in the buffer.</summary>
-    public int Pending
-    {
-        get
-        {
-            SplitAddedText();
-            return _queue.Count;
-        }
-    }
+    public int Pending => _buffer.Pending;
 
     private void RegisterCommands()
     {
-        // Cmd_Wait_f: "make remaining commands wait until next frame". Only the buffer can wait: a wait
-        // inside an alias body stops the buffer AFTER the alias has run to its end, where the C would
-        // stop in the middle of it.
-        Interpreter.RegisterCommand("wait", _ => _wait = true, "make script execution wait for next rendered frame");
-
-        Interpreter.RegisterCommand("defer", argv =>
-        {
-            if (argv.Count == 1)
-            {
-                if (_deferred.Count == 0) _print("No commands are pending.\n");
-                foreach ((double delay, string text) in _deferred)
-                    _print(string.Create(CultureInfo.InvariantCulture, $"-> In {delay,9:0.00}: {text}\n"));
-            }
-            else if (argv.Count == 2 && argv[1].Equals("clear", StringComparison.OrdinalIgnoreCase)) _deferred.Clear();
-            else if (argv.Count == 3 && argv[2].Length != 0)
-            {
-                if (_deferred.Count < MaxDeferred) _deferred.Add((QcNumber(argv[1]), argv[2]));
-            }
-            else _print("usage: defer <seconds> <command>\n       defer clear\n");
-        }, "execute a command in the future");
+        // Cmd_Wait_f and Cmd_Defer_f. They act on the buffer that is running the command: this one, or a
+        // session's own (a server's "wait" holds the server's text, and what a server defers comes back as
+        // the server's text, not as the player's).
+        DpCommandBuffer.Handlers(_buffer, _print, out Action<IReadOnlyList<string>> wait, out Action<IReadOnlyList<string>> defer);
+        Interpreter.RegisterCommand("wait", wait, DpCommandBuffer.WaitHelp);
+        Interpreter.RegisterCommand("defer", defer, DpCommandBuffer.DeferHelp);
 
         Interpreter.RegisterCommand("toggle", Toggle, "toggles a console variable's values (use for more info)");
 

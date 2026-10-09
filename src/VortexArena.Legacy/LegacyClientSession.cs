@@ -283,6 +283,8 @@ public sealed class LegacyClientSession : IDisposable
         double frameTime = _clockStarted ? Math.Max(0, now - _lastFrame) : 0;
         _clockStarted = true;
         _lastFrame = now;
+        // Cbuf_Frame comes first in Host_Frame: deferred commands that are due, and the end of a "wait".
+        Console.NewFrame(now);
         if (Client.State != DpClientState.Connected) return;
         Clock.Advance(frameTime, State.Paused || DemoPaused);
         if (State.Signon >= DpProtocol.Signons) State.Time = Clock.Time;

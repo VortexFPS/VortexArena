@@ -18,6 +18,7 @@ namespace VortexArena.Game.Client;
 ///   keeps the client an observer).</item>
 ///   <item><c>r_shot &lt;absolute path.png&gt;</c> - save the next drawn frame of the root viewport.</item>
 ///   <item><c>r_hud 0|1</c> - hide or show every 2D layer of the match (the console stays).</item>
+///   <item><c>r_effect &lt;name&gt; x y z</c> - spawn an effectinfo effect at a point.</item>
 ///   <item><c>r_dumpmaterials</c> - the kinds of material on visible geometry, with counts.</item>
 /// </list>
 /// </summary>
@@ -72,6 +73,16 @@ public static class RenderDevCommands
                 foreach (Node child in node.GetChildren()) Walk(child);
             }
         }, "0 hides every 2D layer of the match for a capture, 1 puts them back");
+
+        interp.RegisterCommand("r_effect", args =>
+        {
+            if (args.Count < 5) { print("usage: r_effect <effectinfo name> x y z"); return; }
+            if ((Godot.Engine.GetMainLoop() as SceneTree)?.Root.FindChild("Effects", true, false) is not EffectSystem effects) { print("r_effect: no effect system (no match running)"); return; }
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            if (!float.TryParse(args[2], System.Globalization.NumberStyles.Float, inv, out float x) || !float.TryParse(args[3], System.Globalization.NumberStyles.Float, inv, out float y)
+                || !float.TryParse(args[4], System.Globalization.NumberStyles.Float, inv, out float z)) { print("r_effect: bad position"); return; }
+            effects.Spawn(args[1], new System.Numerics.Vector3(x, y, z));
+        }, "spawn an effectinfo effect at a point in Quake coordinates (Xonotic's 'cmd pointparticles')");
 
         interp.RegisterCommand("r_dumpmaterials", _ => DumpMaterials(print), "list the kinds of material on visible geometry");
     }

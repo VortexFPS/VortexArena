@@ -92,6 +92,20 @@ public static class DpSurfaceShader
 
         string code = DpSurfaceShaderGen.Generate(def, plan, stage, background, forModel, glow is not null, frames, lightmap is not null, reflect);
         ShaderMaterial material = new() { Shader = ShaderCompiler.SharedShader(code), ResourceName = def.Name + "/dp" };
+        if (!forModel && def.Dp.Water is { } water && plan.Blended)
+        {
+            // r_water: the reflective and refractive variant of the same material; WaterRenderer switches a
+            // surface to it while the pass is on and supplies the reflection. Off, this is the plain material
+            // DarkPlaces draws with r_water 0.
+            string waterCode = DpSurfaceShaderGen.Generate(def, plan, stage, background, forModel, glow is not null, frames, lightmap is not null, reflect, water);
+            Texture2D? waterNormal = ctx.LoadTexture(AssetPaths.StripImageExtension(imageName) + "_norm");
+            if (waterNormal is not null)
+            {
+                material.SetShaderParameter("water_normal_tex", waterNormal);
+                if (AssetSystem.IsRgTexture(waterNormal)) material.SetShaderParameter("water_norm_rg", true);
+            }
+            VortexArena.Game.Client.WaterRenderer.Register(material, material.Shader, ShaderCompiler.SharedShader(waterCode), water);
+        }
         material.SetShaderParameter("albedo_tex", albedo);
         if (lightmap is not null && !plan.FullBright) material.SetShaderParameter("lightmap_tex", lightmap);
         if (background is not null) material.SetShaderParameter("background_tex", backgroundTexture!);

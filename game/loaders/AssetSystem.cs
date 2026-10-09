@@ -774,6 +774,7 @@ public sealed class AssetSystem
             }
             var cube = new Cubemap();
             cube.CreateFromImages(layers);
+            GC.KeepAlive(layers);   // a fresh Godot array with no later use: keep it past the call
             return cube;
         }
         VortexArena.Common.Diagnostics.Log.Info($"[AssetSystem] dpreflectcube '{name}': no face image found.");
@@ -807,6 +808,7 @@ public sealed class AssetSystem
         }
         _whiteCube = new Cubemap();
         _whiteCube.CreateFromImages(layers);
+        GC.KeepAlive(layers);
         return _whiteCube;
     }
 

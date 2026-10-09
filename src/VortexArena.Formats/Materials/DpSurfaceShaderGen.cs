@@ -18,9 +18,10 @@ public static class DpSurfaceShaderGen
     /// surface of the level is lit by its vertex colours or (<paramref name="lightmapped"/>) its lightmap page.</param>
     /// <param name="glow">The material stage's texture has a _glow companion.</param>
     /// <param name="frames">animMap frames in use (1 without an animMap).</param>
-    public static string Generate(ShaderDef def, in DpMaterialPlan plan, ShaderStage stage, ShaderStage? background, bool forModel, bool glow, int frames, bool lightmapped = false, bool reflect = false)
+    public static string Generate(ShaderDef def, in DpMaterialPlan plan, ShaderStage stage, ShaderStage? background, bool forModel, bool glow, int frames, bool lightmapped = false, bool reflect = false, DpWater? water = null)
     {
         reflect &= !forModel;
+        if (forModel || !plan.Blended) water = null;   // gl_rmain.c: a water shader must be a blended texture
         lightmapped &= !plan.FullBright && !forModel;
         StringBuilder sb = new(4096);
         sb.Append(Banner).Append(" (").Append(plan.FullBright ? "full-bright" : forModel ? "light grid" : lightmapped ? "lightmap" : "vertex light")
@@ -38,6 +39,9 @@ public static class DpSurfaceShaderGen
             DpBlend.Custom => CustomBlend(plan.CustomSrc, plan.CustomDst),
             _ => "",
         };
+        // The water variant (r_water 1) composes its own picture from the scene behind it and a reflection, and
+        // replaces what is there: an ordinary mix at alpha 1.
+        if (water is not null) blend = "blend_mix";
         if (blend.Length > 0)
         {
             modes.Add(blend);
@@ -84,6 +88,20 @@ public static class DpSurfaceShaderGen
         bool environment = stage.TcGen is { Type: TcGenType.Environment };
         bool turbulent = stage.TcMods.Count > 0 && stage.TcMods[0].Type == TcModType.Turb;
         if (environment || turbulent) sb.Append("varying vec2 dp_uv;\n");
+        if (water is not null)
+        {
+            sb.Append("// r_water (gl_rmain.c R_Water_*, shader_glsl.h MODE_WATER): the scene behind the surface (the refraction),\n");
+            sb.Append("// a render from the mirrored eye (the reflection; the game's WaterRenderer supplies it and its matrix), mixed by\n");
+            sb.Append("// the Fresnel term and drawn under the ordinary material at the shader's water alpha.\n");
+            sb.Append("uniform sampler2D screen_tex : hint_screen_texture, filter_linear, repeat_disable;\n");
+            sb.Append("uniform sampler2D reflection_tex : hint_default_black, filter_linear, repeat_disable;\n");
+            sb.Append("uniform sampler2D water_normal_tex : hint_normal, filter_linear_mipmap, repeat_enable;\n");
+            sb.Append("uniform mat4 reflection_vp;          // world to the reflection render's clip space\n");
+            sb.Append("uniform bool water_norm_rg = false;  // a two-channel (BC5) normal map: z is reconstructed\n");
+            sb.Append("uniform float water_on = 0.0;        // 1 while this plane's reflection is being rendered\n");
+            sb.Append("uniform vec2 water_distort = vec2(0.0);   // r_water_refractdistort * refractfactor, r_water_reflectdistort * reflectfactor\n");
+            sb.Append("varying vec3 dp_world;\n");
+        }
         sb.Append('\n');
         sb.Append(SharedFunctions);
 
@@ -116,6 +134,7 @@ public static class DpSurfaceShaderGen
             sb.Append("        dp_uv = UV + ").Append(F(turb.P(1))).Append(" * vec2(sin(((VERTEX.x + VERTEX.y) / 1024.0 + animpos) * 6.2831853), sin(((-VERTEX.z) / 1024.0 + animpos) * 6.2831853));\n");
             sb.Append("    }\n");
         }
+        if (water is not null) sb.Append("    dp_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n");
         if (forModel && !plan.FullBright)
             sb.Append("    lightgrid_tc = (lightgrid_matrix * vec4((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz, 1.0)).xyz;\n");
         sb.Append("    POSITION = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);\n");
@@ -190,6 +209,12 @@ public static class DpSurfaceShaderGen
         // display values (DpColour.ShaderFunctions) these are DarkPlaces' own blends; when it holds linear light each
         // case hands the engine the linear value whose encoding is DarkPlaces' result where the destination
         // allows it to be known (an opaque surface, any blend over black, the multiplying blends). ----
+        if (water is not null)
+        {
+            EmitWater(sb, plan, water);
+            sb.Append("}\n");
+            return sb.ToString();
+        }
         switch (plan.Blend)
         {
             case DpBlend.Opaque:
@@ -207,6 +232,46 @@ public static class DpSurfaceShaderGen
         }
         sb.Append("}\n");
         return sb.ToString();
+    }
+
+    /// <summary>The render layer bit a water render's camera leaves out: a water surface is not drawn into a
+    /// water render (gl_rmain.c: no recursion), which its shader does by this bit of CAMERA_VISIBLE_LAYERS.</summary>
+    public const uint WaterRenderSkipBit = 1u << 17;
+
+    // shader_glsl.h MODE_WATER, then the base pass over it (gl_rmain.c R_DrawTextureSurfaceList: RSURFPASS_BACKGROUND
+    // and the material at currentalpha * r_water_wateralpha). "uv", "c" and "rgb" are the material's own.
+    private static void EmitWater(StringBuilder sb, in DpMaterialPlan plan, DpWater water)
+    {
+        sb.Append("    if ((CAMERA_VISIBLE_LAYERS & uint(").Append(WaterRenderSkipBit).Append(")) == uint(0)) discard;   // not in a water render\n");
+        sb.Append("    float va = ").Append(plan.VertexAlpha ? "COLOR.a" : "1.0").Append(";\n");
+        sb.Append("    vec3 bg = texture(screen_tex, SCREEN_UV).rgb;\n");
+        sb.Append("    float over = 1.0;\n");
+        sb.Append("    if (water_on > 0.5) {\n");
+        sb.Append("        vec3 wt = texture(water_normal_tex, uv).rgb;\n");
+        sb.Append("        if (water_norm_rg) { vec2 w2 = wt.rg * 2.0 - 1.0; wt.b = sqrt(max(0.0, 1.0 - dot(w2, w2))) * 0.5 + 0.5; }\n");
+        sb.Append("        vec2 wn = normalize(wt - vec3(0.5)).xy;\n");
+        sb.Append("        vec2 distort = water_distort * va;\n");
+        // DarkPlaces' screen coordinates have y up; SCREEN_UV has y down.
+        sb.Append("        vec3 refraction = texture(screen_tex, SCREEN_UV + vec2(wn.x, -wn.y) * distort.x).rgb;\n");
+        sb.Append("        vec4 rc = reflection_vp * vec4(dp_world, 1.0);\n");
+        // DarkPlaces shifts the lookup on the SCREEN; the reflection here is a texture spread over the water, so
+        // the same shift is taken through the lookup's screen-space derivatives.
+        sb.Append("        vec2 rbase = rc.xy / max(rc.w, 1e-5) * vec2(0.5, -0.5) + 0.5;\n");
+        sb.Append("        vec2 rshift = dFdx(rbase) * (wn.x * distort.y * VIEWPORT_SIZE.x) - dFdy(rbase) * (wn.y * distort.y * VIEWPORT_SIZE.y);\n");
+        sb.Append("        vec2 ruv = clamp(rbase + rshift, vec2(0.002), vec2(0.998));\n");
+        sb.Append("        vec3 reflection = texture(reflection_tex, ruv).rgb;\n");
+        sb.Append("        float fresnel = pow(min(1.0, 1.0 - abs(dot(normalize(VIEW), normalize(NORMAL)))), 2.0) * ").Append(F(water.ReflectMax - water.ReflectMin))
+          .Append(" * va + ").Append(F(water.ReflectMin)).Append(" * va;\n");
+        sb.Append("        vec3 refractcolor = vec3(").Append(F(water.RefractR)).Append(", ").Append(F(water.RefractG)).Append(", ").Append(F(water.RefractB)).Append(");\n");
+        if (plan.VertexAlpha) sb.Append("        refractcolor = mix(refractcolor, vec3(1.0), va);   // USEALPHAGENVERTEX\n");
+        sb.Append("        bg = mix(refraction * refractcolor, reflection * vec3(").Append(F(water.ReflectR)).Append(", ").Append(F(water.ReflectG)).Append(", ").Append(F(water.ReflectB)).Append("), clamp(fresnel, 0.0, 1.0));\n");
+        sb.Append("        over = ").Append(F(water.WaterAlpha)).Append(";   // r_water_wateralpha: the dp_water alpha\n");
+        sb.Append("    }\n");
+        if (plan.Blend == DpBlend.Add || (plan.Blend == DpBlend.Custom && plan.CustomDst == BlendFactor.One))
+            sb.Append("    ALBEDO = clamp(bg + rgb * (c.a * over), vec3(0.0), vec3(1.0));   // the material, GL_SRC_ALPHA GL_ONE, over the water\n");
+        else
+            sb.Append("    ALBEDO = mix(bg, rgb, clamp(c.a * over, 0.0, 1.0));   // the material, GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA, over the water\n");
+        sb.Append("    ALPHA = 1.0;\n");
     }
 
     private static string CustomBlend(BlendFactor src, BlendFactor dst) => (src, dst) switch

@@ -86,6 +86,9 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         _sceneRoot.AddChild(_camera);
 
         // (N6) the light arbiter first: the lights made below register with it, and Register is a no-op without one.
+        // r_water: reflective and refractive water. The session's own cvars decide (Xonotic's client program turns
+        // r_water on by itself on a level with warpzones).
+        _sceneRoot.AddChild(new WaterRenderer { Name = "Water", CvarSource = (name, fallback) => string.IsNullOrWhiteSpace(_cvars.GetString(name)) ? fallback : _cvars.GetFloat(name) });
         _sceneRoot.AddChild(new LightBudget { Name = "LightBudget" });
 
         _effects = new EffectSystem { Name = "Effects" };

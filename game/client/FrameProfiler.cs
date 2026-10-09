@@ -102,6 +102,8 @@ public partial class FrameProfiler : CanvasLayer
           "motionblur",
           // (F4) r_shadow_realtime_world: the per-frame gate + light-style animation over world lights.
           "worldlights",
+          // r_water: the reflective water pass (one mirrored render per visible water plane).
+          "water",
           // the messagemode chat prompt's caret-blink _Process (only ticks while the prompt is open — it disables
           // its own _Process when closed — but scoped so the open-window cost is attributed, not proc:other).
           "chat",

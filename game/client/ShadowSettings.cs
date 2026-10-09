@@ -29,10 +29,23 @@ public static class ShadowSettings
     // The level's cell meshes (MapLoader), for switching their casting. Freed ones are dropped when walked.
     private static readonly System.Collections.Generic.List<GeometryInstance3D> s_cells = new();
 
+    /// <summary>The live cell meshes of the levels built so far (a copy; freed ones are left out).</summary>
+    public static System.Collections.Generic.List<GeometryInstance3D> WorldCells()
+    {
+        var live = new System.Collections.Generic.List<GeometryInstance3D>();
+        lock (s_cells)
+            foreach (GeometryInstance3D cell in s_cells)
+                if (GodotObject.IsInstanceValid(cell)) live.Add(cell);
+        return live;
+    }
+
+    /// <summary>How many cell meshes have ever been registered: changes when a level is built.</summary>
+    public static int WorldCellGeneration { get; private set; }
+
     /// <summary>Called by MapLoader for every cell mesh of a level it builds (any thread).</summary>
     public static void RegisterWorldCell(GeometryInstance3D cell)
     {
-        lock (s_cells) s_cells.Add(cell);
+        lock (s_cells) { s_cells.Add(cell); WorldCellGeneration++; }
         s_seeded = false;   // the next poll applies the current setting to the new level
     }
 

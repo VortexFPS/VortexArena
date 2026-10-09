@@ -494,6 +494,7 @@ public partial class ClientWorld : Node3D
         // (F2) r_coronas - flares on lights that author one. On in every Xonotic preset, so this is
         // default-look parity rather than an extra; it stays inert until a light asks for a corona.
         AddChild(new CoronaRenderer { Name = "Coronas" });
+        AddChild(new WaterRenderer { Name = "Water" });   // r_water: reflective and refractive water
 
         // (F9) r_motionblur - camera motion blur. A CanvasLayer, so it lives here beside the other client
         // render systems rather than in the HUD tree; NetGame hands it the camera.

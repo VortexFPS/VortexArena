@@ -95,12 +95,8 @@ public partial class DialogSettingsEffects : SettingsTab
         var gloss = Widgets.CheckBox("r_shadow_gloss", "Gloss",
             "Enable the use of glossmaps on textures supporting it");
         box.AddChild(gloss);
-        // INERT (F9 audit). Gloss here is data-driven, not switchable: a surface gets its specular term
-        // wherever a _gloss companion texture exists, decided at material build time in AssetSystem /
-        // ShaderCompiler. There is nothing for the checkbox to turn off. The QC dependency on
-        // mod_q3bsp_nolightmaps goes with it - a second Dependent on this control would fight the
-        // Unsupported one and win whenever its own cvar changed.
-        Dependent.Unsupported(gloss, "gloss is applied wherever the texture provides it, and cannot be toggled.");
+        // r_shadow_gloss is read by the world shader (WorldTint.PollCvars): 0 removes the lightmap's and the
+        // realtime lights' specular term on walls, as in DarkPlaces. (A model's gloss map stays.)
 
         // INERT (F9 audit): this renderer has no offset/parallax mapping path at all. Both controls stay
         // bound so an inherited Xonotic config still parses; neither does anything yet.
@@ -122,12 +118,9 @@ public partial class DialogSettingsEffects : SettingsTab
         var reflections = Widgets.CheckBox("r_water", "Reflections",
             "Reflection and refraction quality, has a huge impact on performance on maps with reflecting surfaces");
         box.AddChild(reflections);
-        // INERT: r_water is DP's reflection/refraction pass. The shader keywords that drive it (dpreflect,
-        // dprefract, dpwater) are parsed by Q3ShaderParser but no renderer consumes them, so a mirror or water
-        // surface here draws its placeholder rather than a reflection. Warpzones are a SEPARATE feature with
-        // its own cvar (r_warpzone, below) - they were briefly gated on r_water, which meant switching off
-        // "Reflections" also blanked every warpzone.
-        Dependent.Unsupported(reflections, "reflections and refractions are not implemented yet.");
+        // r_water is DarkPlaces' reflective and refractive water (game/client/WaterRenderer.cs): a dp_water
+        // surface shows a reflection render and the scene behind it; off, it is the plain blended material.
+        // Warpzones are a separate feature with their own cvar (r_warpzone, below).
 
         // Inert with its parent, and for the same reason - it sizes a pass that does not exist. Warpzone view
         // resolution is cl_portal_resolution, which is a console cvar rather than a menu row.
@@ -193,21 +186,14 @@ public partial class DialogSettingsEffects : SettingsTab
         var worldShadows = Widgets.CheckBox("r_shadow_realtime_world_shadows", "Shadows",
             "Shadows cast by realtime world lights");
         box.AddChild(worldShadows);
-        // INERT (F9 audit): world lights DO cast, but they draw their shadow grants from the same ranked
-        // budget as dynamic lights (LightBudget), so what actually governs them is
-        // r_shadow_realtime_dlight_shadows plus r_shadow_dlight_shadow_budget. Giving world lights their own
-        // grant pool is the follow-up that would make this control mean something.
-        Dependent.Unsupported(worldShadows,
-            "world lights share the dynamic-light shadow budget; use Shadows under Realtime dynamic lights.");
+        // r_shadow_realtime_world_shadows decides whether a level's realtime lights cast (LightBudget), as
+        // r_shadow_realtime_dlight_shadows does for dynamic ones; both need Soft shadows (shadow mapping).
 
         var normalMaps = Widgets.CheckBox("r_shadow_usenormalmap", "Use normal maps",
             "Directional shading of certain textures to simulate interaction of realtime light with a bumpy surface");
         box.AddChild(normalMaps);
-        // INERT (F9 audit): like gloss, normal mapping here is data-driven - a surface is normal-mapped
-        // wherever a _norm companion exists, bound at material build time. The QC dependency on
-        // r_shadow_realtime_dlight goes for the same reason as gloss's.
-        Dependent.Unsupported(normalMaps,
-            "normal maps are applied wherever the texture provides them, and cannot be toggled.");
+        // r_shadow_usenormalmap: 0 lights a surface from a realtime light without N.L and without specular
+        // (DarkPlaces adds the diffuse scale to the ambient one); the baked lighting is not affected.
 
         // INERT (F9 audit): DP's r_shadow_shadowmapping picks shadow MAPS over stencil shadow volumes and
         // brings a filter-quality family with it. Godot has no stencil-volume path to choose between, and its
@@ -216,8 +202,8 @@ public partial class DialogSettingsEffects : SettingsTab
         // reason, and the note is gone with it.)
         var softShadows = Widgets.CheckBox("r_shadow_shadowmapping", "Soft shadows");
         box.AddChild(softShadows);
-        Dependent.Unsupported(softShadows,
-            "shadow filtering is a renderer-wide setting here, not a per-light one.");
+        // r_shadow_shadowmapping gates every light shadow and the model shadows of r_shadows, as in this
+        // DarkPlaces, whose other mode draws none (ShadowSettings, LightBudget).
 
         var corona = Widgets.Slider("r_coronas", 0, 1.5f, 0.1f, "Flare effects around certain lights");
         box.AddChild(Ui.Row("Corona brightness:", corona));

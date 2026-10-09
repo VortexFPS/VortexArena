@@ -628,8 +628,8 @@ public static class ClientSettings
         // r_warpzone: warpzone portal views, split out of r_water. They are separate features and were only
         // ever conflated because DP names its portal pass r_water: turning off "Reflections" must not take
         // warpzones with it, which is what a shared cvar did. ON by default - a warpzone is level geometry a
-        // player has to see THROUGH to navigate, not an ornament. (r_water itself gates reflections and
-        // refractions, which this renderer does not implement at all; its menu row says so.)
+        // player has to see THROUGH to navigate, not an ornament. (r_water itself gates the reflective and
+        // refractive water of dp_water shaders: game/client/WaterRenderer.cs.)
         c.Register("r_warpzone", "1");
         // vid_restart_resetrenderer: does vid_restart also reset the renderer (reload the map)? DP recreates
         // the GL context on vid_restart, which re-uploads every texture, so gl_picmip and

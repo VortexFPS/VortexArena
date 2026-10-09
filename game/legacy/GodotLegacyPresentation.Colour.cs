@@ -124,6 +124,7 @@ public sealed partial class GodotLegacyPresentation
         switch (parts[0])
         {
             case "dump": DumpMaterials(); break;
+            case "cvar" when parts.Length >= 3: _cvars.Set(parts[1], parts[2]); break;   // a session cvar, e.g. r_water
             case "fullbright": RenderingServer.GlobalShaderParameterSet("world_nolightmaps", on ? 1f : 0f); LegacyColour.DebugFullbright(on); break;
             case "lightmaponly": LegacyColour.DebugLightmapOnly(on); break;
             case "gamma": LegacyColour.DebugForce(on); break;

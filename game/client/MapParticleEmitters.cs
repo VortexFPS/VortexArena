@@ -180,7 +180,7 @@ public partial class MapParticleEmitters : Node3D
             GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
                 $"[MapEmitters] {className} '{e.Mdl}': {em.Emission.Impulse:0.###} emissions/s ({em.Emission.Absolute}), " +
                 $"count {e.ParticleCount:0.###}, velocity {e.Velocity}, box {em.Emission.BoxMin}..{em.Emission.BoxMax}, " +
-                $"{(em.Emission.Brushes is { } b ? b.Count + " brush(es)" : "no brush: whole box")}"));
+                $"{(em.Emission.Brushes is { } b ? b.Count + " brush(es), " + (b.Count > 0 ? b[0].Sides.Length : 0) + " planes in the first" : "no brush: whole box")}"));
         }
     }
 

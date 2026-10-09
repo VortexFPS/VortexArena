@@ -137,6 +137,31 @@ public sealed class AssetLoader
     /// <summary>The material/texture resolver shared with the model/map builders.</summary>
     public AssetSystem Assets => _assets;
 
+    private VortexArena.Formats.Images.QuakePalette? _quakePalette;
+    // Main thread only (an MDL is never prepared off it).
+    private readonly Dictionary<string, MdlShared> _mdlShared = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The Quake palette of this loader's game data, by DarkPlaces' rule (palette.c Palette_Load): the colours
+    /// of <c>gfx/palette.lmp</c> or the built-in Quake palette, and a full-bright range only when
+    /// <c>gfx/colormap.lmp</c> says how long it is. Xonotic's data has neither file, so there the palette is
+    /// the built-in one with no full-brights; a server's packages may add them. Read once, on first use.
+    /// </summary>
+    public VortexArena.Formats.Images.QuakePalette QuakePalette => _quakePalette ??=
+        VortexArena.Formats.Images.QuakePalette.Load(ReadOptional("gfx/palette.lmp"), ReadOptional("gfx/colormap.lmp"));
+
+    private byte[]? ReadOptional(string vpath)
+    {
+        try
+        {
+            return _vfs.Exists(vpath) ? _vfs.ReadBytes(vpath) : null;
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>The font cache/loader over the same VFS.</summary>
     public FontLoader Fonts => _fonts;
 
@@ -463,6 +488,19 @@ public sealed class AssetLoader
                 // out cheap MeshInstance3D instances — the same "cache the parse, rebuild the node" contract the
                 // IQM/DPM/MD3 factories use, so a per-casing/per-gib spawn is a node alloc, not a re-decode.
                 MdlData mdl = MdlReader.Read(bytes);
+                // A Quake model proper - several poses or skins, or any MDL of a legacy session (which may be
+                // posed, re-skinned, colormapped and given an external skin): the posable node. Its pose is
+                // the caller's to set; nothing plays by itself.
+                if (_assets.DarkPlacesRules || mdl.Frames.Length > 1 || mdl.Skins.Length > 1)
+                {
+                    // One set of geometry and skin materials per file, whichever skins its entities show.
+                    if (!_mdlShared.TryGetValue(key, out MdlShared? shared))
+                    {
+                        shared = MdlBuilder.Share(mdl, _assets, key, QuakePalette);
+                        _mdlShared[key] = shared;
+                    }
+                    return new ModelParse(() => MdlBuilder.Instantiate(shared, skinIndex), Array.Empty<string>());
+                }
                 MdlBuilder.Prepared prep = MdlBuilder.Prepare(mdl, 0);
                 // MDL carries its palette-decoded skin material inside Prepared — no named materials to warm.
                 return new ModelParse(() => MdlBuilder.Instantiate(prep), Array.Empty<string>());
@@ -472,6 +510,16 @@ public sealed class AssetLoader
         {
             GD.PrintErr($"[AssetLoader] model '{key}' parse failed: {ex.Message}");
             return ModelParse.Failed;
+        }
+
+        // A sprite under a name that does not end in ".spr" (Xonotic's own are ".spr32", and DarkPlaces picks
+        // the loader by the file's first bytes, not its name).
+        if (magic.StartsWith("IDSP", StringComparison.Ordinal) || magic.StartsWith("IDS2", StringComparison.Ordinal))
+        {
+            if (offThread)
+                return null;    // textures are made on the main thread
+            Func<Node3D?>? sprite = BuildSpriteFactory(key);
+            return sprite is null ? ModelParse.Failed : new ModelParse(sprite, Array.Empty<string>());
         }
 
         // ── Not-yet-implemented importers: MD2 / ZYM / PSK  (TODO T72 — NOT a deliberate cut) ──────────
@@ -753,7 +801,15 @@ public sealed class AssetLoader
             GD.PrintErr($"[AssetLoader] sprite '{key}' read/parse failed: {ex.Message}");
             return null;
         }
-        return () => SpriteBuilder.Build(spr, _assets, key);
+        // A legacy session draws a sprite as DarkPlaces does: turned to the view by its own type, showing the
+        // frame its entity names (GodotLegacyPresentation drives the SpriteModel). The native game keeps the
+        // self-animating billboard.
+        if (_assets.DarkPlacesRules)
+        {
+            SpriteShared? shared = null;
+            return () => SpriteBuilder.BuildModel(shared ??= SpriteBuilder.Share(spr, _assets, key, QuakePalette));
+        }
+        return () => SpriteBuilder.Build(spr, _assets, key, QuakePalette);
     }
 
     // =============================================================================================

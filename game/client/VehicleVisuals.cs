@@ -64,6 +64,8 @@ public partial class VehicleVisuals : Node3D
     private MeshInstance3D? _healBeam;                  // persistent heal beam (bumblebee)
 
     private AudioStreamPlayer3D? _engineIdle, _engineMove, _engineBoost;
+    // snd_darkplaces 1: the same three loops as channels of DarkPlaces' mixer (game/audio/DpLoopEmitter.cs).
+    private VortexArena.Game.Audio.DpLoopEmitter? _dpIdle, _dpMove, _dpBoost;
     private bool _dead;
     private bool _wasFiring;
 
@@ -78,6 +80,9 @@ public partial class VehicleVisuals : Node3D
     /// tried before the <see cref="SoundResolver"/> <c>res://</c> fallback so engine/idle/boost loops play from
     /// the mounted content packs.</summary>
     public Func<string, AudioStream?>? AudioLoader { get; set; }
+    /// <summary>The asset loader's own LoadSound delegate (not a lambda around it): what the DarkPlaces mixer's
+    /// sample bank is keyed on (<c>DpNative.Bank</c>). Null leaves the engine-node path.</summary>
+    public Func<string, AudioStream?>? DpAudioLoader { get; set; }
 
     /// <summary>The networked vehicle entity this visual reflects (set by the renderer; drives the per-frame state).</summary>
     public VortexArena.Common.Framework.Entity? Bound { get; set; }
@@ -203,10 +208,37 @@ public partial class VehicleVisuals : Node3D
 
     private void BuildEngineSounds()
     {
-        _engineIdle = LoopPlayer("EngineIdle", _desc.Engine.Idle, 0f);
-        _engineMove = LoopPlayer("EngineMove", _desc.Engine.Move, 0f);
+        EngineLoop("EngineIdle", _desc.Engine.Idle, out _engineIdle, out _dpIdle);
+        EngineLoop("EngineMove", _desc.Engine.Move, out _engineMove, out _dpMove);
         if (!string.IsNullOrEmpty(_desc.Engine.Boost))
-            _engineBoost = LoopPlayer("EngineBoost", _desc.Engine.Boost!, 0f);
+            EngineLoop("EngineBoost", _desc.Engine.Boost!, out _engineBoost, out _dpBoost);
+    }
+
+    /// <summary>
+    /// One engine loop. With snd_darkplaces 1 it is a looping channel of DarkPlaces' mixer that rides this
+    /// node, with what Xonotic gives a vehicle's engine sound: "sound(vehic, CH_TRIGGER_SINGLE, SND_VEH_*,
+    /// VOL_VEHICLEENGINE, ATTEN_NORM)" - volume 1 (times the cross-fade weight), attenuation 0.5, and no
+    /// change of pitch (the QuakeC never passes one). The mixer then pans and attenuates it by DarkPlaces'
+    /// rules like every other sound. A sample the mounted game data does not hold keeps the engine-node path.
+    /// </summary>
+    private void EngineLoop(string name, string sample, out AudioStreamPlayer3D? node, out VortexArena.Game.Audio.DpLoopEmitter? emitter)
+    {
+        node = null;
+        emitter = null;
+        if (VortexArena.Game.Audio.DpNative.Active && VortexArena.Game.Audio.DpNative.Bank(DpAudioLoader ?? AudioLoader) is { } bank
+            && bank.Get(sample, forPlay: true) is { Failed: false } sfx)
+        {
+            emitter = new VortexArena.Game.Audio.DpLoopEmitter
+            {
+                Name = name,
+                Sfx = sfx,
+                Volume = 0f,
+                Attenuation = VortexArena.Engine.Audio.DpVehicleSounds.AttenNorm,
+            };
+            AddChild(emitter);
+            return;
+        }
+        node = LoopPlayer(name, sample, 0f);
     }
 
     private void BuildHealBeam()
@@ -259,10 +291,21 @@ public partial class VehicleVisuals : Node3D
     private void DriveEngineSound(in State s)
     {
         // Crossfade idle↔move by speed; overlay boost. (QC engine sound by throttle.)
-        float move = Mathf.Clamp(s.Speed01, 0f, 1f);
-        SetVol(_engineIdle, (1f - move) * 0.6f + 0.15f);
-        SetVol(_engineMove, move * 0.8f);
-        SetVol(_engineBoost, s.Boosting ? 0.9f : 0f);
+        (float idle, float move, float boost) = VortexArena.Engine.Audio.DpVehicleSounds.EngineMix(s.Speed01, s.Boosting);
+        SetVol(_engineIdle, idle);
+        SetVol(_engineMove, move);
+        SetVol(_engineBoost, boost);
+        _dpIdle?.SetVolume(idle);
+        _dpMove?.SetVolume(move);
+        _dpBoost?.SetVolume(boost);
+    }
+
+    // The engine stops with the vehicle: its mixer channels are given back.
+    private void StopDpEngine()
+    {
+        foreach (VortexArena.Game.Audio.DpLoopEmitter? emitter in new[] { _dpIdle, _dpMove, _dpBoost })
+            if (emitter is not null && GodotObject.IsInstanceValid(emitter)) emitter.QueueFree();
+        _dpIdle = _dpMove = _dpBoost = null;
     }
 
     private void DriveBodyFrame(in State s)
@@ -313,6 +356,7 @@ public partial class VehicleVisuals : Node3D
         _dead = true;
 
         SetVol(_engineIdle, 0f); SetVol(_engineMove, 0f); SetVol(_engineBoost, 0f);
+        StopDpEngine();
         if (_healBeam is not null) _healBeam.Visible = false;
 
         // Explosion + death sound at the body.
@@ -482,6 +526,13 @@ public partial class VehicleVisuals : Node3D
     private void PlayOneShot(string sample)
     {
         if (string.IsNullOrEmpty(sample)) return;
+        // snd_darkplaces 1: "sound(this, CH_SHOTS, SND_ROCKET_IMPACT, VOL_BASE, ATTEN_NORM)" at the vehicle's place.
+        if (VortexArena.Game.Audio.DpNative.Active && VortexArena.Game.Audio.DpNative.Bank(DpAudioLoader ?? AudioLoader) is { } bank
+            && bank.Get(sample, forPlay: true) is { Failed: false } sfx)
+        {
+            VortexArena.Engine.Audio.DpVehicleSounds.StartDeath(VortexArena.Game.Audio.DpAudio.Instance.Sound, sfx, Coords.ToQuake(GlobalPosition));
+            return;
+        }
         AudioStream? stream = LoadStream(sample);
         if (stream is null) return;
         var p = new AudioStreamPlayer3D { Name = "death", Stream = stream, MaxDistance = 4096f, Autoplay = true };

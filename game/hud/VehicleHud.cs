@@ -242,12 +242,12 @@ public partial class VehicleHud : HudPanel
             if (_alarm1Time < _time)
             {
                 _alarm1Time = _time + 2.0;
-                VehicleAlarm(ref _alarmHealth, "vehicles/alarm");
+                VehicleAlarm(ref _alarmHealth, "vehicles/alarm", shield: false);
             }
         }
         else if (_alarm1Time != 0.0)
         {
-            VehicleAlarmStop(_alarmHealth);
+            VehicleAlarmStop(_alarmHealth, shield: false);
             _alarm1Time = 0.0;
         }
 
@@ -257,12 +257,12 @@ public partial class VehicleHud : HudPanel
             if (_alarm2Time < _time)
             {
                 _alarm2Time = _time + 1.0;
-                VehicleAlarm(ref _alarmShield, "vehicles/alarm_shield");
+                VehicleAlarm(ref _alarmShield, "vehicles/alarm_shield", shield: true);
             }
         }
         else if (_alarm2Time != 0.0)
         {
-            VehicleAlarmStop(_alarmShield);
+            VehicleAlarmStop(_alarmShield, shield: true);
             _alarm2Time = 0.0;
         }
     }
@@ -270,15 +270,20 @@ public partial class VehicleHud : HudPanel
     /// <summary>Stop + reset both alarm channels (exit / on-foot). Mirrors the QC SND_Null stop on both gates.</summary>
     private void StopAlarms()
     {
-        if (_alarm1Time != 0.0) { VehicleAlarmStop(_alarmHealth); _alarm1Time = 0.0; }
-        if (_alarm2Time != 0.0) { VehicleAlarmStop(_alarmShield); _alarm2Time = 0.0; }
+        if (_alarm1Time != 0.0) { VehicleAlarmStop(_alarmHealth, shield: false); _alarm1Time = 0.0; }
+        if (_alarm2Time != 0.0) { VehicleAlarmStop(_alarmShield, shield: true); _alarm2Time = 0.0; }
     }
 
     /// <summary>Port of QC <c>vehicle_alarm(e, ch, snd)</c> (cl_vehicles.qc:3-9): play the cue, but only when
     /// <c>cl_vehicles_alarm</c> is set (default 0 → silent, matching Base).</summary>
-    private void VehicleAlarm(ref AudioStreamPlayer? player, string sample)
+    private void VehicleAlarm(ref AudioStreamPlayer? player, string sample, bool shield)
     {
         if (GlobalF("cl_vehicles_alarm", 0f) == 0f) // QC: if (!autocvar_cl_vehicles_alarm) return;
+            return;
+
+        // snd_darkplaces 1: "sound(NULL, CH_PAIN_SINGLE or CH_TRIGGER_SINGLE, s0und, VOL_BASEVOICE, ATTEN_NONE)" -
+        // a single channel of the world entity on DarkPlaces' mixer, so each repeat replaces the one before.
+        if (AlarmOnMixer(AudioLoader, sample, shield))
             return;
 
         player ??= MakeAlarmPlayer(sample);
@@ -287,8 +292,22 @@ public partial class VehicleHud : HudPanel
         player.Play();
     }
 
-    private static void VehicleAlarmStop(AudioStreamPlayer? player)
+    /// <summary>
+    /// The alarm as a channel of DarkPlaces' mixer. False when that path is off or the mounted game data
+    /// does not hold the sample (the caller then plays it on an engine node).
+    /// </summary>
+    internal static bool AlarmOnMixer(System.Delegate? audioLoader, string sample, bool shield)
     {
+        if (!VortexArena.Game.Audio.DpNative.Active || VortexArena.Game.Audio.DpNative.Bank(audioLoader) is not { } bank
+            || bank.Get(sample, forPlay: true) is not { Failed: false } sfx) return false;
+        return VortexArena.Engine.Audio.DpVehicleSounds.StartAlarm(VortexArena.Game.Audio.DpAudio.Instance.Sound, sfx, shield) >= 0;
+    }
+
+    private static void VehicleAlarmStop(AudioStreamPlayer? player, bool shield)
+    {
+        // QC: vehicle_alarm(NULL, channel, SND_Null) - whatever plays on the alarm's channel ends.
+        if (VortexArena.Game.Audio.DpNative.Active)
+            VortexArena.Engine.Audio.DpVehicleSounds.StopAlarm(VortexArena.Game.Audio.DpAudio.Instance.Sound, shield);
         if (player is not null && GodotObject.IsInstanceValid(player) && player.Playing)
             player.Stop();
     }

@@ -2534,26 +2534,34 @@ public partial class ClientWorld : Node3D
     {
         if (!_vehicles.TryGetValue(entity.Index, out VehicleVisuals? vis))
         {
-            vis = new VehicleVisuals
-            {
-                Name = $"vehicle#{entity.Index}",
-                Effects = Effects,
-                Beams = Beams,
-                // Resolve a vehicle model by name through the shared resolver (wrap the name in a temp entity).
-                ModelResolver = name => ModelResolver?.Invoke(new Entity { ClassName = "vehicle", Model = name }),
-                SoundResolver = ResolveSound,
-                AudioLoader = s => this.AudioLoader?.Invoke(s),
-                Bound = entity,
-            };
-            AddChild(vis);
-            vis.Assets = Assets;   // texture the vehicle body/guns built via ModelLoader.BuildModel/ModelAnimator
-            vis.Build(entity.ClassName + " " + entity.Model);
+            vis = NewVehicleVisuals($"vehicle#{entity.Index}", entity.ClassName + " " + entity.Model);
+            vis.Bound = entity;
             _vehicles[entity.Index] = vis;
         }
         else
         {
             vis.Bound = entity;
         }
+    }
+
+    // A vehicle's client-side driver with this client's effects, beams, models and sounds wired in.
+    private VehicleVisuals NewVehicleVisuals(string name, string classNameOrModel)
+    {
+        VehicleVisuals vis = new()
+        {
+            Name = name,
+            Effects = Effects,
+            Beams = Beams,
+            // Resolve a vehicle model by name through the shared resolver (wrap the name in a temp entity).
+            ModelResolver = model => ModelResolver?.Invoke(new Entity { ClassName = "vehicle", Model = model }),
+            SoundResolver = ResolveSound,
+            AudioLoader = s => this.AudioLoader?.Invoke(s),
+            DpAudioLoader = this.AudioLoader,   // the loader's own delegate: the DarkPlaces mixer's sample bank is keyed on it
+        };
+        AddChild(vis);
+        vis.Assets = Assets;   // texture the vehicle body/guns built via ModelLoader.BuildModel/ModelAnimator
+        vis.Build(classNameOrModel);
+        return vis;
     }
 
     /// <summary>

@@ -94,6 +94,8 @@ public partial class ProjectileRenderer : Node3D
     /// <summary>Loads a sample straight to an <see cref="AudioStream"/> from the mounted VFS (host-set to
     /// <c>AssetLoader.LoadSound</c>). Tried before the <see cref="SoundResolver"/> <c>res://</c> fallback.</summary>
     public Func<string, AudioStream?>? AudioLoader { get; set; }
+    /// <summary>The asset loader's own LoadSound delegate (not a wrapper around it): what the DarkPlaces mixer path finds the sample bank through.</summary>
+    public Func<string, AudioStream?>? DpAudioLoader { get; set; }
 
     /// <summary>
     /// Builds a fully-textured render node for a model VFS path (host-set to <c>AssetLoader.LoadModel</c>), used
@@ -728,6 +730,14 @@ public partial class ProjectileRenderer : Node3D
     /// <summary>Attach a looping spatial fly sound to the projectile root (QC <c>loopsound</c>). Graceful miss.</summary>
     private void AttachLoopSound(Node3D root, string sample)
     {
+        // snd_darkplaces 1: QC loopsound(proj, CH_SHOTS_SINGLE, sample, VOL_BASE, ATTEN_NORM) as a looping channel
+        // of DarkPlaces' mixer that rides the projectile (game/audio/DpLoopEmitter.cs).
+        if (VortexArena.Game.Audio.DpNative.Active && VortexArena.Game.Audio.DpNative.Bank(DpAudioLoader ?? AudioLoader) is { } bank)
+        {
+            if (bank.Get(sample, forPlay: true) is { Failed: false } sfx)
+                root.AddChild(new VortexArena.Game.Audio.DpLoopEmitter { Name = "FlySound", Sfx = sfx, Volume = 0.7f, Attenuation = 0.5f });
+            return;
+        }
         AudioStream? stream = LoadLoopStream(sample);
         if (stream is null)
             return;

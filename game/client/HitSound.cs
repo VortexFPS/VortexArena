@@ -100,6 +100,10 @@ public sealed class HitSound
 
     private void Play(ref AudioStream? stream, ref bool probed, string sample, float pitch)
     {
+        // snd_darkplaces 1: as Xonotic's client program plays it - sound7(NULL, CH_INFO, sample, VOL_BASE, ATTN_NONE, pitch) -
+        // on DarkPlaces' mixer. CH_INFO is channel 0, which layers.
+        if (VortexArena.Game.Audio.DpNative.Active && VortexArena.Game.Audio.DpNative.Local(AudioLoader, sample, 0, 0.7f, pitch) >= 0)
+            return;
         if (stream is null)
         {
             if (probed) return; // known-missing sample — stay silent instead of re-probing every beep

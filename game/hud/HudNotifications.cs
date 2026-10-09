@@ -390,6 +390,16 @@ public sealed class HudNotifications
         if (soundName == _lastAnnouncerSound && now < _lastAnnouncerTime + AntiSpamInterval)
             return;
 
+        // snd_darkplaces 1: Local_Notification_sound's _sound(NULL, CH_INFO, file, VOL_BASEVOICE, ATTEN_NONE) on
+        // DarkPlaces' mixer (channel 0: an announcement does not cut the one before it short).
+        if (VortexArena.Game.Audio.DpNative.Active
+            && VortexArena.Game.Audio.DpNative.Local(AudioLoader, $"announcer/{AnnouncerVoice}/{soundName}", 0, Mathf.Clamp(AnnouncerVolume, 0f, 1f)) >= 0)
+        {
+            _lastAnnouncerSound = soundName;
+            _lastAnnouncerTime = now;
+            return;
+        }
+
         AudioStream? stream = LoadAnnouncerStream(soundName);
 
         // Record prev_soundfile/prev_soundtime even when the sample is missing: QC sets these whenever the

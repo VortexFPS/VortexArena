@@ -949,18 +949,25 @@ public static class ClientSettings
         // All three go through ChannelVol's "unset → full" guard too: these are DP ENGINE cvars (registered in
         // C, not the .cfg tree), so without RegisterEngineAudioDefaults they'd read 0 → SetBusVolume would MUTE
         // the Master/Music/SFX buses (the "all volume defaults are 0" bug). The guard is belt-and-suspenders.
-        SetBusVolume("Master", ChannelVol(c, "mastervolume"));
-        SetBusVolume("Music", ChannelVol(c, "bgmvolume"));
+        // snd_darkplaces 1 (the default): every sound is a channel of DarkPlaces' mixer (game/audio/DpAudio.cs),
+        // which applies mastervolume, volume, bgmvolume and the snd_channelNvolume cvars itself, per channel,
+        // BEFORE its limiter - so the Master bus stays at unity. The few players still on engine nodes
+        // (vehicle engines and alarms) keep their loudness by having mastervolume folded into their buses.
+        VortexArena.Game.Audio.DpNative.Configure(c);
+        float master = ChannelVol(c, "mastervolume");
+        float fold = VortexArena.Game.Audio.DpNative.Active ? master : 1f;
+        SetBusVolume("Master", VortexArena.Game.Audio.DpNative.Active ? 1f : master);
+        SetBusVolume("Music", ChannelVol(c, "bgmvolume") * fold);
         // The "effects" bus stands in for the weapon/voice/item channels; use the loudest typical channel.
-        SetBusVolume("SFX", ChannelVol(c, "snd_channel0volume"));
+        SetBusVolume("SFX", ChannelVol(c, "snd_channel0volume") * fold);
 
         // Per-channel buses (DP snd_channel<N>volume cvars → dedicated buses).
         // Default to 1.0 (full volume) when the cvar is unset (Xonotic's stock default.cfg sets these to 1).
-        SetBusVolume("Weapon", ChannelVol(c, "snd_channel1volume"));
-        SetBusVolume("Voice", ChannelVol(c, "snd_channel2volume"));
-        SetBusVolume("Player", ChannelVol(c, "snd_channel7volume"));
+        SetBusVolume("Weapon", ChannelVol(c, "snd_channel1volume") * fold);
+        SetBusVolume("Voice", ChannelVol(c, "snd_channel2volume") * fold);
+        SetBusVolume("Player", ChannelVol(c, "snd_channel7volume") * fold);
         // Ambient inherits from the general effects channel (snd_channel0volume).
-        SetBusVolume("Ambient", ChannelVol(c, "snd_channel0volume"));
+        SetBusVolume("Ambient", ChannelVol(c, "snd_channel0volume") * fold);
 
         AppliedState.Record(AudioApplyCvars);   // see the note in ApplyVideo
     }
@@ -989,6 +996,20 @@ public static class ClientSettings
         c.Register("snd_swapstereo", "0", save);
         c.Register("snd_spatialization_control", "0", save);
         c.Register("snd_mutewhenidle", "1", save);
+        // The rest of what DarkPlaces' mixer reads (snd_main.c defaults; Xonotic's own values where its
+        // configuration sets an engine cvar by bare name, which a store that has not registered it yet drops).
+        c.Register("snd_darkplaces", "1", save);   // 0 = the previous engine-node audio path (kept for one release)
+        c.Register("snd_softclip", "1", save);                              // xonotic-common.cfg: set snd_softclip 1
+        c.Register("snd_maxchannelvolume", "0", save);                      // xonotic-common.cfg
+        c.Register("snd_identicalsoundrandomization_time", "-0.1", 0);      // xonotic-client.cfg
+        c.Register("snd_identicalsoundrandomization_tics", "1", 0);         // xonotic-client.cfg
+        c.Register("snd_spatialization_occlusion", "1", save);
+        c.Register("snd_spatialization_min", "0.70", save);
+        c.Register("snd_spatialization_max", "0.95", save);
+        c.Register("snd_spatialization_min_radius", "10000", save);
+        c.Register("snd_spatialization_max_radius", "100", save);
+        c.Register("snd_spatialization_power", "0", save);
+        c.Register("snd_waterfx", "1", save);
 
         // Distance-attenuation curve (ClientWorld reads these live to spatialize 3D sounds — see DpDistanceGain).
         // Defaults = Xonotic's shipped "new style" method 1 (binds-xonotic.cfg `snd_attenuation_method_1`:

@@ -81,6 +81,62 @@ public sealed partial class MusicPlayer : Node
         public float FadeRate;            // QC fade_rate: seconds to ramp DOWN
         public float Volume;              // target volume from the source entity (1 = full)
         public bool LoadFailed;           // true if the stream couldn't be loaded (skip forever)
+        // snd_darkplaces 1: the track is a channel of DarkPlaces' mixer.
+        public VortexArena.Engine.Audio.DpSfx? DpSfx;
+        public int DpChannel = -1, DpEntity;
+    }
+
+    private int _dpNextEntity;
+
+    // The files a track name stands for. A level's track number ("cdtracks/track005", from its mapinfo) means
+    // the fifth name of the remap list - Xonotic's cdtracks.cfg builds it in g_cdtracks_remaplist and runs
+    // "cd remap" with it - exactly as cd_shared.c CDAudio_Play_byName resolves "cd loop 5".
+    private static IEnumerable<string> DpTrackNames(string track)
+    {
+        yield return track;
+        string bare = track.StartsWith("cdtracks/", StringComparison.OrdinalIgnoreCase) ? track["cdtracks/".Length..] : track;
+        string number = bare.StartsWith("track", StringComparison.OrdinalIgnoreCase) ? bare["track".Length..].TrimStart('0') : bare;
+        string list = VortexArena.Common.Services.Api.Services is not null ? VortexArena.Common.Services.Api.Cvars.GetString("g_cdtracks_remaplist") : "";
+        string[] remap = list.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        foreach (string candidate in VortexArena.Engine.Audio.DpSoundFiles.TrackCandidates(number.Length > 0 ? number : bare, remap))
+            yield return candidate;
+        yield return "cdtracks/" + bare;
+    }
+    private const int ChBgmSingle = 8;   // QC CH_BGM_SINGLE
+
+    // TargetMusic_Advance on DarkPlaces' mixer: "sound7(it, CH_BGM_SINGLE, it.noise, vol, ATTEN_NONE, 0, BIT(4))" starts
+    // (or, when the track has run out, restarts) it with CHANNELFLAG_FULLVOLUME - so "volume" does not apply, and
+    // bgmvolume is already in vol - and the empty sample changes its volume while it plays. Returns false when
+    // the sample bank cannot be reached (the engine-node path then plays the track).
+    private bool DpAdvanceSource(string track, SourceState src, float vol, ref List<string>? toRemove)
+    {
+        if (VortexArena.Game.Audio.DpNative.Bank(AudioLoader) is not { } bank) return false;
+        VortexArena.Engine.Audio.DpSoundSystem sound = VortexArena.Game.Audio.DpAudio.Instance.Sound;
+        if (src.DpEntity == 0) src.DpEntity = VortexArena.Engine.Audio.DpSoundSystem.MaxEdicts + 20000 + _dpNextEntity++;
+        bool playing = src.DpSfx is not null && src.DpChannel >= 0 && sound.IsChannelPlaying(src.DpChannel, src.DpSfx, src.DpEntity, ChBgmSingle);
+        if (vol <= 0.001f)
+        {
+            if (playing) sound.StopChannel(src.DpChannel);
+            src.DpChannel = -1;
+            if (src.State <= 0f) (toRemove ??= new()).Add(track);
+            return true;
+        }
+        if (src.LoadFailed) return true;
+        if (src.DpSfx is null)
+        {
+            VortexArena.Engine.Audio.DpSfx? sfx = null;
+            foreach (string name in DpTrackNames(track))
+                if (bank.Exists(name) && bank.Get(name, forPlay: true) is { Failed: false } found) { sfx = found; break; }
+            if (sfx is null)
+            {
+                src.LoadFailed = true;
+                return true;
+            }
+            src.DpSfx = sfx;
+        }
+        if (playing) sound.SetChannelVolume(src.DpChannel, vol);
+        else src.DpChannel = sound.StartSound(src.DpEntity, ChBgmSingle, src.DpSfx, System.Numerics.Vector3.Zero, vol, 0f, 0f, VortexArena.Engine.Audio.DpSoundSystem.ChannelFlagFullVolume, 1f);
+        return true;
     }
 
     // keyed by resolved track path (case-insensitive)
@@ -400,6 +456,9 @@ public sealed partial class MusicPlayer : Node
             }
 
             float vol = src.State * src.Volume * bgm;
+
+            if (VortexArena.Game.Audio.DpNative.Active && src.Player is null && DpAdvanceSource(track, src, vol, ref toRemove))
+                continue;
 
             if (!src.LoadFailed && src.Player is null && src.State > 0f)
             {

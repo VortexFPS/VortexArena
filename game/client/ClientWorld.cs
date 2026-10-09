@@ -454,6 +454,7 @@ public partial class ClientWorld : Node3D
         // Share the VFS audio loader so projectile fly-loops resolve from the mounted content packs too
         // (late-bound: the host sets AudioLoader after _Ready; ProjectileRenderer keeps the res:// fallback).
         Projectiles.AudioLoader = s => AudioLoader?.Invoke(s);
+        Projectiles.DpAudioLoader = AudioLoader;
         AddChild(Projectiles);
 
         // The one shared Draw_CylindricLine primitive (cross-ribbon segment pool). Every beam/rope/line renderer
@@ -884,6 +885,11 @@ public partial class ClientWorld : Node3D
         string bare = reg?.Sample ?? sample;
         if (reg is not null) { volume = reg.Volume; }
 
+        // snd_darkplaces 1: a channel of DarkPlaces' mixer (ClientWorld.DpSound.cs). What follows is the
+        // previous engine-node path, kept for one release behind snd_darkplaces 0.
+        if (VortexArena.Game.Audio.DpNative.Active && DpStartSound(bare, origin, volume, attenuation, channel, sourceNetId, pitch))
+            return;
+
         AudioStream? stream = LoadStream(bare);
         if (stream is null)
             return;
@@ -956,6 +962,7 @@ public partial class ClientWorld : Node3D
     /// in Godot space; falls back to the last known position when no camera is available this frame.</summary>
     private Godot.Vector3 ListenerPos()
     {
+        if (_dpSceneListener is { } scripted) return Coords.ToGodot(scripted.Origin);   // a test scene's ears
         Camera3D? cam = FrameCamera();
         if (cam is not null)
             _lastListener = cam.GlobalPosition;
@@ -1043,6 +1050,9 @@ public partial class ClientWorld : Node3D
         string bare = reg?.Sample ?? sample;
         if (reg is not null) volume = reg.Volume;
 
+        if (VortexArena.Game.Audio.DpNative.Active && DpStartLoop(netId, channel, bare, origin, volume, attenuation))
+            return;
+
         var key = (netId, channel);
         if (_loopingSounds.TryGetValue(key, out LoopingSound? existing) && GodotObject.IsInstanceValid(existing.Player))
         {
@@ -1072,6 +1082,7 @@ public partial class ClientWorld : Node3D
     /// </summary>
     public void OnStopSound(int netId, int channel)
     {
+        if (VortexArena.Game.Audio.DpNative.Active) DpStopSound(netId, channel);
         if (_loopingSounds.Remove((netId, channel), out LoopingSound? ls))
             DestroyLoop(ls);
     }
@@ -1191,6 +1202,7 @@ public partial class ClientWorld : Node3D
     /// snapshot / was removed, so its loops (Arc beam, vehicle engine) must end even without an explicit stop.</summary>
     private void StopLoopsForEntity(int netId)
     {
+        if (VortexArena.Game.Audio.DpNative.Active) DpStopLoopsForEntity(netId);
         if (_loopingSounds.Count == 0 && _singleChannelPlayers.Count == 0)
             return;
 
@@ -1347,6 +1359,8 @@ public partial class ClientWorld : Node3D
         _sndRadius = CvarF("snd_soundradius", 2400f);
         _sndExponent = CvarF("snd_attenuation_exponent", 4f);
         _sndDecibel = CvarF("snd_attenuation_decibel", 0f);
+        if (VortexArena.Game.Audio.DpNative.Active) DpFrame((float)delta);
+        else DpSceneStep((float)delta);
         Godot.Vector3 listener = ListenerPos();
         using (FrameProfiler.Scope("cw.audio"))
         {

@@ -75,7 +75,7 @@ public class ParticleParityTests
 
         // Spawn at t=0 (the C reference spawns once before any update).
         sim.SpawnEffect(fx.Blocks, fx.Pcount, fx.OriginMins, fx.OriginMaxs, fx.VelocityMins, fx.VelocityMaxs,
-            tintRgba: 0xFFFFFFFFu, fade: fx.Fade);
+            tintRgba: 0xFFFFFFFFu, fade: fx.Fade, wantTrail: fx.WantTrail);
 
         float worstPos = 0f, worstVel = 0f, worstSize = 0f, worstAlpha = 0f;
         int worstStep = -1;
@@ -276,6 +276,7 @@ public class ParticleParityTests
         JsonElement sp = r.GetProperty("spawn");
         float pcount = sp.GetProperty("pcount").GetSingle();
         float fade = sp.GetProperty("fade").GetSingle();
+        bool wantTrail = sp.TryGetProperty("wanttrail", out JsonElement wt) && wt.GetInt32() != 0;
         Vector3 omin = Vec3(sp, "originmins"), omax = Vec3(sp, "originmaxs");
         Vector3 vmin = Vec3(sp, "velocitymins"), vmax = Vec3(sp, "velocitymaxs");
 
@@ -301,7 +302,7 @@ public class ParticleParityTests
             steps.Add(new Step(time, parts));
         }
 
-        return new Fixture(collisions, brushes, blocks, pcount, fade, omin, omax, vmin, vmax,
+        return new Fixture(collisions, brushes, blocks, pcount, fade, wantTrail, omin, omax, vmin, vmax,
             rngList.ToArray(), steps);
     }
 
@@ -364,7 +365,7 @@ public class ParticleParityTests
         bool Collisions,
         List<(int contents, int surfaceflags, float[] planes)> World,
         List<ParticleEmitterInfo> Blocks,
-        float Pcount, float Fade,
+        float Pcount, float Fade, bool WantTrail,
         Vector3 OriginMins, Vector3 OriginMaxs, Vector3 VelocityMins, Vector3 VelocityMaxs,
         int[] Rng, List<Step> Steps);
 }

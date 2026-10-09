@@ -111,6 +111,17 @@ public sealed partial class FaithfulParticleBackend : Node3D
     /// </summary>
     public void SetTrace(ITraceService? trace) => _sim.Trace = trace;
 
+    /// <summary>
+    /// Raised for an effectinfo <c>orientation beam</c> block spawned as a trail (the bullet tracer, the
+    /// vaporizer and misc_laser beams): DarkPlaces stores one beam particle there, this pool holds sprites
+    /// only, so the effect system draws it with its beam renderer. Set before the first spawn.
+    /// </summary>
+    public Action<BeamEvent>? OnBeam
+    {
+        get => _sim.OnBeam;
+        set => _sim.OnBeam = value;
+    }
+
     /// <summary>The live simulation (exposed for stats/HUD and the parity harness; do not mutate).</summary>
     public ParticleSim Sim => _sim;
 
@@ -178,7 +189,7 @@ public sealed partial class FaithfulParticleBackend : Node3D
         if (blocks is null || blocks.Count == 0)
             return;
         ParticleEmitterInfo[] converted = Convert(blocks);
-        _sim.SpawnEffect(converted, count, origin, origin, velocity, velocity, tintRgba);
+        _sim.SpawnEffect(converted, count, origin, origin, velocity, velocity, tintRgba, wantTrail: false);
     }
 
     /// <summary>
@@ -193,7 +204,7 @@ public sealed partial class FaithfulParticleBackend : Node3D
         if (blocks is null || blocks.Count == 0)
             return;
         ParticleEmitterInfo[] converted = Convert(blocks);
-        _sim.SpawnEffect(converted, count, start, end, velocity, velocity, tintRgba);
+        _sim.SpawnEffect(converted, count, start, end, velocity, velocity, tintRgba, wantTrail: true);
     }
 
     /// <summary>Drop all live particles (map change / mode switch). Does not touch already-spawned decals.</summary>

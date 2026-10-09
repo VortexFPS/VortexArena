@@ -69,6 +69,8 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         _assets = assets ?? throw new ArgumentNullException(nameof(assets));
         _cvars = cvars ?? throw new ArgumentNullException(nameof(cvars));
         _note = note ?? (_ => { });
+        // --legacy-extra-data <dir>: more packages on the session's file system (LegacyData.MountExtraData).
+        if (LegacyData.MountExtraData(files) is { } extra) _note(extra);
         // First: what is built below (the particle renderer's shader among it) is built for the session's colour.
         ApplyLegacyColour();
 
@@ -355,6 +357,7 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         // rsurface.shadertime for the world: the surface shaders of the session animate on its clock.
         RenderingServer.GlobalShaderParameterSet(DpSurfaceShader.TimeUniform, (float)time);
         ApplyLightStyle(time);
+        UpdateQ1Frame(time);   // a Quake 1 format level: light styles, animated textures
         View.ConWidth = Math.Max(1, _cvars.GetFloat("vid_conwidth"));
         View.ConHeight = Math.Max(1, _cvars.GetFloat("vid_conheight"));
         View.EngineDrawWorld = !_cvars.Has("r_drawworld") || _cvars.GetFloat("r_drawworld") != 0;
@@ -423,6 +426,7 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
         _levelMaps.Clear();
         _levelAtlases.Clear();
         _levelBsp = null;
+        ReleaseQ1Level();
         foreach (Image image in _submodelImages.Values) image.Dispose();
         _submodelImages.Clear();
     }

@@ -348,7 +348,8 @@ public sealed partial class GodotLegacyPresentation
     // not read on demand always can (it was read ahead, or loads the way it always did).
     private bool ModelAvailable(string model)
     {
-        if (model[0] == '*' || Headless) return true;
+        // (A ".bsp" model is a small Quake 1 format map, read where it is built: CreateQ1ModelNode.)
+        if (model[0] == '*' || Headless || IsQ1ModelName(model)) return true;
         if (IsDeferredModel(model))
         {
             if (_deferredReady.Contains(model)) return true;

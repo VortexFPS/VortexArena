@@ -80,7 +80,9 @@ public sealed partial class GodotLegacyPresentation
     // vertex-lit surface and every grid-lit model through the world shaders' lightmap-intensity global.
     private void ApplyLightStyle(double time)
     {
-        float value = VortexArena.Formats.Materials.DpColour.LightStyleValue(_lightStyles[0], time);
+        // A Quake 1 format level: style 0 is a layer of its lightmaps like any other (Q1SurfaceShader), and
+        // DarkPlaces does not scale the lightmap intensity by it there ("even on q3bsp" is mod_brushq3 only).
+        float value = _levelQ1 is not null ? 1f : VortexArena.Formats.Materials.DpColour.LightStyleValue(_lightStyles[0], time);
         if (!float.IsFinite(value)) value = 1f;
         value = Math.Clamp(value, 0f, 4f);
         if (value == _lightStyleApplied) return;

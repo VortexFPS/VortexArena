@@ -75,6 +75,13 @@ public sealed partial class GodotLegacyPresentation
         public BoneMatrix Placement;
         public Vector3[]? PosePositions;
         public Quaternion[]? PoseRotations;
+        // A Quake 1 format level (GodotLegacyPresentation.Q1.cs): the map this brush model is of, and the
+        // light last sampled for a model that is lit from the lightmap under it.
+        public Q1Level? Q1;
+        public int Q1LightStamp = -1;
+        public NVec3 Q1LightAt;
+        public bool Q1LightSet;
+        public Vector3 Q1Light;
     }
 
     private readonly Dictionary<int, Proxy> _proxies = new();
@@ -316,6 +323,8 @@ public sealed partial class GodotLegacyPresentation
                 $"net {key - NetworkKeyBase,4} {model} ef {entity.Effects} a {entity.Alpha} org {origin.X:0.#} {origin.Y:0.#} {origin.Z:0.#} ang {angles.X:0.#} {angles.Y:0.#} {angles.Z:0.#} meshes {proxy.Geometry.Count}"));
         if (!ApplyPlacement(proxy, placement)) return;
         ApplyRenderState(proxy, entity.Alpha / 255f, entity.Effects, 0);
+        if (_levelQ1 is not null) ApplyQ1ModelLight(proxy, placement.Origin);
+        if (proxy.Q1 is not null) ApplyQ1Frame(proxy, entity.Frame);
         // EntityState colormod / glowmod are bytes at 32 = 1.0 (protocol.h); zero-length means "not set".
         ApplyTint(proxy, entity.Colormap,
             new QcVector(entity.ColorMod0 / 32f, entity.ColorMod1 / 32f, entity.ColorMod2 / 32f),
@@ -408,6 +417,8 @@ public sealed partial class GodotLegacyPresentation
 
         // "if (!entrender->alpha) entrender->alpha = 1"
         ApplyRenderState(proxy, entity.Alpha == 0 ? 1 : entity.Alpha, entity.Effects, entity.RenderFlags);
+        if (_levelQ1 is not null) ApplyQ1ModelLight(proxy, placement.Origin);
+        if (proxy.Q1 is not null) ApplyQ1Frame(proxy, (int)entity.Frame);
         lap = Lap(profile, 4, lap);
         ApplyTint(proxy, entity.ColorMap, entity.ColorMod, entity.GlowMod);
         lap = Lap(profile, 5, lap);
@@ -539,6 +550,7 @@ public sealed partial class GodotLegacyPresentation
         if (LegacyPerfLog.Enabled && System.Diagnostics.Stopwatch.GetElapsedTime(step).TotalMilliseconds >= 2) LegacyPerfLog.Event("model step: into the scene " + model, step);
         _proxyNodes++;
         proxy.Node = node;
+        proxy.Q1 = IsQ1ModelName(model) && _q1Models.TryGetValue(model, out Q1Level? q1Model) ? q1Model : null;
         // The program sets every frame of every model (.frame, .frame2, .lerpfrac): nothing plays on its own. The
         // engine switches a node's per-frame call on when the node enters the tree, whatever was asked before, so
         // it is switched off here, after - some ninety vertex-animated nodes were each called every frame, most
@@ -583,6 +595,9 @@ public sealed partial class GodotLegacyPresentation
         if (!LegacyQcHost.IsSafePath(model) || !_vfs.Exists(model)) return null;
         try
         {
+            // A Quake 1 format map as a model (Quake's item boxes): GodotLegacyPresentation.Q1.cs.
+            Node3D? brushModel = CreateQ1ModelNode(model, out bool isQ1Model);
+            if (isQ1Model) return brushModel;
             // A vertex-animated model with more than one frame gets the morphing animator, so .frame shows;
             // everything else (IQM/DPM skeletal, single-frame MD3, MDL, sprites) is the asset pipeline's node.
             Md3Data? md3 = skin == 0 && model.EndsWith(".md3", StringComparison.OrdinalIgnoreCase) ? _assets.LoadMd3(model) : null;
@@ -632,6 +647,11 @@ public sealed partial class GodotLegacyPresentation
     /// </summary>
     private void BuildSubmodel(Proxy proxy, string model)
     {
+        if (_q1 is not null)
+        {
+            BuildQ1Submodel(proxy, model);
+            return;
+        }
         if (_levelBsp is not { } bsp || s_memberwiseClone is null || s_bspFaces is null
             || !int.TryParse(model.AsSpan(1), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int index)
             || index < 1 || index >= bsp.Models.Length)
@@ -937,7 +957,8 @@ public sealed partial class GodotLegacyPresentation
         }
         // EF_FULLBRIGHT / RF_FULLBRIGHT on a surface drawn by one of the model shaders: MODE_FLATCOLOR, asked
         // for per instance (3), where 1 is the light grid.
-        float gridLit = (bits & BitFullBright) != 0 ? 3f : 1f;
+        // (2 on a Quake 1 format level: lit by the instance's own values, ApplyQ1ModelLight.)
+        float gridLit = (bits & BitFullBright) != 0 ? 3f : _levelQ1 is not null && proxy.Q1LightSet ? 2f : 1f;
         foreach (GeometryInstance3D geometry in proxy.Geometry)
             if (geometry is MeshInstance3D lit && GodotObject.IsInstanceValid(lit)) lit.SetInstanceShaderParameter(PlayerSkinShader.GridLitUniform, gridLit);
         foreach ((MeshInstance3D instance, int surface, Material? original) in proxy.Surfaces)
@@ -1248,9 +1269,11 @@ public sealed partial class GodotLegacyPresentation
     /// </summary>
     QcVector ILegacyScene.GetLight(QcVector point, int flags, out QcVector ambient, out QcVector diffuse, out QcVector direction)
     {
-        ambient = new QcVector(1, 1, 1);
         diffuse = default;
         direction = new QcVector(0, 0, 1);
+        // A Quake 1 format level has its light in the lightmaps, which are sampled here as DarkPlaces does.
+        if (Q1GetLight(point, out ambient)) return ambient;
+        ambient = new QcVector(1, 1, 1);
         return ambient;
     }
 

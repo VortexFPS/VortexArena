@@ -974,3 +974,11 @@ shader, display values in the 3D buffer) while the native game keeps its own loo
 To test without a public server, run the reference dedicated server in WSL (no window). UDP from Windows to
 `127.0.0.1` inside WSL2 is not forwarded, so bind it to the WSL address (`wsl hostname -I`) and keep it off
 the public master list with `sv_public 0`; `_scratch/legacy-live-join.txt` records a working command line.
+
+A server whose map (or server packages) the Xonotic data lacks has the client download them, as DarkPlaces does
+(`curl --pak` commands; spec §17): they go to `<user directory>/legacy/dlcache/`, the loading screen shows the
+progress, and a join whose map cannot be had ends at the menu with the reason. Limits are the player's
+`legacy_curl_*` cvars. What a session did is in `<user directory>/logs/legacy-<stamp>.log`, also when the game was
+started without a console. A local test set-up (a stock dedicated server bound to 127.0.0.1 with a renamed map, a
+server package and an HTTP listener) is scripted under `_scratch/join/` (`mkcontent.py`, `sv.ps1`, `http.ps1`,
+`run.ps1`, `dpc.ps1`); a stock server's default `sv_curl_defaulturl` points at xonotic.org, so set it yourself.

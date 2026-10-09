@@ -542,11 +542,11 @@ public sealed partial class FaithfulParticleRenderer : Node3D
         SortDepth(invmod.Indices, pool, viewOrigin);
 
         // 3) Pack + upload.
-        PackAndUpload(premul, pool, sizeScale, alphaScale, fwd, time, planeStart, planeEnd, doFade, invmod: false);
-        PackAndUpload(invmod, pool, sizeScale, alphaScale, fwd, time, planeStart, planeEnd, doFade, invmod: true);
+        PackAndUpload(premul, pool, sizeScale, alphaScale, viewOrigin, fwd, time, planeStart, planeEnd, doFade, invmod: false);
+        PackAndUpload(invmod, pool, sizeScale, alphaScale, viewOrigin, fwd, time, planeStart, planeEnd, doFade, invmod: true);
     }
 
-    private void PackAndUpload(Batch b, Particle[] pool, float sizeScale, float alphaScale, NVec3 viewFwd,
+    private void PackAndUpload(Batch b, Particle[] pool, float sizeScale, float alphaScale, NVec3 viewOrigin, NVec3 viewFwd,
         float time, float planeStart, float planeEnd, bool doFade, bool invmod)
     {
         int n = b.Indices.Count;
@@ -623,29 +623,31 @@ public sealed partial class FaithfulParticleRenderer : Node3D
 
             if (p.Orientation == ParticleOrientation.Spark)
             {
-                // Velocity-stretched spark (cl_particles.c:2812-2825): half-length along the CURRENT
-                // velocity = max(stretch · 0.04 · |vel|, size · 0.5); cross HALF-width = size —
-                // R_CalcBeam_Vertex3f places corners at org ± size·right (gl_rmain.c:6269-6280), so the
-                // full width is 2·size, same ± convention as DP's billboard corners. Build the basis
-                // CPU-side so the shader draws it verbatim (sparkFlag = 1). The quad is 1x1 centered, so
-                // the X axis becomes the full width and Y the full length.
-                float size = p.Size * sizeScale;
-                float speed = p.Vel.Length();
-                float stretch = p.Stretch > 0f ? p.Stretch : 1f;
-                float halfLen = MathF.Max(stretch * 0.04f * speed, size * 0.5f);
-                float width = MathF.Max(size * 2f, 0.001f);
-
-                Vector3 gvel = speed > 1e-4f ? Coords.ToGodot(p.Vel).Normalized() : Vector3.Up;
-                Vector3 gfwd = Coords.ToGodot(viewFwd);
-                Vector3 widthAxis = gvel.Cross(gfwd);
-                if (widthAxis.LengthSquared() < 1e-6f)
-                    widthAxis = gvel.Cross(Vector3.Right);
-                widthAxis = widthAxis.Normalized();
-                Vector3 faceAxis = widthAxis.Cross(gvel).Normalized();
-
-                Vector3 xAxis = widthAxis * width;          // full width across the streak
-                Vector3 yAxis = gvel * (halfLen * 2f);      // full length along velocity
-                Vector3 zAxis = faceAxis;                   // unit normal (no scale needed)
+                // Velocity-stretched spark (cl_particles.c:2817-2825 + R_CalcBeam_Vertex3f): half-length
+                // along the CURRENT velocity = max(stretch · 0.04 · |vel|, size · 0.5); half-width = size,
+                // across the streak and across the line from the spark to the EYE (not the camera's forward
+                // axis: that made a spark away from the screen centre thinner, and one flying along the view
+                // direction vanish). The maths is ParticleGeometry.SparkAxes, held to DarkPlaces by
+                // ParticleDarkPlacesTests. The shader draws the basis verbatim (sparkFlag = 1).
+                //
+                // The texture runs ALONG the streak: DarkPlaces gives the tail (org − along) the cell's
+                // left edge s1 and the head s2, with t across (:2826-2829) — so the 1x1 quad's X (its U
+                // axis) carries the full length, tail to head, and its Y the full width, with the top row
+                // (V = 0, t1) on the −across side. Cell 41 (the bar the laser/electro sparks use) is drawn
+                // lengthwise; with the axes the other way round it lay across the streak.
+                Vector3 xAxis, yAxis, zAxis;
+                if (ParticleGeometry.SparkAxes(p.Org, p.Vel, p.Size * sizeScale, p.Stretch, viewOrigin,
+                        out NVec3 along, out NVec3 across))
+                {
+                    xAxis = Coords.ToGodot(along) * 2f;
+                    yAxis = Coords.ToGodot(across) * -2f;
+                    zAxis = xAxis.Cross(yAxis).Normalized();
+                }
+                else
+                {
+                    xAxis = yAxis = Vector3.Zero;               // no velocity / end-on: nothing to draw
+                    zAxis = Vector3.Back;
+                }
                 WriteTransform(buf, o, xAxis, yAxis, zAxis, gpos);
                 WriteColor(buf, o, col);
                 WriteCustom(buf, o, slot, angle, sparkFlag: 1f);

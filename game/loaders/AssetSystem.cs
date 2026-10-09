@@ -1940,14 +1940,57 @@ public sealed class AssetSystem
             // second time (MaybePicmip is not idempotent), so this early-out is load-bearing, not an optimisation.
             if (parked.Prepared)
                 return parked.Image;
-            PrepareDecoded(vpath, parked.Image, DdsCacheRoot);
+            PrepareOrDefer(vpath, parked.Image);
             return parked.Image;
         }
         Image? image = LoadImageFromVpath(vpath);
         if (image == null)
             return null;
-        PrepareDecoded(vpath, image, DdsCacheRoot);
+        PrepareOrDefer(vpath, image);
         return image;
+    }
+
+    /// <summary>
+    /// Off by default (null), and then nothing here changes. An owner that sets it is asking for this: a
+    /// texture whose block compression would be slow where it is being loaded - the BC7 encoder on any
+    /// thread, any encoder on the frame thread - is uploaded uncompressed (shrunk and mipped as usual), and
+    /// its path is handed to the callback instead, from whatever thread loaded it. The owner compresses it
+    /// later with <see cref="CompressToCache"/>. Legacy compatibility mode sets it: there a first visit to a
+    /// server otherwise holds frames for seconds while BC7 runs (measured: 3 to 17 s per frame).
+    /// </summary>
+    public Action<string>? DeferCompression { get; set; }
+
+    private void PrepareOrDefer(string vpath, Image image)
+    {
+        if (DeferCompression is { } defer && TextureCompression > 0
+            && (UsesBptcEncoder() || VortexArena.Common.Diagnostics.Prof.IsMainThread))
+        {
+            MaybePicmip(vpath, image);
+            EnsureMipmaps(vpath, image);
+            if (!image.IsCompressed() && !image.IsEmpty() && image.HasMipmaps()
+                && TextureCategories.Enabled(TextureCompressionCategories, TextureCategories.Classify(vpath)))
+                defer(vpath);
+            return;
+        }
+        PrepareDecoded(vpath, image, DdsCacheRoot);
+    }
+
+    /// <summary>
+    /// Decode <paramref name="vpath"/> again, block-compress it and bank the result in the texture cache
+    /// (r_texture_dds_save), uploading nothing: the other half of <see cref="DeferCompression"/>. Safe off
+    /// the frame thread. True if a compressed image was produced.
+    /// </summary>
+    public bool CompressToCache(string vpath)
+    {
+        Image? image = LoadImageFromVpath(vpath);
+        if (image is null)
+            return false;
+        try
+        {
+            PrepareDecoded(vpath, image, DdsCacheRoot);
+            return image.IsCompressed();
+        }
+        finally { image.Dispose(); }
     }
 
     /// <summary>

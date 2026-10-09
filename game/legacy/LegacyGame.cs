@@ -173,7 +173,13 @@ public partial class LegacyGame : Node
     private static double Now => Time.GetTicksUsec() / 1_000_000.0;
     private static bool Headless => DisplayServer.GetName() == "headless";
 
-    private static void Log(string line) => GD.Print("[legacy] " + line);
+    // To the process's output, and to the session's own log file (LegacyLog): a game started the ordinary
+    // way has no output anyone can read afterwards.
+    private static void Log(string line)
+    {
+        GD.Print("[legacy] " + line);
+        LegacyLog.Write(line);
+    }
 
     // =====================================================================================================
     //  Start
@@ -241,6 +247,16 @@ public partial class LegacyGame : Node
         AssetLoader assets = new(_vfs);
         LegacyData.MountTextureCache(_vfs, assets.Assets);
         _presentation = new GodotLegacyPresentation(_sceneRoot, _drawLayer, _vfs, assets, _cvars, Log);
+        // No slow texture compression where a texture is loaded: uploaded uncompressed, compressed into the
+        // session's cache in the background (LegacyTextureBank). VORTEX_LEGACY_INLINECOMPRESS=1 is the old way.
+        if (string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_INLINECOMPRESS")))
+        {
+            _textureBank = new LegacyTextureBank(assets.Assets, Log) { Enabled = string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_NOBANK")) };
+            assets.Assets.DeferCompression = _textureBank.Defer;
+        }
+        // The native menu's background warm of the native game's own assets (which compresses textures on
+        // most of the machine's cores) rests while a Xonotic server is being played.
+        RestMenuWarmer();
 
         RegisterEngineCommands(_interpreter);
         if (_shared is null)
@@ -289,6 +305,21 @@ public partial class LegacyGame : Node
             ProgramDownloaded = LegacyData.WriteCachedProgram,
         };
         DpSignonConfig signon = _options.Client.Signon;
+        _assetLoader = assets;
+        if (LocalGame is null && string.IsNullOrEmpty(DemoPath))
+        {
+            // A server somebody else runs: the packages it names are fetched (libcurl.c), and its level is not
+            // entered without its map. Every limit comes from the player's own settings.
+            _options.Packages = new VortexArena.Legacy.Downloads.LegacyPackageDownloads(LegacyData.DownloadCache, LegacyData.DownloadLimits(PlayerCvars))
+            {
+                FileExists = services.FileExists,
+                MountPack = MountDownloadedPackage,
+                Print = OnPrint,
+            };
+            signon.RequireWorld = true;
+            signon.FileExists = services.FileExists;
+            signon.InBandFallback = PlayerCvars is not { } settings || !settings.Has(LegacyData.InBandCvar) || settings.GetFloat(LegacyData.InBandCvar) != 0;
+        }
         signon.Name = _cvars.GetString("_cl_name") is { Length: > 0 } name ? name : "player";
         int color = (int)_cvars.GetFloat("_cl_color");
         signon.TopColor = (color >> 4) & 15;
@@ -300,14 +331,25 @@ public partial class LegacyGame : Node
         signon.PlayerSkin = _cvars.GetString("_cl_playerskin");
         if (_cvars.Has("cl_netfps") && _cvars.GetFloat("cl_netfps") > 0) _options.Client.NetFps = _cvars.GetFloat("cl_netfps");
         _options.PredictMovement = !_cvars.Has("cl_movement") || _cvars.GetFloat("cl_movement") != 0;
+        // Developer aid (VORTEX_LEGACY_NETFPS): another packet rate, for measuring what a download's speed depends on.
+        if (double.TryParse(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_NETFPS"), NumberStyles.Float, CultureInfo.InvariantCulture, out double netFps) && netFps > 0)
+            _options.Client.NetFps = netFps;
 
         _shared?.EnterSession();   // from here to the end of Start is the session's own work
         _services = services;
         _session = new LegacyClientSession(services, _interpreter, _presentation, _options) { EngineMessages = _presentation };
+        // Every block of an in-band download is acknowledged, also after a long frame (see DpDownload.MaxPendingAcks).
+        _session.Client.Download.MaxPendingAcks = 64;
         if (_cvars.Has("cl_nettimesyncboundmode")) _session.Clock.BoundMode = (int)_cvars.GetFloat("cl_nettimesyncboundmode");
         _session.Event += text => Log("event: " + Printable(text, 600));
         int commandsLogged = 0;
-        _session.Client.CommandSent += command => { if (Headless && commandsLogged++ < 12) Log("cmd> " + Printable(command)); };
+        _session.Client.CommandSent += command =>
+        {
+            // The signon's own commands, for the log file; never a player's chat, and LegacyLog drops anything that names rcon or a password.
+            if (commandsLogged++ >= 40) return;
+            if (Headless && commandsLogged <= 12) Log("cmd> " + Printable(command));
+            else LegacyLog.Write("cmd> " + Printable(command));
+        };
         // Cmd_ForwardToServer: a command the client does not know is the server's to answer. Set after the
         // defaults ran, so a typo in a configuration file is not sent anywhere. (On the menu's console the
         // menu already forwards unknown commands to its session; its handler stays.)
@@ -363,6 +405,17 @@ public partial class LegacyGame : Node
             }
         }
         _transport = new DpUdpTransport(new IPEndPoint(ip, port));
+        if (_options.Packages is { } downloads)
+        {
+            // "http:///x.pk3" means "on the game server"; a download may be on a private network only if the server is.
+            downloads.ServerHost = ip.ToString();
+            downloads.ServerPort = port;
+            downloads.ServerIsPrivate = VortexArena.Legacy.Downloads.LegacyPackageDownloads.IsPrivateServer(ip);
+            VortexArena.Legacy.Downloads.LegacyDownloadLimits limits = downloads.Limits;
+            Log(string.Create(CultureInfo.InvariantCulture, $"package downloads: {(limits.Enabled ? "on" : "OFF (legacy_curl_enabled 0)")}, at most {limits.MaxFileBytes >> 20} MiB a package and {limits.MaxConnectionBytes >> 20} MiB a connection, ") +
+                string.Create(CultureInfo.InvariantCulture, $"{limits.MaxConcurrent} at once, {limits.MaxRedirects} redirects, given up after {limits.StallTimeoutSeconds:0} s without data, speed limit {(limits.MaxKiBPerSecond > 0 ? limits.MaxKiBPerSecond.ToString("0", CultureInfo.InvariantCulture) + " KiB/s" : "none")}, ") +
+                $"private addresses {(downloads.ServerIsPrivate ? "allowed (the server is at one)" : "refused")}; cache {LegacyData.DownloadCache}; log {LegacyLog.Path ?? "(opening)"}");
+        }
         Log($"connecting to {ip}:{port} as \"{Printable(signon.Name)}\" (rate {signon.Rate}, cl_netfps {_options.Client.NetFps.ToString(CultureInfo.InvariantCulture)}, " +
             $"client program {(forceDownload ? "always downloaded" : "from the game data or the download cache if it matches")}); writes go to {LegacyData.UserRoot}");
         _session.Connect(Now);
@@ -371,6 +424,135 @@ public partial class LegacyGame : Node
         _presentation.BeginPreload(null);
         _shared?.LeaveSession();
     }
+
+    private AssetLoader? _assetLoader;
+    private LegacyTextureBank? _textureBank;
+    private Node? _menuWarmer;
+    private double _menuWarmerLookedAt;
+
+    // The warmer may not exist yet when a session starts (a join from the command line): looked for again now and then.
+    private void RestMenuWarmer()
+    {
+        if (_menuWarmer is not null || _shutDown) return;
+        _menuWarmerLookedAt = Now;
+        if (GetParent()?.GetNodeOrNull("MenuAssetWarmer") is { } warmer && warmer.IsProcessing())
+        {
+            warmer.SetProcess(false);
+            _menuWarmer = warmer;
+            Log("the native menu's background asset warm rests while this session runs");
+        }
+    }
+    private readonly StringBuilder _mountedPackages = new();
+
+    // FS_AddPack for a package this session downloaded (or found in its download cache): mounted below the
+    // loose directories and above the other packages, as DarkPlaces does, and only on this session's own
+    // file system, which ends with the session ("fs_unload_dlcache").
+    private string? MountDownloadedPackage(string path)
+    {
+        if (_vfs is not { } vfs || _shutDown) return "the session is over";
+        try
+        {
+            if (!vfs.MountBelowDirectories(path)) return "the file is not there any more";
+        }
+        catch (Exception e) when (e is System.IO.IOException or System.IO.InvalidDataException or UnauthorizedAccessException or VortexArena.Formats.AssetParseException)
+        {
+            return "it could not be mounted (" + e.Message + ")";
+        }
+        _presentation?.GameDataChanged();
+        long length = 0;
+        try { if (System.IO.File.Exists(path)) length = new System.IO.FileInfo(path).Length; }
+        catch (System.IO.IOException) { }
+        Log($"package mounted for this session: {path} ({length} bytes)");
+        // Textures compressed from here on are kept apart from Xonotic's own (see UseDownloadTextureCache).
+        _mountedPackages.Append(System.IO.Path.GetFileName(path).ToLowerInvariant()).Append(':').Append(length).Append(';');
+        if (_assetLoader is { } loader)
+        {
+            byte[] hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(_mountedPackages.ToString()));
+            LegacyData.UseDownloadTextureCache(vfs, loader.Assets, Convert.ToHexString(hash, 0, 8).ToLowerInvariant());
+        }
+        return null;
+    }
+
+    // cl_screen.c SCR_DrawQWDownload and SCR_DrawCurlDownload: what is being downloaded, how far it is and how
+    // fast, on the loading screen and once a second in the log.
+    private string _downloadName = "";
+    private double _downloadBegan, _downloadRateAt, _downloadLogAt;
+    private int _downloadRateBytes, _downloadRate, _downloadSeen;
+    private bool _downloadShown;
+    private double _downloadLast;
+    private long _downloadSentAt, _downloadReceivedAt;
+
+    private void UpdateDownloadDisplay(LegacyClientSession session, double now)
+    {
+        DpDownload download = session.Client.Download;
+        StringBuilder? text = null;
+        float fraction = 0.2f;
+        if (download.Active)
+        {
+            if (_downloadName != download.Name)
+            {
+                _downloadName = download.Name;
+                _downloadBegan = _downloadRateAt = now;
+                _downloadRate = _downloadRateBytes = _downloadSeen = 0;
+                _downloadSentAt = _transport?.Sent ?? 0;
+                _downloadReceivedAt = _transport?.Received ?? 0;
+            }
+            _downloadRateBytes += Math.Max(0, download.ReceivedSize - _downloadSeen);
+            _downloadSeen = download.ReceivedSize;
+            if (now >= _downloadRateAt + 1)
+            {
+                // cls.qw_downloadspeedrate: the bytes of the last whole second.
+                _downloadRate = (int)(_downloadRateBytes / (now - _downloadRateAt));
+                _downloadRateAt = now;
+                _downloadRateBytes = 0;
+            }
+            int percent = download.ExpectedSize > 0 ? Math.Clamp((int)Math.Floor(download.ReceivedSize * 100.0 / download.ExpectedSize), 0, 100) : 0;
+            text = new StringBuilder(string.Create(CultureInfo.InvariantCulture,
+                $"Downloading {Printable(download.Name, 80)} {percent,3}% ({download.ReceivedSize}/{download.ExpectedSize}) at {_downloadRate} bytes/s"));
+            fraction = 0.2f + 0.1f * percent / 100f;
+            _downloadLast = now;
+        }
+        else if (_downloadName.Length > 0)
+        {
+            // Up to the last frame it was still running: what follows in this frame (the program's start) is not download.
+            double seconds = Math.Max(0.001, _downloadLast - _downloadBegan);
+            Log(string.Create(CultureInfo.InvariantCulture,
+                $"download of {Printable(_downloadName, 80)} through the game connection ended after {seconds:0.00} s: {_downloadSeen} bytes, {_downloadSeen / seconds:0} bytes/s on average; ") +
+                $"{download.BlocksReceived} blocks received, {download.BlocksRepeated} of them repeats, {download.AcksDropped} acknowledgements dropped; datagrams sent {(_transport?.Sent ?? 0) - _downloadSentAt} ({((_transport?.Sent ?? 0) - _downloadSentAt) / seconds:0} a second), received {(_transport?.Received ?? 0) - _downloadReceivedAt}");
+            _downloadName = "";
+        }
+        if (session.Packages is { Running: true } packages)
+        {
+            foreach (VortexArena.Legacy.Downloads.LegacyDownloadInfo info in packages.Snapshot())
+            {
+                if (text is null) text = new StringBuilder();
+                else text.Append('\n');
+                text.Append(Printable(info.Text, 160));
+                if (info.Total > 0) text.Append(CultureInfo.InvariantCulture, $"  ({info.Received}/{info.Total})");
+                if (info.Fraction > 0) fraction = 0.1f + 0.1f * (float)info.Fraction;
+            }
+            if (packages.AdditionalInfo is { } more) text?.Append('\n').Append(more);
+        }
+        if (text is null)
+        {
+            if (_downloadShown)
+            {
+                _downloadShown = false;
+                if (!_inGame) LoadingScreen?.UpdateProgress(0.35f, "Loading the level...");
+            }
+            return;
+        }
+        _downloadShown = true;
+        string shown = text.ToString();
+        if (!_inGame) LoadingScreen?.UpdateProgress(fraction, shown);
+        if (now >= _downloadLogAt)
+        {
+            _downloadLogAt = now + 1;
+            Log("download: " + shown.Replace("\n", " | "));
+            if (!string.IsNullOrEmpty(s_shotDirectory) && !Headless && _downloadShots < 6) SaveShot($"download-{_downloadShots++:00}");
+        }
+    }
+    private int _downloadShots;
 
     // What a demo is "connected" through: nothing arrives and what is sent is dropped.
     private sealed class NoTransport : ILegacyTransport
@@ -628,8 +810,16 @@ public partial class LegacyGame : Node
             foreach (string name in new[] { "bind", "unbind", "unbindall", "in_bind", "in_unbind", "in_bindmap", "in_releaseall", "bindlist" })
                 _commands.Register(interpreter, name, _ => { }, "ignored in a legacy session: the player's own binds are used, read-only");
             // Engine commands with nothing to do here, kept from reaching the server as unknown commands.
-            foreach (string name in new[] { "snd_restart", "r_restart", "vid_restart", "menu_restart", "toggleconsole", "screenshot", "curl", "stopsound", "cd" })
+            foreach (string name in new[] { "snd_restart", "r_restart", "vid_restart", "menu_restart", "toggleconsole", "screenshot", "stopsound", "cd" })
                 _commands.Register(interpreter, name, _ => { }, "ignored in a legacy session");
+            // libcurl.c Curl_Curl_f, when it comes through the console (typed, or the client program's localcmd:
+            // Xonotic's map vote fetches its screenshot packages so). A server's own "curl" lines are read by
+            // the signon before they get here.
+            _commands.Register(interpreter, "curl", argv =>
+            {
+                if (_session?.Packages is { } packages) packages.Command(argv, loadBegun: true);
+                else Log("curl: there are no package downloads in this session");
+            }, "curl --info | --cancel [file] | --pak [--as name.pk3] <url>: package downloads from a Xonotic server");
             // A server may tell a DarkPlaces client to go elsewhere or to exit. This client does neither on a server's say-so.
             foreach (string name in new[] { "connect", "reconnect", "quit", "exit", "playdemo", "record" })
             {
@@ -790,6 +980,7 @@ public partial class LegacyGame : Node
         }
         LegacyPerfLog.Part(LegacyPerfLog.Server);
         using var _scope = FrameProfiler.Scope("legacy");
+        if (_menuWarmer is null && Now - _menuWarmerLookedAt > 1) RestMenuWarmer();
         // Frames spent waiting (for the local server, for the first message): models whose files the worker
         // threads have finished get their nodes built, a few milliseconds a frame.
         if (!_inGame && _presentation is { } waiting) waiting.PrebuildReady(0.008);
@@ -1374,6 +1565,20 @@ public partial class LegacyGame : Node
             Fail("The server's game code could not be started: " + Printable(programError, 300));
             return false;
         }
+        if (client.Signon.MissingWorld is { } missingWorld)
+        {
+            // DarkPlaces prints "Map %s not found" and goes on into an empty world. This client leaves instead.
+            StringBuilder why = new($"Map {Printable(missingWorld, 80)} not found: this client does not have the map and could not get it from the server.");
+            if (session.Packages is { } tried)
+            {
+                if (!tried.Limits.Enabled) why.Append(" Package downloads are switched off (legacy_curl_enabled 0).");
+                else if (tried.Failures.Count == 0 && tried.Fetched + tried.FromCache == 0) why.Append(" The server named no download address for it (sv_curl_defaulturl is not set there).");
+                foreach (string failure in tried.Failures) why.Append(" Download failed - ").Append(Printable(failure, 300)).Append('.');
+            }
+            foreach (string attempt in client.Signon.FallbackLog) why.Append(' ').Append(Printable(attempt, 200)).Append('.');
+            Fail(why.ToString());
+            return false;
+        }
         if (session.MessagesNotDecoded > 0)
         {
             Fail("A message from the server could not be read and the connection was closed. (" + Printable(session.FirstUndecoded ?? "", 300) + ")");
@@ -1397,8 +1602,7 @@ public partial class LegacyGame : Node
             LoadingScreen?.UpdateProgress(stage switch { 0 => 0.1f, 1 => 0.35f, 2 => 0.8f, 3 => 0.9f, _ => 1f },
                 stage switch { 0 => "Connecting...", 1 => "Loading the game code...", 2 => "Spawning...", 3 => "Entering the game...", _ => "" });
         }
-        if (client.Download.Active)
-            LoadingScreen?.UpdateProgress(0.2f, string.Create(CultureInfo.InvariantCulture, $"Downloading the game code... {client.Download.ReceivedSize / 1024} KB"));
+        UpdateDownloadDisplay(session, now);
 
         if (_inGame && session.State.Signon < DpProtocol.Signons)
         {
@@ -1410,6 +1614,7 @@ public partial class LegacyGame : Node
             _scriptHeld = default;
             _pendingImpulse = 0;
             _chatLines.Clear();
+            if (_textureBank is { } resting) resting.Playing = false;
             Log($"level change: now loading {session.State.WorldModel}");
             RaiseLoadingScreen(session.State.WorldNameNoExtension);
         }
@@ -1444,6 +1649,7 @@ public partial class LegacyGame : Node
             if (_presentation is { } shown) shown.Loading = false;
             CollectAfterLoad();
             now = Now;   // the collection is part of the load
+            if (_textureBank is { } bank) bank.Playing = true;
             LegacyPerfLog.Mark("loading screen down");
             Log(string.Create(CultureInfo.InvariantCulture, $"the loading screen came down {now - _startedAt:0.00} s after the session was started ({now - _enteredAt:0.00} s after entering the game)"));
             _loadingDismissed = true;
@@ -1516,6 +1722,20 @@ public partial class LegacyGame : Node
         if (_failed) return;
         _failed = true;
         GD.PrintErr("[legacy] connection failed: " + reason);
+        LegacyLog.Write("CONNECTION FAILED: " + reason);
+        LegacyLog.Flush();
+        // Developer aid (VORTEX_LEGACY_SHOTS): the window two seconds later, when the menu shows the reason.
+        if (!string.IsNullOrEmpty(s_shotDirectory) && !Headless && IsInsideTree() && GetTree() is { } tree)
+        {
+            string shot = System.IO.Path.Combine(s_shotDirectory!, "failed.png");
+            tree.CreateTimer(2.0, processAlways: true, processInPhysics: false, ignoreTimeScale: true).Timeout += () =>
+            {
+                Image? image = tree.Root.GetTexture()?.GetImage();
+                if (image is null) return;
+                System.IO.Directory.CreateDirectory(s_shotDirectory!);
+                System.Threading.Tasks.Task.Run(() => image.SavePng(shot));
+            };
+        }
         Action<string>? callback = ConnectionFailed;
         // Deferred: this can be reached from inside the session's own call stack, and the shell tears the node down.
         Callable.From(() => callback?.Invoke(reason)).CallDeferred();
@@ -1726,6 +1946,7 @@ public partial class LegacyGame : Node
             }
             PostConsoleLine(ConsolePrint, line);
             if (Headless && _printsLogged++ < MaxLoggedPrints) Log("print: " + Printable(line, 300));
+            else LegacyLog.Write("print: " + Printable(line, 300));
         }
     }
 
@@ -1746,9 +1967,12 @@ public partial class LegacyGame : Node
         // One line per second of wall clock; a frame that took several seconds (loading) skips the lines it missed.
         _nextStatus = Math.Max(_nextStatus + 1, now + 0.5);
         if (!_inGame) return;
-        if (!Headless && (PlayerCvars is not { } player || player.GetFloat(LegacyData.StatusCvar) == 0)) return;
+        NoteUnimplementedBuiltins(session, final: false);
+        // To the output when asked for (always in a headless run); otherwise every tenth second to the log file only.
+        bool toOutput = Headless || (PlayerCvars is { } player && player.GetFloat(LegacyData.StatusCvar) != 0);
+        if (!toOutput && (_statusLines++ % 10) != 0) return;
         CsqcHost? host = session.Host;
-        if (_server is { } server && Interlocked.CompareExchange(ref _statusBusy, 1, 0) == 0)
+        if (toOutput && _server is { } server && Interlocked.CompareExchange(ref _statusBusy, 1, 0) == 0)
         {
             LegacyLocalServerStats stats = server.TakeStats();
             int frames = _frameMeter.CopyTo(_statusFrames), client = _clientMeter.CopyTo(_statusClient);
@@ -1784,7 +2008,30 @@ public partial class LegacyGame : Node
             $"nodes {Performance.GetMonitor(Performance.Monitor.ObjectNodeCount):0}, objects {Performance.GetMonitor(Performance.Monitor.ObjectCount):0}, " +
             $"managed {GC.GetTotalMemory(false) / (1024 * 1024)} MB, native {OS.GetStaticMemoryUsage() / (1024 * 1024)} MB, " +
             $"view '{presentation.View.Origin.X:0.0} {presentation.View.Origin.Y:0.0} {presentation.View.Origin.Z:0.0}' fovy {presentation.View.VerticalFovDegrees:0.0}");
-        System.Threading.Tasks.Task.Run(() => Log(second));
+        if (toOutput) System.Threading.Tasks.Task.Run(() => Log(second));
+        else LegacyLog.Write(second);
+    }
+    private int _statusLines;
+
+    // A server's own client program (a mod's) may call an engine builtin this client does not have. DarkPlaces
+    // would stop the program; here the call is answered with nothing and counted, and the log names it - once
+    // when a new one turns up, and with the totals when the session ends.
+    private int _unimplementedSeen;
+
+    private void NoteUnimplementedBuiltins(LegacyClientSession session, bool final)
+    {
+        if (session.Host is not { } host || host.UnimplementedBuiltins.Count == 0) return;
+        if (!final && host.UnimplementedBuiltins.Count == _unimplementedSeen) return;
+        _unimplementedSeen = host.UnimplementedBuiltins.Count;
+        StringBuilder text = new(final ? "the server's client program called engine builtins this client does not implement (each call was answered with nothing): "
+            : "WARNING: the server's client program calls engine builtins this client does not implement (answered with nothing; something may look or behave differently): ");
+        int listed = 0;
+        foreach (KeyValuePair<(int Number, string Name), long> entry in host.UnimplementedBuiltins)
+        {
+            if (listed++ >= 24) { text.Append("..."); break; }
+            text.Append(CultureInfo.InvariantCulture, $"#{entry.Key.Number} {Printable(entry.Key.Name, 40)} x{entry.Value}; ");
+        }
+        Log(text.ToString());
     }
 
     // =====================================================================================================
@@ -1805,6 +2052,7 @@ public partial class LegacyGame : Node
             if (_session is { } session)
             {
                 DumpProgramProfile(session);   // before the goodbye: that unloads the program
+                NoteUnimplementedBuiltins(session, final: true);
                 if (_transport is { } transport && session.Client.State == DpClientState.Connected)
                 {
                     foreach (byte[] datagram in session.Disconnect(Now)) transport.Send(datagram);
@@ -1835,6 +2083,11 @@ public partial class LegacyGame : Node
             _transport?.Dispose();
             _transport = null;
             _presentation?.Shutdown();
+            if (_assetLoader is { } loader) loader.Assets.DeferCompression = null;
+            _textureBank?.Dispose();
+            _textureBank = null;
+            if (_menuWarmer is { } warmer && GodotObject.IsInstanceValid(warmer)) warmer.SetProcess(true);
+            _menuWarmer = null;
             _session = null;
             // On the menu's console the cvar store outlives the session: unless the program's host lets go of
             // it, the store holds the host, the host this node, and this node the whole game that was played.
@@ -1856,6 +2109,7 @@ public partial class LegacyGame : Node
             ReleaseLevelMemory(Godot.Engine.GetMainLoop() as SceneTree);
             LegacyPerfLog.Mark("session over");
             LegacyPerfLog.Flush();
+            LegacyLog.Flush();
         }
     }
 

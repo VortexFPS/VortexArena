@@ -59,6 +59,31 @@ public readonly struct StainEvent
     }
 }
 
+/// <summary>
+/// One <c>orientation beam</c> particle as CL_NewParticle would store it (cl_particles.c:1697): a quad from
+/// <see cref="Start"/> to <see cref="End"/> of half-width <see cref="Size"/> (R_CalcBeam_Vertex3f), whose size
+/// and alpha then change by <see cref="SizeIncrease"/> and −<see cref="AlphaFade"/> per second until the alpha
+/// reaches zero or <see cref="Lifetime"/> elapses. Quake units; alpha on DP's 0..256 scale.
+/// </summary>
+public readonly struct BeamEvent
+{
+    public readonly Vector3 Start, End;
+    public readonly float Size, SizeIncrease, Alpha, AlphaFade, Lifetime, Stretch;
+    public readonly byte ColorR, ColorG, ColorB;
+    public readonly int TexNum;
+    public readonly ParticleBlend Blend;
+
+    public BeamEvent(Vector3 start, Vector3 end, float size, float sizeIncrease, float alpha, float alphaFade,
+        float lifetime, byte r, byte g, byte b, int texNum, float stretch, ParticleBlend blend)
+    {
+        Start = start; End = end; Size = size; SizeIncrease = sizeIncrease; Alpha = alpha; AlphaFade = alphaFade;
+        Lifetime = lifetime; ColorR = r; ColorG = g; ColorB = b; TexNum = texNum; Stretch = stretch; Blend = blend;
+    }
+
+    /// <summary>Seconds until the beam is gone: the alpha fade or the lifetime, whichever ends first.</summary>
+    public float VisibleSeconds => AlphaFade > 0f ? MathF.Min(Lifetime, Alpha / AlphaFade) : Lifetime;
+}
+
 /// <summary>The faithful CPU particle pool + simulation (DP cl_particles.c). One instance per backend.</summary>
 public sealed class ParticleSim
 {
@@ -112,6 +137,10 @@ public sealed class ParticleSim
 
     /// <summary>Renderer hook for stains/decals raised on surface impact (and immediate blood stains).</summary>
     public Action<StainEvent>? OnStain;
+
+    /// <summary>Host hook for an <c>orientation beam</c> block drawn as a trail (DP's one PARTICLE_HBEAM
+    /// particle, cl_particles.c:1688-1698): the pool holds sprites only, so the host draws the beam.</summary>
+    public Action<BeamEvent>? OnBeam;
 
     /// <summary>
     /// The CLIENT cvar store for the cl_particles* gates/quality. MUST be set to the client store
@@ -239,15 +268,20 @@ public sealed class ParticleSim
     /// <param name="pcount">DP <c>pcount</c> — the requested count; countmultiplier·quality applied inside.</param>
     /// <param name="tintRgba">Optional per-spawn tint (RGBA bytes, 0xFFFFFFFF = none); multiplies color/alpha.</param>
     /// <param name="fade">DP fade multiplier on the spawn count (distance/quality fade); 1 = none.</param>
+    /// <param name="wantTrail">DP <c>wanttrail</c>: true for CL_ParticleTrail (trailparticles, a projectile's
+    /// per-frame trail segment, boxparticles with flag 128), false for CL_ParticleBox / CL_ParticleEffect
+    /// (pointparticles, te_* effects). It — not the block's trailspacing — decides whether a block is laid
+    /// out along the segment (cl_particles.c:1625, cl_particles_forcetraileffects being 0).</param>
     public void SpawnEffect(
         IReadOnlyList<ParticleEmitterInfo> blocks, float pcount,
         Vector3 originMins, Vector3 originMaxs,
         Vector3 velocityMins, Vector3 velocityMaxs,
-        uint tintRgba = 0xFFFFFFFFu, float fade = 1f)
+        uint tintRgba = 0xFFFFFFFFu, float fade = 1f, bool wantTrail = false)
     {
         if (blocks == null || blocks.Count == 0) return;
-        // cl_particles gate (1697) — also CL_NewParticle's own guard.
-        if (!CvBool(ParticleCvars.Particles)) return;
+        // DP gates cl_particles per block, AFTER the decal and beam branches (1702): a decal still marks the
+        // wall with particles switched off.
+        bool particlesOn = CvBool(ParticleCvars.Particles);
 
         float now = _currentTime;   // the sim clock (set by Update), NOT Api.Clock — see _currentTime.
         // (perf 2026-08-03) The adaptive-quality controller scales the spawn count exactly like DP's
@@ -287,10 +321,11 @@ public sealed class ParticleSim
 
         foreach (ParticleEmitterInfo info in blocks)
         {
+            // (1623-1627) definedastrail = trailspacing > 0; drawastrail = wanttrail. They are two different
+            // things: a trailspacing block asked for as a point effect spawns its count at the centre, and a
+            // plain count block asked for as a trail is spread evenly along the segment.
             bool definedAsTrail = info.TrailSpacing > 0f;
-            bool drawAsTrail = false; // wanttrail: our SpawnEffect spawns a box/point; trail callers set TrailSpacing>0.
-            // A trail block (TrailSpacing>0) draws as a trail from originmins..originmaxs.
-            if (definedAsTrail) drawAsTrail = true;
+            bool drawAsTrail = wantTrail;
 
             // Water gates (1625-1628).
             if (info.Underwater && !underwater) continue;
@@ -311,7 +346,76 @@ public sealed class ParticleSim
                 if (staintex > info.StainTex1 - 1) staintex = info.StainTex1 - 1;
             }
 
-            // pt_decal / HBEAM paths are not modeled here (the box/point spawn path). Type gates (1699-1708):
+            // type decal (1679-1687) — special-cased BEFORE the cl_particles gate and the count path: exactly
+            // ONE surface splat per spawn call (count ignored), searched from the effect centre plus the
+            // relative origin offset (basis from the mean emit velocity) with originjitter[0] as the ray
+            // reach — the jitter is a SEARCH RADIUS, never a position offset. The colour is the raw INVMOD
+            // removal amount (the splat system multiplies wall·(1−tex·color)).
+            if (info.Type == ParticleType.Decal)
+            {
+                Vector3 dvel = velocityMins * 0.5f + velocityMaxs * 0.5f;
+                AngleVectors(AnglesFromVectorsNoUp(dvel), out Vector3 dfwd, out Vector3 dright, out Vector3 dup);
+                Vector3 dpos = center + dfwd * info.RelativeOriginOffset.X
+                                      + dright * info.RelativeOriginOffset.Y
+                                      + dup * info.RelativeOriginOffset.Z;
+                float dsize = (float)ParticleRandom.Lhrandom(Rng, info.SizeMin, info.SizeMax);
+                float dalpha = (float)ParticleRandom.Lhrandom(Rng, info.AlphaMin, info.AlphaMax);
+                if (hasTint)
+                    dalpha *= (tintMin.W + tintMax.W) * 0.5f;   // DP: ·avgtint[3]
+                int dl2 = (int)ParticleRandom.Lhrandom(Rng, 0.5, 256.5);
+                int dl1 = 256 - dl2;
+                byte dr = (byte)((((int)((info.Color0 >> 16) & 0xFF) * dl1 + (int)((info.Color1 >> 16) & 0xFF) * dl2) >> 8) & 0xFF);
+                byte dg = (byte)((((int)((info.Color0 >> 8) & 0xFF) * dl1 + (int)((info.Color1 >> 8) & 0xFF) * dl2) >> 8) & 0xFF);
+                byte db = (byte)((((int)((info.Color0 >> 0) & 0xFF) * dl1 + (int)((info.Color1 >> 0) & 0xFF) * dl2) >> 8) & 0xFF);
+                OnStain?.Invoke(new StainEvent(dpos, default, dr, dg, db, dsize, dalpha, tex,
+                    isBlood: false, projected: true, maxDist: info.OriginJitter.X));
+                continue;
+            }
+
+            // orientation beam (1688-1698): never a count of loose particles. Asked for as a point effect it
+            // draws nothing; asked for as a trail it is ONE beam from originmins (+ the relative origin offset
+            // in the trail's basis) to originmaxs. This pool has no beam form (the renderer draws sprites), so
+            // the beam is handed to the host through OnBeam with the values CL_NewParticle would have stored.
+            if (info.Orientation == ParticleOrientation.Beam)
+            {
+                if (!drawAsTrail) continue;
+                AngleVectors(AnglesFromVectorsNoUp(traildir), out Vector3 bfwd, out Vector3 bright, out Vector3 bup);
+                Vector3 bofs = bfwd * info.RelativeOriginOffset.X
+                             + bright * info.RelativeOriginOffset.Y
+                             + bup * info.RelativeOriginOffset.Z;
+                float bsize = (float)ParticleRandom.Lhrandom(Rng, info.SizeMin, info.SizeMax);
+                float balpha = (float)ParticleRandom.Lhrandom(Rng, info.AlphaMin, info.AlphaMax);
+                float btime = (float)ParticleRandom.Lhrandom(Rng, info.TimeMin, info.TimeMax);
+                ParticleRandom.Lhrandom(Rng, info.StainAlphaMin, info.StainAlphaMax);
+                ParticleRandom.Lhrandom(Rng, info.StainSizeMin, info.StainSizeMax);
+                if (!particlesOn) continue;                    // CL_NewParticle's own cl_particles guard (702)
+                int bl2 = (int)ParticleRandom.Lhrandom(Rng, 0.5, 256.5);
+                int bl1 = 256 - bl2;
+                byte br = (byte)((((int)((info.Color0 >> 16) & 0xFF) * bl1 + (int)((info.Color1 >> 16) & 0xFF) * bl2) >> 8) & 0xFF);
+                byte bg = (byte)((((int)((info.Color0 >> 8) & 0xFF) * bl1 + (int)((info.Color1 >> 8) & 0xFF) * bl2) >> 8) & 0xFF);
+                byte bb = (byte)((((int)((info.Color0 >> 0) & 0xFF) * bl1 + (int)((info.Color1 >> 0) & 0xFF) * bl2) >> 8) & 0xFF);
+                // CL_NewParticle's remaining draws, so the rand() stream stays where DarkPlaces leaves it.
+                if ((int)info.StainColor0 >= 0 && (int)info.StainColor1 >= 0)
+                    ParticleRandom.Lhrandom(Rng, 0.5, 256.5);
+                ParticleRandom.VectorRandom(Rng);
+                float bfade = info.AlphaFade;
+                if (btime == 0f) btime = balpha / MathF.Min(1f, bfade);   // (712-713), before the tint
+                if (hasTint)
+                {
+                    Vector4 avg = (tintMin + tintMax) * 0.5f;  // the beam takes avgtint (1697)
+                    if (info.Blend != ParticleBlend.InvMod)
+                    { br = (byte)(br * avg.X); bg = (byte)(bg * avg.Y); bb = (byte)(bb * avg.Z); }
+                    balpha *= avg.W;
+                    bfade *= avg.W;
+                }
+                OnBeam?.Invoke(new BeamEvent(originMins + bofs, originMaxs, bsize, info.SizeIncrease,
+                    balpha, bfade, btime, br, bg, bb, tex, info.StretchFactor, info.Blend));
+                continue;
+            }
+
+            if (!particlesOn) continue;                        // (1702)
+
+            // Type gates (1704-1713):
             switch (info.Type)
             {
                 case ParticleType.Smoke:  if (!CvBool(ParticleCvars.Smoke))   continue; break;
@@ -379,34 +483,6 @@ public sealed class ParticleSim
             velocity = forward * info.RelativeVelocityOffset.X
                      + right   * info.RelativeVelocityOffset.Y
                      + up      * info.RelativeVelocityOffset.Z;
-
-            // type decal — DP special-cases these BEFORE the count/accumulator path (:1674-1682): exactly
-            // ONE surface splat per spawn call (count ignored), searched from the effect center (+ relative
-            // offset, already folded into trailpos for point effects) with originjitter[0] as the ray reach
-            // — the jitter is a SEARCH RADIUS, never a position offset. Draws in DP order: tex, size,
-            // alpha·avgtint, then the color byte-lerp CL_SpawnDecalParticleForSurface performs (:969-973).
-            // The color is the raw INVMOD removal amount (the splat system multiplies wall·(1−tex·color)).
-            if (info.Type == ParticleType.Decal)
-            {
-                int dtex = info.Tex0;
-                if (info.Tex1 > info.Tex0)
-                {
-                    dtex = (int)ParticleRandom.Lhrandom(Rng, info.Tex0, info.Tex1);
-                    if (dtex > info.Tex1 - 1) dtex = info.Tex1 - 1;
-                }
-                float dsize = (float)ParticleRandom.Lhrandom(Rng, info.SizeMin, info.SizeMax);
-                float dalpha = (float)ParticleRandom.Lhrandom(Rng, info.AlphaMin, info.AlphaMax);
-                if (hasTint)
-                    dalpha *= (tintMin.W + tintMax.W) * 0.5f;   // DP: ·avgtint[3]
-                int dl2 = (int)ParticleRandom.Lhrandom(Rng, 0.5, 256.5);
-                int dl1 = 256 - dl2;
-                byte dr = (byte)((((int)((info.Color0 >> 16) & 0xFF) * dl1 + (int)((info.Color1 >> 16) & 0xFF) * dl2) >> 8) & 0xFF);
-                byte dg = (byte)((((int)((info.Color0 >> 8) & 0xFF) * dl1 + (int)((info.Color1 >> 8) & 0xFF) * dl2) >> 8) & 0xFF);
-                byte db = (byte)((((int)((info.Color0 >> 0) & 0xFF) * dl1 + (int)((info.Color1 >> 0) & 0xFF) * dl2) >> 8) & 0xFF);
-                OnStain?.Invoke(new StainEvent(trailpos, default, dr, dg, db, dsize, dalpha, dtex,
-                    isBlood: false, projected: true, maxDist: info.OriginJitter.X));
-                continue;
-            }
 
             // bound(0, acc, 16384) (1753).
             if (info.ParticleAccumulator < 0) info.ParticleAccumulator = 0;
@@ -498,7 +574,8 @@ public sealed class ParticleSim
         float pairfriction, float pliquidfriction,
         float lifetime, float stretch, ParticleBlend blendmode, ParticleOrientation orientation,
         int staincolor1, int staincolor2, int staintex,
-        float stainalpha, float stainsize, float angle, float spin, Vector4? tint)
+        float stainalpha, float stainsize, float angle, float spin, Vector4? tint,
+        float originJitter = 0f, float velocityJitter = 0f)
     {
         // cl_particles gate + free-slot scan (702-706).
         if (!CvBool(ParticleCvars.Particles)) return -1;
@@ -588,9 +665,9 @@ public sealed class ParticleSim
         // VectorRandom(v) (789): one ball sample. In the effectinfo path originjitter/velocityjitter passed
         // to CL_NewParticle are 0 (the caller folded its own shared rvec into px/pvx already), so this only
         // consumes a draw — but we MUST consume it to stay in lockstep with the C reference.
-        ParticleRandom.VectorRandom(Rng);
-        p.Org = new Vector3(px, py, pz);
-        p.Vel = new Vector3(pvx, pvy, pvz);
+        Vector3 jv = ParticleRandom.VectorRandom(Rng);
+        p.Org = new Vector3(px, py, pz) + jv * originJitter;        // (795-797)
+        p.Vel = new Vector3(pvx, pvy, pvz) + jv * velocityJitter;   // (798-800)
         p.SortOrg = p.Org;   // internal sub-spawns sort by their own org; SpawnEffect overrides to the effect center
         p.LastTraced = p.Org; // budgeted-trace resume origin (see the trace ring): the next bounce trace sweeps
                               // from here, so movement on out-of-ring frames is still collision-checked later
@@ -617,10 +694,12 @@ public sealed class ParticleSim
                 MoveFilter.NoMonsters, null);
             _pool[idx].Die = now + lifetime * tr.Fraction;
             Vector3 dorg = tr.EndPos + tr.PlaneNormal;
-            int rd = NewParticle(now, ParticleType.RainDecal, pcolor1, pcolor2, 0, _pool[idx].Size, _pool[idx].Size * 20f,
+            // (822) ..., airfriction 0, liquidfriction 0, originjitter 0, velocityjitter 0, quality,
+            // lifetime 0 (so alpha / min(1, alphafade)), stretch 1, tex_rainsplash.
+            int rd = NewParticle(now, ParticleType.RainDecal, pcolor1, pcolor2, TexRainSplash, _pool[idx].Size, _pool[idx].Size * 20f,
                 _pool[idx].Alpha, _pool[idx].Alpha / 0.4f, 0f, 0f,
                 dorg.X, dorg.Y, dorg.Z, tr.PlaneNormal.X, tr.PlaneNormal.Y, tr.PlaneNormal.Z,
-                0f, 0f, 1f, stretch, ParticleBlend.Add, ParticleOrientation.Oriented, -1, -1, -1, 1f, 1f, 0f, 0f, null);
+                0f, 0f, 0f, 1f, ParticleBlend.Add, ParticleOrientation.Oriented, -1, -1, -1, 1f, 1f, 0f, 0f, null);
             if (rd >= 0)
             {
                 float pdie = _pool[idx].Die;
@@ -630,9 +709,12 @@ public sealed class ParticleSim
                 {
                     Vector3 sorg = tr.EndPos + tr.PlaneNormal;
                     Vector3 svel = new(tr.PlaneNormal.X * 16f, tr.PlaneNormal.Y * 16f, tr.PlaneNormal.Z * 16f + gravityVar * 0.04f);
-                    int sp = NewParticle(now, ParticleType.Spark, pcolor1, pcolor2, 0, 0.25f, 0f, _pool[idx].Alpha * 2f, _pool[idx].Alpha * 4f,
+                    // (829) ..., airfriction 0, liquidfriction 0, originjitter 0, velocityjitter 32, quality,
+                    // lifetime 0, stretch 1, tex_particle: each splash drop flies its own way.
+                    int sp = NewParticle(now, ParticleType.Spark, pcolor1, pcolor2, TexParticle, 0.25f, 0f, _pool[idx].Alpha * 2f, _pool[idx].Alpha * 4f,
                         1f, 0.1f, sorg.X, sorg.Y, sorg.Z, svel.X, svel.Y, svel.Z,
-                        0f, 0f, 32f, stretch, ParticleBlend.Add, ParticleOrientation.Spark, -1, -1, -1, 1f, 1f, 0f, 0f, null);
+                        0f, 0f, 0f, 1f, ParticleBlend.Add, ParticleOrientation.Spark, -1, -1, -1, 1f, 1f, 0f, 0f, null,
+                        velocityJitter: 32f);
                     if (sp >= 0)
                     {
                         _pool[sp].DelayedSpawn = pdie;
@@ -906,6 +988,10 @@ public sealed class ParticleSim
         LiveCount = live;
         _lastActiveCount = _activeOrdinal;   // ring wrap modulus for next frame (active slots scanned this frame)
     }
+
+    // DP's fixed particlefont cells (cl_particles.c tex_rainsplash / tex_particle).
+    private const int TexRainSplash = 32;
+    private const int TexParticle = 63;
 
     private void Kill(ref Particle p, int i)
     {

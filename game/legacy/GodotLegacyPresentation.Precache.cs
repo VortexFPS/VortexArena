@@ -58,6 +58,10 @@ public sealed partial class GodotLegacyPresentation
         public int PendingModels;
         /// <summary>Worker threads of an on-demand run that are alive (see StartDeferredWorkers).</summary>
         public int Alive;
+        /// <summary>Set while frames are being shown: textures then go to the renderer one at a time
+        /// (AssetSystem.WarmTextureOffThread). Several at once are quicker, and hold the frame thread in
+        /// present while they go up - which costs nothing behind a loading screen and is a stall in play.</summary>
+        public volatile bool OneUploadAtATime;
         public readonly List<Thread> Threads = new();
         // Main thread only: what has been queued already.
         public readonly HashSet<string> Models = new(StringComparer.Ordinal), Sounds = new(StringComparer.Ordinal);
@@ -71,7 +75,10 @@ public sealed partial class GodotLegacyPresentation
     // The longest the end of a level's load waits for files still being read. A warm load is done long before
     // (0.3 s on stormkeep); the first load after an install block-compresses every texture it reads (3.6 s
     // here, 11 s with every player model read ahead) and goes on doing so behind the game instead.
-    private const double MaxPrecacheWaitSeconds = 1.25;
+    // (It was 1.25 s while a cold load compressed every texture where it was read. Now that slow compression
+    // is left to the background, a cold load is a few seconds of decoding, and letting it finish here is
+    // what keeps its uploads - a quarter of a second of the frame thread each burst - out of the first minute of play.)
+    private const double MaxPrecacheWaitSeconds = 8;
     private readonly List<string> _precacheModels = new(), _precacheSounds = new();
     // One built node per precached model, waiting for the first entity that shows it (skin 0 only).
     private readonly Dictionary<string, PrebuiltModel> _prebuilt = new(StringComparer.Ordinal);
@@ -107,7 +114,17 @@ public sealed partial class GodotLegacyPresentation
 
     /// <summary>Set while the loading screen covers the scene: entities are given their models without the
     /// per-frame bound that keeps a frame short during play.</summary>
-    public bool Loading { get; set; }
+    public bool Loading
+    {
+        get => _loading;
+        set
+        {
+            _loading = value;
+            if (_run is { } run) run.OneUploadAtATime = !value;
+            if (_deferred is { } deferred) deferred.OneUploadAtATime = !value;
+        }
+    }
+    private bool _loading;
 
     // ---- starting early --------------------------------------------------------------------------------
 
@@ -156,7 +173,7 @@ public sealed partial class GodotLegacyPresentation
         if (_run is { } existing) return existing;
         // The shared white, black and fallback resources and the generated shaders exist before a worker asks.
         _assets.Assets.PrimeSharedSingletons();
-        PrecacheRun run = new() { Loader = _assets };
+        PrecacheRun run = new() { Loader = _assets, OneUploadAtATime = _levelsBegun > 0 && !Loading };
         for (int i = 0, n = PrecacheWorkers; i < n; i++)
         {
             Thread thread = new(() => PrecacheWorker(run)) { IsBackground = true, Name = "legacy-precache-" + i };
@@ -271,15 +288,16 @@ public sealed partial class GodotLegacyPresentation
         {
             if (run.Cancel.IsCancellationRequested) return;
             foreach (string texture in loader.Assets.EnumerateMaterialTextureNames(material))
-                _ = run.Textures.GetOrAdd(texture, static (name, assets) => new Lazy<bool>(() =>
+                _ = run.Textures.GetOrAdd(texture, static (name, state) => new Lazy<bool>(() =>
                 {
                     long began = LegacyPerfLog.Stamp();
                     long before = GC.GetAllocatedBytesForCurrentThread();
-                    assets.WarmTextureForLoad(name);
+                    if (state.Run.OneUploadAtATime) state.Assets.WarmTextureOffThread(name);
+                    else state.Assets.WarmTextureForLoad(name);
                     Interlocked.Add(ref s_allocated[1], GC.GetAllocatedBytesForCurrentThread() - before);
                     LegacyPerfLog.Event("warm texture " + name, began);
                     return true;
-                }), loader.Assets).Value;
+                }), (Run: run, Assets: loader.Assets)).Value;
             _ = run.Materials.GetOrAdd(material, static (name, assets) => new Lazy<bool>(() =>
             {
                 long began = LegacyPerfLog.Stamp();
@@ -338,12 +356,25 @@ public sealed partial class GodotLegacyPresentation
             _readsWaiting++;
             return false;
         }
-        if (!_runInBackground || _run is not { } run || !run.Models.Contains(model) || _runDone.Contains(model)) return true;
-        // Still in the queue of a precache that is finishing behind the game: read it next.
-        if (_urgentAsked.Add(model)) run.Urgent.Enqueue(model);
+        if (_run is { } queued && queued.Models.Contains(model))
+        {
+            if (!_runInBackground || _runDone.Contains(model)) return true;
+            // Still in the queue of a precache that is finishing behind the game: read it next.
+            if (_urgentAsked.Add(model)) queued.Urgent.Enqueue(model);
+            _readsWaiting++;
+            return false;
+        }
+        if (_levelRead.Contains(model) || _deferredReady.Contains(model)) return true;
+        // A model no precache list named (the program shows it without having precached it, or the level's
+        // lists were never read): its files are read on a worker like a player model's, never on this thread.
+        RequestDeferred(model);
+        if (_deferredReady.Contains(model)) return true;
         _readsWaiting++;
         return false;
     }
+
+    // Models a finished precache run has read for this level (the run itself is let go of when it is done).
+    private readonly HashSet<string> _levelRead = new(StringComparer.Ordinal);
 
     // Once a frame while a precache is finishing behind the game: note what its workers have read (an entity
     // waiting for one of those models gets it on its next submission), and let go of the run when it is done.
@@ -354,6 +385,7 @@ public sealed partial class GodotLegacyPresentation
         if (Volatile.Read(ref run.PendingModels) > 0) return;
         foreach (Thread thread in run.Threads)
             if (thread.IsAlive) return;   // the sounds at the tail of the queue
+        _levelRead.UnionWith(run.Models);
         _run = null;
         _runInBackground = false;
         _runDone.Clear();
@@ -374,7 +406,7 @@ public sealed partial class GodotLegacyPresentation
         if (_deferred is not { } run)
         {
             _assets.Assets.PrimeSharedSingletons();
-            _deferred = run = new PrecacheRun { Loader = _assets };
+            _deferred = run = new PrecacheRun { Loader = _assets, OneUploadAtATime = !Loading };
         }
         Interlocked.Increment(ref run.PendingModels);
         run.Work.Add((false, model));
@@ -527,6 +559,7 @@ public sealed partial class GodotLegacyPresentation
     private void CancelPrecache()
     {
         CancelDeferred();
+        _levelRead.Clear();
         _runInBackground = false;
         _runDone.Clear();
         _urgentAsked.Clear();
@@ -656,6 +689,7 @@ public sealed partial class GodotLegacyPresentation
                 (finished ? "all read" : $"{Volatile.Read(ref run.PendingModels)} models still being read: they finish behind the game"), started);
             if (finished)
             {
+                _levelRead.UnionWith(run.Models);
                 _run = null;
                 _runDone.Clear();
                 run.Work.Dispose();

@@ -289,11 +289,68 @@ public partial class EffectSystem : Node3D
         Splats = new DecalSplats { Name = "DecalSplats" };
         AddChild(Splats);
         FaithfulParticles.SetSplats(Splats);
+        // An effectinfo beam block drawn as a trail (tr_bullet's tracer, the TE_TEI_G3 and misc_laser beams):
+        // DarkPlaces draws one quad from the trail's start to its end, 2·size wide, for as long as its alpha
+        // lasts (cl_particles.c:1688-1698, 2842). The faithful pool has no beam form, so the beam renderer
+        // draws it — which is what this effect's blocks got before the particle router took trails over and
+        // left the beam block with nothing drawing it.
+        FaithfulParticles.OnBeam = ev =>
+        {
+            if (Beams is null || ev.Start == ev.End)
+                return;
+            float a = Math.Clamp(ev.Alpha / 256f, 0f, 1f);
+            var color = new Color(ev.ColorR / 255f, ev.ColorG / 255f, ev.ColorB / 255f, a);
+            Beams.Beam(ev.Start, ev.End, color, MathF.Max(ev.Size * 2f, 0.5f),
+                Math.Clamp(ev.VisibleSeconds, 0.03f, 5f));
+        };
         ModernParticles = new ModernParticleBackend { Name = "ModernParticles" };
         AddChild(ModernParticles);
         Sdf = new SdfCollisionService { Name = "SdfCollision", Cvars = clientCvars };
         AddChild(Sdf);
         Router = new ParticleRouter(FaithfulParticles, ModernParticles, Styles, Sdf) { Cvars = clientCvars };
+
+        RegisterDevCommands();
+    }
+
+    /// <summary>
+    /// <c>fx_spawn &lt;effect&gt; &lt;x y z&gt; [vx vy vz] [count]</c> and
+    /// <c>fx_trail &lt;effect&gt; &lt;x y z&gt; &lt;x2 y2 z2&gt;</c>: play one effect at a map position (Quake
+    /// coordinates, as the entity lump and <c>viewpos</c> give them). The console's way to put a named effect
+    /// at a known place — what Xonotic's <c>cmd pointparticles</c> cheat is for — so a capture can hold this
+    /// renderer against DarkPlaces on the same effect, point and delay (<c>+"defer 20 fx_spawn ..."</c>).
+    /// </summary>
+    private void RegisterDevCommands()
+    {
+        var interp = VortexArena.Game.Menu.MenuState.Interp;
+        if (interp is null)
+            return;
+        static bool Vec(IReadOnlyList<string> a, int at, out NVec3 v)
+        {
+            v = default;
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            const System.Globalization.NumberStyles ns = System.Globalization.NumberStyles.Float;
+            if (a.Count < at + 3 || !float.TryParse(a[at], ns, ci, out float x) || !float.TryParse(a[at + 1], ns, ci, out float y)
+                || !float.TryParse(a[at + 2], ns, ci, out float z))
+                return false;
+            v = new NVec3(x, y, z);
+            return true;
+        }
+        interp.RegisterCommand("fx_spawn", a =>
+        {
+            if (!IsInsideTree() || a.Count < 5 || !Vec(a, 2, out NVec3 at))
+                return;
+            Vec(a, 5, out NVec3 vel);
+            float count = a.Count >= 9 && float.TryParse(a[8], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float c) ? c : 1f;
+            Spawn(a[1], at, vel, count);
+        }, "play an effect at a map position: fx_spawn <effect> <x y z> [vx vy vz] [count]");
+        interp.RegisterCommand("fx_trail", a =>
+        {
+            if (!IsInsideTree() || a.Count < 8 || !Vec(a, 2, out NVec3 from) || !Vec(a, 5, out NVec3 to))
+                return;
+            if (!SpawnTrailSegment(a[1], from, to, NVec3.Zero))
+                Spawn(a[1], from, to);
+        }, "play a trail effect between two map positions: fx_trail <effect> <x y z> <x2 y2 z2>");
     }
 
     /// <summary>

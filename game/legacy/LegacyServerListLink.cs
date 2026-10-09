@@ -93,8 +93,18 @@ public sealed class LegacyServerListLink : IMenuServerQueries, IDisposable
 
     /// <summary>"getservers &lt;game&gt; &lt;protocol&gt; empty full" to a master. The name is looked up off the
     /// frame (a slow resolver must not stall the menu); the request leaves when the answer is in.</summary>
+    /// <summary>
+    /// VORTEX_NO_MASTER_QUERY=1: this process asks no master server for its list. For unattended runs (test
+    /// harnesses, captures): the Xonotic menu refreshes its server list as soon as it starts, from the masters
+    /// in its own configuration, and three such runs announced themselves to the public masters and pinged
+    /// every listed server before anyone noticed. A server the menu already knows (a favourite, one named by
+    /// hand) can still be asked for its status; with no master list there is normally none.
+    /// </summary>
+    public static readonly bool MastersForbidden = System.Environment.GetEnvironmentVariable("VORTEX_NO_MASTER_QUERY") is "1";
+
     public bool QueryMaster(string master, string gameName, int protocol)
     {
+        if (MastersForbidden) return false;
         if (_disposed || _unresolvable.Contains(master)) return false;
         if (!SplitHostPort(master, MasterPort, out string host, out int port)) return false;
         byte[] request = MasterServerProtocol.EncodeGetServers(gameName, protocol);

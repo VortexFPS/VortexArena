@@ -43,6 +43,17 @@ public interface ILegacyPresentation
     /// done. An implementation with a world loads it now if it has not. The default does nothing.</summary>
     void LevelFilesArrived(CsqcClientState state) { }
 
+    /// <summary>
+    /// Why the level's map could not be used although the game data HAS the file: a format this client does
+    /// not read, a damaged file, a world that could not be built for drawing. Null when the world is loaded,
+    /// when there is no world to load, and when the map is simply missing (the signon handles that:
+    /// <see cref="Protocol.DpSignon.MissingWorld"/>). Read after <see cref="BeginLevel"/> and after
+    /// <see cref="LevelFilesArrived"/>; a session that sees a reason here does not start the level's program
+    /// and leaves the server with it (<see cref="LegacyClientSession.WorldError"/>) - DarkPlaces would enter
+    /// an empty world. The default is null.
+    /// </summary>
+    string? WorldLoadError => null;
+
     /// <summary>Called once per level when its program has been loaded and CSQC_Init has returned (or the
     /// server named no program): the end of cl_parse.c CL_BeginDownloads, by which point DarkPlaces has every
     /// model and sound of the level in memory. An implementation that draws finishes loading what the server
@@ -336,8 +347,55 @@ public struct LegacyParticleTint
     public float AlphaMin, AlphaMax, Fade;
 }
 
+/// <summary>
+/// One particle of the DP_CSQC_SPAWNPARTICLE builtins (#527 spawnparticle, #528 delayedparticle): the
+/// arguments of cl_particles.c CL_NewParticle as clvm_cmds.c VM_CL_SpawnParticle passes them, in DarkPlaces'
+/// own units and numbering. The builtin has already refused what CL_NewParticle refuses by argument
+/// (<see cref="Type"/> at or past pt_total, <see cref="Texture"/> outside the 256 particle-font cells).
+/// </summary>
+public struct LegacySpawnParticle
+{
+    /// <summary>pt_total: the first value that is not a ptype_t.</summary>
+    public const int TypeCount = 15;
+    /// <summary>MAX_PARTICLETEXTURES: cells of the particle font.</summary>
+    public const int MaxTextures = 256;
+
+    /// <summary>Where the particle starts (also its sort origin), and its velocity. A beam's velocity is its far end.</summary>
+    public QcVector Origin, Velocity;
+    /// <summary>ptype_t: 0 pt_dead, 1 alphastatic, 2 static, 3 spark, 4 beam, 5 rain, 6 raindecal, 7 snow,
+    /// 8 bubble, 9 blood, 10 smoke, 11 decal, 12 entityparticle, 13 explode, 14 explode2.</summary>
+    public int Type;
+    /// <summary>pblend_t: 0 alpha, 1 add, 2 invmod. Anything else is as the program gave it.</summary>
+    public int Blend;
+    /// <summary>porientation_t: 0 billboard, 1 spark, 2 oriented double-sided, 3 vertical beam, 4 horizontal beam.</summary>
+    public int Orientation;
+    /// <summary>0xRRGGBB; each particle's colour is a random mix of the two.</summary>
+    public int Color1, Color2;
+    /// <summary>Particle-font cell, 0 to 255.</summary>
+    public int Texture;
+    public float Size, SizeIncrease;
+    /// <summary>0 to 256 and units per second, as CL_NewParticle takes them (the globals times 256).</summary>
+    public float Alpha, AlphaFade;
+    public float Gravity, Bounce, AirFriction, LiquidFriction, OriginJitter, VelocityJitter;
+    public bool QualityReduction;
+    /// <summary>Seconds; 0 lives until its alpha has faded.</summary>
+    public float Lifetime;
+    public float Stretch;
+    /// <summary>0xRRGGBB, or negative: the stain takes the particle's colour.</summary>
+    public int StainColor1, StainColor2;
+    /// <summary>Particle-font cell of the stain, or negative for none.</summary>
+    public int StainTexture;
+    public float StainAlpha, StainSize;
+    public float Angle, Spin;
+    /// <summary>Seconds from now until the particle appears and starts to move (part->delayedspawn - cl.time); 0 at once.</summary>
+    public float Delay;
+}
+
 public interface ILegacyEffects
 {
+    /// <summary>#527 spawnparticle and #528 delayedparticle: CL_NewParticle. False when no particle was made
+    /// (cl_particles off, the pool full), which the builtin returns to the program as 0.</summary>
+    bool SpawnParticle(in LegacySpawnParticle particle);
     /// <summary>#337 pointparticles, #48 particle (effect 35, SVC_PARTICLE) and svc_pointparticles:
     /// CL_ParticleEffect over the box <paramref name="originMin"/>..<paramref name="originMax"/>.
     /// <paramref name="effect"/> is a <see cref="CsqcEffectInfo"/> number.</summary>

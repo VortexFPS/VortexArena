@@ -506,7 +506,8 @@ public class LegacyDownloadTests
     [Fact]
     public void A_Missing_Map_Is_Downloaded_Before_The_Level_Is_Entered_And_Comes_From_The_Cache_The_Second_Time()
     {
-        byte[] map = Encoding.ASCII.GetBytes("not really a map, but a file of that name");
+        // (a real map: a file of that name that is not one would be refused - see the test after next)
+        byte[] map = Q1BspFixture.Build(VortexArena.Formats.Bsp.Q1BspFormat.Bsp29);
         byte[] pack = Zip(("maps/dltest.bsp", map), ("textures/dltest/wall.tga", new byte[64]));
         using MiniHttp http = new(path => path == "/dltest.pk3" ? new Reply { Body = pack } : new Reply { Status = 404 });
         string cache;
@@ -562,7 +563,7 @@ public class LegacyDownloadTests
     {
         using Rig rig = new(localProgram: false);
         byte[] pack = Zip(("csprogs-custom-1.dat", rig.ProgramBytes), ("zz-test-serverpackage.txt", new byte[4]), ("sound/custom/a.wav", new byte[32]));
-        byte[] mapPack = Zip(("maps/custom.bsp", new byte[128]));
+        byte[] mapPack = Zip(("maps/custom.bsp", Q1BspFixture.Build(VortexArena.Formats.Bsp.Q1BspFormat.Bsp29)));
         using MiniHttp http = new(path => path switch
         {
             "/zz-server.pk3" => new Reply { Body = pack },
@@ -644,6 +645,50 @@ public class LegacyDownloadTests
         Assert.Equal(2, signon.FallbackLog.Count(l => l.Contains("refused by the server")));
         Assert.Contains(rig.Printed, p => p.Contains("Map maps/nowhere.bsp not found"));
         Assert.Empty(Directory.GetFiles(rig.Cache));
+    }
+
+    [Fact]
+    public void A_Map_That_Is_There_But_Cannot_Be_Loaded_Is_Not_Entered_Either()
+    {
+        // The owner's second play test: the map had arrived, was a format the client could not read, and the
+        // level was entered with an empty world. A present file that is not a usable map now ends the level
+        // the way a missing one does - no program, a reason for the menu.
+        string extra = TempDir();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(extra, "maps"));
+            File.WriteAllBytes(Path.Combine(extra, "maps", "broken.bsp"), Encoding.ASCII.GetBytes("BSP2 and then nothing a map needs"));
+            File.WriteAllBytes(Path.Combine(extra, "maps", "quake2.bsp"), new byte[] { (byte)'I', (byte)'B', (byte)'S', (byte)'P', 38, 0, 0, 0, 1, 2, 3, 4 });
+            File.WriteAllBytes(Path.Combine(extra, "maps", "quake1.bsp"), Q1BspFixture.Build(VortexArena.Formats.Bsp.Q1BspFormat.Bsp2));
+            foreach (string map in new[] { "maps/broken.bsp", "maps/quake2.bsp" })
+            {
+                using Rig rig = new();
+                Assert.True(rig.Vfs.Mount(extra));
+                rig.Session.Connect(0);
+                rig.Settle();
+                rig.SendServerInfo(map, "");
+                Assert.Null(rig.Session.Client.Signon.MissingWorld);     // it is not missing
+                Assert.NotNull(rig.Session.WorldError);
+                Assert.Contains("could not be loaded", rig.Session.WorldError);
+                Assert.Contains(map, rig.Session.WorldError);
+                Assert.Null(rig.Session.Host);                           // the level's program was not started
+                Assert.Contains(rig.Events, e => e.Contains("the level is not entered"));
+                rig.Settle();
+                Assert.Null(rig.Session.Host);
+            }
+            // ...and a Quake 1 format map, which this client reads, is entered
+            using Rig good = new();
+            Assert.True(good.Vfs.Mount(extra));
+            good.Session.Connect(0);
+            good.Settle();
+            good.SendServerInfo("maps/quake1.bsp", "");
+            Assert.Null(good.Session.WorldError);
+            Assert.NotNull(good.Session.Host);
+            Assert.Contains("prespawn", good.Commands);
+            good.Session.Host!.Presentation.World.Bounds(out VortexArena.QuakeC.QcVector mins, out VortexArena.QuakeC.QcVector maxs);
+            Assert.Equal((-257f, 257f), (mins.X, maxs.Z));
+        }
+        finally { Directory.Delete(extra, recursive: true); }
     }
 
     [Fact]

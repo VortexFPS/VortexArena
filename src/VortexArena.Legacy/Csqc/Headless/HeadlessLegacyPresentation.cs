@@ -83,14 +83,17 @@ public sealed class HeadlessLegacyPresentation : ILegacyPresentation, ILegacyCal
         ArgumentNullException.ThrowIfNull(state);
         // The submodels "*1".. are the new map's.
         ModelData.ClearCache();
-        if (Map.MapName != state.WorldModel || Map.Bsp is null) Map.LoadMap(state.WorldModel);
+        if (Map.MapName != state.WorldModel || !Map.HasMap) Map.LoadMap(state.WorldModel);
     }
+
+    /// <summary>The map is in the game data and could not be read (see <see cref="ILegacyPresentation.WorldLoadError"/>).</summary>
+    public string? WorldLoadError => Map.LoadFailedOnPresentFile ? Map.LoadError : null;
 
     public void LevelFilesArrived(CsqcClientState state)
     {
         ArgumentNullException.ThrowIfNull(state);
         ModelData.ClearCache();
-        if (Map.MapName != state.WorldModel || Map.Bsp is null) Map.LoadMap(state.WorldModel);
+        if (Map.MapName != state.WorldModel || !Map.HasMap) Map.LoadMap(state.WorldModel);
     }
 
     private void Count(string member) => _null.Calls[member] = _null.Calls.GetValueOrDefault(member) + 1;

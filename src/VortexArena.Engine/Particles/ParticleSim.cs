@@ -85,7 +85,7 @@ public readonly struct BeamEvent
 }
 
 /// <summary>The faithful CPU particle pool + simulation (DP cl_particles.c). One instance per backend.</summary>
-public sealed class ParticleSim
+public sealed partial class ParticleSim
 {
     private Particle[] _pool;
     private int _highWater;        // scan upper bound — mirrors DP's cl.num_particles

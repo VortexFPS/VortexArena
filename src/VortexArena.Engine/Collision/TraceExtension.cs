@@ -79,7 +79,29 @@ public struct TraceExtension
     /// and takes the end position from the product without rounding it to single precision in between,
     /// and the last bit of an end position is what the next move starts from.
     /// </summary>
-    public readonly double FinishFraction(float sweptFraction, out bool cleared)
+    public readonly double FinishFraction(float sweptFraction, out bool cleared) => FinishFraction((double)sweptFraction, out cleared);
+
+    /// <summary><see cref="Finish(ref TraceResult)"/> for a sweep whose fraction is known in double precision
+    /// (<see cref="TraceService.LastFraction"/>: a Quake 1 format map computes it so).</summary>
+    public readonly bool Finish(ref TraceResult trace, double sweptFraction)
+    {
+        double fraction = FinishFraction(sweptFraction, out bool cleared);
+        if (cleared)
+        {
+            trace.Ent = null;
+            trace.DpHitQ3SurfaceFlags = 0;
+            trace.DpHitContents = 0;
+            trace.DpHitTextureName = null;
+            trace.PlaneNormal = Vector3.Zero;
+            trace.PlaneDist = 0;
+        }
+        trace.Fraction = (float)fraction;
+        trace.EndPos = EndPos(fraction);
+        return cleared;
+    }
+
+    /// <summary>The same on a fraction already held in double precision.</summary>
+    public readonly double FinishFraction(double sweptFraction, out bool cleared)
     {
         cleared = false;
         double fraction = sweptFraction;

@@ -40,6 +40,22 @@ public static class LegacyData
     public const string CurlMaxSpeedCvar = "legacy_curl_maxspeed";
     public const string CurlTimeoutCvar = "legacy_curl_timeout";
     public const string InBandCvar = "legacy_download_inband";
+    /// <summary>0 gives a server's client program no HTTP at all (the uri_get builtin): it is then told the
+    /// engine lacks DP_QC_URI_GET and DP_QC_URI_POST, and says so itself. Default 1.</summary>
+    public const string UriGetEnabledCvar = "legacy_uri_get_enabled";
+    /// <summary>Seconds one such request may take in all. Default 30, 1 to 120.</summary>
+    public const string UriGetTimeoutCvar = "legacy_uri_get_timeout";
+
+    /// <summary>The limits for the HTTP requests of a session's client program, from the player's own settings.</summary>
+    public static VortexArena.Legacy.Downloads.LegacyUriLimits UriLimits(CvarService? player)
+    {
+        VortexArena.Legacy.Downloads.LegacyUriLimits limits = new() { UserAgent = "VortexArena (legacy compatibility; DarkPlaces protocol)" };
+        if (player is null) return limits;
+        limits.Enabled = !player.Has(UriGetEnabledCvar) || player.GetFloat(UriGetEnabledCvar) != 0;
+        float timeout = player.GetFloat(UriGetTimeoutCvar);
+        if (float.IsFinite(timeout) && timeout >= 1) limits.TotalTimeoutSeconds = Math.Min(timeout, 120);
+        return limits;
+    }
 
     /// <summary>The limits for a session's package downloads, from the player's own settings.</summary>
     public static VortexArena.Legacy.Downloads.LegacyDownloadLimits DownloadLimits(CvarService? player)
@@ -79,6 +95,38 @@ public static class LegacyData
 
     /// <summary><c>--legacy-data &lt;dir&gt;</c>: overrides the cvar for this run without being saved into the player's configuration.</summary>
     public static string? CommandLineDataDir { get; set; }
+
+    /// <summary>
+    /// <c>--legacy-extra-data &lt;dir&gt;</c> (or the environment variable <c>VORTEX_LEGACY_EXTRA_DATA</c>): a
+    /// directory of further packages mounted on a session's file system over the Xonotic data, as if they had
+    /// been in its data folder - a server's downloads kept somewhere else, for playing a recording made on
+    /// that server or for looking at its maps. Command line and environment only: nothing a server sends can
+    /// name a directory. Returns a line for the log, or null when nothing was asked for.
+    /// </summary>
+    public static string? MountExtraData(VortexArena.Formats.Vfs.VirtualFileSystem files)
+    {
+        string? directory = System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_EXTRA_DATA");
+        string[] args = Godot.OS.GetCmdlineArgs(), userArgs = Godot.OS.GetCmdlineUserArgs();
+        foreach (string[] list in new[] { args, userArgs })
+        {
+            int at = Array.IndexOf(list, "--legacy-extra-data");
+            if (at >= 0 && at + 1 < list.Length) directory = list[at + 1];
+        }
+        if (string.IsNullOrWhiteSpace(directory)) return null;
+        try
+        {
+            string full = Path.GetFullPath(directory.Trim());
+            foreach (string mounted in files.MountedPaths)
+                if (string.Equals(mounted, full, StringComparison.OrdinalIgnoreCase)) return null;
+            return files.MountGameDir(full)
+                ? $"extra game data mounted from \"{full}\" (--legacy-extra-data)"
+                : $"--legacy-extra-data: \"{full}\" does not exist; nothing was mounted";
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return $"--legacy-extra-data: \"{directory}\" could not be mounted ({e.Message})";
+        }
+    }
 
     /// <summary>Registers the cvars in the player's own store. They are the only legacy settings that live there.</summary>
     public static void RegisterCvars(CvarService cvars)

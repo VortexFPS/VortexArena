@@ -27,6 +27,8 @@ namespace VortexArena.Legacy.Server;
 public struct SvTrace
 {
     public bool AllSolid, StartSolid;
+    /// <summary>trace_inopen / trace_inwater: written only on a Quake 1 format map (Mod_Q1BSP_RecursiveHullCheck).</summary>
+    public bool InOpen, InWater;
     /// <summary>The move started inside the world's own brushes / inside any brush model (world or SOLID_BSP entity).</summary>
     public bool WorldStartSolid, BModelStartSolid;
     public float Fraction;
@@ -184,6 +186,34 @@ public sealed class SvWorld : TraceService.IEntityProvider
         try
         {
             byte[] file = _files.ReadBytes(worldModel);
+            if (Q1BspReader.IsQ1Format(file))
+            {
+                // A Quake 1 format map: no brushes to build. Its clipping hulls are the collision, and the parts
+                // of it that mean the same in a Quake 3 map (tree, visibility, bounds, entities) stand in as Bsp.
+                Q1BspData q1 = Q1BspReader.Read(file);
+                Q1Bsp = q1;
+                Hulls = new Q1HullCollision(q1, areaWeightedNormals: !Q1DedicatedNormals);
+                Bsp = Q1BspTreeView.Create(q1);
+                for (int i = 1; i < q1.Models.Length; i++)
+                {
+                    string name = "*" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    _submodels[name] = new BspCollisionBuilder.Submodel(name, q1.Models[i].Mins, q1.Models[i].Maxs, Array.Empty<Brush>());
+                }
+                _pvs = new BspPvs(Bsp);
+                _worldMins = q1.Models[0].Mins;
+                _worldMaxs = q1.Models[0].Maxs;
+                CollisionWorld hullWorld = new() { Hulls = Hulls };
+                hullWorld.BuildGrid();
+                _collision = hullWorld;
+                _worldTrace = new TraceService(hullWorld) { DarkPlacesArithmetic = true };
+                _trace = new TraceService(hullWorld, this) { DarkPlacesArithmetic = true };
+                CollisionWorld none = new();
+                none.BuildGrid();
+                _entityTrace = new TraceService(none, this) { DarkPlacesArithmetic = true };
+                MapName = worldModel;
+                SetupGrid();
+                return true;
+            }
             BspData bsp = BspReader.Read(file);
             // Brushes, the curved surfaces as DarkPlaces' own collision triangles, and its hierarchy over both.
             BspCollisionBuilder.Result built = BspCollisionBuilder.Build(bsp, null, BspCollisionOptions.DarkPlaces(file));
@@ -229,6 +259,8 @@ public sealed class SvWorld : TraceService.IEntityProvider
     {
         MapName = null;
         Bsp = null;
+        Q1Bsp = null;
+        Hulls = null;
         LoadError = null;
         _worldTrace = _trace = _entityTrace = null;
         _collision = null;
@@ -239,6 +271,16 @@ public sealed class SvWorld : TraceService.IEntityProvider
         _worldMins = _worldMaxs = default;
         SetupGrid();
     }
+
+    /// <summary>The parsed map when it is a Quake 1 format one. <see cref="Bsp"/> is then only its tree,
+    /// visibility, bounds and entities (<see cref="Q1BspTreeView"/>): it has no faces and no brushes.</summary>
+    public Q1BspData? Q1Bsp { get; private set; }
+    /// <summary>The clipping hulls of a Quake 1 format map, or null.</summary>
+    public Q1HullCollision? Hulls { get; private set; }
+    /// <summary>Whether a Quake 1 format map's face normals are formed as a DEDICATED DarkPlaces server forms
+    /// them (see <see cref="Q1HullCollision"/>'s constructor). Set before <see cref="LoadMap"/>; false - a
+    /// listen server, which is what a local game is - by default.</summary>
+    public bool Q1DedicatedNormals { get; set; }
 
     /// <summary>The program whose entities are linked and clipped.</summary>
     /// <param name="modelNameOf">sv.model_precache[modelindex] of an entity, or null: which map
@@ -329,11 +371,13 @@ public sealed class SvWorld : TraceService.IEntityProvider
 
             TraceResult hit;
             int hitEdict = -1, startContents;
+            double exactFraction; // TraceService.LastFraction of the sweep whose answer is kept
             if (type == MoveWorldOnly || vm is null)
             {
                 hit = worldService.Trace(vStart, vMins, vMaxs, extendEnd, MoveFilter.WorldOnly, _passMirror);
                 result.WorldStartSolid = result.BModelStartSolid = hit.StartSolid;
                 startContents = worldService.LastStartContents;
+                exactFraction = worldService.LastFraction;
             }
             else if (type == MoveMissile)
             {
@@ -344,6 +388,8 @@ public sealed class SvWorld : TraceService.IEntityProvider
                 hit = service.Trace(vStart, vMins, vMaxs, extendEnd, MoveFilter.Normal, _passMirror);
                 hitEdict = EdictOf(hit);
                 startContents = service.LastStartContents;
+                exactFraction = service.LastFraction;
+                bool inOpen = hit.InOpen, inWater = hit.InWater;
                 _monsters = MonsterFilter.Only;
                 Vector3 grow = new(15, 15, 15);
                 TraceResult monster = _entityTrace.Trace(vStart, vMins - grow, vMaxs + grow, extendEnd, MoveFilter.Normal, _passMirror);
@@ -353,9 +399,12 @@ public sealed class SvWorld : TraceService.IEntityProvider
                 {
                     hit = monster;
                     hitEdict = EdictOf(monster);
+                    exactFraction = _entityTrace.LastFraction;
                 }
                 hit.StartSolid = startSolid;
                 hit.AllSolid = allSolid;
+                hit.InOpen = inOpen;
+                hit.InWater = inWater || (monster.InWater && Hulls is not null);
             }
             else
             {
@@ -364,12 +413,18 @@ public sealed class SvWorld : TraceService.IEntityProvider
                 hit = service.Trace(vStart, vMins, vMaxs, extendEnd, filter, _passMirror);
                 hitEdict = EdictOf(hit);
                 startContents = service.LastStartContents;
+                exactFraction = service.LastFraction;
             }
             // trace.startsupercontents: everything the box starts inside, of any contents
             result.StartContents = BspLegacyWorld.ContentsFromEngine(startContents);
+            if (Hulls is not null)
+            {
+                result.InOpen = hit.InOpen;
+                result.InWater = hit.InWater;
+            }
 
-            // Collision_ClipExtendFinish
-            bool clearedByExtend = extension.Finish(ref hit);
+            // Collision_ClipExtendFinish (a Quake 1 format map's fraction is a double: see TraceService.LastFraction)
+            bool clearedByExtend = Hulls is not null ? extension.Finish(ref hit, exactFraction) : extension.Finish(ref hit);
             float fraction = hit.Fraction;
             if (clearedByExtend) hitEdict = -1;
 
@@ -380,7 +435,10 @@ public sealed class SvWorld : TraceService.IEntityProvider
                 // bmodelstartsolid = true; if (cliptrace->fraction == 1) cliptrace->ent = touch; }".
                 // The sweep library reports only that the move started solid, not in what, so the
                 // rare stuck case asks again: the world alone, then which entity's box holds the start.
-                TraceResult world = worldService.Trace(vStart, vMins, vMaxs, vStart, MoveFilter.WorldOnly, _passMirror);
+                // (On a Quake 1 format map the sweep itself says whether the world held the start, and asking
+                // again at rest would not: Mod_Q1BSP_TracePoint, which a line of no length becomes, tests no mask.)
+                TraceResult world = Hulls is not null ? new TraceResult { StartSolid = service.LastWorldStartSolid }
+                    : worldService.Trace(vStart, vMins, vMaxs, vStart, MoveFilter.WorldOnly, _passMirror);
                 result.WorldStartSolid = result.BModelStartSolid = world.StartSolid;
                 int stuck = StuckEntity(vm, vStart, vMins, vMaxs, type, out bool isBsp);
                 if (isBsp) result.BModelStartSolid = true;
@@ -829,6 +887,17 @@ public sealed class SvWorld : TraceService.IEntityProvider
         if (Bsp is not { } bsp || bsp.Nodes.Length == 0) return true;
         Vector3 s = V(start), e = V(end);
         if (!IsFinite(s) || !IsFinite(e)) return false;
+        if (Hulls is { } hulls)
+        {
+            // Mod_Q1BSP_TraceLineOfSight: Mod_Q1BSP_TraceLine with SUPERCONTENTS_VISBLOCKERMASK (opaque), then
+            // "trace.fraction == 1 || BoxesOverlap(trace.endpos, trace.endpos, acceptmins, acceptmaxs)". (With
+            // sv_gameplayfix_q1bsptracelinereportstexture at its default the line is tested against faces, whose
+            // textures are solid but not opaque, so it is never stopped; the hull trace leaves endpos at zero.)
+            hulls.TraceBox(0, s, Vector3.Zero, Vector3.Zero, e, SuperContents.Opaque, out Q1HullTrace sight);
+            if (sight.Fraction == 1) return true;
+            Vector3 at = hulls.LineReportsTexture ? new Vector3((float)(s.X + sight.Fraction * ((double)e.X - s.X)), (float)(s.Y + sight.Fraction * ((double)e.Y - s.Y)), (float)(s.Z + sight.Fraction * ((double)e.Z - s.Z))) : Vector3.Zero;
+            return at.X >= acceptMins.X && at.X <= acceptMaxs.X && at.Y >= acceptMins.Y && at.Y <= acceptMaxs.Y && at.Z >= acceptMins.Z && at.Z <= acceptMaxs.Z;
+        }
         double ex = e.X, ey = e.Y, ez = e.Z;
         LineOfSightNode(bsp, 0, s.X, s.Y, s.Z, e.X, e.Y, e.Z, ref ex, ref ey, ref ez, 0);
         // BoxesOverlap(traceendpos, traceendpos, acceptmins, acceptmaxs)
@@ -1100,6 +1169,19 @@ public sealed class SvWorld : TraceService.IEntityProvider
         if (model is null || model.Length < 2 || model[0] != '*') return false;
         if (!_submodels.TryGetValue(model, out BspCollisionBuilder.Submodel submodel) || submodel.Brushes.Length == 0) return false;
         localBrushes = submodel.Brushes;
+        toWorld = EntityMatrix.FromQuakeEntity(e.Origin, e.Angles);
+        return true;
+    }
+
+    // The same for a model of a Quake 1 format map: its clipping hulls.
+    bool TraceService.IEntityProvider.TryGetEntityHullModel(Entity e, out Q1HullCollision? hulls, out int model, out EntityMatrix toWorld)
+    {
+        hulls = null;
+        model = 0;
+        toWorld = EntityMatrix.Identity;
+        if (Hulls is null || _modelNameOf is null || e.Solid != Solid.Bsp) return false;
+        if (!BspLegacyWorld.Q1SubmodelIndex(_modelNameOf(e.Index), Hulls.ModelCount, out model)) return false;
+        hulls = Hulls;
         toWorld = EntityMatrix.FromQuakeEntity(e.Origin, e.Angles);
         return true;
     }

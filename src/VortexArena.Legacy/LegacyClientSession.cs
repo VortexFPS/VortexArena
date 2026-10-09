@@ -32,7 +32,9 @@ public sealed class LegacyClientOptions
     public float ViewHeight { get; set; } = 768;
     /// <summary>cl_movement: whether input commands are marked as predicted (Xonotic's configuration sets it).</summary>
     public bool PredictMovement { get; set; } = true;
-    /// <summary>Options for each client program loaded. Null for the defaults.</summary>
+    /// <summary>Options for each client program loaded. Null for the defaults. Its
+    /// <see cref="CsqcHostOptions.UriRequests"/> (the program's HTTP requests), if any, is the session's
+    /// from here on: the session delivers the replies each frame and disposes of it.</summary>
     public CsqcHostOptions? Host { get; set; }
     /// <summary>
     /// DarkPlaces' download cache (cl_parse.c CL_BeginDownloads looks for "dlcache/csprogs.dat.SIZE.CRC"
@@ -138,6 +140,15 @@ public sealed class LegacyClientSession : IDisposable
     /// <summary>Why the server's client program could not be started, or null. The connection goes on
     /// without it, but nothing the program was to decode can be decoded.</summary>
     public string? ProgramError { get; private set; }
+
+    /// <summary>
+    /// Why this level cannot be entered although the game data has its map: the presentation could not load
+    /// the file (<see cref="ILegacyPresentation.WorldLoadError"/>: an unsupported or damaged map). Set when the
+    /// level's program would have been started; the program is then not started and nothing more is sent for
+    /// this level. The owner leaves the server and shows the reason, exactly as for a map that is missing
+    /// (<see cref="DpSignon.MissingWorld"/>). DarkPlaces would enter an empty world.
+    /// </summary>
+    public string? WorldError { get; private set; }
     /// <summary>Client programs started on this session (one per level).</summary>
     public int ProgramsStarted { get; private set; }
     /// <summary>Calls of CSQC_UpdateView, and how many of them faulted.</summary>
@@ -351,6 +362,8 @@ public sealed class LegacyClientSession : IDisposable
         // CL_Frame begins with CL_VM_PreventInformationLeaks.
         host.PreventInformationLeaks();
         Console.Execute();
+        // Curl_Frame: the replies to the program's uri_get requests, between its entry points and before it draws.
+        host.DeliverUriReplies();
         int faults = host.FaultCount;
         host.UpdateView(_options.ViewWidth, _options.ViewHeight, frameTime);
         FramesDrawn++;
@@ -384,6 +397,7 @@ public sealed class LegacyClientSession : IDisposable
         UnloadProgram();
         Console.Detach();
         _options.Packages?.Dispose();
+        _options.Host?.UriRequests?.Dispose();
     }
 
     // CL_UpdateMoveVars: Xonotic publishes its physics settings as stats; the two that matter to the
@@ -429,6 +443,7 @@ public sealed class LegacyClientSession : IDisposable
             UnloadProgram();
             _programPending = true;
             ProgramError = null;
+            WorldError = null;
             Clock.Reset();
             _lastSentMoveTime = 0;
             _mountsAtLevelStart = _options.Packages?.MountedCount ?? 0;
@@ -449,6 +464,14 @@ public sealed class LegacyClientSession : IDisposable
             long started = System.Diagnostics.Stopwatch.GetTimestamp();
             Presentation.LevelFilesArrived(State);
             Note($"the level's files were loaded after its downloads ({System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} s)");
+        }
+        if (Presentation.WorldLoadError is { Length: > 0 } worldError)
+        {
+            // Never a level without its world: no program, no "prespawn" answered by play.
+            _programPending = false;
+            WorldError = worldError;
+            Note($"the level is not entered: {worldError}");
+            return;
         }
         StartProgram();
     }

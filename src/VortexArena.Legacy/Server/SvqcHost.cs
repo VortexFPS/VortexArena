@@ -493,6 +493,8 @@ public sealed partial class SvqcHost : IDisposable
             return false;
         }
         World.LinkSolidNot = !Cvars.Has("sv_areagrid_link_SOLID_NOT") || Cvars.GetFloat("sv_areagrid_link_SOLID_NOT") != 0;
+        // (read before the map is loaded: a dedicated DarkPlaces server forms the face normals of a Quake 1 map differently)
+        World.Q1DedicatedNormals = Cvars.Has("sv_dedicated") && Cvars.GetFloat("sv_dedicated") != 0;
         if (!World.LoadMap(modelName))
         {
             Print($"Couldn't load map {modelName}: {World.LoadError}\n");

@@ -60,6 +60,7 @@ internal static partial class Program
         public int Changes = 10, ClientCount = 0, Bots = -1, Parallel = 4;
         public string? Mode, Maps, Modes, Command, From, To, Mins, Maxs, Dump;
         public List<(string Name, string Value)> Sets = new();
+        public List<string> ExtraData = new();
     }
 
     private static int Main(string[] args)
@@ -78,6 +79,7 @@ internal static partial class Program
                 switch (args[i])
                 {
                     case "--data": o.Data = Next(); break;
+                    case "--extra-data": o.ExtraData.Add(Next()); break;
                     case "--map": o.Map = Next(); break;
                     case "--out": o.Out = Next(); break;
                     case "--bind": o.Bind = Next(); break;
@@ -166,6 +168,10 @@ internal static partial class Program
                     if (warnings.Count < 2000 || warnings.ContainsKey(text)) warnings[text] = warnings.GetValueOrDefault(text) + 1;
                 });
             foreach ((string name, string value) in o.Sets) env.SetCvar(name, value);
+            // "--extra-data DIR-or-PK3": packages over the game data's own (a downloaded map pack), as dlcache/ is mounted
+            foreach (string extra in o.ExtraData)
+                foreach (string pack in Directory.Exists(extra) ? Directory.GetFiles(extra, "*.pk3").OrderBy(x => x, StringComparer.Ordinal).ToArray() : new[] { extra })
+                    if (!env.Files.MountBelowDirectories(pack)) Console.Error.WriteLine($"--extra-data: {pack} could not be mounted");
             return env;
         }
         catch (DirectoryNotFoundException e)

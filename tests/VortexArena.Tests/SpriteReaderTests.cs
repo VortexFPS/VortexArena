@@ -13,7 +13,7 @@ namespace VortexArena.Tests;
 /// <summary>
 /// T31 — first-ever coverage for <see cref="SpriteReader"/> (port of Darkplaces <c>Mod_IDSP_Load</c> /
 /// <c>Mod_IDS2_Load</c> / <c>Mod_Sprite_SharedSetup</c>, model_sprite.c). Pins: the magic/version
-/// dispatch (IDSP v1 quake / v2 half-life / v32 spr32; IDS2 v2 .sp2), spr32's BGRA→RGBA swap, the HL
+/// dispatch (IDSP v1 quake / v2 half-life / v32 spr32; IDS2 v2 .sp2), spr32's RGBA pixels, the HL
 /// 256-color palette requirement + per-rendermode alpha rules (IndexAlpha = colour 765-767 with
 /// alpha=index; AlphaTest = pal[255] transparent; unknown rendermode errors), SPR_SINGLE/SPR_GROUP
 /// frame flattening with intervals, and sp2's negated origin_x + forced SPR_VP_PARALLEL.
@@ -49,11 +49,11 @@ public class SpriteReaderTests
     }
 
     [Fact]
-    public void Spr32_SwapsBgraToRgba_AndDerivesQuad()
+    public void Spr32_KeepsRgbaAsStored_AndDerivesQuad()
     {
         List<byte> b = IdspHeader(version: 32, type: 2, numFrames: 1);
         Add(b, 0); // SPR_SINGLE
-        // 2x1 BGRA pixels: (B=1,G=2,R=3,A=4) and (B=10,G=20,R=30,A=40)
+        // 2x1 pixels as the file stores them, R G B A (DarkPlaces swaps them only to upload a BGRA texture).
         AddFrame(b, originX: -1, originY: 1, w: 2, h: 1, pixels: new byte[] { 1, 2, 3, 4, 10, 20, 30, 40 });
 
         SpriteData spr = SpriteReader.Read(b.ToArray());
@@ -62,7 +62,7 @@ public class SpriteReaderTests
         Assert.Equal(SpriteType.VpParallel, spr.SpriteType);
         SpriteFrame f = spr.Frames.Single();
         Assert.NotNull(f.Rgba);
-        Assert.Equal(new byte[] { 3, 2, 1, 4, 30, 20, 10, 40 }, f.Rgba); // R<->B swapped
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 10, 20, 30, 40 }, f.Rgba);
         Assert.Null(f.Indices);
         // quad bounds: left = originX, right = originX+w, up = originY, down = originY-h
         Assert.Equal(-1, f.QuadLeft);

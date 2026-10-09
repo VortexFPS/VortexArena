@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using VortexArena.Formats.Images;
 using VortexArena.Formats.Sprites;
 
 namespace VortexArena.Game.Loaders;
@@ -25,11 +26,14 @@ namespace VortexArena.Game.Loaders;
 ///         <see cref="ImageTexture"/> directly.</item>
 ///   <item><b>sp2</b>: <see cref="SpriteFrame.ExternalImage"/> names an image resolved through the VFS via
 ///         <see cref="AssetSystem.LoadTexture"/>.</item>
-///   <item><b>spr (Quake v1)</b>: only raw palette <see cref="SpriteFrame.Indices"/> are available (the
-///         Quake palette is not embedded in the file and is not shipped by Xonotic), so we emit a small
-///         magenta placeholder texture rather than guessing a palette. TODO(palette): colour through
-///         gfx/palette.lmp once a palette source exists.</item>
+///   <item><b>spr (Quake v1)</b>: raw palette <see cref="SpriteFrame.Indices"/>, coloured through the Quake
+///         palette with index 255 transparent (<see cref="SpriteFrame.ToRgba"/>; DarkPlaces'
+///         <c>palette_bgra_transparent</c>).</item>
 /// </list></para>
+///
+/// <para><see cref="Build"/> is the native game's sprite: a billboard the engine turns, animating by itself.
+/// A legacy session draws sprites as DarkPlaces does instead - every type's own orientation, the frame the
+/// entity names - through <see cref="BuildModel"/> / <see cref="SpriteModel"/>.</para>
 ///
 /// <para>Multi-frame sprites get a <see cref="SpriteFramePlayer"/> child that swaps the quad texture over
 /// time using the parsed group intervals (or a default rate when the sprite is a flat frame list), and also
@@ -55,9 +59,10 @@ public static class SpriteBuilder
     /// <c>&lt;vpath&gt;_&lt;n&gt;</c> image shipped next to the .spr (e.g. <c>chatbubble.spr_0</c>) is used in
     /// preference to the embedded pixels, exactly like DP's <c>Mod_Sprite_SharedSetup</c>.
     /// </summary>
-    public static Node3D Build(SpriteData spr, AssetSystem assets, string? vpath = null)
+    public static Node3D Build(SpriteData spr, AssetSystem assets, string? vpath = null, QuakePalette? palette = null)
     {
         ArgumentNullException.ThrowIfNull(spr);
+        palette ??= QuakePalette.Default;
 
         var root = new Node3D { Name = "Sprite" };
 
@@ -65,7 +70,7 @@ public static class SpriteBuilder
         // become a placeholder so the animation timing still lines up.
         var textures = new ImageTexture?[spr.FrameCount];
         for (int i = 0; i < spr.FrameCount; i++)
-            textures[i] = FrameTexture(spr.Frames[i], assets, vpath, i);
+            textures[i] = FrameTexture(spr.Frames[i], assets, vpath, i, palette);
 
         // Size the quad from frame 0's pixel dimensions (fall back to 1x1 for a null/zero frame).
         SpriteFrame? frame0 = spr.FrameCount > 0 ? spr.Frames[0] : null;
@@ -102,6 +107,17 @@ public static class SpriteBuilder
 
         return root;
     }
+
+    /// <summary>
+    /// The sprite as DarkPlaces draws it (<see cref="SpriteModel"/>): oriented by its type against the view,
+    /// showing the frame it is told to. <paramref name="shared"/> comes from <see cref="Share"/> and is made
+    /// once per sprite file.
+    /// </summary>
+    public static SpriteModel BuildModel(SpriteShared shared) => SpriteModel.Create(shared);
+
+    /// <summary>The pictures and materials every <see cref="SpriteModel"/> of one sprite file uses.</summary>
+    public static SpriteShared Share(SpriteData spr, AssetSystem assets, string? vpath, QuakePalette? palette) =>
+        new(spr, assets, vpath, palette);
 
     // ---------------------------------------------------------------------------------------------
     //  Material / billboard
@@ -157,16 +173,18 @@ public static class SpriteBuilder
     };
 
     /// <summary>
-    /// The quad is centred on its own local origin, but DP's frame origin offsets the image (left/up edges
-    /// are <c>originX</c>/<c>originY</c>). Convert that to the centre offset in Godot units: the quad centre
-    /// sits at <c>(originX + width/2, originY - height/2)</c> in DP's up-positive pixel space, which maps to
-    /// Godot X right / Y up directly.
+    /// The quad is centred on its own local origin, but DP's frame origin offsets the image. Vertically the
+    /// picture runs from <c>originY</c> down to <c>originY - height</c>. Horizontally DarkPlaces measures the
+    /// stored rectangle along the sprite's LEFT axis (<c>R_CalcSprite_Vertex3f</c>: the picture's left edge is
+    /// at <c>left * (originX + width)</c>), so along Godot's X - the viewer's right - the picture runs from
+    /// <c>-(originX + width)</c> to <c>-originX</c>. For the usual centred sprite (originX = -width / 2) that
+    /// is the same thing; for an off-centre one the offset is on the other side from where this used to put it.
     /// </summary>
     private static Vector3 FrameCenterOffset(SpriteFrame? f)
     {
         if (f is null)
             return Vector3.Zero;
-        float cx = (f.OriginX + f.Width * 0.5f) * UnitsPerPixel;
+        float cx = -(f.OriginX + f.Width * 0.5f) * UnitsPerPixel;
         float cy = (f.OriginY - f.Height * 0.5f) * UnitsPerPixel;
         return new Vector3(cx, cy, 0f);
     }
@@ -175,7 +193,7 @@ public static class SpriteBuilder
     //  Per-frame texture decode
     // ---------------------------------------------------------------------------------------------
 
-    private static ImageTexture? FrameTexture(SpriteFrame frame, AssetSystem assets, string? vpath, int frameIndex)
+    private static ImageTexture? FrameTexture(SpriteFrame frame, AssetSystem assets, string? vpath, int frameIndex, QuakePalette palette)
     {
         // DP external-frame override (Mod_Sprite_SharedSetup): a plain `<vpath>_<n>` image shipped next to the
         // .spr replaces the embedded pixels — a higher-res / properly-alpha'd version (e.g. chatbubble.spr_0.tga,
@@ -192,14 +210,14 @@ public static class SpriteBuilder
         if (!string.IsNullOrEmpty(frame.ExternalImage))
             return AsImageTexture(SafeLoadTexture(assets, frame.ExternalImage!)) ?? Placeholder(frame.Width, frame.Height);
 
-        // spr32 / sprhl: decoded RGBA8 ready to upload.
-        if (frame.Rgba is not null && frame.Width > 0 && frame.Height > 0)
+        // spr32 / sprhl: decoded RGBA8 ready to upload. Quake spr: its indices through the Quake palette.
+        if (frame.Width > 0 && frame.Height > 0 && frame.ToRgba(palette) is { } rgba)
         {
-            var img = Image.CreateFromData(frame.Width, frame.Height, false, Image.Format.Rgba8, frame.Rgba);
+            var img = Image.CreateFromData(frame.Width, frame.Height, false, Image.Format.Rgba8, rgba);
             return ImageTexture.CreateFromImage(img);
         }
 
-        // plain Quake spr (palette indices only, no embedded palette) or a zero-size frame.
+        // A zero-size frame.
         return Placeholder(frame.Width, frame.Height);
     }
 
@@ -213,7 +231,7 @@ public static class SpriteBuilder
         return img is not null ? ImageTexture.CreateFromImage(img) : null;
     }
 
-    private static Texture2D? SafeLoadTexture(AssetSystem assets, string name)
+    internal static Texture2D? SafeLoadTexture(AssetSystem assets, string name)
     {
         try
         {

@@ -34,7 +34,16 @@ public class CustomProgramProbeTests
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", ".."));
 
     private sealed record Probe(string Path, int Size, int Crc, int Functions, int Globals, int EntityFields, SortedSet<int> Declared, SortedDictionary<int, string> DeclaredNotImplemented,
-        Dictionary<(int, string), long> CalledNotImplemented, bool InitOk, string? Fault, int Frames, int FramesFaulted, int Extended);
+        Dictionary<(int, string), long> CalledNotImplemented, bool InitOk, string? Fault, int Frames, int FramesFaulted, int Extended,
+        SortedSet<string> ExtensionsRefused, SortedSet<string> ExtensionsGranted, long HttpRequests);
+
+    // The probe gives the program what a session gives it, HTTP included (so that checkextension answers as
+    // it does in play) - but a request it starts goes nowhere: every one fails at once, as an unreachable host does.
+    private sealed class NoNetwork : VortexArena.Legacy.Downloads.ILegacyUriFetcher
+    {
+        public System.Threading.Tasks.Task<VortexArena.Legacy.Downloads.LegacyUriResult> FetchAsync(VortexArena.Legacy.Downloads.LegacyUriRequest request, System.Threading.CancellationToken cancel) =>
+            System.Threading.Tasks.Task.FromResult(new VortexArena.Legacy.Downloads.LegacyUriResult(VortexArena.Legacy.Downloads.LegacyUriStatus.Failed, Array.Empty<byte>(), "the probe has no network"));
+    }
 
     private static Probe Run(string programPath, string baseData)
     {
@@ -74,7 +83,8 @@ public class CustomProgramProbeTests
                     names.TryAdd(function.BuiltinNumber, function.Name);
                 }
 
-            CsqcHost host = new(program, program.Length, Crc16.Block(program), services, console, presentation, state);
+            using VortexArena.Legacy.Downloads.LegacyUriRequests http = new(null, new NoNetwork());
+            CsqcHost host = new(program, program.Length, Crc16.Block(program), services, console, presentation, state, new CsqcHostOptions { UriRequests = http });
             SortedDictionary<int, string> notImplemented = new();
             foreach (int number in declared)
                 if (!host.Vm.HasBuiltin(number)) notImplemented[number] = names[number];
@@ -89,6 +99,7 @@ public class CustomProgramProbeTests
                 {
                     state.Time = 1 + i / 60.0;
                     int before = host.FaultCount;
+                    host.DeliverUriReplies();
                     host.UpdateView(1280, 720, 1 / 60.0);
                     console.Execute();
                     frames++;
@@ -101,7 +112,9 @@ public class CustomProgramProbeTests
                 }
             }
             Probe result = new(programPath, program.Length, Crc16.Block(program), file.Functions.Length, file.Globals.Length, file.EntityFields, declared, notImplemented,
-                new Dictionary<(int, string), long>(host.UnimplementedBuiltins), ok, fault, frames, faulted, 0);
+                new Dictionary<(int, string), long>(host.UnimplementedBuiltins), ok, fault, frames, faulted, 0,
+                new SortedSet<string>(host.ExtensionChecks.Where(kv => !kv.Value).Select(kv => kv.Key), StringComparer.Ordinal),
+                new SortedSet<string>(host.ExtensionChecks.Where(kv => kv.Value).Select(kv => kv.Key), StringComparer.Ordinal), http.Started + http.Refused);
             host.Shutdown();
             return result;
         }
@@ -116,6 +129,8 @@ public class CustomProgramProbeTests
     {
         string repo = RepoRoot();
         string baseData = Path.GetFullPath(Path.Combine(repo, "..", "Base", "data"));
+        // A checkout that does not sit beside Base (a nested worktree) names it with VA_BASE_DIR, as TestPaths does.
+        if (!Directory.Exists(baseData) && TestPaths.BaseData != TestPaths.Unresolved) baseData = TestPaths.BaseData;
         string stock = Path.Combine(baseData, "xonotic-data.pk3dir", "csprogs.dat");
         List<string> custom = new();
         if (Environment.GetEnvironmentVariable("VORTEX_PROBE_CSPROGS") is { Length: > 0 } named && File.Exists(named)) custom.Add(named);
@@ -135,6 +150,9 @@ public class CustomProgramProbeTests
                 string.Join(", ", p.DeclaredNotImplemented.Select(kv => $"#{kv.Key} {kv.Value}")));
             report.AppendLine($"   unimplemented builtins CALLED during the run ({p.CalledNotImplemented.Count}): " +
                 string.Join(", ", p.CalledNotImplemented.OrderByDescending(kv => kv.Value).Select(kv => $"#{kv.Key.Item1} {kv.Key.Item2} x{kv.Value}")));
+            report.AppendLine($"   extensions asked for and answered NO ({p.ExtensionsRefused.Count}): " + string.Join(", ", p.ExtensionsRefused));
+            report.AppendLine($"   extensions asked for and answered yes ({p.ExtensionsGranted.Count}): " + string.Join(", ", p.ExtensionsGranted));
+            report.AppendLine($"   HTTP requests the program tried to start (uri_get): {p.HttpRequests}");
             if (against is not null)
             {
                 report.AppendLine("   declared here and not by the stock program: " +

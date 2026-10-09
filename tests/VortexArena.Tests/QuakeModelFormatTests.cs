@@ -32,7 +32,7 @@ public class QuakeModelFormatTests
 
     // ---- a synthetic .mdl ------------------------------------------------------------------------
 
-    private sealed class MdlFile
+    internal sealed class MdlFile
     {
         public Vector3 Scale = new(0.5f, 0.25f, 2f), Origin = new(-3f, 4f, -8f);
         public int SkinWidth = 4, SkinHeight = 2, Flags, SyncType;
@@ -103,7 +103,7 @@ public class QuakeModelFormatTests
     /// triangle, vertex 3 is on the seam and used by a back triangle only, vertex 4 is used by nothing.
     /// Two skins (a single and a group of three), three frames (single, a group of two, single).
     /// </summary>
-    private static MdlFile Sample()
+    internal static MdlFile Sample()
     {
         var f = new MdlFile { Flags = MdlFlags.Rocket | MdlFlags.Rotate | 0x200 };
         f.Skins.Add((new[] { new byte[] { 0, 15, 255, 1, 251, 16, 96, 208 } }, null));
@@ -296,7 +296,7 @@ public class QuakeModelFormatTests
 
     // ---- a synthetic .spr -------------------------------------------------------------------------
 
-    private static byte[] Sprite(int version, int type, int syncType, params (float[]? Intervals, (int Ox, int Oy, int W, int H, byte[] Pixels)[] Frames)[] slots)
+    internal static byte[] Sprite(int version, int type, int syncType, params (float[]? Intervals, (int Ox, int Oy, int W, int H, byte[] Pixels)[] Frames)[] slots)
     {
         var ms = new MemoryStream();
         var w = new BinaryWriter(ms);

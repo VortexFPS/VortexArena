@@ -47,6 +47,29 @@ public sealed class LegacyModel
 
     /// <summary>num_poses: how many poses <see cref="BonePose"/> and <see cref="TagPose"/> index.</summary>
     public int NumPoses { get; init; }
+
+    /// <summary>
+    /// model_t.effects: EF_* bits the model itself asks for, which DarkPlaces ORs into the effects of every
+    /// entity that shows it (cl_main.c CL_UpdateNetworkEntity, csprogs.c CSQC_AddRenderEdict). Only a Quake
+    /// <c>.mdl</c> has any: its header flags, the low byte moved to the top (MF_ROCKET becomes EF_ROCKET: a
+    /// trail; MF_ROTATE becomes EF_ROTATE: a spinning item). See <see cref="VortexArena.Formats.Mdl.MdlFlags"/>.
+    /// </summary>
+    public uint Effects { get; init; }
+
+    /// <summary>
+    /// model_t.numskins as the file gives it: what an entity's <c>.skin</c> is checked against ("if
+    /// (skinnum >= numskins) skinnum = 0"). A skin group counts once. 0 for a format whose skins are
+    /// <c>.skin</c> files (not counted here). DarkPlaces adds one for every further
+    /// <c>&lt;model&gt;_&lt;N&gt;</c> picture found beside a <c>.mdl</c>; those are the drawing side's to find.
+    /// </summary>
+    public int SkinCount { get; init; }
+
+    /// <summary>
+    /// model_t.yawmins / yawmaxs and rotatedmins / rotatedmaxs, as radii: the largest horizontal distance and
+    /// the largest distance of any vertex from the origin. 0 where a loader does not compute them.
+    /// </summary>
+    public float YawRadius { get; init; }
+    public float Radius { get; init; }
     /// <summary>animscenes, or null for a model that has none (a brush model). numframes is its length.</summary>
     public LegacyAnimScene[]? Scenes { get; init; }
     public int NumFrames => Scenes?.Length ?? 0;
@@ -154,6 +177,7 @@ public static class LegacyModelLoader
             Name = model.Name, Kind = model.Kind, Format = model.Format, NormalMins = model.NormalMins, NormalMaxs = model.NormalMaxs,
             BoneNames = model.BoneNames, BoneParents = model.BoneParents, TagNames = model.TagNames, NumPoses = model.NumPoses,
             Pose7 = model.Pose7, PoseMatrices = model.PoseMatrices, TagMatrices = model.TagMatrices, Scenes = scenes,
+            Effects = model.Effects, SkinCount = model.SkinCount, YawRadius = model.YawRadius, Radius = model.Radius,
         };
     }
 
@@ -297,35 +321,41 @@ public static class LegacyModelLoader
         };
     }
 
-    // Mod_IDP0_Load.
+    // Mod_IDP0_Load. The reader has already done the C's work: the box is Mod_Alias_CalculateBoundingBox over
+    // the vertices a triangle uses, and a frame group (a torch's flame) is ONE frame number whose poses the
+    // engine plays by itself at the group's rate - so .frame indexes Scenes, not the poses.
     private static LegacyModel FromMdl(string name, MdlData mdl)
     {
-        Box box = default;
-        foreach (MdlFrame frame in mdl.Frames)
-            foreach (MdlVertex vertex in frame.Vertices)
-                box.Add(vertex.Position);
+        LegacyAnimScene[] scenes = new LegacyAnimScene[mdl.Scenes.Length];
+        for (int i = 0; i < scenes.Length; i++)
+        {
+            MdlScene s = mdl.Scenes[i];
+            scenes[i] = new LegacyAnimScene(s.Name, s.First, s.Count, s.FrameRate, s.Loop);
+        }
         return new LegacyModel
         {
-            Name = name, Kind = LegacyModelKind.Alias, Format = "mdl", NormalMins = box.Mins, NormalMaxs = box.Maxs,
-            NumPoses = mdl.Frames.Length, Scenes = ScenePerFrame(mdl.Frames.Length, i => mdl.Frames[i].Name),
+            Name = name, Kind = LegacyModelKind.Alias, Format = "mdl", NormalMins = mdl.Mins, NormalMaxs = mdl.Maxs,
+            NumPoses = mdl.Frames.Length, Scenes = scenes,
+            Effects = mdl.Effects, SkinCount = mdl.SkinScenes.Length, YawRadius = mdl.YawRadius, Radius = mdl.Radius,
         };
     }
 
-    // Mod_IDSP_Load: a cube of the largest corner distance of any frame.
+    // Mod_IDSP_Load / Mod_IDS2_Load: a cube of the largest corner distance of any frame, and one frame number
+    // per slot of the file - a group of pictures is one, played at the group's rate.
     private static LegacyModel FromSprite(string name, SpriteData sprite)
     {
-        long radius2 = 0;
-        foreach (SpriteFrame frame in sprite.Frames)
+        LegacyAnimScene[] scenes = new LegacyAnimScene[sprite.Scenes.Length];
+        for (int i = 0; i < scenes.Length; i++)
         {
-            long left = frame.OriginX, right = (long)frame.OriginX + frame.Width, up = frame.OriginY, down = (long)frame.OriginY - frame.Height;
-            radius2 = Math.Max(radius2, Math.Max(left * left, right * right) + Math.Max(up * up, down * down));
+            SpriteScene s = sprite.Scenes[i];
+            scenes[i] = new LegacyAnimScene(s.Name, s.FirstFrame, s.FrameCount, s.FrameRate, true);
         }
-        float radius = MathF.Sqrt(radius2);
+        float radius = sprite.Radius;
         return new LegacyModel
         {
             Name = name, Kind = LegacyModelKind.Sprite, Format = "sprite",
             NormalMins = new Vector3(-radius), NormalMaxs = new Vector3(radius),
-            NumPoses = sprite.Frames.Length, Scenes = ScenePerFrame(sprite.Frames.Length, i => $"frame {i}"),
+            NumPoses = sprite.Frames.Length, Scenes = scenes, YawRadius = radius, Radius = radius,
         };
     }
 

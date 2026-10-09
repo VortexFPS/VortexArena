@@ -20,7 +20,7 @@ namespace VortexArena.Tests.Legacy;
 /// server: everything the live join against a real DarkPlaces server found working or broken, pinned
 /// here so it stays that way without a server. (The live run itself is tools/dp-probe.)
 /// </summary>
-public class LegacyClientSessionTests
+public partial class LegacyClientSessionTests
 {
     /// <summary>
     /// A client program that reads two bytes per entity update into globals and counts its frames -
@@ -58,12 +58,13 @@ public class LegacyClientSessionTests
         public readonly StringBuilder Printed = new();
         public DpNetChannel Server = new(0);
         public readonly List<byte[]> ToClient = new();
-        public readonly byte[] ProgramBytes = Program();
+        public readonly byte[] ProgramBytes;
         public double Now;
         public int Frame = 500, Nops, MoveDatagrams;
 
-        public Rig(bool localProgram)
+        public Rig(bool localProgram, byte[]? program = null, Action<LegacyClientOptions>? configure = null)
         {
+            ProgramBytes = program ?? Program();
             Directory.CreateDirectory(Root);
             File.WriteAllText(Path.Combine(Root, "placeholder.txt"), "x");
             if (localProgram) File.WriteAllBytes(Path.Combine(Root, "csprogs.dat"), ProgramBytes);
@@ -73,6 +74,7 @@ public class LegacyClientSessionTests
             LegacyClientOptions options = new();
             options.Client.NetFps = 1000;
             options.Client.Signon.Rate = 1_000_000;
+            configure?.Invoke(options);
             Session = new LegacyClientSession(services, interpreter, new HeadlessLegacyPresentation(Vfs), options);
             Session.Event += Events.Add;
         }

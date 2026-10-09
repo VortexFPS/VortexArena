@@ -76,6 +76,25 @@ public sealed partial class QcStringBuiltins
         return (uint)index < (uint)_buffers.Count ? _buffers[index] : null;
     }
 
+    /// <summary>
+    /// A buffer's strings joined by <paramref name="separator"/> (empty slots contribute nothing but their
+    /// separator), for a host builtin that sends a buffer somewhere (the POST body of uri_get). Null if there
+    /// is no such buffer. The joining stops once the text is longer than <paramref name="maxLength"/>
+    /// characters: a result longer than that is incomplete.
+    /// </summary>
+    public string? Implode(float handle, string separator, int maxLength)
+    {
+        if (Buffer(handle) is not { } buffer) return null;
+        StringBuilder text = new();
+        for (int i = 0; i < buffer.Count; i++)
+        {
+            if (i > 0) text.Append(separator);
+            if (buffer.Strings[i] is { } s) text.Append(s);
+            if (text.Length > maxLength) break;
+        }
+        return text.ToString();
+    }
+
     private StringBuffer? Buffer(QcVm vm, int arg, string name)
     {
         StringBuffer? buffer = Buffer(vm.ArgFloat(arg));

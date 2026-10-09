@@ -210,10 +210,14 @@ public sealed class NullLegacyPresentation : ILegacyPresentation, ILegacyCallCou
 
     // ---- sound -------------------------------------------------------------------------------------
 
+    /// <summary>Answer "no such sample" to precache_sound and localsound, as a presentation does for a file
+    /// the game data lacks. Off, every sample is said to be there.</summary>
+    public bool SoundsMissing { get; set; }
+
     bool ILegacySound.Precache(string sample)
     {
         Count();
-        return true;
+        return !SoundsMissing;
     }
 
     void ILegacySound.Start(int edict, int channel, string sample, QcVector origin, float volume, float attenuation, float startPosition, int flags, float speed) => Count();
@@ -222,7 +226,7 @@ public sealed class NullLegacyPresentation : ILegacyPresentation, ILegacyCallCou
     bool ILegacySound.Local(string sample, int channel, float volume)
     {
         Count();
-        return true;
+        return !SoundsMissing;
     }
 
     void ILegacySound.SetListener(QcVector origin, QcVector forward, QcVector right, QcVector up) => Count();

@@ -1,7 +1,7 @@
 // Port of Base/darkplaces/clvm_cmds.c VM_CL_ReadByte, VM_CL_ReadChar, VM_CL_ReadShort, VM_CL_ReadLong,
 // VM_CL_ReadCoord, VM_CL_ReadAngle, VM_CL_ReadString, VM_CL_ReadFloat, VM_CL_ReadPicture, VM_CL_getstatf,
 // VM_CL_getstati, VM_CL_getstats, VM_CL_getplayerkey, VM_CL_isdemo, VM_CL_serverkey, VM_CL_GetEntity,
-// prvm_cmds.c VM_isserver and VM_uri_get (the "no libcurl" outcome), common.c InfoString_GetValue.
+// prvm_cmds.c VM_isserver and VM_uri_get, common.c InfoString_GetValue.
 using System.Globalization;
 using System.Numerics;
 using System.Text;
@@ -272,12 +272,55 @@ public sealed partial class CsqcBuiltins
         return "";
     }
 
-    // #513 float(string uri, float id, ...) uri_get. Starting a request needs an HTTP client the host
-    // supplies; without one the answer is 0, "could not be started", as DarkPlaces gives without libcurl.
+    // #513 float(string uri, float id[, string post_contenttype, string post_delim[, float buf[, float keyid]]])
+    // uri_get (DP_QC_URI_GET, DP_QC_URI_POST; with a key number it is crypto_uri_postbuf). "gets content from
+    // an URL and calls a callback URI_Get_Callback with it set as string": 1 if the request was started, and
+    // then the callback hears of it exactly once; 0 if not (no HTTP client, HTTP switched off, an address
+    // that is refused), and then it never does.
+    //
+    // With a content type and a delimiter it is a POST: of the delimiter alone, or with a string buffer of
+    // that buffer's strings joined by the delimiter. A key number asks for the body (or a GET's query) to
+    // be signed with the player's d0_blind_id key in an X-D0-Blind-ID-Detached-Signature header; without
+    // that library DarkPlaces' Crypto_SignDataDetached signs nothing and the request goes out unsigned,
+    // which is what happens here.
     private void UriGet(QcVm vm)
     {
+        if (_host.UriGetCallbackFunction == 0) throw Fault($"uri_get called by {_vm.Name} without URI_Get_Callback defined");
         Parms(2, 6, "VM_uri_get");
-        vm.ReturnFloat(_host.UriGet(vm.ArgString(0), ArgInt(1)) ? 1 : 0);
+        string url = vm.ArgString(0);
+        float id = vm.ArgFloat(1);
+        string? postType = vm.ArgCount >= 3 ? vm.ArgString(2) : null;
+        string? postSeparator = vm.ArgCount >= 4 ? vm.ArgString(3) : null;
+        int postBuffer = vm.ArgCount >= 5 ? ArgInt(4) : -1;
+
+        byte[]? body = null;
+        if (postSeparator is not null && !string.IsNullOrEmpty(postType))
+        {
+            string text = postSeparator;
+            if (postBuffer >= 0)
+            {
+                const int most = 1 << 20;   // characters; past any limit a request here is allowed
+                if (_host.ImplodeStringBuffer(vm.ArgFloat(4), postSeparator, most) is not { } imploded)
+                {
+                    // The C names the wrong argument here ("(int)PRVM_G_FLOAT(OFS_PARM0)", the address); and it
+                    // returns without an answer, so the program reads a stale return cell.
+                    Warning($"uri_get: invalid buffer {postBuffer}\n");
+                    return;
+                }
+                if (imploded.Length > most)
+                {
+                    Warning($"uri_get: string buffer {postBuffer} holds more than {most} characters, nothing is posted\n");
+                    vm.ReturnInt(0);
+                    return;
+                }
+                text = imploded;
+            }
+            body = Encoding.UTF8.GetBytes(text);
+        }
+        else postType = null;
+        // "PRVM_G_INT(OFS_RETURN) = 1": the integer, which as a float is a denormal - not zero, and
+        // "if (uri_get(...))" is a bit test.
+        vm.ReturnInt(_host.UriBegin(url, id, postType, body) ? 1 : 0);
     }
 
     // #504 getentity(float entitynum, float fldnum): a property of one of the engine's own network

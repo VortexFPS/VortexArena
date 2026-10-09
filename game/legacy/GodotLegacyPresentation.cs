@@ -410,6 +410,7 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
     {
         CancelPrecache();
         StopAllSounds();
+        ReleaseDpSound();
         ReleaseAllProxies();
         ReleasePrebuilt();
         ReleaseLevelMaps();

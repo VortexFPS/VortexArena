@@ -74,7 +74,8 @@ public partial class ClientWorld
     private bool DpStartSound(string bare, NVec3 origin, float volume, float attenuation, int channel, int sourceNetId, float pitch)
     {
         if (DpNative.Bank(AudioLoader) is not { } bank) return false;
-        if (bank.Get(bare, forPlay: true) is not { Failed: false } sfx) return true;   // DarkPlaces: a missing file is silence
+        // Not in the mounted game data: the engine-node path may still know it as a project resource.
+        if (bank.Get(bare, forPlay: true) is not { Failed: false } sfx) return false;
         DpSoundSystem sound = DpSound();
         int entnum = sourceNetId > 0 ? sourceNetId : 0;
         if (entnum == 0 && channel > 0) channel = 0;
@@ -97,7 +98,7 @@ public partial class ClientWorld
             sound.StartSound(netId, engineChannel, DpSoundSystem.ChangeVolume, origin, Math.Clamp(volume, 0f, 1f), Math.Clamp(attenuation, 0f, 4f), 0f, DpSoundSystem.ChannelFlagForceLoop, 1f);
             return true;
         }
-        if (bank.Get(bare, forPlay: true) is not { Failed: false } sfx) return true;
+        if (bank.Get(bare, forPlay: true) is not { Failed: false } sfx) return false;
         int index = sound.StartSound(netId, engineChannel, sfx, origin, Math.Clamp(volume, 0f, 1f), Math.Clamp(attenuation, 0f, 4f), 0f, DpSoundSystem.ChannelFlagForceLoop, 1f);
         if (index >= 0) _dpLoops[key] = new DpLoop { Sfx = sfx, Sample = bare, Channel = index };
         return true;

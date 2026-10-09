@@ -111,6 +111,12 @@ public sealed partial class GodotLegacyPresentation
         _dpAudio.Sound.Settings = _dpSettings;
     }
 
+    // The session is over: the process's sound system must not keep it alive through its world.
+    private void ReleaseDpSound()
+    {
+        if (_dpAudio is { } audio && audio.Sound.World is DpWorld world && ReferenceEquals(world.P, this)) audio.Sound.World = new DpNullSoundWorld();
+    }
+
     private DpSfx? DpSample(string sample, bool forPlay)
     {
         if (sample.Length > 200 || !LegacyQcHost.IsSafePath(sample)) return null;

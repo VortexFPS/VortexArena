@@ -490,6 +490,11 @@ void light() {
 
     internal static string MakeTranslucent(string code)
     {
+        // The source is a literal in this file, so its line endings are this file's: a Windows checkout with
+        // automatic line-ending conversion gives CRLF, and the anchor (and the discard block below) end in a
+        // bare LF. Compared as written, the anchor was "gone", the type initializer threw, and the game
+        // started to a grey window. The comparison is made on LF text whatever the checkout did.
+        code = code.Replace("\r\n", "\n");
         if (!code.Contains(TranslucentAnchor, System.StringComparison.Ordinal))
             throw new System.InvalidOperationException("LightmapShader: the translucent variant's anchor line is gone from Code.");
         // A blended surface is not alpha-tested: the discard block goes.

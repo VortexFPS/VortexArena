@@ -43,6 +43,10 @@ public sealed partial class QcCoreBuiltins
     }
 
     private readonly Dictionary<string, bool> _extensionAnswers = new(StringComparer.Ordinal);
+
+    /// <summary>What the program has asked checkextension so far, and the answer it got (the first 1024
+    /// distinct names). For a probe that reports which extensions a program wants and this engine lacks.</summary>
+    public IReadOnlyDictionary<string, bool> ExtensionAnswers => _extensionAnswers;
     private int _extensionAnswersFor = -1;
 
     // #46 void(string s, ...) localcmd

@@ -171,6 +171,9 @@ public sealed partial class CsqcHost : IDisposable
     /// Each such call returned 0.</summary>
     public Dictionary<(int Number, string Name), long> UnimplementedBuiltins { get; } = new();
 
+    /// <summary>Every extension name the program has passed to checkextension, with the answer it got.</summary>
+    public IReadOnlyDictionary<string, bool> ExtensionChecks => _core.ExtensionAnswers;
+
     /// <summary>Network reads made while no message was being parsed. They return -1, as in DarkPlaces.</summary>
     public long ReadsOutsideMessage { get; internal set; }
 

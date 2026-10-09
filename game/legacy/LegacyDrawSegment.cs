@@ -53,5 +53,10 @@ public partial class LegacyDrawSegment : Control
         if (Size != rect.Size) Size = rect.Size;
     }
 
-    public override void _Draw() => Layer?.Replay(this);
+    public override void _Draw()
+    {
+        long began = LegacyPerfLog.Stamp();
+        Layer?.Replay(this);
+        LegacyPerfLog.Extra(LegacyPerfLog.XHudReplay, began);
+    }
 }

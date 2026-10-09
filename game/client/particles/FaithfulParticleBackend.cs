@@ -81,7 +81,36 @@ public readonly struct ParticleStainEvent
 public sealed partial class FaithfulParticleBackend : Node3D
 {
     private readonly ParticleSim _sim = new(new XorShiftParticleRng());
+    private readonly ParticleSimRunner _runner;
     private FaithfulParticleRenderer _renderer = null!;
+
+    /// <summary>
+    /// (2026-10-08) The frame's spawns, update, cull, sort and pack run on a thread of their own, from where
+    /// this node's <c>_Process</c> used to run the update until the frame is about to be drawn; the main thread
+    /// records the spawns, goes on with the nodes that follow and only hands the packed buffer to the engine.
+    /// <see cref="ParticleSimRunner"/> says why the particles come out the same (and
+    /// <c>ParticleSimRunnerTests</c> holds it to that). False - the environment variable
+    /// VORTEX_PARTICLES_WORKER=0 - runs everything in place as before.
+    /// </summary>
+    public static bool UseWorker = System.Environment.GetEnvironmentVariable("VORTEX_PARTICLES_WORKER") != "0";
+
+    public FaithfulParticleBackend()
+    {
+        _runner = new ParticleSimRunner(_sim) { Threaded = UseWorker };
+        _packOnWorker = PackOnWorker;
+    }
+
+    // What the pack needs, set by the main thread before the worker is started.
+    private readonly Action _packOnWorker;
+    private NVec3 _packViewOrigin, _packViewForward;
+    private float _packTime;
+    private FaithfulParticleRenderer.SyncSettings _packSettings;
+    private bool _uploadPending;
+    private ulong _advancedFrame = ulong.MaxValue;
+
+    /// <summary>A tracer over the same world as the simulation's, for the main thread (the simulation's own is
+    /// the worker's while an update runs). Same geometry, so the same answers.</summary>
+    public ITraceService? MainThreadTrace { get; private set; }
 
     // Cache: one converted ParticleEmitterInfo list per source EffectInfoEmitter list (identity-keyed, so
     // the EffectSystem's stable per-effect block lists map to a stable converted snapshot — no per-spawn
@@ -109,7 +138,12 @@ public sealed partial class FaithfulParticleBackend : Node3D
     /// listen server cost a box-sweep of the whole entity broadphase under the tick lock per bouncing
     /// particle). See <see cref="ParticleSim.Trace"/>. Null reverts to the ambient Api.Trace.
     /// </summary>
-    public void SetTrace(ITraceService? trace) => _sim.Trace = trace;
+    public void SetTrace(ITraceService? trace, ITraceService? mainThreadTrace = null)
+    {
+        Finish(flush: true);
+        _sim.Trace = trace;
+        MainThreadTrace = mainThreadTrace ?? trace;
+    }
 
     /// <summary>
     /// Raised for an effectinfo <c>orientation beam</c> block spawned as a trail (the bullet tracer, the
@@ -118,12 +152,20 @@ public sealed partial class FaithfulParticleBackend : Node3D
     /// </summary>
     public Action<BeamEvent>? OnBeam
     {
-        get => _sim.OnBeam;
-        set => _sim.OnBeam = value;
+        get => _runner.OnBeam;
+        set => _runner.OnBeam = value;
     }
 
-    /// <summary>The live simulation (exposed for stats/HUD and the parity harness; do not mutate).</summary>
-    public ParticleSim Sim => _sim;
+    /// <summary>The live simulation (exposed for stats/HUD and the parity harness; do not mutate). Asking for
+    /// it ends an update still running on the worker, so what is read is whole.</summary>
+    public ParticleSim Sim
+    {
+        get
+        {
+            Finish(flush: true);
+            return _sim;
+        }
+    }
 
     /// <summary>Warm-pass nodes for the renderer's MultiMesh pipelines (§11 R1) — empty before _Ready.</summary>
     public System.Collections.Generic.List<Node3D> BuildWarmupInstances()
@@ -142,17 +184,72 @@ public sealed partial class FaithfulParticleBackend : Node3D
         // stain (it can't touch Godot's Decals); adapt each to the Godot-free ParticleStainEvent and forward.
         // Color bytes -> linear 0..1; alpha is 0..1 for stains, 0..255 for the blood-no-staintex path -> map
         // both robustly; a negative texnum (blood picks a decal) falls back to the blood-decal cell band.
-        _sim.OnStain += ev => ForwardStain(new ParticleStainEvent(
+        _runner.OnStain = ev => ForwardStain(new ParticleStainEvent(
             ev.Org, ev.Dir, ev.Size,
             ev.ColorR / 255f, ev.ColorG / 255f, ev.ColorB / 255f,
             ev.Alpha > 1.5f ? ev.Alpha / 255f : ev.Alpha,
             ev.TexNum,
             ev.Projected, ev.MaxDist, ev.IsBlood));
+
+        // The update started in _Process is ended, and its buffer handed over, just before the frame is drawn.
+        _preDraw = Callable.From(OnFramePreDraw);
+        RenderingServer.Singleton.Connect(RenderingServer.SignalName.FramePreDraw, _preDraw);
+    }
+
+    private Callable _preDraw;
+
+    public override void _ExitTree()
+    {
+        Finish();
+        if (RenderingServer.Singleton.IsConnected(RenderingServer.SignalName.FramePreDraw, _preDraw))
+            RenderingServer.Singleton.Disconnect(RenderingServer.SignalName.FramePreDraw, _preDraw);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _runner.Dispose();
+        base.Dispose(disposing);
+    }
+
+    private void OnFramePreDraw()
+    {
+        if (!_runner.InFlight && !_uploadPending) return;
+        using var _scope = VortexArena.Common.Diagnostics.Prof.Sample("particles.join");
+        Finish();
+    }
+
+    /// <summary>
+    /// Ends the run the worker is on, if any: waits for it, delivers the marks it raised and hands the packed
+    /// instances to the engine. With <paramref name="flush"/> the spawns recorded since are applied as well:
+    /// everything that reads or changes the simulation from the main thread asks for that first.
+    /// </summary>
+    private void Finish(bool flush = false)
+    {
+        if (_runner.InFlight)
+        {
+            long began = VortexArena.Game.Legacy.LegacyPerfLog.Stamp();
+            _runner.Join();
+            VortexArena.Game.Legacy.LegacyPerfLog.Extra(VortexArena.Game.Legacy.LegacyPerfLog.XParticleWait, began);
+        }
+        if (flush) _runner.Flush();
+        if (_uploadPending)
+        {
+            _uploadPending = false;
+            _renderer.Upload();
+        }
+    }
+
+    private void PackOnWorker()
+    {
+        long began = VortexArena.Game.Legacy.LegacyPerfLog.Stamp();
+        _renderer.Pack(_sim.Pool, _sim.HighWater, _packViewOrigin, _packViewForward, _packTime, _packSettings);
+        VortexArena.Game.Legacy.LegacyPerfLog.Extra(VortexArena.Game.Legacy.LegacyPerfLog.XParticleSync, began);
     }
 
     /// <summary>Set the particlefont (orchestrator wiring). Rebuilds the renderer atlas if already ready.</summary>
     public void SetFont(ParticleFont? font)
     {
+        Finish();
         Font = font;
         if (_renderer is not null && font is not null)
             _renderer.BuildAtlas(font);
@@ -166,6 +263,7 @@ public sealed partial class FaithfulParticleBackend : Node3D
     /// gates every spawn off (no particles render at all). Propagates to the sim and the renderer.</summary>
     public void SetCvars(VortexArena.Common.Services.ICvarService cvars)
     {
+        Finish();
         _pendingCvars = cvars;
         _sim.Cvars = cvars;
         if (_renderer is not null)
@@ -189,7 +287,7 @@ public sealed partial class FaithfulParticleBackend : Node3D
         if (blocks is null || blocks.Count == 0)
             return;
         ParticleEmitterInfo[] converted = Convert(blocks);
-        _sim.SpawnEffect(converted, count, origin, origin, velocity, velocity, tintRgba, wantTrail: false);
+        _runner.Spawn(converted, count, origin, origin, velocity, velocity, tintRgba, wantTrail: false);
     }
 
     /// <summary>
@@ -204,11 +302,15 @@ public sealed partial class FaithfulParticleBackend : Node3D
         if (blocks is null || blocks.Count == 0)
             return;
         ParticleEmitterInfo[] converted = Convert(blocks);
-        _sim.SpawnEffect(converted, count, start, end, velocity, velocity, tintRgba, wantTrail: true);
+        _runner.Spawn(converted, count, start, end, velocity, velocity, tintRgba, wantTrail: true);
     }
 
     /// <summary>Drop all live particles (map change / mode switch). Does not touch already-spawned decals.</summary>
-    public void Clear() => _sim.Clear();
+    public void Clear()
+    {
+        Finish(flush: true);
+        _sim.Clear();
+    }
 
     // ---------------------------------------------------------------------------------------------
     //  EffectInfoEmitter -> ParticleEmitterInfo conversion (field-by-field; enums are cast-compatible
@@ -354,8 +456,23 @@ public sealed partial class FaithfulParticleBackend : Node3D
     //  Per-frame: advance the sim, then sync the renderer to the live pool from the active camera.
     // ---------------------------------------------------------------------------------------------
 
-    public override void _Process(double delta)
+    public override void _Process(double delta) => Advance(delta);
+
+    /// <summary>
+    /// The frame's particle step: what <c>_Process</c> does. An owner that knows no more particles will be
+    /// spawned this frame before this node's own turn may call it earlier in the frame (legacy compatibility
+    /// mode does, as soon as the client program has run), which gives the worker the rest of the frame; the
+    /// node's own call is then nothing. A spawn between such an early call and the node's turn would be applied
+    /// after the update instead of before it, so the early call is only for an owner that makes none.
+    /// </summary>
+    public void Advance(double delta)
     {
+        ulong frame = Godot.Engine.GetProcessFrames();
+        if (frame == _advancedFrame) return;
+        _advancedFrame = frame;
+        // An update still running from the frame before (no frame was drawn in between: a hidden window).
+        Finish();
+
         // [profiling] the faithful sim+sync was the largest UNSCOPED per-frame cost (showed only as
         // proc:other in hitch dumps) — scope it so combat-frame attribution names it directly.
         using var _scope = VortexArena.Common.Diagnostics.Prof.Sample("particles.cpu");
@@ -380,8 +497,7 @@ public sealed partial class FaithfulParticleBackend : Node3D
         _clientTime += Math.Min(VortexArena.Game.Client.ClientRenderTime.ScaleDelta((float)delta), MaxParticleStep);
         // Child scopes: a particles.cpu hitch names its half directly (sim integration vs renderer
         // cull/sort/pack) instead of restarting the whole who-is-it hunt.
-        using (VortexArena.Common.Diagnostics.Prof.Sample("particles.sim"))
-            _sim.Update(_clientTime);
+        ParticleSim.UpdateSettings updateSettings = _sim.ReadUpdateSettings();
 
         // View origin/forward in Quake space, from the active camera (GetViewport().GetCamera3D()). The
         // renderer culls/sorts against this and converts to Godot at the boundary.
@@ -397,8 +513,33 @@ public sealed partial class FaithfulParticleBackend : Node3D
             viewForward = Coords.ToQuake(gFwd);
         }
 
-        using (VortexArena.Common.Diagnostics.Prof.Sample("particles.sync"))
-            _renderer.Sync(_sim.Pool, _sim.HighWater, viewOrigin, viewForward, _clientTime);
+        if (_runner.Threaded != UseWorker)
+        {
+            _runner.Flush();
+            _runner.Threaded = UseWorker;
+        }
+        if (!UseWorker)
+        {
+            long began = VortexArena.Game.Legacy.LegacyPerfLog.Stamp();
+            using (VortexArena.Common.Diagnostics.Prof.Sample("particles.sim"))
+                _sim.Update(_clientTime, updateSettings);
+            VortexArena.Game.Legacy.LegacyPerfLog.Extra(VortexArena.Game.Legacy.LegacyPerfLog.XParticleSim, began);
+            began = VortexArena.Game.Legacy.LegacyPerfLog.Stamp();
+            using (VortexArena.Common.Diagnostics.Prof.Sample("particles.sync"))
+                _renderer.Sync(_sim.Pool, _sim.HighWater, viewOrigin, viewForward, _clientTime);
+            VortexArena.Game.Legacy.LegacyPerfLog.Extra(VortexArena.Game.Legacy.LegacyPerfLog.XParticleSync, began);
+            return;
+        }
+
+        // The worker takes it from here: the update, then the cull, sort and pack into the renderer's buffers.
+        // The main thread comes back for the result in Finish - when the frame is about to be drawn, or sooner
+        // if something asks for the simulation.
+        _packViewOrigin = viewOrigin;
+        _packViewForward = viewForward;
+        _packTime = _clientTime;
+        _packSettings = _renderer.ReadSyncSettings();
+        _uploadPending = true;
+        _runner.Begin(_clientTime, updateSettings, _packOnWorker);
     }
 
     private float _clientTime;   // accumulating client render clock driving the sim

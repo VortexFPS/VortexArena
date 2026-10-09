@@ -139,7 +139,7 @@ public partial class MapParticleEmitters : Node3D
         {
             // traceline(p, p + normalize(movedir) * 4096, 0, NULL): the emission moves to the surface the
             // entity points at and leaves along its normal at |movedir|.
-            ITraceService trace = fx.FaithfulParticles?.Sim.Trace ?? Api.Trace;
+            ITraceService trace = fx.FaithfulParticles?.MainThreadTrace ?? Api.Trace;
             TraceResult tr = trace.Trace(p, NVec3.Zero, NVec3.Zero,
                 p + VortexArena.Common.Math.QMath.Normalize(e.MoveDir) * 4096f, MoveFilter.WorldOnly, e);
             p = tr.EndPos;

@@ -187,7 +187,11 @@ public partial class EffectSystem : Node3D
         // every bouncing spark used to box-sweep the live entity broadphase under the server-tick gate — the
         // dominant combat-frame hitch. This tracer runs only on the main thread alongside the splat consumer
         // of the same (client-only) world, so it needs no gate.
-        FaithfulParticles?.SetTrace(new TraceService(world));
+        // (2026-10-08) The simulation's update runs on its own thread (FaithfulParticleBackend.UseWorker), and
+        // a collision world keeps scratch state per query, so the simulation's tracer is over a share of the
+        // world with scratch of its own; main-thread callers that used the simulation's tracer get a second one
+        // over the world itself. Same brushes, same broadphase, same answers.
+        FaithfulParticles?.SetTrace(new TraceService(world.ShareForThread()), new TraceService(world));
 
         // Give the casing sim a world-only tracer too, so brass does full MOVETYPE_BOUNCE world collision
         // (reflect off real brush faces at cl_casings_ticrate) instead of the FloorZ ground-plane fallback —

@@ -405,6 +405,42 @@ public sealed class CollisionWorld
 
     public IReadOnlyList<Brush> Brushes => _brushes;
 
+    public CollisionWorld() { }
+
+    private CollisionWorld(CollisionWorld source)
+    {
+        _brushes = new List<Brush>(source._brushes);
+        _cells = source._cells;
+        _outside = new List<int>(source._outside);
+        _worldMins = source._worldMins;
+        _worldMaxs = source._worldMaxs;
+        _scaleX = source._scaleX;
+        _scaleY = source._scaleY;
+        _biasX = source._biasX;
+        _biasY = source._biasY;
+        _gridBuilt = true;
+        _bih = source._bih;
+        _useBih = source._useBih;
+        _mark = new int[_brushes.Count];
+    }
+
+    /// <summary>
+    /// A second world over the same brushes for another thread to query: the brush list, the grid and the
+    /// hierarchy are shared (queries only read them), the per-query scratch (the visit marks, the hierarchy
+    /// walker) is its own, and so are the two lists (copies of references: clearing this world later does not
+    /// pull the brushes from under the share). Two threads can then query the same geometry at once, each
+    /// through its own world.
+    /// Call it once the brush set is final, on the thread that owns this world: the broadphase is built here
+    /// if it was not yet. A brush added to this world afterwards is not in the share:
+    /// make a new share after changing the set.
+    /// </summary>
+    public CollisionWorld ShareForThread()
+    {
+        if (!_gridBuilt) BuildGrid();
+        _ = Bih;
+        return new CollisionWorld(this);
+    }
+
     public Vector3 WorldMins => _worldMins;
     public Vector3 WorldMaxs => _worldMaxs;
 

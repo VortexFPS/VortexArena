@@ -111,6 +111,18 @@ public sealed partial class GodotLegacyPresentation
         _effects.ProcessMode = frozen ? Node.ProcessModeEnum.Disabled : Node.ProcessModeEnum.Inherit;
     }
 
+    /// <summary>
+    /// The frame's particle step, started as soon as the client program has run instead of when the effect
+    /// system's node gets its turn later in the frame. Nothing spawns a particle in between (spawns come from
+    /// the server's messages and from the program, both done by now), so the particles are the same; what
+    /// changes is that their update, which runs on its own thread, has the rest of the frame to finish in.
+    /// </summary>
+    public void AdvanceParticles(double delta)
+    {
+        if (_effectsFrozen || _effects.FaithfulParticles is not { } particles || !particles.IsInsideTree() || !particles.CanProcess()) return;
+        particles.Advance(delta);
+    }
+
     // ---- developer aid: only reachable from a review script (VORTEX_LEGACY_SCRIPT) -----------------------
 
     /// <summary>"colourdbg &lt;what&gt; [value]" in a review script: one switch of the picture, or "dump" for the

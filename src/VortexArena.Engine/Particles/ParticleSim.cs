@@ -279,9 +279,49 @@ public sealed class ParticleSim
         uint tintRgba = 0xFFFFFFFFu, float fade = 1f, bool wantTrail = false)
     {
         if (blocks == null || blocks.Count == 0) return;
+        SpawnEffect(blocks, pcount, originMins, originMaxs, velocityMins, velocityMaxs, tintRgba, fade, wantTrail, ReadSpawnSettings());
+    }
+
+    /// <summary>The cvars one <see cref="SpawnEffect(IReadOnlyList{ParticleEmitterInfo}, float, Vector3, Vector3, Vector3, Vector3, uint, float, bool)"/>
+    /// can read: cl_particles, its quality (times <see cref="QualityScale"/>), the six per-type switches,
+    /// cl_decals_newsystem_immediatebloodstain and sv_gravity (800 when unset).</summary>
+    public readonly struct SpawnSettings
+    {
+        public readonly bool Particles, Smoke, Sparks, Bubbles, Blood, Rain, Snow;
+        public readonly float Quality, ImmediateBloodStain, Gravity;
+
+        public SpawnSettings(bool particles, float quality, bool smoke, bool sparks, bool bubbles, bool blood, bool rain, bool snow,
+            float immediateBloodStain, float gravity)
+        {
+            Particles = particles; Quality = quality; Smoke = smoke; Sparks = sparks; Bubbles = bubbles; Blood = blood; Rain = rain; Snow = snow;
+            ImmediateBloodStain = immediateBloodStain; Gravity = gravity;
+        }
+    }
+
+    /// <summary>Reads what a spawn needs from the cvar store, on the thread that owns the store.</summary>
+    public SpawnSettings ReadSpawnSettings() => new(
+        CvBool(ParticleCvars.Particles), Cv(ParticleCvars.Quality) * QualityScale,
+        CvBool(ParticleCvars.Smoke), CvBool(ParticleCvars.Sparks), CvBool(ParticleCvars.Bubbles),
+        CvBool(ParticleCvars.Blood), CvBool(ParticleCvars.Rain), CvBool(ParticleCvars.Snow),
+        Cv(ParticleCvars.DecalsImmediateBloodStain), SvGravity());
+
+    /// <summary>
+    /// The spawn with its cvars read beforehand (<see cref="ReadSpawnSettings"/>), so that it touches no cvar
+    /// store: the form <see cref="ParticleSimRunner"/> applies on its own thread. The same values give the
+    /// same particles as the plain call.
+    /// </summary>
+    public void SpawnEffect(
+        IReadOnlyList<ParticleEmitterInfo> blocks, float pcount,
+        Vector3 originMins, Vector3 originMaxs,
+        Vector3 velocityMins, Vector3 velocityMaxs,
+        uint tintRgba, float fade, bool wantTrail, in SpawnSettings settings)
+    {
+        if (blocks == null || blocks.Count == 0) return;
         // DP gates cl_particles per block, AFTER the decal and beam branches (1702): a decal still marks the
         // wall with particles switched off.
-        bool particlesOn = CvBool(ParticleCvars.Particles);
+        bool particlesOn = settings.Particles;
+        _spawnParticlesOn = particlesOn;   // CL_NewParticle's own test of the same cvar, read once a call
+        _spawnGravity = settings.Gravity;
 
         float now = _currentTime;   // the sim clock (set by Update), NOT Api.Clock — see _currentTime.
         // (perf 2026-08-03) The adaptive-quality controller scales the spawn count exactly like DP's
@@ -289,7 +329,7 @@ public sealed class ParticleSim
         // integrate + world traces) and leads ~19% of stormkeep frames, so it is the largest CPU cost that
         // degrades gracefully. QualityScale is 1 (identity) whenever the controller is disabled, which is
         // the default — so this multiply changes nothing until a player opts into a frame-time target.
-        float quality = Cv(ParticleCvars.Quality) * QualityScale;
+        float quality = settings.Quality;
 
         // VectorLerp(originmins, 0.5, originmaxs, center) (1600).
         Vector3 center = originMins + (originMaxs - originMins) * 0.5f;
@@ -418,12 +458,12 @@ public sealed class ParticleSim
             // Type gates (1704-1713):
             switch (info.Type)
             {
-                case ParticleType.Smoke:  if (!CvBool(ParticleCvars.Smoke))   continue; break;
-                case ParticleType.Spark:  if (!CvBool(ParticleCvars.Sparks))  continue; break;
-                case ParticleType.Bubble: if (!CvBool(ParticleCvars.Bubbles)) continue; break;
-                case ParticleType.Blood:  if (!CvBool(ParticleCvars.Blood))   continue; break;
-                case ParticleType.Rain:   if (!CvBool(ParticleCvars.Rain))    continue; break;
-                case ParticleType.Snow:   if (!CvBool(ParticleCvars.Snow))    continue; break;
+                case ParticleType.Smoke:  if (!settings.Smoke)   continue; break;
+                case ParticleType.Spark:  if (!settings.Sparks)  continue; break;
+                case ParticleType.Bubble: if (!settings.Bubbles) continue; break;
+                case ParticleType.Blood:  if (!settings.Blood)   continue; break;
+                case ParticleType.Rain:   if (!settings.Rain)    continue; break;
+                case ParticleType.Snow:   if (!settings.Snow)    continue; break;
                 default: break;
             }
 
@@ -442,7 +482,7 @@ public sealed class ParticleSim
                 immediateBloodStain = false;
             else
             {
-                int ibs = (int)Cv(ParticleCvars.DecalsImmediateBloodStain);
+                int ibs = (int)settings.ImmediateBloodStain;
                 immediateBloodStain =
                     (ibs >= 1 && info.Type == ParticleType.Blood) ||
                     (ibs >= 2 && staintex != 0);
@@ -577,8 +617,9 @@ public sealed class ParticleSim
         float stainalpha, float stainsize, float angle, float spin, Vector4? tint,
         float originJitter = 0f, float velocityJitter = 0f)
     {
-        // cl_particles gate + free-slot scan (702-706).
-        if (!CvBool(ParticleCvars.Particles)) return -1;
+        // cl_particles gate + free-slot scan (702-706). The cvar was read for this effect call (SpawnSettings):
+        // a lookup by name for every particle of a burst was a measurable part of spawning one.
+        if (!_spawnParticlesOn) return -1;
         while (_freeParticle < _maxParticles && _freeParticle < _pool.Length && _pool[_freeParticle].Active)
             _freeParticle++;
         if (_freeParticle >= _maxParticles)
@@ -684,7 +725,7 @@ public sealed class ParticleSim
         // renderer side if a host wants them; here we faithfully spawn the spark sub-particles DP creates.
         if (p.TypeIndex == ParticleType.Rain)
         {
-            float gravityVar = SvGravity();
+            float gravityVar = _spawnGravity;
             // Re-read by ref because NewParticle calls below may grow/realloc the pool.
             Vector3 org = _pool[idx].Org, vel = _pool[idx].Vel;
             _pool[idx].TypeIndex = ParticleType.Spark;
@@ -737,7 +778,31 @@ public sealed class ParticleSim
     /// it as <see cref="Now"/> so spawns this frame share the clock. In game pass an ACCUMULATING client
     /// render clock (sum of frame deltas) — NOT the server sim clock; in tests pass the scripted step time.
     /// </summary>
-    public void Update(float time)
+    public void Update(float time) => Update(time, ReadUpdateSettings());
+
+    /// <summary>The cvars one <see cref="Update(float)"/> reads: cl_particles_collisions, sv_gravity (800 when
+    /// unset) and cl_decals_newsystem_bloodsmears.</summary>
+    public readonly struct UpdateSettings
+    {
+        public readonly bool Collisions, BloodSmears;
+        public readonly float Gravity;
+
+        public UpdateSettings(bool collisions, float gravity, bool bloodSmears)
+        {
+            Collisions = collisions; Gravity = gravity; BloodSmears = bloodSmears;
+        }
+    }
+
+    /// <summary>Reads what an update needs from the cvar store, on the thread that owns the store.</summary>
+    public UpdateSettings ReadUpdateSettings() =>
+        new(CvBool(ParticleCvars.Collisions), SvGravity(), CvBool(ParticleCvars.DecalsBloodSmears));
+
+    /// <summary>
+    /// <see cref="Update(float)"/> with its cvars read beforehand (<see cref="ReadUpdateSettings"/>), so that it
+    /// touches no cvar store: the form a thread other than the store's owner runs (<see cref="ParticleSimRunner"/>).
+    /// The same values give the same result as the plain call.
+    /// </summary>
+    public void Update(float time, in UpdateSettings settings)
     {
         // frametime = bound(0, time - updatetime, 1); updatetime = bound(time-1, updatetime+frametime, time+1).
         // (cl_particles.c:2921-2922) — _updateTime starts at 0, so the first frametime is `time` clamped to 1.
@@ -758,8 +823,9 @@ public sealed class ParticleSim
 
         if (_highWater == 0) return;
 
-        bool collisions = CvBool(ParticleCvars.Collisions);
-        float svGravity = SvGravity();
+        bool collisions = settings.Collisions;
+        float svGravity = settings.Gravity;
+        bool bloodSmears = settings.BloodSmears;
         float gravity = frametime * svGravity;
         bool update = frametime > 0f;
         int live = 0;
@@ -871,7 +937,7 @@ public sealed class ParticleSim
                                 p.Org = tr.EndPos;
                                 // Decal projection axis (:3007-3012): the particle's velocity when
                                 // cl_decals_newsystem_bloodsmears is on (smeared marks), else the hit normal.
-                                Vector3 decaldir = CvBool(ParticleCvars.DecalsBloodSmears) && p.Vel.LengthSquared() > 1e-6f
+                                Vector3 decaldir = bloodSmears && p.Vel.LengthSquared() > 1e-6f
                                     ? Vector3.Normalize(p.Vel)
                                     : tr.PlaneNormal;
 
@@ -988,6 +1054,9 @@ public sealed class ParticleSim
         LiveCount = live;
         _lastActiveCount = _activeOrdinal;   // ring wrap modulus for next frame (active slots scanned this frame)
     }
+
+    private bool _spawnParticlesOn;
+    private float _spawnGravity;
 
     // DP's fixed particlefont cells (cl_particles.c tex_rainsplash / tex_particle).
     private const int TexRainSplash = 32;

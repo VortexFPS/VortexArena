@@ -39,7 +39,28 @@ public static class LegacyPerfLog
         public float GcPause;
         public int DrawCalls, Objects;
         public byte State, Flag;
+        public float X0, X1, X2, X3, X4, X5;
     }
+
+    /// <summary>
+    /// Time spent outside the legacy node, by what spent it, since the last frame was recorded: 0 the particle
+    /// simulation, 1 the particle cull, sort and pack, 2 the particle buffer upload, 3 replaying the 2D list
+    /// onto canvas items, 4 waiting for the particle worker, 5 spare. The nodes that do this work run after the
+    /// legacy node, so a frame's record carries the figures of the frame before it.
+    /// </summary>
+    public const int XParticleSim = 0, XParticleSync = 1, XParticleUpload = 2, XHudReplay = 3, XParticleWait = 4, XSpare = 5;
+    private static readonly long[] s_extraTicks = new long[6];
+
+    /// <summary>Adds the time since <paramref name="began"/> (a <see cref="Stamp"/>) to an extra slot. Main thread or a
+    /// worker; nothing when not recording.</summary>
+    public static void Extra(int slot, long began)
+    {
+        if (!Enabled || began == 0) return;
+        System.Threading.Interlocked.Add(ref s_extraTicks[slot], Stopwatch.GetTimestamp() - began);
+    }
+
+    private static float TakeExtra(int slot) =>
+        (float)(System.Threading.Interlocked.Exchange(ref s_extraTicks[slot], 0) * 1000.0 / Stopwatch.Frequency);
 
     private static Frame[]? s_frames;
     private static int s_count;
@@ -102,6 +123,8 @@ public static class LegacyPerfLog
         // Asking the renderer waits for the render thread, so it is asked once in 64 frames (0 in between).
         if ((s_count & 63) == 0) s_current.DrawCalls = (int)Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
         s_current.Objects = (int)Performance.GetMonitor(Performance.Monitor.ObjectCount);
+        s_current.X0 = TakeExtra(0); s_current.X1 = TakeExtra(1); s_current.X2 = TakeExtra(2);
+        s_current.X3 = TakeExtra(3); s_current.X4 = TakeExtra(4); s_current.X5 = TakeExtra(5);
         if (s_count < MaxFrames) s_frames[s_count++] = s_current;
     }
 
@@ -134,7 +157,7 @@ public static class LegacyPerfLog
             CultureInfo ci = CultureInfo.InvariantCulture;
             double perMs = 1000.0 / Stopwatch.Frequency;
             StringBuilder text = new(s_count * 96 + 4096);
-            text.Append("F,t_ms,state,total_ms,server_ms,receive_ms,send_ms,program_ms,present_ms,alloc_main,alloc_all,gc0,gc1,gc2,gc_pause_ms,draw_calls,objects,flag\n");
+            text.Append("F,t_ms,state,total_ms,server_ms,receive_ms,send_ms,program_ms,present_ms,alloc_main,alloc_all,gc0,gc1,gc2,gc_pause_ms,draw_calls,objects,flag,x_psim,x_psync,x_pupload,x_hud,x_pwait,x_spare\n");
             for (int i = 0; i < s_count; i++)
             {
                 ref Frame f = ref s_frames[i];
@@ -144,7 +167,10 @@ public static class LegacyPerfLog
                     .Append(f.P3.ToString("0.000", ci)).Append(',').Append(f.P4.ToString("0.000", ci)).Append(',')
                     .Append(f.Allocated).Append(',').Append(f.AllocatedAll).Append(',')
                     .Append(f.Gc0).Append(',').Append(f.Gc1).Append(',').Append(f.Gc2).Append(',')
-                    .Append(f.GcPause.ToString("0.00", ci)).Append(',').Append(f.DrawCalls).Append(',').Append(f.Objects).Append(',').Append(f.Flag).Append('\n');
+                    .Append(f.GcPause.ToString("0.00", ci)).Append(',').Append(f.DrawCalls).Append(',').Append(f.Objects).Append(',').Append(f.Flag)
+                    .Append(',').Append(f.X0.ToString("0.0000", ci)).Append(',').Append(f.X1.ToString("0.0000", ci))
+                    .Append(',').Append(f.X2.ToString("0.0000", ci)).Append(',').Append(f.X3.ToString("0.0000", ci))
+                    .Append(',').Append(f.X4.ToString("0.0000", ci)).Append(',').Append(f.X5.ToString("0.0000", ci)).Append('\n');
             }
             lock (s_eventLock)
             {

@@ -340,6 +340,15 @@ public sealed partial class DecalSplats : Node3D
         int stamp = _stamp;
         float[] tris = _tris!;
 
+        // (2026-10-08) The six planes of the splat box, as ClipPolyAgainstBox forms them. A triangle whose three
+        // corners are all outside one of them is clipped to nothing by that plane whatever the planes before it
+        // left (what they leave is a part of the triangle), so it is refused here on eighteen dot products
+        // instead of being copied into a list and cut plane by plane. A 256-unit cell of a level holds some
+        // thousands of triangles and a mark touches a handful: a burst of blood marks was 0.3 to 3 ms a mark.
+        NVec3 pr = ctx.Right, pu = ctx.Up, pn = ctx.N;
+        float dr = NVec3.Dot(pr, org), du = NVec3.Dot(pu, org), dn = NVec3.Dot(pn, org);
+        float rHi = dr + h, rLo = -dr + h, uHi = du + h, uLo = -du + h, nHi = dn + h, nLo = -dn + h;
+
         int x0 = (int)MathF.Floor((org.X - h) / GridCell), x1 = (int)MathF.Floor((org.X + h) / GridCell);
         int y0 = (int)MathF.Floor((org.Y - h) / GridCell), y1 = (int)MathF.Floor((org.Y + h) / GridCell);
         int z0 = (int)MathF.Floor((org.Z - h) / GridCell), z1 = (int)MathF.Floor((org.Z + h) / GridCell);
@@ -356,10 +365,23 @@ public sealed partial class DecalSplats : Node3D
                         _triStamp[t] = stamp;
 
                         int o = t * 9;
+                        NVec3 va = new(tris[o], tris[o + 1], tris[o + 2]);
+                        NVec3 vb = new(tris[o + 3], tris[o + 4], tris[o + 5]);
+                        NVec3 vc = new(tris[o + 6], tris[o + 7], tris[o + 8]);
+                        // "Outside" is the clipper's own test negated: dot(plane normal, p) - d > 0.
+                        float ar = NVec3.Dot(pr, va), br = NVec3.Dot(pr, vb), cr = NVec3.Dot(pr, vc);
+                        if ((ar - rHi > 0f && br - rHi > 0f && cr - rHi > 0f) || (-ar - rLo > 0f && -br - rLo > 0f && -cr - rLo > 0f))
+                            continue;
+                        float au = NVec3.Dot(pu, va), bu = NVec3.Dot(pu, vb), cu = NVec3.Dot(pu, vc);
+                        if ((au - uHi > 0f && bu - uHi > 0f && cu - uHi > 0f) || (-au - uLo > 0f && -bu - uLo > 0f && -cu - uLo > 0f))
+                            continue;
+                        float an = NVec3.Dot(pn, va), bn = NVec3.Dot(pn, vb), cn = NVec3.Dot(pn, vc);
+                        if ((an - nHi > 0f && bn - nHi > 0f && cn - nHi > 0f) || (-an - nLo > 0f && -bn - nLo > 0f && -cn - nLo > 0f))
+                            continue;
                         _polyA.Clear();
-                        _polyA.Add(new NVec3(tris[o], tris[o + 1], tris[o + 2]));
-                        _polyA.Add(new NVec3(tris[o + 3], tris[o + 4], tris[o + 5]));
-                        _polyA.Add(new NVec3(tris[o + 6], tris[o + 7], tris[o + 8]));
+                        _polyA.Add(va);
+                        _polyA.Add(vb);
+                        _polyA.Add(vc);
                         if (!ClipPolyAgainstBox(org, ctx.N, ctx.Right, ctx.Up, h))
                             continue;
                         for (int i = 2; i < _polyA.Count; i++)

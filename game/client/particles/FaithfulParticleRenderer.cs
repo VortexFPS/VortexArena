@@ -58,13 +58,25 @@ public sealed partial class FaithfulParticleRenderer : Node3D
 
     private sealed class Batch
     {
-        public MultiMeshInstance3D Node = null!;
-        public MultiMesh Mesh = null!;
+        // One MultiMesh per capacity tier (TierCaps), all drawn by the same material from the same place; only
+        // the smallest tier that holds this frame's instances is shown and uploaded. See TierCaps.
+        public MultiMeshInstance3D[] Nodes = Array.Empty<MultiMeshInstance3D>();
+        public Rid[] Meshes = Array.Empty<Rid>();
+        public string Name = "";
         public ShaderMaterial Material = null!;
         public float[] Buffer = Array.Empty<float>();
         public int Count;
+        // What the engine was last told, so that a frame that changes neither makes no call for it.
+        public int ShownTier = -1, ShownCount = -1;
         // Scratch indices into the pool for this batch (filled each Sync, sorted, then packed).
-        public readonly List<int> Indices = new();
+        public int[] Indices = new int[256];
+        public int IndexCount;
+
+        public void Add(int i)
+        {
+            if (IndexCount == Indices.Length) Array.Resize(ref Indices, Indices.Length * 2);
+            Indices[IndexCount++] = i;
+        }
     }
 
     // (hitch fix 2026-08-03) Fixed instance capacity — see the note in the pack loop. Sized to cover a
@@ -72,6 +84,28 @@ public sealed partial class FaithfulParticleRenderer : Node3D
     // write is a GPU buffer realloc, and a render-thread rendezvous once thread_model=Separate is on).
     // 8192 is 2x the largest capacity the old grow path was observed reaching (4096) on stormkeep.
     private const int MaxInstances = 8192;
+
+    // (2026-10-08) The instance buffer of a MultiMesh can only be replaced whole (MultimeshSetBuffer takes
+    // InstanceCount x stride floats), so with one MultiMesh of 8,192 instances every frame with a single live
+    // particle copied 640 KB to the engine, which copied it to the render thread, which sent it to the GPU:
+    // most of what a frame of particles cost. Each batch therefore keeps one MultiMesh per capacity below, made
+    // once and never resized (the 2026-08-03 rule stands), and a frame uploads to the smallest that holds it -
+    // 10 KB for a hundred particles. The instances, their order, the material and the node's place and bounds
+    // are the same whichever tier draws them, so the picture is the same.
+    private static readonly int[] TierCaps = { 128, 512, 2048, MaxInstances };
+
+    // sRGB byte / 256 -> linear, exactly SrgbToLinear(b * (1f / 256f)) for each of the 256 inputs.
+    private static readonly float[] s_srgbByteToLinear = BuildSrgbTable();
+
+    private static float[] BuildSrgbTable()
+    {
+        float[] t = new float[256];
+        for (int i = 0; i < 256; i++) t[i] = SrgbToLinear(i * (1f / 256f));
+        return t;
+    }
+
+    // DP texnum (a byte) -> shader slot; 0 for a cell the atlas does not hold (what the dictionary miss gave).
+    private readonly int[] _slotTable = new int[256];
 
     private Batch? _premul;   // DP GL_ONE / GL_ONE_MINUS_SRC_ALPHA — alpha AND additive particles
     private Batch? _invmod;   // DP GL_ZERO / GL_ONE_MINUS_SRC_COLOR — dst·(1−src) via blend_mul
@@ -106,9 +140,8 @@ public sealed partial class FaithfulParticleRenderer : Node3D
     private int[] _sortIdx = Array.Empty<int>();
 
     /// <summary>Sort a cull stream's indices farthest-first (ties in pool order) via the key arrays.</summary>
-    private void SortDepth(List<int> indices, Particle[] pool, NVec3 viewOrigin)
+    private void SortDepth(int[] indices, int n, Particle[] pool, NVec3 viewOrigin)
     {
-        int n = indices.Count;
         if (n <= 1) return;
         if (_sortKeys.Length < n)
         {
@@ -159,6 +192,7 @@ public sealed partial class FaithfulParticleRenderer : Node3D
     {
         _built = false;
         _slotOf.Clear();
+        Array.Clear(_slotTable);
         _atlasTex = null;
         _cellRects = Array.Empty<Vector4>();
         if (font is null || !font.Loaded)
@@ -219,6 +253,7 @@ public sealed partial class FaithfulParticleRenderer : Node3D
             float dv = (h - 1f) / atlasH;
             _cellRects[slot] = new Vector4(u0, v0, du, dv);
             _slotOf[index] = slot;
+            if ((uint)index < 256u) _slotTable[index] = slot;
         }
 
         _atlasTex = ImageTexture.CreateFromImage(atlas);
@@ -262,6 +297,7 @@ public sealed partial class FaithfulParticleRenderer : Node3D
                 float du = uv.Size.X - 1f / aw;
                 float dv = uv.Size.Y - 1f / ah;
                 _slotOf[i] = rects.Count;
+                if ((uint)i < 256u) _slotTable[i] = rects.Count;
                 rects.Add(new Vector4(u0, v0, du, dv));
             }
         if (rects.Count == 0)
@@ -341,7 +377,7 @@ public sealed partial class FaithfulParticleRenderer : Node3D
 
             list.Add(new MultiMeshInstance3D
             {
-                Name = "warm_" + b.Node.Name,
+                Name = "warm_fp_" + b.Name,
                 Multimesh = mm,
                 MaterialOverride = b.Material,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
@@ -358,18 +394,6 @@ public sealed partial class FaithfulParticleRenderer : Node3D
         // billboards (and oriented sparks) still draw.
         var quad = new QuadMesh { Size = new Vector2(1f, 1f) };
 
-        var mm = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseColors = true,
-            UseCustomData = true,
-            Mesh = quad,
-            // Pre-size so the GPU buffer exists before the first burst and is NEVER resized afterwards —
-            // VisibleInstanceCount 0 keeps the uninitialized instances from drawing until the first Sync.
-            InstanceCount = MaxInstances,
-            VisibleInstanceCount = 0,
-        };
-
         var mat = new ShaderMaterial { Shader = ParticleShader(invmod) };
         if (invmod)
             // Multiplicative darkening composites over the premul stream (DP interleaves them in one
@@ -377,24 +401,45 @@ public sealed partial class FaithfulParticleRenderer : Node3D
             // what's under them).
             mat.RenderPriority = 1;
 
-        var node = new MultiMeshInstance3D
+        var nodes = new MultiMeshInstance3D[TierCaps.Length];
+        var meshes = new Rid[TierCaps.Length];
+        for (int tier = 0; tier < TierCaps.Length; tier++)
         {
-            Name = "fp_" + name,
-            Multimesh = mm,
-            MaterialOverride = mat,
-            // Particles are emissive sprites: never cast/receive shadows, never affected by GI.
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            GIMode = GeometryInstance3D.GIModeEnum.Disabled,
-            // A generous custom AABB so the renderer doesn't cull the whole batch when instances are far
-            // from the node origin (we never recompute a tight AABB per frame).
-            CustomAabb = new Aabb(new Vector3(-1e6f, -1e6f, -1e6f), new Vector3(2e6f, 2e6f, 2e6f)),
-        };
-        AddChild(node);
+            var mm = new MultiMesh
+            {
+                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                UseColors = true,
+                UseCustomData = true,
+                Mesh = quad,
+                // Pre-size so the GPU buffer exists before the first burst and is NEVER resized afterwards —
+                // VisibleInstanceCount 0 keeps the uninitialized instances from drawing until the first Sync.
+                InstanceCount = TierCaps[tier],
+                VisibleInstanceCount = 0,
+            };
+            var node = new MultiMeshInstance3D
+            {
+                // The largest tier keeps the name the single MultiMesh had.
+                Name = tier == TierCaps.Length - 1 ? "fp_" + name : "fp_" + name + "_" + TierCaps[tier],
+                Multimesh = mm,
+                MaterialOverride = mat,
+                // Particles are emissive sprites: never cast/receive shadows, never affected by GI.
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                GIMode = GeometryInstance3D.GIModeEnum.Disabled,
+                // A generous custom AABB so the renderer doesn't cull the whole batch when instances are far
+                // from the node origin (we never recompute a tight AABB per frame).
+                CustomAabb = new Aabb(new Vector3(-1e6f, -1e6f, -1e6f), new Vector3(2e6f, 2e6f, 2e6f)),
+                Visible = false,
+            };
+            AddChild(node);
+            nodes[tier] = node;
+            meshes[tier] = mm.GetRid();
+        }
 
-        // Buffer sized once, to match the fixed InstanceCount above — the pack loop never reallocates it.
+        // One CPU buffer for all tiers, sized once for the largest — the pack loop never reallocates it, and a
+        // frame hands the engine only the stretch its tier holds.
         return new Batch
         {
-            Node = node, Mesh = mm, Material = mat,
+            Nodes = nodes, Meshes = meshes, Name = name, Material = mat,
             Buffer = new float[MaxInstances * FloatsPerInstance],
         };
     }
@@ -479,31 +524,62 @@ public sealed partial class FaithfulParticleRenderer : Node3D
     /// </summary>
     public void Sync(Particle[] pool, int highWater, NVec3 viewOrigin, NVec3 viewForward, float time)
     {
-        Batch? premul = _premul, invmod = _invmod;
-        if (!_built || premul is null || invmod is null || pool is null || highWater <= 0)
+        Pack(pool, highWater, viewOrigin, viewForward, time, ReadSyncSettings());
+        Upload();
+    }
+
+    /// <summary>What one <see cref="Pack"/> reads from outside the pool: the draw cvars and the colour space.</summary>
+    public readonly struct SyncSettings
+    {
+        public readonly float SizeScale, AlphaScale, NearMin, NearMax, DrawDistance;
+        public readonly bool Display;
+
+        public SyncSettings(float sizeScale, float alphaScale, float nearMin, float nearMax, float drawDistance, bool display)
         {
-            ClearBatch(premul);
-            ClearBatch(invmod);
+            SizeScale = sizeScale; AlphaScale = alphaScale; NearMin = nearMin; NearMax = nearMax; DrawDistance = drawDistance; Display = display;
+        }
+    }
+
+    /// <summary>Reads the cvars a pack needs. Main thread (the cvar store's owner).</summary>
+    public SyncSettings ReadSyncSettings() => new(
+        ReadCvar(ParticleCvars.Size, 1f), ReadCvar(ParticleCvars.Alpha, 1f),
+        ReadCvar(ParticleCvars.NearClipMin, 4f), ReadCvar(ParticleCvars.NearClipMax, 4f),
+        ReadCvar(ParticleCvars.DrawDistance, 2000f), DisplayFramebuffer.Active);
+
+    /// <summary>
+    /// The first half of <see cref="Sync"/>: cull, sort and write the instances into this renderer's own
+    /// buffers. It calls nothing in the engine and reads only its arguments and what <see cref="BuildAtlas"/>
+    /// set up, so the particle worker runs it (FaithfulParticleBackend); <see cref="Upload"/> then hands the
+    /// result to the engine on the main thread. One Pack at a time, and no Upload during one.
+    /// </summary>
+    public void Pack(Particle[] pool, int highWater, NVec3 viewOrigin, NVec3 viewForward, float time, in SyncSettings settings)
+    {
+        Batch? premul = _premul, invmod = _invmod;
+        if (premul is null || invmod is null) return;
+        if (!_built || pool is null || highWater <= 0)
+        {
+            premul.Count = 0;
+            invmod.Count = 0;
             return;
         }
 
         // cl_particles_size scales every particle's drawn size (cl_particles.c:2732).
-        float sizeScale = ReadCvar(ParticleCvars.Size, 1f);
+        float sizeScale = settings.SizeScale;
         if (sizeScale <= 0f) sizeScale = 1f;
-        float alphaScale = MathF.Max(0f, ReadCvar(ParticleCvars.Alpha, 1f));
+        float alphaScale = MathF.Max(0f, settings.AlphaScale);
 
         // Near-clip band + size-scaled drawdistance (cl_particles.c:2655-2656, 3158).
-        float nearMin = ReadCvar(ParticleCvars.NearClipMin, 4f);
-        float nearMax = ReadCvar(ParticleCvars.NearClipMax, 4f);
-        float drawDist = ReadCvar(ParticleCvars.DrawDistance, 2000f);
+        float nearMin = settings.NearMin;
+        float nearMax = settings.NearMax;
+        float drawDist = settings.DrawDistance;
         float drawDistSq = drawDist > 0f ? drawDist * drawDist : 0f;   // 0 keeps "disabled" semantics
         NVec3 fwd = Normalize(viewForward);
         float planeStart = NVec3.Dot(viewOrigin, fwd) + nearMin;       // minparticledist_start
         float planeEnd = NVec3.Dot(viewOrigin, fwd) + nearMax;         // minparticledist_end
         bool doFade = planeStart < planeEnd;
 
-        premul.Indices.Clear();
-        invmod.Indices.Clear();
+        premul.IndexCount = 0;
+        invmod.IndexCount = 0;
 
         // 1) Cull + bucket by blend state (DP groups INVMOD apart from the shared premultiplied stream).
         for (int i = 0; i < highWater; i++)
@@ -531,28 +607,35 @@ public sealed partial class FaithfulParticleRenderer : Node3D
             }
 
             if (p.BlendMode == ParticleBlend.InvMod)
-                invmod.Indices.Add(i);
+                invmod.Add(i);
             else
-                premul.Indices.Add(i);
+                premul.Add(i);
         }
 
         // 2) Sort both streams the way DP's transparent queue does: farthest SortOrg (the effect center)
         //    first, ties in pool order — a burst composites in its spawn/block order.
-        SortDepth(premul.Indices, pool, viewOrigin);
-        SortDepth(invmod.Indices, pool, viewOrigin);
+        SortDepth(premul.Indices, premul.IndexCount, pool, viewOrigin);
+        SortDepth(invmod.Indices, invmod.IndexCount, pool, viewOrigin);
 
-        // 3) Pack + upload.
-        PackAndUpload(premul, pool, sizeScale, alphaScale, viewOrigin, fwd, time, planeStart, planeEnd, doFade, invmod: false);
-        PackAndUpload(invmod, pool, sizeScale, alphaScale, viewOrigin, fwd, time, planeStart, planeEnd, doFade, invmod: true);
+        // 3) Pack.
+        PackBatch(premul, pool, sizeScale, alphaScale, viewOrigin, fwd, time, planeStart, planeEnd, doFade, invmod: false, settings.Display);
+        PackBatch(invmod, pool, sizeScale, alphaScale, viewOrigin, fwd, time, planeStart, planeEnd, doFade, invmod: true, settings.Display);
     }
 
-    private void PackAndUpload(Batch b, Particle[] pool, float sizeScale, float alphaScale, NVec3 viewOrigin, NVec3 viewFwd,
-        float time, float planeStart, float planeEnd, bool doFade, bool invmod)
+    /// <summary>The second half of <see cref="Sync"/>: shows what the last <see cref="Pack"/> wrote. Main thread.</summary>
+    public void Upload()
     {
-        int n = b.Indices.Count;
+        UploadBatch(_premul);
+        UploadBatch(_invmod);
+    }
+
+    private void PackBatch(Batch b, Particle[] pool, float sizeScale, float alphaScale, NVec3 viewOrigin, NVec3 viewFwd,
+        float time, float planeStart, float planeEnd, bool doFade, bool invmod, bool display)
+    {
+        int n = b.IndexCount;
         if (n == 0)
         {
-            ClearBatch(b);
+            b.Count = 0;
             return;
         }
 
@@ -580,13 +663,17 @@ public sealed partial class FaithfulParticleRenderer : Node3D
             n = MaxInstances;
         }
         float[] buf = b.Buffer;
+        int[] indices = b.Indices;
+        int[] slotTable = _slotTable;
+        float[] toLinear = s_srgbByteToLinear;
+        // (display: a session on display values takes the bytes as they are - DisplayFramebuffer.)
 
         for (int k = 0; k < n; k++)
         {
-            ref Particle p = ref pool[b.Indices[first + k]];
+            ref Particle p = ref pool[indices[first + k]];
             int o = k * FloatsPerInstance;
 
-            int slot = _slotOf.TryGetValue(p.TexNum, out int s) ? s : 0;
+            int slot = slotTable[p.TexNum];
             // Draw-time spin (cl_particles.c:2740): angle + spin·(time − delayedspawn), degrees → radians.
             float angle = (p.Angle + p.Spin * (time - p.DelayedSpawn)) * (MathF.PI / 180f);
 
@@ -602,11 +689,9 @@ public sealed partial class FaithfulParticleRenderer : Node3D
             }
             if (alphaNorm > 1f) alphaNorm = 1f;
 
-            // (A legacy session on display values takes the bytes as they are: DisplayFramebuffer.)
-            bool display = DisplayFramebuffer.Active;
-            float lr = display ? p.ColorR * (1f / 256f) : SrgbToLinear(p.ColorR * (1f / 256f));
-            float lg = display ? p.ColorG * (1f / 256f) : SrgbToLinear(p.ColorG * (1f / 256f));
-            float lb = display ? p.ColorB * (1f / 256f) : SrgbToLinear(p.ColorB * (1f / 256f));
+            float lr = display ? p.ColorR * (1f / 256f) : toLinear[p.ColorR];
+            float lg = display ? p.ColorG * (1f / 256f) : toLinear[p.ColorG];
+            float lb = display ? p.ColorB * (1f / 256f) : toLinear[p.ColorB];
 
             // Premultiply (DP :2683 ADD, :2727 ALPHA, :2680 INVMOD). Additive carries vertex alpha 0 so
             // the premultiplied blend leaves the destination intact (pure add); invmod's COLOR is the
@@ -684,23 +769,50 @@ public sealed partial class FaithfulParticleRenderer : Node3D
             }
         }
 
-        b.Mesh.VisibleInstanceCount = n;       // draw only the n filled instances (buffer may be larger)
         b.Count = n;
+    }
 
-        // One upload of the reused buffer (length == InstanceCount*stride, the contract MultimeshSetBuffer
-        // requires). No managed allocation here — only the native marshal copy.
-        RenderingServer.MultimeshSetBuffer(b.Mesh.GetRid(), buf);
-        b.Node.Visible = true;
+    private void UploadBatch(Batch? b)
+    {
+        if (b is null) return;
+        int n = b.Count;
+        if (n == 0)
+        {
+            ClearBatch(b);
+            return;
+        }
+        float[] buf = b.Buffer;
+
+        // The smallest tier that holds the n instances draws them; the one that drew the last frame's is hidden.
+        int tier = 0;
+        while (TierCaps[tier] < n) tier++;
+        if (tier != b.ShownTier)
+        {
+            if (b.ShownTier >= 0) b.Nodes[b.ShownTier].Visible = false;
+            b.Nodes[tier].Visible = true;
+            b.ShownTier = tier;
+            b.ShownCount = -1;
+        }
+        if (n != b.ShownCount)
+        {
+            RenderingServer.MultimeshSetVisibleInstances(b.Meshes[tier], n);   // draw only the n filled instances
+            b.ShownCount = n;
+        }
+
+        // One upload of the reused buffer's first InstanceCount*stride floats (the length MultimeshSetBuffer
+        // requires of this tier). No managed allocation here — only the native marshal copy.
+        long began = VortexArena.Game.Legacy.LegacyPerfLog.Stamp();
+        RenderingServer.MultimeshSetBuffer(b.Meshes[tier], new ReadOnlySpan<float>(buf, 0, TierCaps[tier] * FloatsPerInstance));
+        VortexArena.Game.Legacy.LegacyPerfLog.Extra(VortexArena.Game.Legacy.LegacyPerfLog.XParticleUpload, began);
     }
 
     private static void ClearBatch(Batch? b)
     {
         if (b is null) return;
-        b.Count = 0;
-        if (b.Mesh is not null)
-            b.Mesh.VisibleInstanceCount = 0;
-        if (b.Node is not null)
-            b.Node.Visible = false;
+        if (b.ShownTier < 0) return;
+        b.Nodes[b.ShownTier].Visible = false;
+        b.ShownTier = -1;
+        b.ShownCount = -1;
     }
 
     // --- MultiMesh buffer writers (row-major Transform3D: 3 rows of [basisRow.x, .y, .z, origin]) -----

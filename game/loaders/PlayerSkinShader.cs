@@ -197,6 +197,7 @@ global uniform mat4 lightgrid_matrix;
 // (255/128 x r_model_light_scale, matching the CPU path's raw-byte/128 DP scale), w = 1 when a grid is bound.
 global uniform vec4 lightgrid_params;
 varying vec3 lightgrid_tc;
+varying vec3 v_shadowable;   // the lit colour before glow: what a model shadow (r_shadows) darkens
 // DP first-person viewmodel depth hack (MATERIALFLAG_SHORTDEPTHRANGE = GL_DepthRange(0, 0.0625),
 // gl_rmain.c:6214/8581): RENDER_VIEWMODEL entities compress their depth into the nearest 1/16 of the depth
 // buffer with depth TESTING still on — the gun keeps its own self-occlusion but always beats world geometry,
@@ -270,6 +271,7 @@ void vertex() {
 }
 
 void fragment() {
+    v_shadowable = vec3(0.0);
     vec4 base = texture(albedo_tex, UV);
     // DP _shirt/_pants: greyscale mask, additively (Screen-ish) blended with the team color tint.
     float shirt = texture(shirt_mask, UV).r;
@@ -387,6 +389,7 @@ void fragment() {
                 // entity takes no light (render_rtlight_disabled).
                 lit = res;
                 if (!(model_light_gamma > 2.5 || grid_lit > 2.5 || no_grid)) { light_albedo = d_tex * d_mod; }
+                v_shadowable = clamp(res - d_glow, vec3(0.0), vec3(1.0));
             } else {
                 lit = skin_to_linear(res);
             }
@@ -493,12 +496,35 @@ void fragment() {
     /// reference before the Code setter's effects were visible, yielding a material bound to an empty
     /// shader and then cached permanently.</para>
     /// </summary>
+    /// <summary>
+    /// The light() of a skin while the 3D buffer holds display values (appended when the shader is first made in
+    /// that state): DarkPlaces' light pass, shader_glsl.h MODE_LIGHTSOURCE - the light's colour times its
+    /// falloff times (ambient + diffuse * N.L), which the engine multiplies by ALBEDO (the texel times
+    /// colormod) and adds to the buffer - and the model shadows of r_shadows on the directional light.
+    /// Without it the engine's own diffuse model and its falloff window would light a model differently
+    /// from the wall beside it.
+    /// </summary>
+    public const string DarkPlacesLightCode = VortexArena.Formats.Lighting.DpLightModel.ShaderFunctions + @"
+global uniform float dp_usenormalmap;
+global uniform float dp_model_shadow;
+void light() {
+    if (!LIGHT_IS_DIRECTIONAL) {
+        vec3 scales = dp_light_scales(SPECULAR_AMOUNT);
+        if (dp_usenormalmap < 0.5) { scales = vec3(scales.x + scales.y, 0.0, 0.0); }
+        float ndotl = clamp(dot(normalize(NORMAL), normalize(LIGHT)), 0.0, 1.0);
+        DIFFUSE_LIGHT += LIGHT_COLOR * (dp_light_att(ATTENUATION) * (scales.x + scales.y * ndotl) * 0.31830989);
+    } else if (dp_model_shadow > 0.0) {
+        SPECULAR_LIGHT -= v_shadowable * (dp_model_shadow * (1.0 - clamp(ATTENUATION, 0.0, 1.0)));
+    }
+}
+";
+
     public static Shader Shader
     {
         get
         {
             lock (_sharedGate)
-                return _shared ??= new Shader { Code = Code };
+                return _shared ??= new Shader { Code = VortexArena.Game.Client.DisplayFramebuffer.Active ? Code + DarkPlacesLightCode : Code };
         }
     }
 }

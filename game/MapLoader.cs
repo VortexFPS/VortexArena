@@ -373,10 +373,14 @@ public static class MapLoader
                 // shadow cost (the first half is the six cube faces per light), and on 2026-08-02 this was
                 // measured as pure waste while nothing cast. r_shadow_world_casts 1 turns it back on for
                 // the people who enable r_shadow_realtime_dlight_shadows.
-                CastShadow = WorldCastsShadows()
+                CastShadow = WorldCastsShadows() || VortexArena.Game.Client.ShadowSettings.WorldCasts
                     ? GeometryInstance3D.ShadowCastingSetting.On
                     : GeometryInstance3D.ShadowCastingSetting.Off,
             };
+            // The shadow settings switch the level's casting with the light shadows (ShadowSettings), and the
+            // model-shadow pass (r_shadows) leaves the level out of its shadow map by this layer.
+            VortexArena.Game.Client.ShadowSettings.RegisterWorldCell(cellInstance);
+            if (VortexArena.Game.Client.DisplayFramebuffer.Active) cellInstance.Layers = VortexArena.Game.Client.ShadowSettings.WorldCellLayer;
             root.AddChild(cellInstance);
             cellClusters.TryGetValue(cellKv.Key, out HashSet<int>? clusters);
             pvsCells.Add((cellInstance, clusters is { Count: > 0 } ? System.Linq.Enumerable.ToArray(clusters) : System.Array.Empty<int>()));
@@ -844,7 +848,8 @@ public static class MapLoader
                 // A blendFunc-blend diffuse (glass) routes to the translucent variant so it renders see-through.
                 return WithDarkPlacesGloss(assets, shaderName, LightmapShader.MakeMaterial(diffuse.Texture, lightmapTex, deluxemap: deluxeTex,
                     albedoUvScale: diffuse.UvScale, alphaCutoff: diffuse.AlphaCutoff, glow: diffuse.Glow,
-                    translucent: diffuse.Translucent, normal: diffuse.Normal, gloss: diffuse.Gloss));
+                    translucent: diffuse.Translucent, normal: diffuse.Normal, gloss: diffuse.Gloss,
+                    reflectMask: diffuse.ReflectMask, reflectCube: diffuse.ReflectCube));
             }
             // No lightmap available — degrade to the plain material rather than dropping the surface.
         }
@@ -1174,7 +1179,8 @@ public static class MapLoader
         AssetSystem.LightmapDiffuse diffuse = assets.ResolveLightmapDiffuse(shaderName);
         return WithDarkPlacesGloss(assets, shaderName, LightmapShader.MakeMaterial(diffuse.Texture, atlas.Lightmap, deluxemap: atlas.Deluxe,
             albedoUvScale: diffuse.UvScale, alphaCutoff: diffuse.AlphaCutoff, glow: diffuse.Glow,
-            translucent: diffuse.Translucent, normal: diffuse.Normal, gloss: diffuse.Gloss));
+            translucent: diffuse.Translucent, normal: diffuse.Normal, gloss: diffuse.Gloss,
+                    reflectMask: diffuse.ReflectMask, reflectCube: diffuse.ReflectCube));
     }
 
     /// <summary>

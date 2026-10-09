@@ -84,6 +84,9 @@ public sealed partial class FakeShadowRenderer : Node3D
         using var _prof = FrameProfiler.Scope("fakeshadows");
 
         int mode = (int)Cvar("r_fakeshadows", 0f);
+        // DarkPlaces' own model shadows (r_shadows, ShadowSettings) replace the blobs while they are on: both
+        // at once would darken the ground under a model twice.
+        if (DisplayFramebuffer.Active && Cvar("r_shadows", 0f) > 0f && Cvar("r_shadow_shadowmapping", 1f) != 0f) mode = 0;
         if (mode <= 0 || Api.Services is null)
         {
             HideAll();

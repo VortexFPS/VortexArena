@@ -227,7 +227,8 @@ public static class LegacyColour
     public static void Leave()
     {
         if (s_sessions <= 0 || --s_sessions > 0) return;
-        Push(false);
+        // Back to what the native game asked for (NativeColour: DarkPlaces' arithmetic by default).
+        if (NativeColour.Enabled) NativeColour.Push(true); else Push(false);
     }
 
     // Developer aid, as the other VORTEX_LEGACY_* variables: VORTEX_LEGACY_LINEARFB=1 leaves the 3D buffer in

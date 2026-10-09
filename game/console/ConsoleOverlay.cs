@@ -290,6 +290,7 @@ public partial class ConsoleOverlay : CanvasLayer
         // other host commands because they need the live client renderer, not just the config store.
         Client.RtLightsCommands.Register(interp, Print);
         Client.TextureCompressBench.Register(interp, Print);
+        Client.RenderDevCommands.Register(interp, Print);   // r_observe / r_shot / r_hud / r_dumpmaterials
 
         interp.RegisterCommand("quit", _ => MenuCommand.Quit?.Invoke(), "exit the game");
         interp.RegisterCommand("exit", _ => MenuCommand.Quit?.Invoke(), "exit the game");

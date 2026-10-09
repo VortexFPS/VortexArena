@@ -52,6 +52,8 @@ public static class SceneLightingSettings
         _env = env;
         _sky = env?.Sky;
         _seeded = false;
+        // The 3D buffer holds display values when the native game is on DarkPlaces' colour arithmetic.
+        NativeColour.ApplyEnvironment(env);
         Poll();
     }
 

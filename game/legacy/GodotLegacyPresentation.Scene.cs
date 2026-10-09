@@ -1101,9 +1101,11 @@ public sealed partial class GodotLegacyPresentation
             // On display values the session's shaders apply DarkPlaces' own falloff (LightmapShader.light):
             // the engine's is left at its range window alone.
             node.OmniAttenuation = DisplayFramebuffer.Active ? 0f : 1f;
-            node.Visible = true;
+            LightBudget.SetOwnerVisible(node, true);
         }
-        for (int i = _lights.Count; i < _lightPool.Count; i++) _lightPool[i].Visible = false;
+        // (Through the budget: it sets Visible on every light it ranks each frame, so a light hidden here
+        // directly was shown again by it and a spent light stayed lit where it last was.)
+        for (int i = _lights.Count; i < _lightPool.Count; i++) LightBudget.SetOwnerVisible(_lightPool[i], false);
     }
 
     // The VF_FOG_* keys: the program overrides the level's fog for the frame (Xonotic's Fog_Force and its

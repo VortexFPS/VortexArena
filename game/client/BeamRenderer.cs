@@ -143,8 +143,8 @@ public partial class BeamRenderer : Node3D
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
             BlendMode = BaseMaterial3D.BlendModeEnum.Add,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            AlbedoColor = color,
-            AlbedoTexture = _beamTex,
+            AlbedoColor = DisplayFramebuffer.ForEngine(color),      // stored values on a display-value buffer
+            AlbedoTexture = DisplayFramebuffer.ForEngine(_beamTex),
             TextureFilter = BaseMaterial3D.TextureFilterEnum.Linear,
             DisableReceiveShadows = true,
         };

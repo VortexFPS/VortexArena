@@ -1332,6 +1332,7 @@ public partial class ClientWorld : Node3D
         // testing path); when the strength cvars are 0 this is a couple of cheap reads and leaves the map/code
         // baseline in place. See VortexArena.Game.WorldTint.
         WorldTint.PollCvars();
+        NativeColour.Frame(delta, this);   // dp_time, the clock of the DarkPlaces-rule surface shaders
         // F1-B: r_model_lightgrid / r_model_light_scale, live like the tint cvars next door.
         ModelLighting.PollCvars();
         // (N3/N9) r_volumetricfog* / r_gi*, live like the tint cvars next door.

@@ -147,7 +147,9 @@ public sealed class AssetLoader
     public AssetLoader(VirtualFileSystem vfs)
     {
         _vfs = vfs ?? throw new ArgumentNullException(nameof(vfs));
-        _assets = new AssetSystem(_vfs);
+        // A Quake 3 shader script is drawn as DarkPlaces draws it when the native game is on DarkPlaces'
+        // colour arithmetic (NativeColour; a legacy session sets this itself).
+        _assets = new AssetSystem(_vfs) { DarkPlacesRules = VortexArena.Game.Client.NativeColour.Enabled };
         _fonts = new FontLoader(_vfs);
     }
 

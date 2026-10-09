@@ -115,6 +115,13 @@ public sealed partial class CoronaRenderer : Node3D
             quad.Scale = new Vector3(r, r, r);
             Color c = light.LightColor;
             float energy = corona * brightness * vis * MathF.Max(0.05f, light.LightEnergy);
+            if (DisplayFramebuffer.Active)
+            {
+                // r_shadow.c R_Shadow_DrawCoronas: currentcolor * corona * r_coronas * 0.25. The light's colour
+                // property is held encoded for the engine (DisplayFramebuffer.ForEngine); take it back.
+                c = new Color(VortexArena.Formats.Materials.DpColour.ToLinear(c.R), VortexArena.Formats.Materials.DpColour.ToLinear(c.G), VortexArena.Formats.Materials.DpColour.ToLinear(c.B));
+                energy = VortexArena.Formats.Lighting.DpLightModel.Corona(corona, size, range, brightness).ColourScale * vis * light.LightEnergy;
+            }
             quad.SetInstanceShaderParameter(ColorUniform, new Vector3(c.R * energy, c.G * energy, c.B * energy));
             quad.Visible = true;
         }
@@ -165,6 +172,7 @@ public sealed partial class CoronaRenderer : Node3D
 shader_type spatial;
 render_mode unshaded, cull_disabled, depth_draw_never, depth_test_disabled, blend_add;
 instance uniform vec3 corona_color = vec3(1.0);
+global uniform float dp_framebuffer;
 void vertex() {
     // Billboard: keep the model's translation+scale, replace its rotation with the view's, so the quad
     // always faces the camera. (MODELVIEW's basis becomes axis-aligned with the scale preserved.)
@@ -178,9 +186,15 @@ void fragment() {
     // Soft radial falloff: bright core, long tail. pow() shapes it into a flare rather than a flat disc.
     float d = clamp(length(UV * 2.0 - 1.0), 0.0, 1.0);
     float a = pow(1.0 - d, 3.0);
-    ALBEDO = vec3(0.0);
-    EMISSION = corona_color * a;
-    ALPHA = a;
+    if (dp_framebuffer > 0.5) {
+        // DarkPlaces' corona texture (r_shadow.c R_Shadow_MakeTextures): ((1 / (r^2 + 0.2)) - (1 / 1.2)) * 32 / (1 / 1.2)
+        // of 255, r from the centre in half-sizes; added to the buffer as it is (GL_ONE GL_ONE).
+        vec2 p = UV * 2.0 - 1.0;
+        a = clamp((1.0 / (dot(p, p) + 0.2) - 0.8333333) * 38.4 / 255.0, 0.0, 1.0);
+    }
+    // An unshaded material shows ALBEDO only: the flare is written there, added once (ALPHA 1).
+    ALBEDO = corona_color * a;
+    ALPHA = 1.0;
 }
 ";
 

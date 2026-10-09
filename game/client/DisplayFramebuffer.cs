@@ -70,6 +70,46 @@ public static class DisplayFramebuffer
         return new Color(Encode(display.R), Encode(display.G), Encode(display.B), display.A);
     }
 
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Texture2D, ImageTexture> s_encoded = new();
+    private static byte[]? s_encodeLut;
+
+    /// <summary>
+    /// A texture for an engine material that decodes its albedo (a StandardMaterial3D: beams, sprites, effect
+    /// meshes): while the buffer holds display values, a copy whose texels are encoded once more, so that what
+    /// the engine's decode arrives at is the stored value - DarkPlaces draws the stored value. The copy is made
+    /// once per texture and kept with it. Unchanged otherwise.
+    /// </summary>
+    public static Texture2D? ForEngine(Texture2D? texture)
+    {
+        if (!Active || texture is null) return texture;
+        if (s_encoded.TryGetValue(texture, out ImageTexture? done)) return done;
+        Image? image = texture.GetImage();
+        if (image is null || image.IsEmpty()) return texture;
+        if (image.IsCompressed() && image.Decompress() != Error.Ok) return texture;
+        image.ClearMipmaps();
+        if (image.GetFormat() != Image.Format.Rgba8) image.Convert(Image.Format.Rgba8);
+        byte[] lut = s_encodeLut ??= BuildEncodeLut();
+        byte[] data = image.GetData();
+        for (int i = 0; i + 3 < data.Length; i += 4)
+        {
+            data[i] = lut[data[i]];
+            data[i + 1] = lut[data[i + 1]];
+            data[i + 2] = lut[data[i + 2]];
+        }
+        Image encoded = Image.CreateFromData(image.GetWidth(), image.GetHeight(), false, Image.Format.Rgba8, data);
+        encoded.GenerateMipmaps();
+        ImageTexture result = ImageTexture.CreateFromImage(encoded);
+        s_encoded.Add(texture, result);
+        return result;
+    }
+
+    private static byte[] BuildEncodeLut()
+    {
+        byte[] lut = new byte[256];
+        for (int i = 0; i < 256; i++) lut[i] = (byte)Math.Clamp((int)MathF.Round(Encode(i / 255f) * 255f), 0, 255);
+        return lut;
+    }
+
     private static float Encode(float c) => VortexArena.Formats.Materials.DpColour.ToDisplay(MathF.Max(c, 0f));
 
     /// <summary>The GDShader helpers a shader of a legacy session ends with (dp_fb): DpColour.ShaderFunctions.</summary>

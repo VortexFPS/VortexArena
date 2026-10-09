@@ -133,6 +133,12 @@ public static class WorldTint
         // A legacy session's clock for its surface shaders (DpSurfaceShader: cl.time).
         RenderingServer.GlobalShaderParameterAdd(
             Loaders.DpSurfaceShader.TimeUniform, RenderingServer.GlobalShaderParameterType.Float, 0.0f);
+        // DarkPlaces' realtime light pass (LightmapShader / PlayerSkinShader light()): r_shadow_usenormalmap, and
+        // the model shadows of r_shadows (their darkening while the pass is on, 0 while it is off).
+        RenderingServer.GlobalShaderParameterAdd(
+            "dp_usenormalmap", RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        RenderingServer.GlobalShaderParameterAdd(
+            "dp_model_shadow", RenderingServer.GlobalShaderParameterType.Float, 0.0f);
         // A legacy session's world arithmetic (LightmapShader.GammaSpaceUniform); 0 everywhere else.
         RenderingServer.GlobalShaderParameterAdd(
             Loaders.LightmapShader.GammaSpaceUniform, RenderingServer.GlobalShaderParameterType.Float, 0.0f);
@@ -296,6 +302,26 @@ public static class WorldTint
             RenderingServer.GlobalShaderParameterSet("world_nolightmaps", nolm);
         }
 
+        // r_shadow_usenormalmap (the Effects tab's "Use normal maps"): a realtime light's N.L and specular.
+        float usenormal = CvarF("r_shadow_usenormalmap", 1f) != 0f ? 1f : 0f;
+        if (usenormal != _useNormalApplied)
+        {
+            _useNormalApplied = usenormal;
+            RenderingServer.GlobalShaderParameterSet("dp_usenormalmap", usenormal);
+        }
+
+        // r_shadow_gloss (the Effects tab's "Gloss"): with DarkPlaces' colour arithmetic the world's specular term
+        // is DarkPlaces' own and 0 removes it, as there (world_gamma_space 3 is the same combine without it).
+        if (Client.NativeColour.Enabled && !Legacy.LegacyColour.Active)
+        {
+            float gloss = CvarF("r_shadow_gloss", 1f) != 0f ? 1f : 3f;
+            if (gloss != _glossApplied)
+            {
+                _glossApplied = gloss;
+                RenderingServer.GlobalShaderParameterSet(Loaders.LightmapShader.GammaSpaceUniform, gloss);
+            }
+        }
+
         // r_model_light_gamma → the grid-lit models' response-curve toggle (unset = the default 0, linear).
         float gamma = CvarF(ModelLightGammaCvar, 0f) > 0.5f ? 1f : 0f;
         if (gamma != _gammaApplied)
@@ -306,6 +332,8 @@ public static class WorldTint
     }
 
     private static float _gammaApplied;
+    private static float _glossApplied = 1f;
+    private static float _useNormalApplied = 1f;
     private static float _deluxeApplied = 1f;
     private static float _nolmApplied;
 

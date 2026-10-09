@@ -714,6 +714,102 @@ public sealed class AssetSystem
         return cube;
     }
 
+    private readonly Dictionary<string, Cubemap?> _reflectCubes = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A <c>dpreflectcube</c> cube map by name, as DarkPlaces resolves it (gl_rmain.c R_LoadCubemap): the name
+    /// plus a face suffix with no separator, the first suffix group that has any image - <c>px nx py ny pz nz</c>,
+    /// then <c>posx negx posy negy posz negz</c> (neither flipped), then the sky-box set <c>rt lf ft bk up dn</c>
+    /// with DarkPlaces' flips. Faces are in Quake axes, +X -X +Y -Y +Z -Z; a missing face is black. Null (and
+    /// cached as such) when no face exists: DarkPlaces then binds its white cube and the mask alone is added,
+    /// which the callers reproduce by leaving the term out only when there is no mask either.
+    /// </summary>
+    public Cubemap? LoadReflectCubemap(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        lock (_reflectCubes)
+        {
+            if (_reflectCubes.TryGetValue(name, out Cubemap? cached)) return cached;
+            Cubemap? cube = BuildReflectCubemap(name);
+            _reflectCubes[name] = cube;
+            return cube;
+        }
+    }
+
+    // suffix, flipx, flipy, flipdiagonal (gl_rmain.c suffix[3][6])
+    private static readonly (string Suffix, bool FlipX, bool FlipY, bool FlipDiagonal)[][] s_cubeSuffixes =
+    {
+        new[] { ("px", false, false, false), ("nx", false, false, false), ("py", false, false, false), ("ny", false, false, false), ("pz", false, false, false), ("nz", false, false, false) },
+        new[] { ("posx", false, false, false), ("negx", false, false, false), ("posy", false, false, false), ("negy", false, false, false), ("posz", false, false, false), ("negz", false, false, false) },
+        new[] { ("rt", true, false, true), ("lf", false, true, true), ("ft", true, true, false), ("bk", false, false, false), ("up", true, false, true), ("dn", true, false, true) },
+    };
+
+    private Cubemap? BuildReflectCubemap(string name)
+    {
+        foreach ((string Suffix, bool FlipX, bool FlipY, bool FlipDiagonal)[] group in s_cubeSuffixes)
+        {
+            Image?[] faces = new Image?[6];
+            int size = 0;
+            for (int i = 0; i < 6; i++)
+            {
+                Image? img = LoadImage(name + group[i].Suffix);
+                if (img is null || img.GetWidth() != img.GetHeight()) continue;
+                if (size == 0) size = img.GetWidth();
+                if (img.GetWidth() != size) continue;
+                if (img.IsCompressed()) img.Decompress();
+                if (img.GetFormat() != Image.Format.Rgba8) img.Convert(Image.Format.Rgba8);
+                // Image_CopyMux order: the diagonal swap first, then the two mirrors.
+                if (group[i].FlipDiagonal) { img.Rotate90(ClockDirection.Clockwise); img.FlipX(); }
+                if (group[i].FlipX) img.FlipX();
+                if (group[i].FlipY) img.FlipY();
+                faces[i] = img;
+            }
+            if (size == 0) continue;
+            var layers = new Godot.Collections.Array<Image>();
+            for (int i = 0; i < 6; i++)
+            {
+                Image face = faces[i] ?? Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
+                face.GenerateMipmaps();
+                layers.Add(face);
+            }
+            var cube = new Cubemap();
+            cube.CreateFromImages(layers);
+            return cube;
+        }
+        VortexArena.Common.Diagnostics.Log.Info($"[AssetSystem] dpreflectcube '{name}': no face image found.");
+        return null;
+    }
+
+    /// <summary>
+    /// The reflection term of a surface of the level drawn by DarkPlaces' rules (shader_glsl.h USEREFLECTCUBE:
+    /// <c>diffusetex += reflectmask * reflectcube</c>): the texture's <c>_reflect</c> companion and the cube map
+    /// the shader names with <c>dpreflectcube</c>. DarkPlaces enables the term only when the mask image exists
+    /// (gl_rmain.c: t->reflectmasktexture); without a named or loadable cube the mask is added against white.
+    /// </summary>
+    public (Texture2D? Mask, Cubemap? Cube) ResolveReflect(ShaderDef? def, string diffuseImage)
+    {
+        if (!DarkPlacesRules || string.IsNullOrEmpty(diffuseImage)) return (null, null);
+        Texture2D? mask = LoadTexture(AssetPaths.StripImageExtension(diffuseImage) + "_reflect");
+        if (mask is null) return (null, null);
+        return (mask, LoadReflectCubemap(def?.Dp.ReflectCube) ?? WhiteCubemap());
+    }
+
+    private Cubemap? _whiteCube;
+    private Cubemap WhiteCubemap()
+    {
+        if (_whiteCube is not null) return _whiteCube;
+        var layers = new Godot.Collections.Array<Image>();
+        for (int i = 0; i < 6; i++)
+        {
+            Image face = Image.CreateEmpty(1, 1, false, Image.Format.Rgba8);
+            face.Fill(Colors.White);
+            layers.Add(face);
+        }
+        _whiteCube = new Cubemap();
+        _whiteCube.CreateFromImages(layers);
+        return _whiteCube;
+    }
+
     /// <summary>
     /// The lightmap-modulate material (see <see cref="LightmapShader"/>): albedo sampled with UV,
     /// multiplied by <paramref name="lightmap"/> sampled with UV2. <paramref name="albedo"/> may be null.
@@ -727,7 +823,13 @@ public sealed class AssetSystem
     /// e.g. <c>trak5x/misc-glass</c>). See <see cref="ResolveLightmapDiffuse"/>.</summary>
     public readonly record struct LightmapDiffuse(
         Texture2D? Texture, float AlphaCutoff, Vector2 UvScale, Texture2D? Glow, bool Translucent,
-        Texture2D? Normal, Texture2D? Gloss);
+        Texture2D? Normal, Texture2D? Gloss)
+    {
+        /// <summary>The <c>_reflect</c> mask and the <c>dpreflectcube</c> cube map (DarkPlaces' rules only; see
+        /// <see cref="ResolveReflect"/>). Both null when the surface has no reflection term.</summary>
+        public Texture2D? ReflectMask { get; init; }
+        public Cubemap? ReflectCube { get; init; }
+    }
 
     /// <summary>
     /// The render parameters a lightmapped surface needs from its shader's <i>diffuse</i> stage: the base
@@ -752,8 +854,11 @@ public sealed class AssetSystem
 
         ShaderDef? def = GetShader(shaderName);
         if (def is null)
+        {
+            (Texture2D? plainMask, Cubemap? plainCube) = ResolveReflect(null, shaderName);
             return new LightmapDiffuse(LoadTexture(shaderName), 0f, Vector2.One, LoadGlow(shaderName), false,
-                LoadNorm(shaderName), LoadGloss(shaderName));
+                LoadNorm(shaderName), LoadGloss(shaderName)) { ReflectMask = plainMask, ReflectCube = plainCube };
+        }
 
         foreach (ShaderStage stage in def.Stages)
         {
@@ -768,8 +873,9 @@ public sealed class AssetSystem
             // textures/exx/light/light_u201_glow). Match that so lightmapped lights glow instead of reading dark.
             // A diffuse stage with blendFunc blend (GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA) is an alpha-blended
             // surface (glass): flag it translucent so the lightmap path renders it see-through, not opaque.
+            (Texture2D? mask, Cubemap? cube) = ResolveReflect(def, image);
             return new LightmapDiffuse(LoadTexture(image), DiffuseAlphaCutoff(stage), DiffuseUvScale(stage),
-                LoadGlow(image), stage.BlendMode == BlendMode.Blend, LoadNorm(image), LoadGloss(image));
+                LoadGlow(image), stage.BlendMode == BlendMode.Blend, LoadNorm(image), LoadGloss(image)) { ReflectMask = mask, ReflectCube = cube };
         }
 
         // Global-only / $lightmap-only shader: best-effort the shader name as a texture (usually null → white).

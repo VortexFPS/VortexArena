@@ -636,7 +636,7 @@ public partial class ProjectileRenderer : Node3D
             };
             if (sprite is not null)
             {
-                meshMat.AlbedoTexture = sprite;
+                meshMat.AlbedoTexture = DisplayFramebuffer.ForEngine(sprite);   // stored values on a display-value buffer
                 meshMat.TextureFilter = BaseMaterial3D.TextureFilterEnum.Linear;
             }
             quad.Material = meshMat;

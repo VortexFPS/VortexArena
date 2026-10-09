@@ -77,7 +77,7 @@ public sealed partial class CylindricLine : Node3D
             RibbonA.Scale = new GVec3(len, widthQuake, 1f);
             RibbonB.Scale = new GVec3(len, widthQuake, 1f);
             Material.BlendMode = blend;
-            Material.AlbedoColor = rgba;
+            Material.AlbedoColor = DisplayFramebuffer.ForEngine(rgba);   // stored values on a display-value buffer
         }
 
         /// <summary>Apply (or clear) a scrolling beam texture, folding LaserRenderer.ApplyBeamTexture and its
@@ -85,7 +85,7 @@ public sealed partial class CylindricLine : Node3D
         /// length/width so texels stay ~square, then scrolled by <paramref name="scrollU"/>.</summary>
         public void SetTexture(Texture2D? tex, bool scrollTiled = false, float scrollU = 0f)
         {
-            Material.AlbedoTexture = tex;
+            Material.AlbedoTexture = DisplayFramebuffer.ForEngine(tex);
             if (tex is null)
                 return;
 

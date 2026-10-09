@@ -18,8 +18,9 @@ public static class DpSurfaceShaderGen
     /// surface of the level is lit by its vertex colours or (<paramref name="lightmapped"/>) its lightmap page.</param>
     /// <param name="glow">The material stage's texture has a _glow companion.</param>
     /// <param name="frames">animMap frames in use (1 without an animMap).</param>
-    public static string Generate(ShaderDef def, in DpMaterialPlan plan, ShaderStage stage, ShaderStage? background, bool forModel, bool glow, int frames, bool lightmapped = false)
+    public static string Generate(ShaderDef def, in DpMaterialPlan plan, ShaderStage stage, ShaderStage? background, bool forModel, bool glow, int frames, bool lightmapped = false, bool reflect = false)
     {
+        reflect &= !forModel;
         lightmapped &= !plan.FullBright && !forModel;
         StringBuilder sb = new(4096);
         sb.Append(Banner).Append(" (").Append(plan.FullBright ? "full-bright" : forModel ? "light grid" : lightmapped ? "lightmap" : "vertex light")
@@ -51,6 +52,12 @@ public static class DpSurfaceShaderGen
         if (background is not null) sb.Append("uniform sampler2D background_tex : filter_linear_mipmap_anisotropic, repeat_enable;\n");
         if (glow) sb.Append("uniform sampler2D glow_tex : hint_default_black, ").Append(filter).Append(";\n");
         if (lightmapped) sb.Append("uniform sampler2D lightmap_tex : hint_default_white, filter_linear, repeat_disable;\n");
+        if (reflect)
+        {
+            // dpreflectcube (shader_glsl.h USEREFLECTCUBE): diffusetex += reflectmask * reflectcube.
+            sb.Append("uniform sampler2D reflect_mask : hint_default_black, ").Append(filter).Append(";\n");
+            sb.Append("uniform samplerCube reflect_cube : filter_linear_mipmap;\n");
+        }
         sb.Append("uniform float morph_amount = 0.0;            // GPU MD3 vertex-morph (ModelAnimator), as the other model shaders\n");
         sb.Append("uniform float viewmodel_depth_range = 1.0;   // MATERIALFLAG_SHORTDEPTHRANGE, as PlayerSkinShader\n");
         sb.Append("global uniform float dp_time;                // cl.time\n");
@@ -147,6 +154,12 @@ public static class DpSurfaceShaderGen
         if (plan.AlphaTest) sb.Append("    if (c.a < 0.5) discard;                // USEALPHAKILL\n");
 
         sb.Append("    vec3 rgb = c.rgb;\n");
+        if (reflect)
+        {
+            // The reflected view vector in the cube map's axes: Quake (x, y, z) = Godot (x, -z, y).
+            sb.Append("    {\n        vec3 rw = (INV_VIEW_MATRIX * vec4(reflect(-VIEW, normalize(NORMAL)), 0.0)).xyz;\n");
+            sb.Append("        rgb += texture(reflect_mask, uv).rgb * texture(reflect_cube, vec3(rw.x, -rw.z, rw.y)).rgb;   // USEREFLECTCUBE\n    }\n");
+        }
         if (forModel)
         {
             sb.Append("    vec3 d_mod = dp_display(colormod);\n");

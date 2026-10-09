@@ -165,6 +165,11 @@ uniform float specular_scale = 0.15;    // DP Color_Specular (gloss intensity) �
 // specularpowermod, specularscale *= specularscalemod). Most of Xonotic's wall shaders say 4 and 1.5.
 uniform float dp_gloss_exponent_mod = 1.0;
 uniform float dp_gloss_intensity_mod = 1.0;
+// dpreflectcube (shader_glsl.h USEREFLECTCUBE): the texture's _reflect mask times a cube map, sampled along the
+// reflected view vector, ADDED to the texel before it is lit. DarkPlaces' arithmetic only (dp_exact below).
+uniform sampler2D reflect_mask : hint_default_black, filter_linear_mipmap_anisotropic;
+uniform samplerCube reflect_cube : filter_linear_mipmap;
+uniform bool use_reflect = false;
 
 // Dynamic whole-map colour tint (VortexArena.Game.WorldTint). A GLOBAL shader parameter so one
 // RenderingServer.GlobalShaderParameterSet re-tints every world surface at once; the strength is folded into the
@@ -197,6 +202,17 @@ global uniform float world_gamma_space;
 // the combine below is then written as it is, and blending, fog and the dynamic lights act on it as they do
 // in DarkPlaces' frame buffer. 0 = linear light, the native game.
 global uniform float dp_framebuffer;
+// r_shadow_usenormalmap (DarkPlaces' arithmetic): 1 = a realtime light is shaded by N.L on the normal-mapped
+// normal and has a specular term; 0 = its diffuse scale joins the ambient one and nothing depends on N.L
+// (r_shadow.c R_Shadow_RenderLighting).
+global uniform float dp_usenormalmap;
+// r_shadows (DarkPlaces' model shadows): r_shadows_darken while the pass is on, 0 while it is off. The scene's
+// directional light is then the shadow map of the models thrown along r_shadows_throwdirection, and a
+// shadowed pixel keeps (1 - darken) of its lit colour (shader_glsl.h USESHADOWMAPORTHO).
+global uniform float dp_model_shadow;
+
+varying vec4 v_light_gloss;   // gloss.rgb * intensity, exponent: the specular term of a realtime light
+varying vec3 v_shadowable;    // the lit colour before glow: what a model shadow darkens
 
 // Per-surface tangent frame (DP VectorS/T/R = tangent/binormal/normal), captured in modelspace so the
 // modelspace deluxe light direction can be rotated into it without a view-space mismatch.
@@ -211,7 +227,7 @@ varying vec3 v_eye_model; // camera minus vertex in modelspace (deluxe specular 
 vec3 srgb_to_linear(vec3 c) {
     return mix(c * (1.0 / 12.92), pow((c + 0.055) * (1.0 / 1.055), vec3(2.4)), step(vec3(0.04045), c));
 }
-
+@@DPLIGHT@@
 void vertex() {
     // In vertex() the basis is modelspace (pre view transform) — the same space the deluxemap encodes the
     // light direction in. Every lightmapped surface carries a TANGENT array (MapLoader generates one).
@@ -244,6 +260,23 @@ void fragment() {
         albedo = srgb_to_linear(albedo);
         lm = srgb_to_linear(lm);
         glow = srgb_to_linear(glow);
+    }
+    // The normal-mapped normal in view space (the normal map's T runs along decreasing v), for the reflection
+    // cube and the realtime lights; and the gloss texel, for the lightmap's and the realtime lights' specular.
+    vec3 rn = normalize(NORMAL);
+    if (use_normal && dp_exact) {
+        vec3 rt = texture(normal_tex, UV * albedo_uv_scale).xyz * 2.0 - 1.0;
+        if (norm_rg) { rt.z = sqrt(max(0.0, 1.0 - dot(rt.xy, rt.xy))); }
+        rn = normalize(TANGENT * rt.x - BINORMAL * rt.y + NORMAL * rt.z);
+    }
+    vec4 gtex = use_gloss ? texture(gloss_tex, UV * albedo_uv_scale) : vec4(0.0);
+    v_light_gloss = (use_gloss && dp_exact && world_gamma_space < 1.5)
+        ? vec4(gtex.rgb * dp_gloss_intensity_mod, 1.0 + (32.0 * dp_gloss_exponent_mod * 0.25 - 1.0) * gtex.a) : vec4(0.0, 0.0, 0.0, 1.0);
+    if (use_reflect && dp_exact) {
+        //   TangentReflectVector = reflect(-EyeVector, surfacenormal); diffusetex += reflectmask * reflectcube
+        // The cube map is in Quake axes (x, y, z) = Godot (x, -z, y).
+        vec3 rw = (INV_VIEW_MATRIX * vec4(reflect(-VIEW, rn), 0.0)).xyz;
+        albedo += texture(reflect_mask, UV * albedo_uv_scale).rgb * texture(reflect_cube, vec3(rw.x, -rw.z, rw.y)).rgb;
     }
 
     vec3 spec_accum = vec3(0.0);   // deluxe specular highlight; added (overbright-scaled) into combined below.
@@ -294,14 +327,12 @@ void fragment() {
             // overbright two as the diffuse).
             if (world_gamma_space < 1.5) {
                 vec3 eye_ts = normalize(vec3(dot(v_eye_model, vs), dot(v_eye_model, vt), dot(v_eye_model, vr)));
-                vec4 gtex = texture(gloss_tex, UV * albedo_uv_scale);
                 float spec = pow(clamp(dot(reflect(lightnormal, sn), -eye_ts), 0.0, 1.0), 1.0 + (32.0 * dp_gloss_exponent_mod * 0.25 - 1.0) * gtex.a);
                 spec_accum = lm * spec * gtex.rgb * dp_gloss_intensity_mod;
             }
         } else if (use_gloss) {
             vec3 eye_ts = normalize(vec3(dot(v_eye_model, vs), dot(v_eye_model, vt), dot(v_eye_model, vr)));
             vec3 halfdir = normalize(lightnormal + eye_ts);
-            vec4 gtex = texture(gloss_tex, UV * albedo_uv_scale);
             float spec = pow(clamp(dot(sn, halfdir), 0.0, 1.0), specular_power * gtex.a);
             spec_accum = lm * spec * gtex.rgb * specular_scale;
         }
@@ -317,6 +348,10 @@ void fragment() {
     // lit their own luxels are. Without this, lightmapped lights render as a dim diffuse×lightmap and look dark.
     vec3 combined = albedo * lm + spec_accum * lightmap_scale * world_lightmap_scale + glow * glow_scale;
     combined *= map_tint;   // dynamic whole-map tint (identity (1,1,1) when no tint is active).
+    v_shadowable = clamp(combined - glow * glow_scale * map_tint, vec3(0.0), vec3(1.0));
+    // A realtime light is shaded on the normal-mapped normal, as DarkPlaces' light pass is. (The baked term
+    // above is already computed; the engine's ambient light is off for this shader.)
+    if (dp_framebuffer > 0.5 && dp_usenormalmap > 0.5) { NORMAL = rn; }
     // In sRGB mode combined is linear (let Godot encode it). In the default gamma-space mode it's the
     // display-ready value, so pre-encode it to linear to cancel Godot's linear->sRGB output transform.
     // The baked result goes to EMISSION, not ALBEDO: emission is not affected by lighting, so the static
@@ -350,12 +385,24 @@ void light() {
             // falloff of the engine's own beyond its range window (1 - (d/r)^4)^2, from which d/r is taken
             // back and DarkPlaces' table is evaluated: (1 - d/r) * 2 / (1 + (d/r)^2), at most 1
             // (r_shadow.c R_Shadow_MakeTextures_SamplePoint). LIGHT_COLOR carries the engine's factor of pi.
-            float q = pow(max(1.0 - sqrt(clamp(ATTENUATION, 0.0, 1.0)), 0.0), 0.25);
-            float att = clamp((1.0 - q) * 2.0 / (1.0 + q * q), 0.0, 1.0);
-            DIFFUSE_LIGHT += LIGHT_COLOR * (att * ndotl * world_dlight * 0.31830989);
+            // The light's ambient, diffuse and specular scales (an .rtlights line's last fields) come packed
+            // in its specular parameter; with r_shadow_usenormalmap 0 the diffuse joins the ambient.
+            float att = dp_light_att(ATTENUATION);
+            vec3 scales = dp_light_scales(SPECULAR_AMOUNT);
+            if (dp_usenormalmap < 0.5) { scales = vec3(scales.x + scales.y, 0.0, 0.0); }
+            DIFFUSE_LIGHT += LIGHT_COLOR * (att * (scales.x + scales.y * ndotl) * world_dlight * 0.31830989);
+            if (scales.z > 0.0 && v_light_gloss.a > 1.0) {
+                //   specular = pow(sat(dot(reflect(lightnormal, surfacenormal), -eyenormal)), 1 + SpecularPower * gloss.a)
+                float spec = pow(clamp(dot(reflect(-normalize(LIGHT), normalize(NORMAL)), normalize(VIEW)), 0.0, 1.0), v_light_gloss.a);
+                SPECULAR_LIGHT += LIGHT_COLOR * v_light_gloss.rgb * (att * scales.z * spec * world_dlight * 0.31830989);
+            }
         } else {
             DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndotl * world_dlight;
         }
+    } else if (dp_framebuffer > 0.5 && dp_model_shadow > 0.0) {
+        // r_shadows: the directional light is only a shadow map of the models. ATTENUATION is the fraction
+        // of unshadowed samples; a shadowed pixel keeps (1 - r_shadows_darken) of its lit colour.
+        SPECULAR_LIGHT -= v_shadowable * (dp_model_shadow * (1.0 - clamp(ATTENUATION, 0.0, 1.0)));
     }
 }
 ";
@@ -381,7 +428,7 @@ void light() {
         get
         {
             lock (_sharedGate)
-                return _shared ??= new Shader { Code = OpaqueCode };
+                return _shared ??= new Shader { Code = Final(OpaqueCode) };
         }
     }
 
@@ -393,7 +440,7 @@ void light() {
         get
         {
             lock (_sharedGate)
-                return _sharedMasked ??= new Shader { Code = Code };
+                return _sharedMasked ??= new Shader { Code = Final(Code) };
         }
     }
 
@@ -414,16 +461,32 @@ void light() {
         get
         {
             lock (_sharedGate)
-                return _sharedTranslucent ??= new Shader { Code = TranslucentCode };
+                return _sharedTranslucent ??= new Shader { Code = Final(TranslucentCode) };
         }
     }
 
     /// <summary>The translucent source: the opaque <see cref="Code"/> with a single <c>ALPHA = base.a</c> write
     /// added (the opaque variant deliberately leaves ALPHA unwritten to stay in the opaque pass).</summary>
-    private static readonly string TranslucentCode = Code.Replace(
-        "ALBEDO = srgb_color ? combined : srgb_to_linear(combined);",
-        "ALBEDO = srgb_color ? combined : srgb_to_linear(combined);\n" +
-        "    ALPHA = base.a; // translucent variant (Q3 blendFunc blend): diffuse alpha drives the see-through.");
+    private static readonly string TranslucentCode = MakeTranslucent(Code);
+
+    /// <summary>The source as compiled: <see cref="Code"/> with the DarkPlaces light helpers
+    /// (<c>DpLightModel.ShaderFunctions</c>) in place of their marker.</summary>
+    internal static string Final(string code) => code.Replace("@@DPLIGHT@@", VortexArena.Formats.Lighting.DpLightModel.ShaderFunctions);
+
+    /// <summary>The line of <see cref="Code"/> after which the translucent variant writes ALPHA. A constant, and
+    /// checked: the replacement used to name a line that a later edit had rewritten, so the variant silently
+    /// stayed opaque and lightmapped glass was a solid wall.</summary>
+    internal const string TranslucentAnchor = "    ALBEDO = (linear_combine || dp_framebuffer > 0.5 ? albedo : srgb_to_linear(albedo)) * map_tint;\n";
+
+    internal static string MakeTranslucent(string code)
+    {
+        if (!code.Contains(TranslucentAnchor, System.StringComparison.Ordinal))
+            throw new System.InvalidOperationException("LightmapShader: the translucent variant's anchor line is gone from Code.");
+        // A blended surface is not alpha-tested: the discard block goes.
+        return code.Replace(TranslucentAnchor, TranslucentAnchor +
+            "    ALPHA = base.a; // translucent variant (Q3 blendFunc blend): diffuse alpha drives the see-through.\n")
+            .Replace("    if (alpha_cutoff > 0.0 && base.a < alpha_cutoff) {\n        discard;\n    }\n", "");
+    }
 
     /// <summary>True if <paramref name="shader"/> is one of the lightmap shader instances (opaque or
     /// translucent). The BSP load tally uses this to recognise a surface that came back on the lightmap path
@@ -453,7 +516,7 @@ void light() {
         Texture2D? albedo, Texture2D? lightmap, float lightmapScale = 2.0f,
         Texture2D? deluxemap = null, Vector2? albedoUvScale = null, float alphaCutoff = 0.0f,
         Texture2D? glow = null, float glowScale = 1.0f, bool translucent = false,
-        Texture2D? normal = null, Texture2D? gloss = null)
+        Texture2D? normal = null, Texture2D? gloss = null, Texture2D? reflectMask = null, Cubemap? reflectCube = null)
     {
         // Three-way program pick (2026-08-02): translucent → alpha-blend variant; alpha-tested (grates,
         // foliage) → the masked variant that carries `discard`; everything else → the discard-free opaque
@@ -491,6 +554,12 @@ void light() {
         {
             mat.SetShaderParameter(GlossUniform, gloss);
             mat.SetShaderParameter(UseGlossUniform, true);
+        }
+        if (reflectMask != null && reflectCube != null)
+        {
+            mat.SetShaderParameter("reflect_mask", reflectMask);
+            mat.SetShaderParameter("reflect_cube", reflectCube);
+            mat.SetShaderParameter("use_reflect", true);
         }
         mat.SetShaderParameter(LightmapScaleUniform, lightmapScale);
         mat.SetShaderParameter(AlphaCutoffUniform, alphaCutoff);

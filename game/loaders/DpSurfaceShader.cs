@@ -85,12 +85,22 @@ public static class DpSurfaceShader
         Texture2D? glow = stage.IsWhiteImage ? null : ctx.LoadTexture(AssetPaths.StripImageExtension(imageName) + "_glow");
         int frames = stage.AnimMap is { Frames.Length: > 1 } ? Math.Min(stage.AnimMap.Frames.Length, 8) : 1;
 
-        string code = DpSurfaceShaderGen.Generate(def, plan, stage, background, forModel, glow is not null, frames, lightmap is not null);
+        // dpreflectcube: the stage texture's _reflect mask times the named cube map (surfaces of the level; a
+        // model's ordinary skin has it in PlayerSkinShader).
+        (Texture2D? reflectMask, Cubemap? reflectCube) = forModel || stage.IsWhiteImage ? (null, null) : ctx.ResolveReflect(def, imageName);
+        bool reflect = reflectMask is not null && reflectCube is not null;
+
+        string code = DpSurfaceShaderGen.Generate(def, plan, stage, background, forModel, glow is not null, frames, lightmap is not null, reflect);
         ShaderMaterial material = new() { Shader = ShaderCompiler.SharedShader(code), ResourceName = def.Name + "/dp" };
         material.SetShaderParameter("albedo_tex", albedo);
         if (lightmap is not null && !plan.FullBright) material.SetShaderParameter("lightmap_tex", lightmap);
         if (background is not null) material.SetShaderParameter("background_tex", backgroundTexture!);
         if (glow is not null) material.SetShaderParameter("glow_tex", glow);
+        if (reflect)
+        {
+            material.SetShaderParameter("reflect_mask", reflectMask!);
+            material.SetShaderParameter("reflect_cube", reflectCube!);
+        }
         for (int i = 1; i < frames; i++)
             material.SetShaderParameter("anim_tex_" + i, ctx.LoadTexture(AssetPaths.StripImageExtension(stage.AnimMap!.Frames[i])) ?? albedo);
         return material;

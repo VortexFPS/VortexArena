@@ -75,7 +75,7 @@ public static class SpriteBuilder
         var quad = new QuadMesh { Size = new Vector2(w, h) };
 
         StandardMaterial3D material = BuildMaterial(spr);
-        material.AlbedoTexture = textures.Length > 0 ? textures[0] : null;
+        material.AlbedoTexture = textures.Length > 0 ? VortexArena.Game.Client.DisplayFramebuffer.ForEngine(textures[0]) : null;   // stored values on a display-value buffer
 
         var mi = new MeshInstance3D
         {
@@ -347,6 +347,6 @@ public partial class SpriteFramePlayer : Node
     private void Apply()
     {
         if (_material is not null && _frame >= 0 && _frame < _textures.Length)
-            _material.AlbedoTexture = _textures[_frame];
+            _material.AlbedoTexture = VortexArena.Game.Client.DisplayFramebuffer.ForEngine(_textures[_frame]);
     }
 }

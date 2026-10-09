@@ -53,7 +53,7 @@ public sealed partial class WorldLightRenderer : Node3D
 
     private readonly List<Built> _lights = new();
     private string _loadedMap = string.Empty;
-    private bool _appliedOn;
+    private bool _appliedOn = true;   // differs from the first poll's "off", so NORMALMODE lights are shown from the start
     private float _appliedLightmaps = 1f;
 
     /// <summary>Set by the host so the loader can read the map's file and resolve gobo textures.</summary>
@@ -131,6 +131,8 @@ public sealed partial class WorldLightRenderer : Node3D
             return;
         }
 
+        _source.Clear();
+        _source.AddRange(src);   // what rtlights_save writes back
         foreach (RtLightsFile.Light l in src)
             Build(l);
 
@@ -258,6 +260,14 @@ public sealed partial class WorldLightRenderer : Node3D
         float maxc = MathF.Max(1f, MathF.Max(l.Color.X, MathF.Max(l.Color.Y, l.Color.Z)));
         var hue = new Color(l.Color.X / maxc, l.Color.Y / maxc, l.Color.Z / maxc);
         float energy = MathF.Min(8f, maxc) * MathF.Max(0.05f, l.DiffuseScale);
+        if (DisplayFramebuffer.Active)
+        {
+            // DarkPlaces: currentcolor = color * style value * r_shadow_lightintensityscale, unclamped, and the
+            // ambient / diffuse / specular scales are separate factors in the light pass (packed below).
+            maxc = MathF.Max(1e-6f, MathF.Max(l.Color.X, MathF.Max(l.Color.Y, l.Color.Z)));
+            hue = DisplayFramebuffer.ForEngine(new Color(MathF.Max(0f, l.Color.X) / maxc, MathF.Max(0f, l.Color.Y) / maxc, MathF.Max(0f, l.Color.Z) / maxc));
+            energy = maxc * NativeColour.LightmapIntensity;   // style 0 / unstyled: the value of 'm' (cl_main.c)
+        }
 
         Texture2D? gobo = ResolveGobo(l.CubemapName);
         Light3D node;
@@ -290,6 +300,7 @@ public sealed partial class WorldLightRenderer : Node3D
 
         LightBudget.Register(node, LightBudget.Role.World, noShadow: !l.Shadow,
                              corona: l.Corona, coronaSize: l.CoronaSizeScale);
+        LightBudget.ApplyDarkPlacesConventions(node, l.AmbientScale, l.DiffuseScale, l.SpecularScale);
         _lights.Add(new Built { Node = node, Src = l });
     }
 
@@ -328,9 +339,12 @@ public sealed partial class WorldLightRenderer : Node3D
         if (on != _appliedOn)
         {
             _appliedOn = on;
+            // DarkPlaces draws the lights whose flags name the current mode (R_Shadow_PrepareLights): a light of
+            // an .rtlights file is a REALTIMEMODE light unless its line says otherwise, a NORMALMODE light is
+            // drawn while realtime world lighting is OFF.
             foreach (Built b in _lights)
                 if (GodotObject.IsInstanceValid(b.Node))
-                    LightBudget.SetOwnerVisible(b.Node, on);
+                    LightBudget.SetOwnerVisible(b.Node, DpLightModel.WorldLightDrawn(b.Src.Flags, on));
             Log.Info(on
                 ? (_lights.Count > 0
                     ? $"[WorldLights] realtime world lighting ON — {_lights.Count} lights."
@@ -348,7 +362,9 @@ public sealed partial class WorldLightRenderer : Node3D
         // the old code multiplied the lightmaps by r_shadow_realtime_world_lightmaps (default 0) and lit the
         // world with nothing at all. Replacing the lighting with an empty set is never what was wanted.
         bool replacing = on && _lights.Count > 0;
-        float lm = replacing ? MathF.Max(0f, Cvar("r_shadow_realtime_world_lightmaps", 0f)) : 1f;
+        // Times r_refdef.scene.lightmapintensity's other factor: the value of light style 0 (1.03125) when the
+        // native game is on DarkPlaces' colour arithmetic (gl_rmain.c R_UpdateVariables).
+        float lm = (replacing ? MathF.Max(0f, Cvar("r_shadow_realtime_world_lightmaps", 0f)) : 1f) * NativeColour.LightmapIntensity;
         if (!Mathf.IsEqualApprox(lm, _appliedLightmaps))
         {
             _appliedLightmaps = lm;
@@ -356,7 +372,7 @@ public sealed partial class WorldLightRenderer : Node3D
             RenderingServer.GlobalShaderParameterSet(LightmapScaleUniform, lm);
         }
 
-        if (!on || _lights.Count == 0)
+        if (_lights.Count == 0)
             return;
 
         // Light styles animate a world light's brightness exactly as they animate a dynlight's radius
@@ -368,7 +384,9 @@ public sealed partial class WorldLightRenderer : Node3D
                 continue;
             float s = VortexArena.Common.Gameplay.LightStyles.Sample(b.Src.Style, t);
             float maxc = MathF.Max(1f, MathF.Max(b.Src.Color.X, MathF.Max(b.Src.Color.Y, b.Src.Color.Z)));
-            b.Node.LightEnergy = MathF.Min(8f, maxc) * MathF.Max(0.05f, b.Src.DiffuseScale) * s;
+            b.Node.LightEnergy = DisplayFramebuffer.Active
+                ? MathF.Max(b.Src.Color.X, MathF.Max(b.Src.Color.Y, b.Src.Color.Z)) * s * NativeColour.LightmapIntensity
+                : MathF.Min(8f, maxc) * MathF.Max(0.05f, b.Src.DiffuseScale) * s;
         }
     }
 
@@ -383,7 +401,8 @@ public sealed partial class WorldLightRenderer : Node3D
             b.Node.QueueFree();
         }
         _lights.Clear();
-        _appliedOn = false;
+        _source.Clear();
+        _appliedOn = true;
     }
 
     private static float Cvar(string name, float fallback)

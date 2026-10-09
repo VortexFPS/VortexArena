@@ -79,6 +79,9 @@ public sealed partial class LightBudget : Node
         public float Rank;
     }
 
+    /// <summary>How many lights cast at once when <c>r_shadow_dlight_shadow_budget</c> is unset or 0.</summary>
+    public const int DefaultShadowBudget = 6;
+
     private readonly List<Entry> _lights = new();
     private readonly Dictionary<ulong, Entry> _byId = new();
     private readonly List<Entry> _ranked = new();
@@ -120,9 +123,33 @@ public sealed partial class LightBudget : Node
             return;
         }
         e = new Entry { Light = light, Id = id, Role = role, NoShadow = noShadow, Corona = corona, CoronaSize = coronaSize };
+        ApplyDarkPlacesConventions(light);
         Instance._byId[id] = e;
         Instance._lights.Add(e);
     }
+
+    /// <summary>
+    /// A light on a buffer of display values (DarkPlaces' colour arithmetic, DisplayFramebuffer): the light
+    /// shaders apply DarkPlaces' own falloff from the engine's range window, so the engine's distance exponent
+    /// is 0, and the light's specular parameter carries its ambient, diffuse and specular scales
+    /// (DpLightModel.PackScales) - a plain dynamic light is ambient 0, diffuse 1, specular 1 (cl_main.c
+    /// CL_AllocLightFlash callers). The shadow bias is the one found free of acne and of detached shadows at
+    /// this world's scale (one unit is one Quake unit).
+    /// </summary>
+    public static void ApplyDarkPlacesConventions(Light3D light, float ambient = 0f, float diffuse = 1f, float specular = 1f)
+    {
+        if (!DisplayFramebuffer.Active) return;
+        if (light is OmniLight3D omni) omni.OmniAttenuation = 0f;
+        else if (light is SpotLight3D spot) spot.SpotAttenuation = 0f;
+        light.LightSpecular = VortexArena.Formats.Lighting.DpLightModel.PackScales(ambient, diffuse, specular);
+        light.ShadowBias = ShadowBias;
+        light.ShadowNormalBias = ShadowNormalBias;
+        light.ShadowBlur = 1f;
+    }
+
+    /// <summary>Shadow biases of a positional light, in world units (see <see cref="ApplyDarkPlacesConventions"/>).</summary>
+    public const float ShadowBias = 0.6f;
+    public const float ShadowNormalBias = 1.5f;
 
     /// <summary>Drop a light from the roster. Freed lights are also reaped automatically each frame.</summary>
     public static void Unregister(Light3D? light)
@@ -164,8 +191,18 @@ public sealed partial class LightBudget : Node
         using var _prof = FrameProfiler.Scope("lightbudget");
 
         bool dlightsOn = Cvar("r_shadow_realtime_dlight", 1f) != 0f;
-        bool shadowsOn = Cvar("r_shadow_realtime_dlight_shadows", 0f) != 0f;
-        int shadowBudget = Math.Max(0, (int)Cvar("r_shadow_dlight_shadow_budget", 4f));
+        // DarkPlaces (r_shadow.c R_Shadow_PrepareLight): a light casts when shadow mapping is on, the light is
+        // not a no-shadow light, and its class is switched on - a level's light by
+        // r_shadow_realtime_world_shadows, a dynamic one by r_shadow_realtime_dlight_shadows.
+        bool shadowMapping = Cvar("r_shadow_shadowmapping", 1f) != 0f;
+        bool dlightShadows = Cvar("r_shadow_realtime_dlight_shadows", 0f) != 0f;
+        bool worldShadows = Cvar("r_shadow_realtime_world_shadows", 1f) != 0f;
+        // The budget is this port's cap on how many lights cast at once (DarkPlaces is bounded by its shadow
+        // atlas instead). 0 or less used to switch every shadow off, which left the menu's two "Shadows" boxes
+        // without effect at the normal preset: it now means the default cap.
+        int shadowBudget = (int)Cvar("r_shadow_dlight_shadow_budget", 4f);
+        if (shadowBudget <= 0) shadowBudget = DefaultShadowBudget;
+        ShadowSettings.Poll(this, shadowMapping && (dlightShadows || (worldShadows && Cvar("r_shadow_realtime_world", 0f) != 0f)));
         int visibleCap = Math.Max(0, (int)Cvar("r_shadow_dlight_max", 0f));
 
         Vector3 eye = ViewOrigin();
@@ -213,7 +250,8 @@ public sealed partial class LightBudget : Node
             }
             VisibleCount++;
 
-            bool cast = shadowsOn && !e.NoShadow && ShadowCount < shadowBudget;
+            bool cast = VortexArena.Formats.Lighting.DpLightModel.CastsShadow(shadowMapping, !e.NoShadow, e.Role == Role.World, worldShadows, dlightShadows)
+                && ShadowCount < shadowBudget;
             // Only touch the property on a change: ShadowEnabled churn re-allocates the light's shadow atlas
             // slot, so flipping it every frame on a light that is oscillating around the budget edge is worse
             // than either state.

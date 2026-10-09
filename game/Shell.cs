@@ -267,6 +267,9 @@ public partial class Shell : Node
         // config. Overrides the loaded config.cfg value (last writer wins), exactly like a console `set` would.
         ApplyCvarOverrides();
         ClientSettings.ApplyAll();
+        // The colour arithmetic of the 3D picture (r_darkplaces_colour): fixed here, once the cvar store holds
+        // the configuration and the --cvar pins and before anything of a level is loaded.
+        Game.Client.NativeColour.ApplyAtBoot(MenuState.SharedAssets?.Assets);
 
         WireCommandHooks();
 

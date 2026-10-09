@@ -152,7 +152,10 @@ public static class ModelLightProbe
     }
 
     /// <summary><c>r_model_dlight</c> — do dynamic lights reach grid-lit models? 1 by default.</summary>
-    public static bool Enabled() => Cvar("r_model_dlight", 1f) != 0f;
+    public static bool Enabled() => Cvar("r_model_dlight", 1f) != 0f
+        // With DarkPlaces' colour arithmetic a dynamic light lights a model per pixel through the light pass
+        // (PlayerSkinShader.DarkPlacesLightCode), with shadows; this per-entity probe would add it twice.
+        && !DisplayFramebuffer.Active;
 
     /// <summary><c>r_model_dlight_scale</c> — how strongly. 1 = the DP attenuation curve unmodified.</summary>
     private static float Strength() => MathF.Max(0f, Cvar("r_model_dlight_scale", 1f));

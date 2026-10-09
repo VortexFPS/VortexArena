@@ -2029,7 +2029,7 @@ public partial class EffectSystem : Node3D
                 // the sparks (a 0.15×2 base quad that reads even at scale 1) showed. Keep the scale so they render.
                 BillboardKeepScale = true,
                 VertexColorUseAsAlbedo = true,
-                AlbedoColor = color,
+                AlbedoColor = DisplayFramebuffer.ForEngine(color),   // stored values on a display-value buffer
                 DisableReceiveShadows = true,
             };
             // Sprite-sheet particle animation: each particle starts on a random frame (AnimOffset) so the burst
@@ -2058,7 +2058,7 @@ public partial class EffectSystem : Node3D
     {
         if (sprite is null)
             return;
-        mat.AlbedoTexture = sprite;
+        mat.AlbedoTexture = DisplayFramebuffer.ForEngine(sprite);
         mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.Linear;
     }
 

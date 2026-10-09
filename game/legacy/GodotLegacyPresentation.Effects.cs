@@ -235,7 +235,8 @@ public sealed partial class GodotLegacyPresentation
         EffectsSpawned++;
     }
 
-    void ILegacyEffects.SpriteEffect(QcVector origin, string model, int startFrame, int frameCount, float frameRate) => SpriteEffectsNotDrawn++;
+    void ILegacyEffects.SpriteEffect(QcVector origin, string model, int startFrame, int frameCount, float frameRate) =>
+        AddSpriteEffect(origin, model, startFrame, frameCount, frameRate);
 
     // ---- the server's own effect messages ----------------------------------------------------------------
 

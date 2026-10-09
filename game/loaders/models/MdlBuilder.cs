@@ -6,9 +6,16 @@ namespace VortexArena.Game.Loaders.Models;
 
 /// <summary>
 /// Turns a parsed <see cref="MdlData"/> (the Godot-free Quake1 "IDPO" importer output) into a Godot scene
-/// node. Unlike <see cref="Md3Builder"/> the shipped MDLs that reach the loader are static single-frame props
-/// (the shotgun shell casing, the gib chunk), so this builds a plain <see cref="MeshInstance3D"/> showing
-/// frame 0 — no morph/animation node needed.
+/// node. Two forms:
+/// <list type="bullet">
+///   <item><see cref="Prepare"/> / <see cref="Instantiate(Prepared)"/>: a plain <see cref="MeshInstance3D"/>
+///     showing one frame with the first skin. Xonotic's own MDLs are static single-frame props (the shotgun
+///     shell casing, the gib chunk) spawned by the hundred; this is their cheap path.</item>
+///   <item><see cref="Share"/> / <see cref="Instantiate(MdlShared, int)"/>: an <see cref="MdlModel"/> - every
+///     pose (the caller sets and blends them), every skin with its groups, external replacement skins, the
+///     full-bright glow and the colormap masks. A legacy session uses this for every MDL, as does the native
+///     game for one with more than one pose or skin.</item>
+/// </list>
 ///
 /// <para>The geometry (<see cref="ArrayMesh"/>) and the palette-decoded skin material are immutable and are
 /// built once via <see cref="Prepare"/>; <see cref="Instantiate"/> then hands out lightweight
@@ -68,6 +75,17 @@ public static class MdlBuilder
         Mesh = prepared.Mesh,
         MaterialOverride = prepared.SkinMaterial,
     };
+
+    /// <summary>
+    /// The geometry and (lazily built) skin materials every <see cref="MdlModel"/> of one file shares.
+    /// <paramref name="vpath"/> is the model's name with its extension, which the external replacement skins
+    /// are named after (<c>progs/player.mdl_0.tga</c>); <paramref name="palette"/> the session's Quake palette.
+    /// </summary>
+    public static MdlShared Share(MdlData mdl, AssetSystem? assets, string? vpath, VortexArena.Formats.Images.QuakePalette? palette) =>
+        new(mdl, assets, vpath, palette);
+
+    /// <summary>A posable, skinnable node sharing <paramref name="shared"/>, showing pose 0 and skin <paramref name="skin"/>.</summary>
+    public static MdlModel Instantiate(MdlShared shared, int skin = 0) => MdlModel.Create(shared, skin);
 
     /// <summary>Convenience one-shot (prepare + instantiate) for one-off callers / tests.</summary>
     public static Node3D Build(MdlData mdl, int frame = 0) => Instantiate(Prepare(mdl, frame));

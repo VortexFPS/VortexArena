@@ -57,6 +57,11 @@ public sealed partial class GodotLegacyPresentation
         public ModelAnimator? Animator;
         // A vertex-animated model the asset pipeline built (a skin other than the first): posed the same way.
         public VortexArena.Game.Loaders.Models.Md3Morph? Morph;
+        // A Quake .mdl (its Morph is the field above; this adds the skin pictures) and a sprite drawn the
+        // DarkPlaces way (oriented against the view each frame): GodotLegacyPresentation.Quake.cs.
+        public VortexArena.Game.Loaders.Models.MdlModel? Mdl;
+        public VortexArena.Game.Loaders.SpriteModel? Sprite;
+        public bool SpriteQueued;
         public int LastFrame = int.MinValue;
         public readonly List<GeometryInstance3D> Geometry = new();
         public List<(MeshInstance3D Mesh, int Surface, Material? Original)>? Surfaces;
@@ -135,6 +140,7 @@ public sealed partial class GodotLegacyPresentation
         _polygonVertices = 0;
         _lights.Clear();
         _oneOffsOfModel.Clear();
+        BeginQuakeFrame();
         CollectDeferredModels();
         _polygonMesh.ClearSurfaces();
         _ledger.BeginFrame();
@@ -254,6 +260,7 @@ public sealed partial class GodotLegacyPresentation
         // The variants hold duplicates of the level's materials; a new level makes its own.
         _materialVariants.Clear();
         _oneOffKeys.Clear();
+        ClearQuakeState();
     }
 
     // ---- ILegacyScene ---------------------------------------------------------------------------------
@@ -287,6 +294,7 @@ public sealed partial class GodotLegacyPresentation
 
         for (int i = 0; i < _staticEntities.Count; i++)
             SubmitNetworkState(StaticKeyBase + i, _staticEntities[i], state);
+        SubmitSpriteEffects();
 
         if ((drawMask & 1) == 0 || state.NetworkEntities is not { } table) return;
         int count = Math.Min(table.Count, DpProtocol.MaxEdicts);
@@ -300,41 +308,51 @@ public sealed partial class GodotLegacyPresentation
         }
     }
 
-    // CL_UpdateNetworkEntity, without the interpolation between the last two states: the entity is drawn
-    // where the newest frame put it.
+    // CL_UpdateNetworkEntity, without the interpolation of the ORIGIN between the last two states: the entity
+    // is drawn where the newest frame put it. Its animation is blended, its model's effects are added, a model
+    // that asks for it spins and leaves a trail (UpdateNetworkEntity, GodotLegacyPresentation.Quake.cs).
     private void SubmitNetworkState(int key, in EntityState entity, CsqcClientState state)
     {
-        if ((entity.Effects & EfNoDraw) != 0 || s_noEntities) return;
+        if (s_noEntities) return;
         if (state.ModelNameForIndex(entity.ModelIndex) is not { Length: > 0 } model) return;
-        _submittedThisFrame++;
-        if (model[0] == '*') SubmodelSubmissions++;
+        bool submodel = model[0] == '*';
+        LegacyModel? info = submodel ? null : ModelData.Load(model);
 
         QcVector origin = new(entity.Origin.X, entity.Origin.Y, entity.Origin.Z);
         QcVector angles = new(entity.Angles.X, entity.Angles.Y, entity.Angles.Z);
         float scale = entity.Scale / 16f;
         if (!(scale > 0)) scale = 1;
-        if (ModelData.KindOf(model) == LegacyModelKind.Alias) angles.X = -angles.X;   // CL_GetPitchSign
+        if (info?.Kind == LegacyModelKind.Alias) angles.X = -angles.X;   // CL_GetPitchSign
+        // The trail is left whether or not the entity is drawn (EF_NODRAW is tested after it, as in the C).
+        int effects = UpdateNetworkEntity(key, entity, info, key >= StaticKeyBase && key < OneOffKeyBase, ref origin, ref angles, out NetEntity net);
+        if ((effects & EfNoDraw) != 0) return;
+        _submittedThisFrame++;
+        if (submodel) SubmodelSubmissions++;
         QcCoreBuiltins.AngleVectors(angles, out QcVector forward, out QcVector right, out QcVector up);
         BoneMatrix placement = new(N(forward) * scale, N(right) * -scale, N(up) * scale, N(origin));
 
         if (Touch(key, model, entity.Skin) is not { Node: { } } proxy) return;
-        if (s_debugEntities && model[0] == '*' && _debugEntities.Count < 300)
+        if (s_debugEntities && _debugEntities.Count < 300)
             _debugEntities.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                $"net {key - NetworkKeyBase,4} {model} ef {entity.Effects} a {entity.Alpha} org {origin.X:0.#} {origin.Y:0.#} {origin.Z:0.#} ang {angles.X:0.#} {angles.Y:0.#} {angles.Z:0.#} meshes {proxy.Geometry.Count}{Q1DebugSubmodel(proxy)}"));
-        if (!ApplyPlacement(proxy, placement)) return;
-        ApplyRenderState(proxy, entity.Alpha / 255f, entity.Effects, 0);
+                $"net {key - NetworkKeyBase,4} {model} ef {entity.Effects}->{effects} a {entity.Alpha} skin {entity.Skin} fr {entity.Frame} org {origin.X:0.#} {origin.Y:0.#} {origin.Z:0.#} ang {angles.X:0.#} {angles.Y:0.#} {angles.Z:0.#} meshes {proxy.Geometry.Count}{Q1DebugSubmodel(proxy)}"));
+        if (!PlaceProxy(proxy, placement)) return;
         if (_levelQ1 is not null) ApplyQ1ModelLight(proxy, placement.Origin);
         if (proxy.Q1 is not null) ApplyQ1Frame(proxy, entity.Frame);
-        // EntityState colormod / glowmod are bytes at 32 = 1.0 (protocol.h); zero-length means "not set".
-        ApplyTint(proxy, entity.Colormap,
-            new QcVector(entity.ColorMod0 / 32f, entity.ColorMod1 / 32f, entity.ColorMod2 / 32f),
-            new QcVector(entity.GlowMod0 / 32f, entity.GlowMod1 / 32f, entity.GlowMod2 / 32f));
-        if (proxy.LastFrame != entity.Frame && !proxy.Stale && (proxy.Animator is not null || proxy.Morph is not null))
+        QcVector colorMod = new(entity.ColorMod0 / 32f, entity.ColorMod1 / 32f, entity.ColorMod2 / 32f);
+        if (proxy.Sprite is not null)
         {
-            if (proxy.Animator is { } animator) animator.SetRawFrame(entity.Frame);
-            else proxy.Morph!.SetFrame(entity.Frame);
-            proxy.LastFrame = entity.Frame;
+            // A sprite's alpha, colour and blending are its own material's (SubmitSprite).
+            ApplyRenderState(proxy, entity.Alpha > 0 ? 1f : 0f, (effects & ~EfAdditive) | EfNoShadow, 0);
+            ApplyNetworkPose(proxy, net, info);
+            SubmitSprite(proxy, entity.Alpha / 255f, effects, 0, colorMod);
+            return;
         }
+        ApplyRenderState(proxy, entity.Alpha / 255f, effects, 0);
+        // EntityState colormod / glowmod are bytes at 32 = 1.0 (protocol.h); zero-length means "not set".
+        ApplyTint(proxy, entity.Colormap, colorMod,
+            new QcVector(entity.GlowMod0 / 32f, entity.GlowMod1 / 32f, entity.GlowMod2 / 32f));
+        UpdateMdlSkin(proxy, ClientTime - net.ShaderTime);
+        ApplyNetworkPose(proxy, net, info);
     }
 
     /// <summary>
@@ -412,15 +430,30 @@ public sealed partial class GodotLegacyPresentation
             _debugEntities.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
                 $"ent {entity.Edict,4} {model} rf {entity.RenderFlags} ef {entity.Effects} a {entity.Alpha:0.##} sc {entity.Scale:0.##} cm {entity.ColorMap} skin {entity.Skin} fr {entity.Frame:0} tag {entity.TagEntity}/{entity.TagIndex} org {entity.Origin.X:0.#} {entity.Origin.Y:0.#} {entity.Origin.Z:0.#} ang {entity.Angles.X:0.#} {entity.Angles.Y:0.#} {entity.Angles.Z:0.#} -> at {placement.Origin.X:0.#} {placement.Origin.Y:0.#} {placement.Origin.Z:0.#} |fwd| {placement.Fwd.Length():0.###} colormod {entity.ColorMod.X:0.##} {entity.ColorMod.Y:0.##} {entity.ColorMod.Z:0.##} glow {entity.GlowMod.X:0.##} {entity.GlowMod.Y:0.##} {entity.GlowMod.Z:0.##} node {(proxy.Node is null ? "none" : "ok")} failed {proxy.Failed}"));
         if (proxy.Node is null) return !proxy.Failed;
-        if (!ApplyPlacement(proxy, placement)) return true;
+        if (!PlaceProxy(proxy, placement)) return true;
         lap = Lap(profile, 3, lap);
 
+        // "entrender->effects |= entrender->model->effects": what a Quake .mdl's header asks for (full
+        // bright, no shadow ...). Trails and EF_ROTATE are the engine's for NETWORK entities only; an entity
+        // the program draws gets neither from DarkPlaces (the program does its own).
+        int effects = entity.Effects;
+        if (proxy.Mdl is { } mdl) effects |= unchecked((int)mdl.Data.Effects);
         // "if (!entrender->alpha) entrender->alpha = 1"
-        ApplyRenderState(proxy, entity.Alpha == 0 ? 1 : entity.Alpha, entity.Effects, entity.RenderFlags);
+        float alpha = entity.Alpha == 0 ? 1 : entity.Alpha;
+        if (proxy.Sprite is not null)
+        {
+            ApplyRenderState(proxy, alpha > 0 ? 1f : 0f, (effects & ~EfAdditive) | EfNoShadow, entity.RenderFlags & ~RfAdditive);
+            if (!proxy.Stale && !s_noPose) ApplyPose(proxy, entity);
+            SubmitSprite(proxy, alpha, effects, entity.RenderFlags, entity.ColorMod);
+            return true;
+        }
+        ApplyRenderState(proxy, alpha, effects, entity.RenderFlags);
         if (_levelQ1 is not null) ApplyQ1ModelLight(proxy, placement.Origin);
         if (proxy.Q1 is not null) ApplyQ1Frame(proxy, (int)entity.Frame);
         lap = Lap(profile, 4, lap);
         ApplyTint(proxy, entity.ColorMap, entity.ColorMod, entity.GlowMod);
+        // "hack for csprogs.dat files that do not set shadertime, leaves the value at entity spawn time"
+        if (proxy.Mdl is not null) UpdateMdlSkin(proxy, ClientTime - entity.ShaderTime);
         lap = Lap(profile, 5, lap);
         if (!proxy.Stale && !s_noPose) ApplyPose(proxy, entity);
         Lap(profile, 6, lap);
@@ -544,6 +577,8 @@ public sealed partial class GodotLegacyPresentation
             return false;
         }
         proxy.Animator = animator;
+        proxy.Mdl = node as VortexArena.Game.Loaders.Models.MdlModel;
+        proxy.Sprite = node as VortexArena.Game.Loaders.SpriteModel;
         node.Visible = false;
         long step = LegacyPerfLog.Stamp();
         _sceneRoot.AddChild(node);
@@ -997,27 +1032,24 @@ public sealed partial class GodotLegacyPresentation
     private void ApplyPose(Proxy proxy, in LegacyRenderEntity entity)
     {
         bool persistent = entity.Edict > 0;
-        if (proxy.Animator is not null || proxy.Morph is not null ? s_noMorph : s_noSkeleton) return;
-        if (proxy.Animator is not null || proxy.Morph is not null)
+        bool posed = proxy.Animator is not null || proxy.Morph is not null || proxy.Sprite is not null;
+        if (posed ? s_noMorph : s_noSkeleton) return;
+        if (posed)
         {
             // frame / frame2 / lerpfrac as VM_FrameBlendFromFrameGroupBlend resolved them: the two strongest
-            // poses and the weight of the second.
+            // poses and the weight of the second. (A frame number is an animscene: for a model or sprite with
+            // frame groups - a Quake torch - it is not a pose number, and the group plays by the clock.)
             int frameA = (int)entity.Frame, frameB = frameA;
             float weight = 0;
             if (persistent && ModelData.RenderFrames(entity.Edict, out int a, out int b, out float lerp))
             {
                 frameA = a;
                 frameB = b;
-                weight = float.IsFinite(lerp) ? Math.Clamp(lerp, 0f, 1f) : 0f;
+                weight = lerp;
             }
-            if (frameA != proxy.LastFrame || frameB != proxy.LastFrameB || MathF.Abs(weight - proxy.LastLerp) > 0.004f)
-            {
-                if (proxy.Animator is { } animator) animator.SetRawFrameBlend(frameA, frameB, weight);
-                else proxy.Morph!.LerpFrames(frameA, frameB, weight);
-                proxy.LastFrame = frameA;
-                proxy.LastFrameB = frameB;
-                proxy.LastLerp = weight;
-            }
+            else if (ModelData.Load(proxy.Model)?.Scenes is { } scenes)
+                frameA = frameB = (uint)frameA < (uint)scenes.Length ? scenes[frameA].FirstFrame : 0;
+            ShowPoses(proxy, frameA, frameB, weight);
             return;
         }
         if (!persistent || proxy.Skeleton is not { } skeleton || proxy.BoneParents is not { } parents) return;
@@ -1100,6 +1132,7 @@ public sealed partial class GodotLegacyPresentation
             }
         }
         if (_mapRoot is not null) _mapRoot.Visible = View.DrawWorld && !s_noWorld;
+        OrientSprites();
         ApplyProgramFog();
 
         LastDynamicLights = _lights.Count;

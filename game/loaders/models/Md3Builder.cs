@@ -359,6 +359,32 @@ public partial class Md3Morph : Node3D
         ApplyFrame(Math.Clamp(frameA, 0, n), Math.Clamp(frameB, 0, n), Math.Clamp(t, 0f, 1f));
     }
 
+    /// <summary>
+    /// Replace the material of one of the model's surfaces (counted as in the file, hidden ones included) for
+    /// this node: the mesh shown now and every mesh a later frame builds. For a caller that supplies its own
+    /// materials instead of names the asset system resolves - a Quake <c>.mdl</c>, whose skins are pictures
+    /// inside the file and change with the entity's <c>.skin</c> (see <see cref="MdlModel"/>).
+    /// </summary>
+    public void SetSurfaceMaterial(int surface, Material? material)
+    {
+        if ((uint)surface >= (uint)_surfaces.Count)
+            return;
+        (Md3Surface s, Material? _, bool visible, bool? autosprite) = _surfaces[surface];
+        _surfaces[surface] = (s, material, visible, autosprite);
+        if (!visible || _mesh?.Mesh is not ArrayMesh mesh)
+            return;
+        // The mesh's surfaces are the visible, non-empty ones in order.
+        int index = 0;
+        for (int i = 0; i < surface; i++)
+        {
+            (Md3Surface other, _, bool shown, _) = _surfaces[i];
+            if (shown && other.VertexCount > 0 && other.Triangles.Length > 0 && other.FrameVertices.Length > 0)
+                index++;
+        }
+        if (index < mesh.GetSurfaceCount())
+            mesh.SurfaceSetMaterial(index, material);
+    }
+
     /// <summary>Start with the per-frame callback OFF — <see cref="SetPlaying"/> arms it when a clip plays.
     /// A statically-posed model (the common case) therefore never enters the process list at all.</summary>
     public override void _Ready() => SetProcess(_playing);

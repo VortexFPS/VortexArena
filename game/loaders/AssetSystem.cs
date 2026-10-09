@@ -135,6 +135,114 @@ public sealed class AssetSystem
     }
 
     // -------------------------------------------------------------------------------------------------
+    //  Trimming (legacy compatibility mode: a level change inside one session)
+    // -------------------------------------------------------------------------------------------------
+
+    // The materials and textures asked for on a thread while its WorldScope was set: what a level's walls are
+    // made of, as against what its models wear.
+    [ThreadStatic] private static bool t_worldScope;
+    private readonly HashSet<string> _worldTextures = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _worldMaterials = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Set by an owner, on its own thread, around the building of a level's own geometry (the world
+    /// and its doors): the materials and textures asked for meanwhile are the ones the Forget methods may
+    /// forget once nothing uses them. Never set by the native game.</summary>
+    public static bool WorldScope
+    {
+        get => t_worldScope;
+        set => t_worldScope = value;
+    }
+
+    /// <summary>
+    /// Forgets every cached material of a level's own geometry (<see cref="WorldScope"/>) that nothing but
+    /// this cache still refers to - no mesh surface, no instance override. After a level change that is the
+    /// last level's walls (the meshes that used them are freed) and nothing the new level has built. Model
+    /// materials are left alone: a weapon nobody holds at this moment is unreferenced too, and forgetting it
+    /// would mean decoding its textures again on the frame it is next seen. Forgetting is all this does: the object goes when the collector finalises it,
+    /// and a later request for the name builds it again as a first request would. Returns how many were
+    /// forgotten. Frame thread.
+    /// </summary>
+    public int ForgetUnreferencedMaterials()
+    {
+        int forgotten = 0;
+        var names = new List<string>();
+        lock (_materialCacheGate)
+        {
+            lock (_worldTextures)
+                foreach (var kv in _materialCache)
+                    if (_worldMaterials.Contains(kv.Key)
+                        && (!GodotObject.IsInstanceValid(kv.Value) || kv.Value.GetReferenceCount() <= 1))
+                        names.Add(kv.Key);
+            foreach (string name in names)
+                _materialCache.Remove(name);
+            lock (_worldTextures)
+                foreach (string name in names)
+                    _worldMaterials.Remove(name);
+            forgotten += names.Count;
+        }
+        names.Clear();
+        lock (_autospriteCacheGate)
+        {
+            foreach (var kv in _autospriteCache)
+                if (kv.Value is { } material && (!GodotObject.IsInstanceValid(material) || material.GetReferenceCount() <= 1))
+                    names.Add(kv.Key);
+            foreach (string name in names)
+                _autospriteCache.Remove(name);
+            forgotten += names.Count;
+        }
+        return forgotten;
+    }
+
+    /// <summary>
+    /// The same for the textures a level's own geometry asked for, and reflection cube maps: forgets each one that
+    /// only this cache refers to (no material holds it). Call it after the materials forgotten by
+    /// <see cref="ForgetUnreferencedMaterials"/> have been finalised, or the textures they held still count
+    /// as in use. Returns how many, and the estimated video memory they held. Frame thread.
+    /// </summary>
+    public (int Count, long Bytes) ForgetUnreferencedTextures()
+    {
+        int forgotten = 0;
+        long bytes = 0;
+        var names = new List<string>();
+        lock (_textureCacheGate)
+        {
+            foreach (var kv in _textureCache)
+            {
+                if (kv.Value is not Texture2D texture)
+                    continue;   // a remembered miss stays one
+                if (!GodotObject.IsInstanceValid(texture))
+                {
+                    names.Add(kv.Key);
+                    continue;
+                }
+                if (texture.GetReferenceCount() > 1)
+                    continue;
+                lock (_worldTextures)
+                    if (!_worldTextures.Remove(kv.Key))
+                        continue;   // a model's, or the HUD's: kept
+                bytes += EstimateTextureBytes(texture, out _);
+                lock (_texMetaGate)
+                    _texMeta.Remove(texture.GetInstanceId());
+                names.Add(kv.Key);
+            }
+            foreach (string name in names)
+                _textureCache.Remove(name);
+            forgotten += names.Count;
+        }
+        names.Clear();
+        lock (_reflectCubes)
+        {
+            foreach (var kv in _reflectCubes)
+                if (kv.Value is { } cube && (!GodotObject.IsInstanceValid(cube) || cube.GetReferenceCount() <= 1))
+                    names.Add(kv.Key);
+            foreach (string name in names)
+                _reflectCubes.Remove(name);
+            forgotten += names.Count;
+        }
+        return (forgotten, bytes);
+    }
+
+    // -------------------------------------------------------------------------------------------------
     //  VRAM census (`r_vram_census`, perf 2026-08-02)
     // -------------------------------------------------------------------------------------------------
 
@@ -377,6 +485,10 @@ public sealed class AssetSystem
         // leading space makes it unambiguous against a real asset name. Only the CACHE key carries it - every
         // lookup below (the shader table, the texture loads) uses the clean name.
         string cacheKey = forModel ? key + " model" : key;
+        // A material the level's own geometry asked for (see ForgetUnreferencedMaterials).
+        if (t_worldScope)
+            lock (_worldTextures)
+                _worldMaterials.Add(cacheKey);
         lock (_materialCacheGate)
             if (_materialCache.TryGetValue(cacheKey, out Material? cached))
                 return cached;
@@ -960,6 +1072,11 @@ public sealed class AssetSystem
         string? vpath = _vfs.ResolveImage(baseNameNoExt);
         if (vpath == null)
             return null;
+
+        // A texture the level's own geometry asked for (see ForgetUnreferencedTextures).
+        if (t_worldScope)
+            lock (_worldTextures)
+                _worldTextures.Add(vpath);
 
         lock (_textureCacheGate)
             if (_textureCache.TryGetValue(vpath, out Texture2D? cached))
@@ -1991,6 +2108,81 @@ public sealed class AssetSystem
             return image.IsCompressed();
         }
         finally { image.Dispose(); }
+    }
+
+    // ---- compressing a texture that is already on screen (legacy compatibility mode, LegacyTextureBank) ----
+
+    /// <summary>True when the engine would use its slow encoder (BC7) for a texture loaded now.</summary>
+    public static bool SlowEncoder => TextureCompression > 0 && UsesBptcEncoder();
+
+    /// <summary>
+    /// <paramref name="vpath"/> as it was uploaded when its compression was deferred: decoded, shrunk by
+    /// gl_picmip, with its mip chain, uncompressed. Null if it cannot be decoded or would not be compressed.
+    /// Safe off the frame thread.
+    /// </summary>
+    public Image? DecodeForCompression(string vpath)
+    {
+        Image? image = LoadImageFromVpath(vpath);
+        if (image is null)
+            return null;
+        MaybePicmip(vpath, image);
+        EnsureMipmaps(vpath, image);
+        if (image.IsCompressed() || image.IsEmpty() || !image.HasMipmaps()
+            || !TextureCategories.Enabled(TextureCompressionCategories, TextureCategories.Classify(vpath)))
+        {
+            image.Dispose();
+            return null;
+        }
+        return image;
+    }
+
+    /// <summary>
+    /// <see cref="CompressToCache"/> that hands the compressed image back instead of dropping it (null if the
+    /// engine's encoder produced none). Safe off the frame thread.
+    /// </summary>
+    public Image? CompressForCache(string vpath)
+    {
+        Image? image = LoadImageFromVpath(vpath);
+        if (image is null)
+            return null;
+        PrepareDecoded(vpath, image, DdsCacheRoot);
+        if (image.IsCompressed())
+            return image;
+        image.Dispose();
+        return null;
+    }
+
+    /// <summary>Banks an image that was block-compressed outside the engine's encoder in this system's texture
+    /// cache (r_texture_dds_save), as <see cref="CompressToCache"/> banks its own. Safe off the frame thread.</summary>
+    public void BankCompressed(string vpath, Image compressed)
+    {
+        if (DdsSave)
+            SaveDdsCache(vpath, compressed, DdsCacheRoot);
+    }
+
+    /// <summary>
+    /// Replaces the pixels of the texture this system holds for <paramref name="vpath"/> with those of
+    /// <paramref name="replacement"/> - a renderer texture of the same picture, block-compressed, made with
+    /// RenderingServer.Texture2DCreate on whatever thread encoded it (handing the image to the renderer is
+    /// the slow part: 2 to 9 ms for a large texture, which is why it is not done here). Every material that
+    /// shows the texture goes on showing it, from a quarter of the memory. Frame thread; one queued command.
+    /// The replacement is consumed. False, with the replacement untouched, if the texture is not held, is
+    /// another size, or is of a kind whose users would have to be told (a two-channel normal map: see
+    /// IsRgTexture).
+    /// </summary>
+    public bool ReplaceTexture(string vpath, Rid replacement, Image.Format format, bool mipmaps, int width, int height)
+    {
+        Texture2D? held;
+        lock (_textureCacheGate)
+            _textureCache.TryGetValue(vpath, out held);
+        if (held is not ImageTexture texture || !GodotObject.IsInstanceValid(texture))
+            return false;
+        if (format == Image.Format.RgtcRg || width != texture.GetWidth() || height != texture.GetHeight())
+            return false;
+        RenderingServer.TextureReplace(texture.GetRid(), replacement);
+        lock (_texMetaGate)
+            _texMeta[texture.GetInstanceId()] = new TexMeta(format, mipmaps);
+        return true;
     }
 
     /// <summary>

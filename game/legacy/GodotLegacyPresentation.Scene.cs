@@ -75,6 +75,8 @@ public sealed partial class GodotLegacyPresentation
         public BoneMatrix Placement;
         public Vector3[]? PosePositions;
         public Quaternion[]? PoseRotations;
+        // The scene frame in which the entity stopped being submitted (see StealIdle).
+        public long HiddenAt;
     }
 
     private readonly Dictionary<int, Proxy> _proxies = new();
@@ -131,6 +133,7 @@ public sealed partial class GodotLegacyPresentation
         CollectDeferredModels();
         _polygonMesh.ClearSurfaces();
         _ledger.BeginFrame();
+        _sceneFrame++;
         _refdef.BeginFrame();
         _listenerOverridden = false;
     }
@@ -143,12 +146,68 @@ public sealed partial class GodotLegacyPresentation
         LastSceneEntities = _submittedThisFrame;
         _ledger.Sweep(_hide, _release);
         foreach (int key in _hide)
-            if (_proxies.TryGetValue(key, out Proxy? hidden) && hidden.Node is { } node && hidden.Shown)
+            if (_proxies.TryGetValue(key, out Proxy? hidden) && hidden.Node is { } node)
             {
-                hidden.Shown = false;
-                node.Visible = false;
+                if (hidden.Shown)
+                {
+                    hidden.Shown = false;
+                    node.Visible = false;
+                }
+                NoteIdle(key, hidden);
             }
         foreach (int key in _release) RetireProxy(key);
+    }
+
+    // ---- a node whose entity is no longer submitted, lent to the next entity of that model ---------------
+    //
+    // An entity that is not submitted keeps its node for ReleaseAfterFrames (some thirteen seconds) in case it
+    // comes back: a door out of sight, a player behind a wall. But Xonotic's program spawns a fresh entity for
+    // every muzzle flash, casing and gib, shows it for a few frames and removes it - each got a node built for
+    // it (2 to 4 ms for uziflash.md3, 3 to 19 for a gib or a weapon) while the nodes of the ones before it sat
+    // hidden waiting out their thirteen seconds: a dozen builds in every fire fight, each a long frame. So when
+    // a node is wanted and none is spare, the node of an entity of the same model and skin that has not been
+    // submitted for IdleStealFrames is taken (through the spare-node pool, so its state is applied as a
+    // difference as always). Should that entity come back after all, it takes a node the same way.
+    private const int IdleStealFrames = 45;
+    private readonly Dictionary<(string Model, int Skin), Queue<(int Key, long HiddenAt)>> _idle = new();
+    private long _sceneFrame;
+
+    /// <summary>Nodes taken from an entity that had stopped being submitted, instead of being built.</summary>
+    public long IdleNodesTaken { get; private set; }
+
+    private void NoteIdle(int key, Proxy proxy)
+    {
+        if (!proxy.Built || proxy.Failed || proxy.IsSubmodel || proxy.Node is null || proxy.Model.Length == 0) return;
+        proxy.HiddenAt = _sceneFrame;
+        if (!_idle.TryGetValue((proxy.Model, proxy.Skin), out Queue<(int, long)>? queue))
+        {
+            if (_idle.Count >= 1024) return;
+            queue = new Queue<(int, long)>();
+            _idle[(proxy.Model, proxy.Skin)] = queue;
+        }
+        if (queue.Count < 256) queue.Enqueue((key, _sceneFrame));
+    }
+
+    // Moves one long-unsubmitted node of that model and skin into the spare pool, if there is one.
+    private void StealIdle(string model, int skin)
+    {
+        if (!_idle.TryGetValue((model, skin), out Queue<(int Key, long HiddenAt)>? queue)) return;
+        while (queue.Count > 0)
+        {
+            (int key, long hiddenAt) = queue.Peek();
+            if (_sceneFrame - hiddenAt < IdleStealFrames) return;   // the oldest is too fresh, so are the rest
+            queue.Dequeue();
+            // Submitted again since (and perhaps hidden again: that is a later entry), rebuilt, or gone.
+            if (!_proxies.TryGetValue(key, out Proxy? idle) || idle.HiddenAt != hiddenAt || idle.Shown || !idle.Built || idle.Stale || idle.Node is null
+                || _ledger.IsCurrent(key) || idle.Skin != skin || !string.Equals(idle.Model, model, StringComparison.Ordinal)) continue;
+            _ledger.Release(key);
+            RetireProxy(key);
+            if (HasPooled(model, skin))
+            {
+                IdleNodesTaken++;
+                return;
+            }
+        }
     }
 
     // ---- nodes kept for the next entity that shows the same model ---------------------------------------
@@ -247,6 +306,7 @@ public sealed partial class GodotLegacyPresentation
         // The variants hold duplicates of the level's materials; a new level makes its own.
         _materialVariants.Clear();
         _oneOffKeys.Clear();
+        _idle.Clear();
     }
 
     // ---- ILegacyScene ---------------------------------------------------------------------------------
@@ -485,6 +545,7 @@ public sealed partial class GodotLegacyPresentation
         if (proxy.Built || proxy.Failed) return proxy;
         // A node of this model that an earlier entity has finished with (a muzzle flash, a gib, a casing, a
         // player's other level of detail): taken back as it is, for nothing.
+        if (!HasPooled(model, skin)) StealIdle(model, skin);
         if (TakePooled(model, skin) is { } pooled)
         {
             _proxies[key] = pooled;
@@ -708,9 +769,11 @@ public sealed partial class GodotLegacyPresentation
                 _assets.Assets.LoadImageCache = _submodelImages;
                 MapLoader.SharedLightmapAtlases = _levelAtlases;
                 MapLoader.PieceBuild = true;
+                AssetSystem.WorldScope = true;
                 try { node = MapLoader.BuildMap(view, _assets.Assets, _levelName); }
                 finally
                 {
+                    AssetSystem.WorldScope = false;
                     _assets.Assets.LoadImageCache = null;
                     MapLoader.SharedLightmapAtlases = null;
                     MapLoader.PieceBuild = false;

@@ -732,6 +732,36 @@ public sealed partial class GodotLegacyPresentation
         }
     }
 
+    /// <summary>
+    /// A later level of one session has been loaded: the loader forgets what only the level before it used.
+    /// A loader keeps every texture and material it has made, so a session that went through three maps held
+    /// the textures of all three (about 260 MB of video memory a map). What the new level has built or
+    /// precached is referred to by its nodes and stays, as does everything a model in memory uses; what goes
+    /// is what nothing refers to any more - the old level's walls. Coming back to a level loads them again,
+    /// as a first visit does. VORTEX_LEGACY_NOTRIM=1 leaves the caches alone (the other arm of a comparison).
+    /// </summary>
+    public void TrimCachesAfterLevelChange()
+    {
+        if (s_noTrim || Headless) return;
+        // Models still being read behind the game hold textures no material refers to yet.
+        if (_run is not null) return;
+        long began = System.Diagnostics.Stopwatch.GetTimestamp();
+        // The old level's meshes are freed with their nodes, but the managed handles on them (and so their
+        // hold on the materials) last until they are finalised: without this nothing counts as unreferenced.
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: false);
+        GC.WaitForPendingFinalizers();
+        int materials = _assets.Assets.ForgetUnreferencedMaterials();
+        // The forgotten materials let go of their textures when they are finalised.
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: false);
+        GC.WaitForPendingFinalizers();
+        (int textures, long bytes) = _assets.Assets.ForgetUnreferencedTextures();
+        LegacyPerfLog.Event("level change: caches trimmed", began);
+        _note(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"level change: {materials} materials and {textures} textures that only the level before used were forgotten (about {bytes / 1048576.0:0} MB of video memory) in {System.Diagnostics.Stopwatch.GetElapsedTime(began).TotalMilliseconds:0} ms"));
+    }
+
+    private static readonly bool s_noTrim = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_NOTRIM"));
+
     // A precached model's node, if one is waiting: taken out of the pool, so each is handed out once.
     private Node3D? TakePrebuilt(string model, int skin, out ModelAnimator? animator)
     {

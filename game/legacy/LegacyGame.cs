@@ -1173,10 +1173,13 @@ public partial class LegacyGame : Node
         session.Draw(delta);
         if (frameProfile is not null && System.Diagnostics.Stopwatch.GetElapsedTime(drawBegan).TotalMilliseconds >= 8) NoteSlowProgramFrame(session, frameProfile, drawBegan, builtinsBefore, profiled);
         LegacyPerfLog.Part(LegacyPerfLog.Program);
+        presentation.AdvanceParticles(delta);
         // SCR_DrawScreen: the engine's own 2D goes on after the program's (Con_DrawNotify after CL_VM_UpdateView).
         if (_inGame) presentation.DrawChatArea(_chatLines, now);
         if (_inGame && session.State.Paused) presentation.DrawPause();
         presentation.EndFrame();
+        // Textures the bank has compressed since they were uploaded take their uncompressed versions' place, a few a frame.
+        _textureBank?.Pump();
         if (session.Host is { FaultCount: > 0 } faulted)
         {
             // Host_Error: DarkPlaces drops the connection when the client program faults.
@@ -1383,6 +1386,12 @@ public partial class LegacyGame : Node
             if (command.StartsWith("sv ", StringComparison.Ordinal))
             {
                 ServerCommand(command[3..]);
+                continue;
+            }
+            if (command == "mem" || command.StartsWith("mem ", StringComparison.Ordinal))
+            {
+                // "mem [label]": what the process holds right now (the menu's review scripts have the same line).
+                Log("memory " + (command.Length > 4 ? command[4..].Trim() : "") + ": " + LegacyData.MemoryReport());
                 continue;
             }
             if (command.StartsWith("track ", StringComparison.Ordinal))
@@ -1647,6 +1656,8 @@ public partial class LegacyGame : Node
             && (_presentation is not { } settling || settling.SceneSettled || now - _enteredAt > MaxSettleSeconds))
         {
             if (_presentation is { } shown) shown.Loading = false;
+            // F3: a later level of the session - what only the level before it used is forgotten first.
+            if (_levelsEntered > 1) _presentation?.TrimCachesAfterLevelChange();
             CollectAfterLoad();
             now = Now;   // the collection is part of the load
             if (_textureBank is { } bank) bank.Playing = true;
@@ -1998,6 +2009,9 @@ public partial class LegacyGame : Node
                 finally { Volatile.Write(ref _statusBusy, 0); }
             });
         }
+        string bankText = _textureBank is { } textureBank
+            ? string.Create(CultureInfo.InvariantCulture, $"texture bank: {textureBank.Pending} to compress, {textureBank.Encoded} compressed, {textureBank.Swapped} swapped in ({textureBank.SavedBytes / (1024 * 1024)} MB given back), ")
+            : "";
         string second = string.Create(CultureInfo.InvariantCulture,
             $"t+{now - _inGameAt:0}: signon {session.State.Signon}, entity frames {session.EntityFrames}, csqc frames {session.FramesDrawn} ({session.FramesFaulted} faulted), " +
             $"faults {host?.FaultCount ?? 0}, desyncs {host?.DesyncCount ?? 0}, undecoded {session.MessagesNotDecoded}, " +
@@ -2007,6 +2021,7 @@ public partial class LegacyGame : Node
             $"dynamic lights {presentation.LastDynamicLights}, extra views skipped {presentation.ExtraViewsSkipped}, polygons {presentation.PolygonsDrawn}, " +
             $"nodes {Performance.GetMonitor(Performance.Monitor.ObjectNodeCount):0}, objects {Performance.GetMonitor(Performance.Monitor.ObjectCount):0}, " +
             $"managed {GC.GetTotalMemory(false) / (1024 * 1024)} MB, native {OS.GetStaticMemoryUsage() / (1024 * 1024)} MB, " +
+            $"{bankText}" +
             $"view '{presentation.View.Origin.X:0.0} {presentation.View.Origin.Y:0.0} {presentation.View.Origin.Z:0.0}' fovy {presentation.View.VerticalFovDegrees:0.0}");
         if (toOutput) System.Threading.Tasks.Task.Run(() => Log(second));
         else LegacyLog.Write(second);

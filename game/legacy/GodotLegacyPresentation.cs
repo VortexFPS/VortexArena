@@ -285,8 +285,13 @@ public sealed partial class GodotLegacyPresentation : ILegacyPresentation, ILega
             // The world's lightmap atlas is kept for the level: every door and platform built later draws from
             // the same texture instead of packing and uploading its own copy of the pages it touches.
             MapLoader.SharedLightmapAtlases = _levelAtlases;
+            AssetSystem.WorldScope = true;   // what the level's own geometry asks for may be forgotten after the next level change
             try { _mapRoot = MapLoader.BuildMap(bsp, _assets.Assets, levelName, submodels); }
-            finally { MapLoader.SharedLightmapAtlases = null; }
+            finally
+            {
+                MapLoader.SharedLightmapAtlases = null;
+                AssetSystem.WorldScope = false;
+            }
             _sceneRoot.AddChild(_mapRoot);
             // Particles collide with the same world the game does.
             if (Map.Collision is { } collision) _effects.SetCollisionWorld(collision);

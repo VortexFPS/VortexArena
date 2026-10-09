@@ -71,6 +71,7 @@ public sealed class LegacyGlyphAtlas
     {
         Generation++;
         _glyphs.Clear();
+        _advances.Clear();
         _pages.Clear();
         _kerning.Clear();
         _dirty = false;
@@ -137,6 +138,36 @@ public sealed class LegacyGlyphAtlas
         return glyph;
     }
 
+    private readonly Dictionary<(ulong Face, int Size, int Rune), float> _advances = new();
+
+    /// <summary>
+    /// The advance of a character alone - what <see cref="Get"/> answers as <c>Advance</c>, without its
+    /// picture. Measuring a string (stringwidth) needs only this. It used to go through <see cref="Get"/>, so
+    /// the first measurement of a string at a new size rasterised every one of its characters into the atlas
+    /// - a copy of the font's texture, a read of every pixel, the outline and blur passes - for a third to
+    /// half a millisecond a character: 12 to 30 ms in the frame a scoreboard or a centre print first appeared.
+    /// </summary>
+    public float Advance(FontFile face, int size, int rune)
+    {
+        (ulong, int, int) key = (face.GetInstanceId(), size, rune);
+        if (_glyphs.TryGetValue(key, out Glyph known)) return known.Advance;
+        if (_advances.TryGetValue(key, out float advance)) return advance;
+        advance = 0;
+        Godot.Collections.Array<Rid> rids = face.GetRids();
+        if (rids.Count > 0)
+        {
+            // The first lines of Rasterise, to the letter.
+            int clamped = Math.Clamp(size, 1, LegacyTextLayout.MaxPixelSize);
+            TextServer server = TextServerManager.GetPrimaryInterface();
+            long index = server.FontGetGlyphIndex(rids[0], clamped, rune, 0);
+            advance = server.FontGetGlyphAdvance(rids[0], clamped, index).X;
+            if (!float.IsFinite(advance) || advance < 0) advance = 0;
+        }
+        if (_advances.Count >= MaxGlyphs) _advances.Clear();
+        _advances[key] = advance;
+        return advance;
+    }
+
     private Glyph Rasterise(FontFile face, int size, int rune)
     {
         Godot.Collections.Array<Rid> rids = face.GetRids();
@@ -162,9 +193,26 @@ public sealed class LegacyGlyphAtlas
 
         // The glyph's coverage: Godot keeps a grey glyph as white with the coverage in alpha.
         byte[] coverage = new byte[width * height];
-        for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
-                coverage[x + y * width] = (byte)Math.Clamp((int)MathF.Round(source.GetPixel(left + x, top + y).A * 255f), 0, 255);
+        // The alpha bytes of the glyph's rectangle in one read where the texture's format stores them as bytes
+        // (the two formats the text server uses); asking for each pixel was a call into the engine per pixel.
+        Image.Format format = source.GetFormat();
+        int alphaAt = format == Image.Format.La8 ? 1 : format == Image.Format.Rgba8 ? 3 : -1, pixelBytes = alphaAt + 1;
+        byte[]? packed = null;
+        if (alphaAt > 0)
+        {
+            using Image cut = source.GetRegion(new Rect2I(left, top, width, height));
+            if (cut.GetFormat() == format && !cut.HasMipmaps())
+            {
+                byte[] data = cut.GetData();
+                if (data.Length == width * height * pixelBytes) packed = data;
+            }
+        }
+        if (packed is not null)
+            for (int i = 0; i < coverage.Length; i++) coverage[i] = packed[i * pixelBytes + alphaAt];
+        else
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                    coverage[x + y * width] = (byte)Math.Clamp((int)MathF.Round(source.GetPixel(left + x, top + y).A * 255f), 0, 255);
 
         byte[] pixels = _postprocess.Apply(coverage, width, height, out int outWidth, out int outHeight);
         int padLeft = _postprocess.Identity ? 0 : _postprocess.PadLeft, padTop = _postprocess.Identity ? 0 : _postprocess.PadTop;

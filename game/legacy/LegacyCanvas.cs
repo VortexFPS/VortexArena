@@ -408,7 +408,7 @@ public sealed class LegacyCanvas : ILegacyDraw
         if (_glyphs.TryGetValue(key, out (FontFile Face, float Advance) known)) return known;
         FontForSlot(font);
         if (!_slotFaces.TryGetValue(font, out FontFile[]? faces) || LegacyGlyphAtlas.FaceFor(faces, rune) is not { } face) return null;
-        known = (face, Atlas.Get(face, pixelSize, rune).Advance);
+        known = (face, Atlas.Advance(face, pixelSize, rune));
         if (_glyphs.Count >= MaxMeasuredStrings) _glyphs.Clear();
         _glyphs[key] = known;
         return known;

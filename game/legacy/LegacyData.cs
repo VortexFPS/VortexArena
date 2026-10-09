@@ -49,7 +49,7 @@ public static class LegacyData
     /// <summary>The limits for the HTTP requests of a session's client program, from the player's own settings.</summary>
     public static VortexArena.Legacy.Downloads.LegacyUriLimits UriLimits(CvarService? player)
     {
-        VortexArena.Legacy.Downloads.LegacyUriLimits limits = new() { UserAgent = "VortexArena (legacy compatibility; DarkPlaces protocol)" };
+        VortexArena.Legacy.Downloads.LegacyUriLimits limits = new() { UserAgent = VortexArena.Legacy.Downloads.LegacyUserAgent.Default };
         if (player is null) return limits;
         limits.Enabled = !player.Has(UriGetEnabledCvar) || player.GetFloat(UriGetEnabledCvar) != 0;
         float timeout = player.GetFloat(UriGetTimeoutCvar);
@@ -60,7 +60,7 @@ public static class LegacyData
     /// <summary>The limits for a session's package downloads, from the player's own settings.</summary>
     public static VortexArena.Legacy.Downloads.LegacyDownloadLimits DownloadLimits(CvarService? player)
     {
-        VortexArena.Legacy.Downloads.LegacyDownloadLimits limits = new() { UserAgent = "VortexArena (legacy compatibility; DarkPlaces protocol)" };
+        VortexArena.Legacy.Downloads.LegacyDownloadLimits limits = new() { UserAgent = VortexArena.Legacy.Downloads.LegacyUserAgent.Default };
         if (player is null) return limits;
         limits.Enabled = !player.Has(CurlEnabledCvar) || player.GetFloat(CurlEnabledCvar) != 0;
         float size = player.GetFloat(CurlMaxSizeCvar);

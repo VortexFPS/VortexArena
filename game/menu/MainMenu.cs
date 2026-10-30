@@ -35,7 +35,7 @@ public partial class MainMenu : MenuScreen
 
         public Control Slot = null!;
         public Panel Frame = null!;
-        public Label TitleLabel = null!;
+        public QcLabel TitleLabel = null!;
         public Button Close = null!;
         public Control ContentHolder = null!;
         public Button Catcher = null!;
@@ -74,7 +74,7 @@ public partial class MainMenu : MenuScreen
 
         ComputeFanScale();
 
-        // Brand logo top-left (added last → above the panels).
+        // Brand logo, behind the panels (see below).
         var brand = new VBoxContainer { Name = "Brand", MouseFilter = MouseFilterEnum.Ignore };
         brand.AddThemeConstantOverride("separation", 0);
         if (MenuSkin.Logo is { } logoTex)
@@ -100,17 +100,29 @@ public partial class MainMenu : MenuScreen
         sub.AddThemeColorOverride("font_color", MenuSkin.Text);
         brand.AddChild(sub);
         _brand = brand;
+        // Behind the panels: the logo is part of the background, and an open dialog shows it through its body.
         AddChild(_brand);
+        MoveChild(_brand, 0);
 
         SetProcess(true);
 
         if (AutoOpen != null)
         {
+            // "<Title>" or "<Title>:<Tab>" (nexposee:Multiplayer:Create).
+            string[] parts = AutoOpen.Split(':', 2);
             foreach (Tile t in _tiles)
-                if (t.Title.Equals(AutoOpen, StringComparison.OrdinalIgnoreCase))
+                if (t.Title.Equals(parts[0], StringComparison.OrdinalIgnoreCase))
                 {
                     _active = t; _opening = true; _factor = 1f;
-                    MoveChild(t.Slot, GetChildCount() - 2);
+                    MoveChild(t.Slot, GetChildCount() - 1);
+                    if (parts.Length > 1)
+                        foreach (Node n in t.ContentHolder.GetChildren())
+                            switch (n)
+                            {
+                                case MultiplayerScreen mp: mp.SelectTab(parts[1]); break;
+                                case DialogSettings st: st.SelectTab(parts[1]); break;
+                                case MediaScreen md: md.SelectTab(parts[1]); break;
+                            }
                     break;
                 }
             AutoOpen = null;
@@ -136,16 +148,9 @@ public partial class MainMenu : MenuScreen
         slot.AddChild(holder);
 
         // Title bar: the dialog name centred in the top border.
-        var titleLabel = new Label
-        {
-            Text = title,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        titleLabel.AddThemeColorOverride("font_color", MenuSkin.Bright);
-        // QC item/borderimage.qh: a window's title is bold, at SKINFONTSIZE_TITLE.
-        if (MenuSkin.TitleFont is { } tb) titleLabel.AddThemeFontOverride("font", tb);
+        // item/borderimage.qc: the title, bold at SKINFONTSIZE_TITLE in SKINCOLOR_TEXT @ SKINALPHA_TEXT, centred in
+        // the top border.
+        var titleLabel = new QcLabel(title, 0.5f) { Bold = true, FontSize = MenuMetrics.FontTitle };
         slot.AddChild(titleLabel);
 
         // Close (X) button, top-right corner of the title bar.
@@ -275,9 +280,12 @@ public partial class MainMenu : MenuScreen
             _lastFit = fit;
             _lastWidth = vp.X;
             RelayoutSlots(fit, canvasW, canvasH);
-            float bw = 0.30f * vp.X;
-            _brand.Position = new Vector2(canvasLeft + MenuMetrics.MarginLeft * fit, MenuMetrics.MarginTop * fit);
-            if (_logo != null) _logo.CustomMinimumSize = new Vector2(bw, bw / 2.933f);
+            // menu.qc drawBackground draws background_l2 over the whole 750x600 menu canvas; the logo is the
+            // MenuSkin.LogoRegion of that layer, so it goes exactly where that region of the layer lands.
+            Rect2 logo = MenuSkin.LogoRegion;
+            float k = canvasW / MenuSkin.LogoLayerSize.X;
+            _brand.Position = new Vector2(canvasLeft + logo.Position.X * k, canvasTop + logo.Position.Y * k);
+            if (_logo != null) _logo.CustomMinimumSize = logo.Size * k;
         }
 
         foreach (Tile t in _tiles)
@@ -312,8 +320,8 @@ public partial class MainMenu : MenuScreen
             t.Slot.Modulate = new Color(1f, 1f, 1f, alpha);
         }
 
-        _brand.Modulate = new Color(1f, 1f, 1f, _active == null ? 1f : 1f - _factor);
-        _brand.Visible = _brand.Modulate.A > 0.02f;
+        // The logo stays put when a dialog opens: in menu.qc it is a layer of the background (background_l2,
+        // drawBackground), drawn whenever the menu is up, and an open dialog shows it through its translucent body.
         MouseFilter = (_active != null && _factor > 0.5f) ? MouseFilterEnum.Stop : MouseFilterEnum.Pass;
     }
 
@@ -337,7 +345,6 @@ public partial class MainMenu : MenuScreen
 
             t.TitleLabel.Position = new Vector2(th, 0);
             t.TitleLabel.Size = new Vector2(Mathf.Max(1, openSize.X - 2 * th), th);
-            t.TitleLabel.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(MenuMetrics.FontTitle * fit)));
 
             t.Close.Position = new Vector2(openSize.X - th, 0);
             t.Close.Size = new Vector2(th, th);
@@ -352,7 +359,7 @@ public partial class MainMenu : MenuScreen
         if (_active != null) return;
         _active = t;
         _opening = true;
-        MoveChild(t.Slot, GetChildCount() - 2); // below the brand, above the rest
+        MoveChild(t.Slot, GetChildCount() - 1); // above the rest
     }
 
     /// <summary>Begin collapsing the open dialog back to its fan slot. Safe when nothing is open.</summary>

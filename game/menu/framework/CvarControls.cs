@@ -81,7 +81,9 @@ internal static class CvarUi
     internal static void SetEnabledRecursive(Control root, bool enabled)
     {
         Apply(root, enabled);
-        root.Modulate = enabled ? Colors.White : new Color(1, 1, 1, 0.4f);
+        // A control with the QC look draws its own disabled state, faded to SKINALPHA_DISABLED as Xonotic does.
+        bool qcLook = root.HasMeta(QcLook.MetaKey) || root is QcLabel;
+        root.Modulate = enabled || qcLook ? Colors.White : new Color(1, 1, 1, 0.4f);
     }
 
     private static void Apply(Node node, bool enabled)
@@ -89,6 +91,7 @@ internal static class CvarUi
         switch (node)
         {
             case BaseButton b: b.Disabled = !enabled; break;
+            case QcLabel l: l.Disabled = !enabled; break;
             case Slider s: s.Editable = enabled; break;
             case LineEdit le: le.Editable = enabled; break;
             case SpinBox sb: sb.Editable = enabled; break;
@@ -220,7 +223,7 @@ public partial class CvarValueCheckBox : CheckBox
 // ---------------------------------------------------------------------------------------------------------
 
 /// <summary>A cvar-bound slider packing a live value readout, mirroring the QC slider's number display.</summary>
-public partial class CvarSlider : HBoxContainer
+public partial class CvarSlider : HBoxContainer, IQcSlider
 {
     private readonly string _cvar;
     private readonly Func<float, string> _format;
@@ -230,6 +233,8 @@ public partial class CvarSlider : HBoxContainer
 
     /// <summary>The inner slider (for callers that need to tweak ticks/size).</summary>
     public HSlider Slider => _slider;
+    /// <summary>The value readout beside it.</summary>
+    public Label Readout => _readout;
 
     public CvarSlider(string cvar, float min, float max, float step, Func<float, string>? format = null)
     {
@@ -274,6 +279,13 @@ public partial class CvarSlider : HBoxContainer
         CvarUi.Cvars.Set(_cvar, ((float)v).ToString(CultureInfo.InvariantCulture));
         CvarUi.Cvars.MarkArchived(_cvar);
     }
+}
+
+/// <summary>A slider row: the slider and its value readout (what <see cref="QcLook.Slider{T}"/> draws).</summary>
+public interface IQcSlider
+{
+    HSlider Slider { get; }
+    Label Readout { get; }
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -367,13 +379,16 @@ public partial class CvarTextSlider : OptionButton
 /// right (the Create-game Time/Frag/Teams/Bot-skill rows). Reads/writes the cvar like every other bound
 /// widget; the store value snaps to the nearest entry on refresh.
 /// </summary>
-public partial class CvarMixedSlider : HBoxContainer
+public partial class CvarMixedSlider : HBoxContainer, IQcSlider
 {
     private readonly string _cvar;
     private readonly List<(string Label, string Value)> _entries = new();
     private readonly HSlider _slider;
     private readonly Label _readout;
     private bool _updating;
+
+    public HSlider Slider => _slider;
+    public Label Readout => _readout;
 
     public CvarMixedSlider(string cvar)
     {

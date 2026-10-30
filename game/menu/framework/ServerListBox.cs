@@ -87,7 +87,7 @@ public partial class ServerListBox : MenuListBox
 
     public ServerListBox()
     {
-        ItemHeight = MenuSkin.BodySize * 1.6f; // QC: rowsPerItem * fontSize, with the skin's line height
+        ItemHeight = MenuMetrics.FontNormalU; // XonoticListBox: rowsPerItem (1) * fontSize
         Resized += RecomputeColumns;
     }
 
@@ -257,18 +257,10 @@ public partial class ServerListBox : MenuListBox
     }
 
     /// <summary>
-    /// The width of one character cell. DP's menu font draws on a fixed grid whose cell equals the font size,
-    /// so the QC can size a column in "characters"; Godot's Xolonium is proportional, so measure a digit —
-    /// every column sized this way (ping, players, map, type) holds digits or gets shortened to fit anyway.
+    /// The width of one character cell: the QC's <c>realFontSize.x</c>, which is the font size itself (12 menu px),
+    /// not any glyph's width - the columns are sized in those units whatever the font.
     /// </summary>
-    private float CellWidth()
-    {
-        Font? font = GetThemeDefaultFont();
-        int size = GetThemeDefaultFontSize();
-        if (font is null || size <= 0)
-            return MenuSkin.BodySize * 0.6f;
-        return font.GetStringSize("0", HorizontalAlignment.Left, -1, size).X;
-    }
+    private static float CellWidth() => MenuMetrics.FontNormalU;
 
     // -----------------------------------------------------------------------------------------------------
     //  Input (QC XonoticServerList_keyDown)
@@ -421,9 +413,10 @@ public partial class ServerListBox : MenuListBox
     /// </summary>
     private void DrawIcons(ServerEntry s, Rect2 body)
     {
-        float iconSize = MenuSkin.BodySize * IconsSizeFactor;
+        float iconSize = CellWidth() * IconsSizeFactor;
         bool mixedFamilies = SeenIPv4 && SeenIPv6;
-        float slots = mixedFamilies ? 3f : 2f;
+        // IP version (only with both families listed), encryption, mod, stats.
+        float slots = mixedFamilies ? 4f : 3f;
         float x = ColumnIconsOrigin + (ColumnIconsSize - slots * iconSize) * 0.5f;
         float y = body.Position.Y + (body.Size.Y - iconSize) * 0.5f;
 
@@ -439,6 +432,10 @@ public partial class ServerListBox : MenuListBox
             else if (s.IsIPv4) Icon("icon_ipv4");
             x += iconSize;
         }
+
+        // The encryption slot: this port has no crypto layer, so nothing is drawn, but the QC always steps past
+        // it and the icons after it keep their places.
+        x += iconSize;
 
         if (s.ModName == "xonotic")
         {
@@ -495,8 +492,8 @@ public partial class ServerListBox : MenuListBox
     /// <summary>True when <paramref name="localX"/> falls inside the icon strip (QC <c>mouseOverIcons</c>).</summary>
     public bool IsOverIcons(float localX)
     {
-        float iconSize = MenuSkin.BodySize * IconsSizeFactor;
-        float slots = SeenIPv4 && SeenIPv6 ? 3f : 2f;
+        float iconSize = CellWidth() * IconsSizeFactor;
+        float slots = SeenIPv4 && SeenIPv6 ? 4f : 3f;
         float pad = (ColumnIconsSize - slots * iconSize) * 0.5f;
         return localX >= ColumnIconsOrigin + pad && localX <= ColumnIconsOrigin + ColumnIconsSize - pad;
     }
@@ -518,8 +515,8 @@ public partial class ServerListBox : MenuListBox
     // -----------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Draw one column's text, vertically centred in <paramref name="cell"/> and cut to its width (the QC's
-    /// <c>draw_TextShortenToWidth</c>, which truncates rather than eliding).
+    /// Draw one column's text, vertically centred in <paramref name="cell"/> and shortened to its width with a
+    /// trailing "..." (the QC's <c>draw_TextShortenToWidth</c>).
     /// </summary>
     private void DrawText(Font font, int fontSize, Rect2 cell, string text, Color color, HorizontalAlignment align)
     {
@@ -538,6 +535,8 @@ public partial class ServerListBox : MenuListBox
             return "";
         if (font.GetStringSize(text, HorizontalAlignment.Left, -1, fontSize).X <= maxWidth)
             return text;
+        // common/util.qc textShortenToWidth: as much of the text as fits in the width less "...", then "...".
+        maxWidth -= font.GetStringSize("...", HorizontalAlignment.Left, -1, fontSize).X;
         int lo = 0, hi = text.Length;
         while (lo < hi)
         {
@@ -547,7 +546,7 @@ public partial class ServerListBox : MenuListBox
             else
                 hi = mid - 1;
         }
-        return text[..lo];
+        return text[..lo] + "...";
     }
 
     /// <summary>Fire the activation event for a row (double-click / Enter, both meaning "join").</summary>

@@ -144,6 +144,18 @@ public partial class HslColorPicker : Control
         else
             DrawTextureRect(FallbackImage(), new Rect2(Vector2.Zero, Size), false);
 
+        if (_mode == PickerMode.NameBox)
+        {
+            // XonoticColorpicker_draw: the picture is redone the way r_textcontrast / r_textbrightness will show the
+            // colour in a name - darkened by 1 - C/(1-B), then washed with B of white (0 and 0.2 in Xonotic).
+            VortexArena.Legacy.Presentation.LegacyTextLook look = VortexArena.Game.Text.DpText.Look;
+            float b = Mathf.Clamp(look.Brightness, 0f, 1f), c = Mathf.Clamp(look.Contrast, 0f, 1f - b);
+            float darken = b < 1f ? 1f - c / (1f - b) : 0f;
+            var full = new Rect2(Vector2.Zero, Size);
+            if (darken > 0f) DrawRect(full, new Color(0f, 0f, 0f, darken));
+            if (b > 0f) DrawRect(full, new Color(1f, 1f, 1f, b));
+        }
+
         if (_mode == PickerMode.StringCvar)
         {
             Vector2 at = new(_cursor.X * Size.X, _cursor.Y * Size.Y);

@@ -415,7 +415,7 @@ public partial class Shell : Node
         Vmap.EditorController.RegisterDefaults(MenuState.Cvars);
         Vmap.EditorOrthoView.RegisterDefaults(MenuState.Cvars);
 
-        // Dev/CI: `--menu-screen nexposee:<Title>` opens that panel inside the nexposee on boot (vs the plain
+        // Dev/CI: `--menu-screen nexposee:<Title>[:<Tab>]` opens that panel (and tab) inside the nexposee on boot (vs the plain
         // `--menu-screen settings` which pushes a framed dialog). Consumed by MainMenu; clear it so the
         // OpenDebugScreen path below doesn't also try to push an unknown screen.
         if (DebugScreen is { } ds && ds.StartsWith("nexposee:"))

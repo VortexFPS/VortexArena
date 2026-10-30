@@ -561,6 +561,9 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   "$GODOT" --path . --menu-screen "settings:Audio" --screenshot "$PWD/screenshots/audio.png"
   ```
   Then `Read` the PNG to inspect the dialog. (Headless renders blank — run windowed.)
+  `nexposee:<Title>[:<Tab>]` (e.g. `nexposee:Multiplayer:Create`) instead opens a main-menu dialog where the
+  player sees it — centred in the nexposee, at Xonotic's size — which is what to compare against Xonotic's own
+  menu (`--legacy-menu`, driven by `VORTEX_LEGACY_SCRIPT`; `menu_cmd directmenu servers` / `profile` there).
 
 ---
 

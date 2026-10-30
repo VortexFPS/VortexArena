@@ -825,6 +825,7 @@ public static class ClientSettings
     {
         CvarService c = MenuState.Cvars;
         RegisterEngineVideoDefaults(c);
+        RegisterEngineTextDefaults(c);
 
         // vid_fullscreen is extended to a mode index (like vid_vsync): 0 windowed / 1 fullscreen (Godot's
         // composited borderless — the desktop compositor stays in the present path) / 2 EXCLUSIVE fullscreen.
@@ -933,6 +934,19 @@ public static class ClientSettings
         c.Register("vid_borderless", "0", save);
         // (§12.7) AboveNormal process priority by default — see ApplyVideo's priority block. 0 = stock priority.
         c.Register("sys_priority_boost", "1", save);
+    }
+
+    /// <summary>
+    /// gl_draw.c's text-colour cvars, at Xonotic's values: DrawQ_String draws every string in
+    /// <c>colour * r_textcontrast + r_textbrightness</c>, and xonotic-common.cfg sets them to 0.8 / 0.2 - a file
+    /// the client boot does not run, so they were never there and the native text (and the name colorpicker,
+    /// which simulates the same lift) came out darker than Xonotic's: the server list's ping greens most visibly.
+    /// Idempotent, like the other engine defaults: a value from a cfg or config.cfg wins.
+    /// </summary>
+    private static void RegisterEngineTextDefaults(CvarService c)
+    {
+        c.Register("r_textcontrast", "0.8");    // xonotic-common.cfg (engine default 1)
+        c.Register("r_textbrightness", "0.2");  // xonotic-common.cfg (engine default 0)
     }
 
     /// <summary>

@@ -47,4 +47,18 @@ public static class MenuMetrics
 
     /// <summary>Menu-px → screen-px scale for a viewport <paramref name="viewportHeight"/> px tall (fit to height).</summary>
     public static float FitScale(float viewportHeight) => viewportHeight / ConHeight;
+
+    /// <summary>
+    /// Design units per menu px. Every menu screen lays out in MenuRoot's 1080-high design space, and the QC
+    /// menu in a 600-high one, so one QC "pixel" is always 1.8 design units - whatever the window size, since
+    /// both spaces fit the window's height. What the QC-faithful layout (<see cref="QcGrid"/>, <see cref="QcLook"/>)
+    /// multiplies every skin metric by.
+    /// </summary>
+    public const float DesignUnit = VortexArena.Game.Text.DpBitmapFont.MenuDesignHeight / ConHeight;
+
+    /// <summary><paramref name="menuPx"/> QC menu px in design units.</summary>
+    public static float U(float menuPx) => menuPx * DesignUnit;
+
+    /// <summary>SKINFONTSIZE_NORMAL in design units: the cell height of every label, button and list row's text.</summary>
+    public static float FontNormalU => FontNormal * DesignUnit;
 }

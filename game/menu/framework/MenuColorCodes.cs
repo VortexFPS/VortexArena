@@ -48,6 +48,38 @@ public static class MenuColorCodes
 
     /// <summary>One Quake colour code → a BBCode hex colour, <c>""</c> for ^7 (reset), or null if not a code.
     /// <paramref name="extra"/> = chars after the caret the code occupies.</summary>
+    /// <summary>
+    /// The text split at its colour codes, each run with the colour it is drawn in (DrawQ_String with
+    /// allowColorCodes): <paramref name="baseColor"/> until the first code, ^7 back to it. Alpha is the base's.
+    /// </summary>
+    public static System.Collections.Generic.List<(string Text, Godot.Color Color)> Segments(string? s, Godot.Color baseColor)
+    {
+        var runs = new System.Collections.Generic.List<(string, Godot.Color)>();
+        if (string.IsNullOrEmpty(s)) return runs;
+        var sb = new StringBuilder();
+        Godot.Color current = baseColor;
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c == '^' && i + 1 < s.Length)
+            {
+                char n = s[i + 1];
+                if (n == '^') { sb.Append('^'); i++; continue; }
+                string? col = Code(n, s, i, out int extra);
+                if (col != null)
+                {
+                    if (sb.Length > 0) { runs.Add((sb.ToString(), current)); sb.Clear(); }
+                    current = col.Length == 0 ? baseColor : Godot.Color.FromHtml(col) with { A = baseColor.A };
+                    i += extra;
+                    continue;
+                }
+            }
+            sb.Append(c);
+        }
+        if (sb.Length > 0) runs.Add((sb.ToString(), current));
+        return runs;
+    }
+
     private static string? Code(char first, string s, int caret, out int extra)
     {
         extra = 0;

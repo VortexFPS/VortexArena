@@ -7,7 +7,8 @@ namespace VortexArena.Game.Menu;
 
 /// <summary>
 /// The Multiplayer dialog — C# successor to <c>XonoticMultiplayerDialog</c> (dialog_multiplayer.qc): one
-/// full-width row of three tabs, <b>Servers / Create / Profile</b>, over the frameless tab body.
+/// full-width row of three tabs, <b>Servers / Create / Profile</b>, over the frameless tab body. Laid out on a
+/// <see cref="QcGrid"/> with the QC's own rows, columns and TD calls, so it matches Xonotic's to the pixel.
 ///
 /// The Servers tab is the faithful port of <c>XonoticServerListTab_fill</c> (dialog_multiplayer_join.qc):
 /// filter row (Categories, Filter box, Empty/Full/Laggy, Refresh, Pause), the five sort-header buttons
@@ -23,7 +24,7 @@ public partial class MultiplayerScreen : MenuScreen
     // net layer can attach its ConnectRequested handler once.
     public static readonly ServerBrowser Browser = new();
 
-    private XonoticTabs _tabs = null!;
+    private QcTabController _tabs = null!;
     private ServerListBox _serverList = null!;
     private LineEdit _filterEdit = null!;
     private LineEdit _addressEdit = null!;
@@ -31,7 +32,6 @@ public partial class MultiplayerScreen : MenuScreen
     private Button _leaveButton = null!;
     private Button _joinButton = null!;
     private Button _infoButton = null!;
-    private Control _headerBar = null!;
 
     private int _renderedRevision = -1;
     private string _renderedFilterKey = "";
@@ -72,47 +72,36 @@ public partial class MultiplayerScreen : MenuScreen
     {
         Name = "MultiplayerScreen";
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 18);
-        AddChild(margin);
+        // XonoticMultiplayerDialog_fill: a 24 x 4 dialog - one row of three tab buttons (4/3 columns each),
+        // the tab controller over the remaining 23 rows.
+        var dialog = new QcGrid(rows: 24, columns: 4);
+        dialog.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(dialog);
 
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 10);
-        margin.AddChild(root);
-
-        if (!HostProvidesTitle) root.AddChild(MakeTitle("Multiplayer"));
-
-        // QC: one row of three equal tab buttons (each 4/3 of 4 columns), then the tab body.
-        _tabs = new XonoticTabs();
-        _tabs.AddRow();
-        _tabs.AddTab("Servers", BuildServersTab());
-
+        _tabs = new QcTabController();
         var create = new CreateGameScreen { Embedded = true, Menu = Menu, HostProvidesTitle = true };
-        _tabs.AddTab("Create", create);
-
         var profile = new DialogMultiplayerProfile { Embedded = true, Menu = Menu, HostProvidesTitle = true };
-        _tabs.AddTab("Profile", profile);
 
-        root.AddChild(_tabs);
+        dialog.TR();
+        dialog.TD(1, 4f / 3f, _tabs.MakeTabButton("Servers", BuildServersTab(), "Find servers to play on"));
+        dialog.TD(1, 4f / 3f, _tabs.MakeTabButton("Create", create, "Host your own game"));
+        dialog.TD(1, 4f / 3f, _tabs.MakeTabButton("Profile", profile));
+        dialog.TR();
+        dialog.TD(dialog.Rows - 1, dialog.Columns, _tabs);
     }
 
     // -------------------------------------------------------------------------------------------------
-    //  Servers tab — faithful XonoticServerListTab_fill layout
+    //  Servers tab — XonoticServerListTab_fill (dialog_multiplayer_join.qc), TD for TD
     // -------------------------------------------------------------------------------------------------
 
     private Control BuildServersTab()
     {
-        var col = new VBoxContainer();
-        col.AddThemeConstantOverride("separation", 8);
+        // xonotic/dialog_multiplayer_join.qh: intendedWidth 0.9, 23 rows, 6.5 columns.
+        var tab = new QcGrid(rows: 23, columns: 6.5f, intendedWidth: 0.9f);
 
-        // --- filter row: Categories | Filter: [box] | Empty Full Laggy | Refresh | Pause ---------------
-        var filter = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        filter.AddThemeConstantOverride("separation", 10);
-
-        var categories = Widgets.CheckBox("menu_slist_categories", "Categories",
-            "Group the server list under category headings");
+        tab.GotoRC(0.5f, 0f);
+        var categories = QcLook.CheckBox(Widgets.CheckBox("menu_slist_categories", "Categories",
+            "Group the server list under category headings"));
         categories.Toggled += _ =>
         {
             // QC ServerList_Categories_Click also clears the address box, since the row you had picked is
@@ -120,113 +109,87 @@ public partial class MultiplayerScreen : MenuScreen
             _addressEdit.Text = "";
             InvalidateRender();
         };
-        filter.AddChild(categories);
-
-        var filterLabel = MakeLabel("Filter:");
-        filterLabel.VerticalAlignment = VerticalAlignment.Center;
-        filter.AddChild(filterLabel);
-
-        _filterEdit = new LineEdit { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsStretchRatio = 2f };
+        tab.TD(1, 0.8f, categories);
+        tab.TD(1, 0.5f, new QcLabel("Filter:", 1f));
+        _filterEdit = QcLook.InputBox(new LineEdit());
         _filterEdit.TextChanged += _ => InvalidateRender();
-        filter.AddChild(_filterEdit);
+        tab.TD(1, 2f, _filterEdit);
 
-        AddFilterCheck(filter, "menu_slist_showempty", "Empty", "Show empty servers");
-        AddFilterCheck(filter, "menu_slist_showfull", "Full", "Show full servers that have no slots available");
-        AddFilterCheck(filter, "menu_slist_showlaggy", "Laggy", "Show high latency servers");
+        tab.GotoRC(0.5f, 0.8f + 0.5f + 2f);
+        tab.TD(1, 0.6f, FilterCheck("menu_slist_showempty", "Empty", "Show empty servers"));
+        tab.TD(1, 0.5f, FilterCheck("menu_slist_showfull", "Full", "Show full servers that have no slots available"));
+        tab.TD(1, 0.6f, FilterCheck("menu_slist_showlaggy", "Laggy", "Show high latency servers"));
+        tab.TDempty(0.05f);
+        var refresh = QcLook.Button(new Button { Text = Localization.Tr("Refresh"), TooltipText = Localization.Tr("Reload the server list") });
+        refresh.Pressed += OnRefresh;
+        tab.TD(1, 0.8f, refresh);
+        tab.TD(1, 0.65f, QcLook.CheckBox(Widgets.CheckBox("net_slist_pause", "Pause",
+            "Pause updating the server list to prevent servers from \"jumping around\"")));
 
-        var refresh = MakeButton("Refresh", OnRefresh);
-        refresh.TooltipText = Localization.Tr("Reload the server list");
-        refresh.SizeFlagsHorizontal = SizeFlags.Fill; // compact, like the QC 0.8-column button
-        refresh.CustomMinimumSize = new Vector2(110, 30);
-        filter.AddChild(refresh);
-
-        var pause = Widgets.CheckBox("net_slist_pause", "Pause",
-            "Pause updating the server list to prevent servers from \"jumping around\"");
-        filter.AddChild(pause);
-
-        col.AddChild(filter);
-
-        // --- the five sort-header buttons over the columned list (QC sortButton1..5) -------------------
-        // Not an HBox: the QC positions each button to line up exactly with the column it heads
-        // (positionSortButton), including the leading gap for the icon strip, so this mirrors that — a bare
-        // Control whose children are placed from the list's own column geometry.
-        _headerBar = new Control { CustomMinimumSize = new Vector2(0, 28) };
+        // The five sort buttons: TD'd into row 2, then moved over the column each one heads
+        // (XonoticServerList_positionSortButton) - see LayoutSortButtons.
         string[] titles = { "Ping", "Hostname", "Map", "Type", "Players" };
+        tab.GotoRC(2f, 0f);
         for (int i = 0; i < 5; i++)
         {
             int idx = i;
-            // ClipText: a Godot Button refuses to lay out narrower than its label, and "Players" is wider than
-            // the five character cells its column gets — without this the last two headers overlap each other
-            // instead of sitting over their columns. The QC condenses the label instead (Label_recalcPos);
-            // clipping is the closest Godot equivalent and keeps the alignment, which is the point of the row.
-            var b = new Button
-            {
-                Text = Localization.Tr(titles[i]),
-                FocusMode = FocusModeEnum.None,
-                ClipText = true,
-            };
+            var b = new Button { Text = Localization.Tr(titles[i]), FocusMode = FocusModeEnum.None };
+            QcLook.Button(b, forcePressed: () => idx == ActiveSortButton());
             b.Pressed += () => OnHeaderClicked(idx);
             _sortButtons[i] = b;
-            _headerBar.AddChild(b);
+            tab.AddChild(b);
         }
         _sortButtons[3].TooltipText = Localization.Tr("Cycle the gametype filter through the game modes");
-        _headerBar.Resized += LayoutSortButtons;
-        col.AddChild(_headerBar);
 
-        _serverList = new ServerListBox { SizeFlagsVertical = SizeFlags.ExpandFill };
+        tab.TR();
+        _serverList = new ServerListBox();
         _serverList.ItemActivated += _ => OnConnect();        // double-click / Enter = Join (QC doubleClick)
         _serverList.ItemSelected += _ => OnRowSelected();      // echo the address into the box (QC setSelected)
         _serverList.InfoRequested += server => ShowInfo(server.Address);
         _serverList.FavoriteToggleRequested += server => ToggleFavorite(server.Address);
-        _serverList.ColumnsChanged += LayoutSortButtons;
-        col.AddChild(_serverList);
+        _serverList.ColumnsChanged += () => LayoutSortButtons(tab);
+        tab.TD(tab.Rows - 5f, tab.Columns, _serverList);
+        tab.Laid += () => LayoutSortButtons(tab);
 
-        // --- Address: [box] [Bookmark] [Info...] (QC rows-2) --------------------------------------------
-        var addr = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        addr.AddThemeConstantOverride("separation", 10);
-        var addrLabel = MakeLabel("Address:");
-        addrLabel.VerticalAlignment = VerticalAlignment.Center;
-        addr.AddChild(addrLabel);
-        _addressEdit = new LineEdit
-        {
-            PlaceholderText = "ip:port",
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            SizeFlagsStretchRatio = 2.2f,
-        };
+        tab.GotoRC(tab.Rows - 2f, 0f);
+        tab.TD(1, 0.6f, new QcLabel("Address:"));
+        _addressEdit = QcLook.InputBox(new LineEdit());
         _addressEdit.TextChanged += _ => UpdateFavoriteButton();
         _addressEdit.TextSubmitted += _ => OnConnect(); // QC onEnter = Connect
-        addr.AddChild(_addressEdit);
+        tab.TD(1, 2.9f, _addressEdit);
+        _favoriteButton = QcLook.Button(new Button());
+        _favoriteButton.Pressed += OnToggleFavorite;
+        tab.TD(1, 1.5f, _favoriteButton);
+        _infoButton = QcLook.Button(new Button
+        {
+            Text = Localization.Tr("Info..."),
+            TooltipText = Localization.Tr("Show more information about the currently highlighted server"),
+        });
+        _infoButton.Pressed += OnInfo;
+        tab.TD(1, 1.5f, _infoButton);
 
-        _favoriteButton = MakeButton("Favorite", OnToggleFavorite);
-        _favoriteButton.SizeFlagsStretchRatio = 1.1f;
-        addr.AddChild(_favoriteButton);
-
-        _infoButton = MakeButton("Info...", OnInfo);
-        _infoButton.TooltipText = Localization.Tr("Show more information about the currently highlighted server");
-        _infoButton.SizeFlagsStretchRatio = 1.1f;
-        addr.AddChild(_infoButton);
-        col.AddChild(addr);
-
-        // --- bottom row: Leave current match | Join! (QC last row) --------------------------------------
-        _leaveButton = MakeButton("Leave current match", () => MenuCommand.Run("disconnect"));
-        _joinButton = MakeButton("Join!", OnConnect);
-        col.AddChild(MakeButtonBar(_leaveButton, _joinButton));
+        tab.TR();
+        _leaveButton = QcLook.Button(new Button { Text = Localization.Tr("Leave current match") });
+        _leaveButton.Pressed += () => MenuCommand.Run("disconnect");
+        tab.TD(1, tab.Columns * 0.5f, _leaveButton);
+        // makeXonoticButton(_("Join!"), '0 1 0'): a coloured button - the gray art, tinted green.
+        _joinButton = QcLook.Button(new Button { Text = Localization.Tr("Join!") }, tint: new Color(0f, 1f, 0f));
+        _joinButton.Pressed += OnConnect;
+        tab.TD(1, tab.Columns * 0.5f, _joinButton);
 
         UpdateFavoriteButton();
-        UpdateSortButtons();
-        return col;
+        return tab;
     }
 
     /// <summary>
-    /// Place each header button over the column it labels — the port of
-    /// <c>XonoticServerList_positionSortButton</c>, which does the same arithmetic in the dialog's coordinate
-    /// space. Re-run whenever the list recomputes its columns (i.e. on every resize).
+    /// XonoticServerList_positionSortButton: each header button keeps the height of its TD in row 2 and takes the
+    /// x extent of the list column it heads (the list's width less its scrollbar, times the column's fraction).
     /// </summary>
-    private void LayoutSortButtons()
+    private void LayoutSortButtons(QcGrid tab)
     {
-        if (_headerBar is null || _serverList is null)
-            return;
-        float h = _headerBar.Size.Y;
+        if (_serverList is null) return;
+        Rect2 row = tab.CellRect(2f, 0f, 1f, 1f);
+        float x0 = _serverList.Position.X;
         (float Origin, float Width)[] columns =
         {
             (_serverList.ColumnPingOrigin, _serverList.ColumnPingSize),
@@ -237,18 +200,19 @@ public partial class MultiplayerScreen : MenuScreen
         };
         for (int i = 0; i < _sortButtons.Length; i++)
         {
-            _sortButtons[i].Position = new Vector2(columns[i].Origin, 0f);
-            _sortButtons[i].Size = new Vector2(columns[i].Width, h);
+            _sortButtons[i].Position = new Vector2(x0 + columns[i].Origin, row.Position.Y);
+            _sortButtons[i].Size = new Vector2(columns[i].Width, row.Size.Y);
         }
     }
 
-    private void AddFilterCheck(HBoxContainer row, string cvar, string label, string tooltip)
+    private CheckBox FilterCheck(string cvar, string label, string tooltip)
     {
-        var cb = Widgets.CheckBox(cvar, label, tooltip);
+        var cb = QcLook.CheckBox(Widgets.CheckBox(cvar, label, tooltip));
         cb.Toggled += _ => InvalidateRender();
-        row.AddChild(cb);
+        return cb;
     }
 
+    // -------------------------------------------------------------------------------------------------
     // -------------------------------------------------------------------------------------------------
     //  List rendering: filter + sort the browser rows into the listbox
     // -------------------------------------------------------------------------------------------------
@@ -331,7 +295,7 @@ public partial class MultiplayerScreen : MenuScreen
         _sortOrder = _sortField == field ? -_sortOrder : InitialSortOrder(field);
         _sortField = field;
         _serverList.SetScrollTop();
-        UpdateSortButtons();
+        foreach (Button b in _sortButtons) b.QueueRedraw();
         InvalidateRender();
     }
 
@@ -359,27 +323,16 @@ public partial class MultiplayerScreen : MenuScreen
     }
 
     /// <summary>
-    /// Repaint the header buttons so the active sort column reads as pressed. The QC does this with
-    /// <c>forcePressed</c>, which makes Button_draw pick the CLICKED graphic — the same look this gives it.
+    /// The header button drawn pressed: the active sort column (QC <c>setSortOrder</c> sets its
+    /// <c>forcePressed</c>). Never Type (index 3): it is a filter cycler, not a sort.
     /// </summary>
-    private void UpdateSortButtons()
+    private int ActiveSortButton() => _sortField switch
     {
-        int active = _sortField switch
-        {
-            SortField.Ping => 0,
-            SortField.Name => 1,
-            SortField.Map => 2,
-            _ => 4,
-        };
-        for (int i = 0; i < _sortButtons.Length; i++)
-        {
-            // Index 3 (Type) is never marked: it is a filter cycler, not a sort.
-            if (i == active && i != 3)
-                _sortButtons[i].AddThemeStyleboxOverride("normal", MenuSkin.ButtonPicture("c"));
-            else
-                _sortButtons[i].RemoveThemeStyleboxOverride("normal");
-        }
-    }
+        SortField.Ping => 0,
+        SortField.Name => 1,
+        SortField.Map => 2,
+        _ => 4,
+    };
 
     /// <summary>
     /// Filter + sort the browser's rows and hand them to the listbox, which inserts the category headings.

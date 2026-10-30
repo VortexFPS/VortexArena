@@ -113,54 +113,144 @@ public partial class CreateGameScreen : MenuScreen
         "Advanced", "Expert", "Pro", "Assassin", "Unhuman", "Godlike",
     };
 
-    private Tree _gametypeTree = null!;
+    private QcGametypeList _gametypeList = null!;
     private readonly List<GameType> _shownGametypes = new();
-    private Label _fragLabel = null!;
-    private HBoxContainer _fragRow = null!;
-    private Control? _fragControl;
-    private Label _teamsLabel = null!;
-    private HBoxContainer _teamsRow = null!;
-    private Control? _teamsControl;
-    private VBoxContainer _mapRows = null!;
+    private QcLabel _fragLabel = null!;
+    private Control _fragCell = null!;
+    private QcLabel _teamsLabel = null!;
+    private Control _teamsCell = null!;
+    private QcMapList _mapList = null!;
     private LineEdit _mapFilter = null!;
     private Button _leaveButton = null!;
-    private readonly ButtonGroup _mapGroup = new();
-    private readonly List<MapRowButton> _mapRowButtons = new();
     private string _selectedMap = "";
+    private bool _refreshing;
 
     protected override void BuildUi()
     {
         Name = "CreateGameScreen";
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, Embedded ? 4 : 24);
-        AddChild(margin);
+        // XonoticServerCreateTab_fill (dialog_multiplayer_create.qc), TD for TD: intendedWidth 0.9, 23 rows,
+        // 6.2 columns (the extra .2 is the gap between the halves).
+        var tab = new QcGrid(rows: 23, columns: 6.2f, intendedWidth: 0.9f);
+        tab.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(tab);
 
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 10);
-        margin.AddChild(root);
+        // --- the left half ------------------------------------------------------------------------------
+        tab.GotoRC(0.5f, 0f);
+        tab.TD(1, 3, Header("Gametype"));
+        tab.TR();
+        _gametypeList = new QcGametypeList();
+        _gametypeList.ItemSelected += _ => OnGametypeSelected();
+        tab.TD(11, 3, _gametypeList);
 
-        if (!Embedded && !HostProvidesTitle)
-            root.AddChild(MakeTitle("Create Game"));
+        tab.GotoRC(12.5f, 0f);
+        tab.TDempty(0.1f);
+        var showAll = QcLook.CheckBox(Widgets.CheckBox("menu_create_show_all", "Show all", "Show all available gametypes"));
+        showAll.Toggled += _ => RefreshGametypes();
+        tab.TD(1, 2.9f, showAll);
 
-        var body = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
-        body.AddThemeConstantOverride("separation", 26);
-        root.AddChild(body);
+        tab.GotoRC(14f, 0f);
+        tab.TD(1, 1, new QcLabel("Time limit:"));
+        tab.TD(1, 2, QcLook.Slider(Widgets.MixedSlider("timelimit_override", "Time limit in minutes that when hit, will end the match")
+            .Add("Default", -1).AddRange(1, 10, 1).AddRange(15, 30, 5).AddRange(40, 60, 10).Add("Infinite", 0)
+            .Finish()));
+        tab.TR();
+        _fragLabel = tab.TD(1, 1, new QcLabel("Frag limit:"));
+        _fragCell = tab.TD(1, 2, new Control { MouseFilter = MouseFilterEnum.Pass });
 
-        body.AddChild(BuildGametypeColumn());
-        body.AddChild(BuildMapColumn());
+        tab.GotoRC(16.5f, 0f);
+        _teamsLabel = tab.TD(1, 1, new QcLabel("Teams:"));
+        _teamsCell = tab.TD(1, 2, new Control { MouseFilter = MouseFilterEnum.Pass });
+        tab.TR();
+        tab.TD(1, 1, new QcLabel("Player slots:"));
+        tab.TD(1, 2, QcLook.Slider(Widgets.Slider("menu_maxplayers", 1, MenuMaxSlots, 1,
+            "The maximum amount of players or bots that can be connected to your server at once")));
+        tab.TR();
+        // Bots share the slot budget with humans, so this tracks the slots slider rather than the QC's fixed 9,
+        // less the one slot you occupy. menu_loadmap_prepare's `bot_number+1` term (see MenuSlotCount) raises the
+        // slot count to fit the bots asked for, so the two sliders cannot contradict each other.
+        var botsLabel = tab.TD(1, 1, new QcLabel("Number of bots:"));
+        var bots = tab.TD(1, 2, QcLook.Slider(Widgets.Slider("bot_number", 0, MenuMaxSlots - 1, 1, "Amount of bots on your server")));
+        Dependent.Bind(bots, "bot_vs_human", 0, 0);
+        Dependent.Bind(botsLabel, "bot_vs_human", 0, 0);
+        tab.TR();
+        var skillLabel = tab.TD(1, 1, new QcLabel("Bot skill:"));
+        var skill = Widgets.MixedSlider("skill", "Specify how experienced the bots will be");
+        for (int i = 0; i < BotSkillNames.Length; i++)
+            skill.Add(BotSkillNames[i], i);
+        tab.TD(1, 2, QcLook.Slider(skill.Finish()));
+        // QC allowBotSkill is bots>0 OR bot_vs_human; the dominant gate is having bots at all.
+        Dependent.Bind(skillLabel, "bot_number", 1, 99);
+        Dependent.Bind(skill, "bot_number", 1, 99);
+        tab.TR();
+        tab.TDempty(0.1f);
+        tab.TD(1, 2.9f, QcLook.CheckBox(Widgets.CheckBox("bot_vs_human", "Bots against humans",
+            "Force humans to play on the same team against an equal-sized team of bots")));
 
-        // Bottom row (QC rows-1): Leave current match (5/12) | Start multiplayer! (5/12).
-        _leaveButton = MakeButton("Leave current match", () => MenuCommand.Run("disconnect"));
-        root.AddChild(MakeButtonBar(_leaveButton, MakeButton("Start multiplayer!", OnStart)));
+        // --- the right half -----------------------------------------------------------------------------
+        tab.GotoRC(0.5f, 3.2f);
+        tab.SetFirstColumn(tab.CurrentColumn);
+        tab.TD(1, 3, Header("Maplist"));
+        tab.TR();
+        _mapList = new QcMapList();
+        _mapList.ItemSelected += i => { if (i >= 0 && i < _mapList.Entries.Count) _selectedMap = _mapList.Entries[i].Map; };
+        _mapList.ToggleIncludeRequested += ToggleInclude;
+        // QC XonoticMapList_doubleClickListBoxItem: the map info dialog, with this tab's gametype as the one to play.
+        _mapList.ItemActivated += i =>
+        {
+            if (i < 0 || i >= _mapList.Entries.Count) return;
+            _selectedMap = _mapList.Entries[i].Map;
+            Menu?.Push(new DialogCreateGameMapInfo(_selectedMap, SelectedGametype()));
+        };
+        // "we use 7.8 here to visually match the component on the left"
+        tab.TD(tab.Rows - 7.8f, 3, _mapList);
+
+        tab.GotoRC(tab.Rows - 6f, 3.2f);
+        tab.TD(1, 0.35f, new QcLabel("Filter:", 1f));
+        _mapFilter = QcLook.InputBox(new LineEdit
+        {
+            TooltipText = Localization.Tr("Click here or CTRL+F to provide a keyword to narrow down the list; CTRL+DEL to clear; ENTER when done."),
+        });
+        _mapFilter.TextChanged += _ => RefilterMaps();
+        tab.TD(1, tab.Columns - 3.2f - 0.35f, _mapFilter);
+
+        tab.GotoRC(tab.Rows - 5f, 3.2f);
+        tab.TDempty(0.2f);
+        tab.TD(1, 1.3f, Button("Add shown", "Add the maps shown in the list to your selection", () => EditMaplist(add: true, shownOnly: true)));
+        tab.TD(1, 1.3f, Button("Remove shown", "Remove the maps shown in the list from your selection", () => EditMaplist(add: false, shownOnly: true)));
+        tab.GotoRC(tab.Rows - 4f, 3.2f);
+        tab.TDempty(0.2f);
+        tab.TD(1, 1.3f, Button("Add all", "Add every available map to your selection", () => EditMaplist(add: true, shownOnly: false)));
+        tab.TD(1, 1.3f, Button("Remove all", "Remove all the maps from your selection", () => EditMaplist(add: false, shownOnly: false)));
+
+        // "the following line instead of me.TR(me) for better visual spacing"
+        tab.GotoRC(tab.Rows - 2.5f, 3.2f);
+        tab.TDempty(0.5f);
+        var mutators = tab.TD(1, 2, Button("Mutators...", "Mutators and weapon arenas", () => Menu?.Push(new DialogMutators())));
+        Dependent.Bind(mutators, "g_campaign", 0, 0);
+
+        // --- bottom row ---------------------------------------------------------------------------------
+        tab.GotoRC(tab.Rows - 1f, 0f);
+        tab.TDempty(tab.Columns / 12f);
+        _leaveButton = tab.TD(1, tab.Columns * 5f / 12f, Button("Leave current match", "", () => MenuCommand.Run("disconnect")));
+        // makeXonoticButton(_("Start multiplayer!"), '0 1 0'): the gray art, tinted green.
+        tab.TD(1, tab.Columns * 5f / 12f, QcLook.Button(MakeButton("Start multiplayer!", OnStart), tint: new Color(0f, 1f, 0f)));
 
         if (!string.IsNullOrWhiteSpace(_initialMap))
             _selectedMap = _initialMap!;
         RefreshGametypes();
         ConfigureModeRows(SelectedGametype() ?? "dm");
         RefilterMaps();
+    }
+
+    /// <summary>makeXonoticHeaderLabel: bold, centred, SKINCOLOR_HEADER @ SKINALPHA_HEADER.</summary>
+    private static QcLabel Header(string text) => new(text, 0.5f) { Bold = true, Color = MenuSkin.Header };
+
+    private static Button Button(string text, string tooltip, Action pressed)
+    {
+        Button b = QcLook.Button(MakeButton(text, pressed));
+        if (tooltip.Length > 0) b.TooltipText = Localization.Tr(tooltip);
+        return b;
     }
 
     public override void _Process(double delta)
@@ -170,96 +260,8 @@ public partial class CreateGameScreen : MenuScreen
     }
 
     // ---------------------------------------------------------------------------------------------------
-    //  Left half — gametype list + match settings
+    //  Gametypes
     // ---------------------------------------------------------------------------------------------------
-
-    private Control BuildGametypeColumn()
-    {
-        var col = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        col.AddThemeConstantOverride("separation", 8);
-
-        var header = MakeHeader("Gametype");
-        header.HorizontalAlignment = HorizontalAlignment.Center;
-        col.AddChild(header);
-
-        // QC makeXonoticGametypeList: rows of [gametype icon | name | free for all / teamplay].
-        _gametypeTree = new Tree
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            Columns = 2,
-            HideRoot = true,
-            SelectMode = Tree.SelectModeEnum.Row,
-            FocusMode = FocusModeEnum.None,
-        };
-        _gametypeTree.SetColumnExpand(0, true);
-        _gametypeTree.SetColumnExpandRatio(0, 65);
-        _gametypeTree.SetColumnExpand(1, true);
-        _gametypeTree.SetColumnExpandRatio(1, 35);
-        _gametypeTree.ItemSelected += OnGametypeSelected;
-        col.AddChild(_gametypeTree);
-
-        var showAll = Widgets.CheckBox("menu_create_show_all", "Show all", "Show all available gametypes");
-        showAll.Toggled += _ => RefreshGametypes();
-        col.AddChild(showAll);
-
-        // --- the match-settings rows (QC rows 14..20 of the left half) -------------------------------
-        var time = Widgets.MixedSlider("timelimit_override", "Time limit in minutes that when hit, will end the match")
-            .Add("Default", -1).AddRange(1, 10, 1).AddRange(15, 30, 5).AddRange(40, 60, 10).Add("Infinite", 0)
-            .Finish();
-        col.AddChild(SettingRow(out _, "Time limit:", time));
-
-        _fragRow = SettingRow(out _fragLabel, "Frag limit:", null);
-        col.AddChild(_fragRow);
-
-        _teamsRow = SettingRow(out _teamsLabel, "Teams:", null);
-        col.AddChild(_teamsRow);
-
-        var slots = Widgets.Slider("menu_maxplayers", 1, MenuMaxSlots, 1,
-            "The maximum amount of players or bots that can be connected to your server at once");
-        col.AddChild(SettingRow(out _, "Player slots:", slots));
-
-        // Bots share the slot budget with humans, so this tracks the slots slider above rather than the old fixed
-        // 9 — less the one slot you occupy. Nothing is lost by the pairing: menu_loadmap_prepare's `bot_number+1`
-        // term (see MenuSlotCount) raises the slot count to fit the bots you asked for, so the two sliders cannot
-        // be dragged into a contradiction where the fill silently drops bots. A console `bot_number` is still
-        // unbounded — this is the menu's range, not the game's.
-        var bots = Widgets.Slider("bot_number", 0, MenuMaxSlots - 1, 1, "Amount of bots on your server");
-        col.AddChild(SettingRow(out Label botsLabel, "Number of bots:", bots));
-        Dependent.Bind(bots, "bot_vs_human", 0, 0);
-        Dependent.Bind(botsLabel, "bot_vs_human", 0, 0);
-
-        var skill = Widgets.MixedSlider("skill", "Specify how experienced the bots will be");
-        for (int i = 0; i < BotSkillNames.Length; i++)
-            skill.Add(BotSkillNames[i], i);
-        skill.Finish();
-        var skillRow = SettingRow(out _, "Bot skill:", skill);
-        col.AddChild(skillRow);
-        // QC allowBotSkill is bots>0 OR bot_vs_human; the dominant gate is having bots at all.
-        Dependent.Bind(skillRow, "bot_number", 1, 99);
-
-        col.AddChild(Widgets.CheckBox("bot_vs_human", "Bots against humans",
-            "Force humans to play on the same team against an equal-sized team of bots"));
-
-        return col;
-    }
-
-    /// <summary>One "Label: control" settings row with the QC's narrow label column.</summary>
-    private static HBoxContainer SettingRow(out Label label, string text, Control? control)
-    {
-        var row = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        row.AddThemeConstantOverride("separation", 8);
-        label = MakeLabel(text);
-        label.CustomMinimumSize = new Vector2(130, 0);
-        label.VerticalAlignment = VerticalAlignment.Center;
-        row.AddChild(label);
-        if (control is not null)
-        {
-            if (control.SizeFlagsHorizontal == SizeFlags.Fill)
-                control.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            row.AddChild(control);
-        }
-        return row;
-    }
 
     /// <summary>Repopulate the gametype rows (registry ∩ visibility), keeping/restoring the selection.</summary>
     private void RefreshGametypes()
@@ -268,10 +270,6 @@ public partial class CreateGameScreen : MenuScreen
         string keep = SelectedGametype() ?? _initialGametype ?? "dm";
 
         _shownGametypes.Clear();
-        _gametypeTree.Clear();
-        TreeItem rootItem = _gametypeTree.CreateItem();
-        TreeItem? reselect = null;
-
         // QC menu order: the stock priority list first, any remaining (show-all) modes after, alphabetical.
         foreach (GameType gt in GameTypes.All)
         {
@@ -288,149 +286,65 @@ public partial class CreateGameScreen : MenuScreen
             return ia.CompareTo(ib);
         });
 
-        foreach (GameType gt in _shownGametypes)
-        {
-            TreeItem item = _gametypeTree.CreateItem(rootItem);
-            item.SetText(0, string.IsNullOrEmpty(gt.DisplayName) ? gt.NetName : gt.DisplayName);
-            if (MenuSkin.SkinImage("gametype_" + GametypeIconName(gt.NetName)) is { } icon)
-            {
-                item.SetIcon(0, icon);
-                item.SetIconMaxWidth(0, 26);
-            }
-            item.SetText(1, Localization.Tr(gt.TeamGame ? "teamplay" : "free for all"));
-            item.SetTextAlignment(1, HorizontalAlignment.Right);
-            item.SetCustomColor(1, MenuSkin.Header);
-            item.SetMetadata(0, gt.NetName);
-            if (gt.NetName == keep)
-                reselect = item;
-        }
-        (reselect ?? rootItem.GetFirstChild())?.Select(0);
+        _refreshing = true;
+        _gametypeList.SetEntries(_shownGametypes.ConvertAll(gt => new QcGametypeList.Entry(gt.NetName,
+            string.IsNullOrEmpty(gt.DisplayName) ? gt.NetName : gt.DisplayName,
+            "gametype_" + GametypeIconName(gt.NetName), gt.TeamGame)));
+        int index = _shownGametypes.FindIndex(gt => gt.NetName == keep);
+        _gametypeList.SelectedItem = Math.Max(0, index);
+        _refreshing = false;
     }
 
     private string? SelectedGametype()
     {
-        TreeItem? sel = _gametypeTree?.GetSelected();
-        if (sel is null) return null;
-        Variant meta = sel.GetMetadata(0);
-        return meta.VariantType == Variant.Type.String ? meta.AsString() : null;
+        if (_gametypeList is null) return null;
+        int i = _gametypeList.SelectedItem;
+        return i >= 0 && i < _gametypeList.Entries.Count ? _gametypeList.Entries[i].NetName : null;
     }
 
     private void OnGametypeSelected()
     {
+        if (_refreshing) return;
         ConfigureModeRows(SelectedGametype() ?? "dm");
         RefilterMaps(); // QC gameTypeChangeNotify → mapListBox.refilter
     }
 
-    /// <summary>QC GameType_ConfigureSliders: rebind the frag-limit row (per-mode label+cvar) + the Teams row.</summary>
+    /// <summary>QC GameType_ConfigureSliders: rebind the frag-limit row (per-mode label+cvar) + the Teams row.
+    /// A mode without the setting keeps the row, disabled and empty, as the QC's string_null slider does.</summary>
     private void ConfigureModeRows(string gametype)
     {
         ModeMenu cfg = ModeMenus.TryGetValue(gametype, out ModeMenu? m)
             ? m!
             : new ModeMenu("Frag limit:", "fraglimit_override", 5, 100, 5, null);
 
-        if (_fragControl is not null)
-        {
-            _fragRow.RemoveChild(_fragControl);
-            _fragControl.QueueFree();
-        }
         _fragLabel.Text = Localization.Tr(cfg.FragLabel.Length > 0 ? cfg.FragLabel : "Frag limit:");
-        if (cfg.FragCvar.Length > 0)
-        {
-            var slider = Widgets.MixedSlider(cfg.FragCvar)
-                .Add("Default", -1).AddRange(cfg.Min, cfg.Max, cfg.Step).Add("Unlimited", 0)
-                .Finish();
-            slider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            _fragRow.AddChild(slider);
-            _fragControl = slider;
-            _fragLabel.Modulate = Colors.White;
-        }
-        else
-        {
-            _fragControl = null;
-            _fragLabel.Modulate = new Color(1, 1, 1, 0.4f); // mode has no limit (QC disables the pair)
-        }
-
-        if (_teamsControl is not null)
-        {
-            _teamsRow.RemoveChild(_teamsControl);
-            _teamsControl.QueueFree();
-        }
-        if (cfg.TeamsCvar is { } teamsCvar)
-        {
-            var teams = Widgets.MixedSlider(teamsCvar)
-                .Add("Default", 0).Add("2 teams", 2).Add("3 teams", 3).Add("4 teams", 4)
-                .Finish();
-            teams.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            _teamsRow.AddChild(teams);
-            _teamsControl = teams;
-            _teamsLabel.Modulate = Colors.White;
-        }
-        else
-        {
-            _teamsControl = null;
-            _teamsLabel.Modulate = new Color(1, 1, 1, 0.4f);
-        }
+        Fill(_fragCell, _fragLabel, cfg.FragCvar.Length > 0
+            ? Widgets.MixedSlider(cfg.FragCvar).Add("Default", -1).AddRange(cfg.Min, cfg.Max, cfg.Step).Add("Unlimited", 0).Finish()
+            : null);
+        Fill(_teamsCell, _teamsLabel, cfg.TeamsCvar is { } teamsCvar
+            ? Widgets.MixedSlider(teamsCvar).Add("Default", 0).Add("2 teams", 2).Add("3 teams", 3).Add("4 teams", 4).Finish()
+            : null);
     }
 
-    // ---------------------------------------------------------------------------------------------------
-    //  Right half — the maplist
-    // ---------------------------------------------------------------------------------------------------
-
-    private Control BuildMapColumn()
+    private static void Fill(Control cell, QcLabel label, CvarMixedSlider? slider)
     {
-        var col = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        col.AddThemeConstantOverride("separation", 8);
-
-        var header = MakeHeader("Maplist");
-        header.HorizontalAlignment = HorizontalAlignment.Center;
-        col.AddChild(header);
-
-        var listPanel = new PanelContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
-        listPanel.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.25f) });
-        var scroll = new ScrollContainer
+        foreach (Node child in cell.GetChildren())
         {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        _mapRows = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _mapRows.AddThemeConstantOverride("separation", 1);
-        scroll.AddChild(_mapRows);
-        listPanel.AddChild(scroll);
-        col.AddChild(listPanel);
-
-        // Filter: narrows the shown rows (QC stringFilterBox).
-        var filterRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        filterRow.AddThemeConstantOverride("separation", 8);
-        var fl = MakeLabel("Filter:");
-        fl.VerticalAlignment = VerticalAlignment.Center;
-        filterRow.AddChild(fl);
-        _mapFilter = new LineEdit { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _mapFilter.TextChanged += _ => RefilterMaps();
-        filterRow.AddChild(_mapFilter);
-        col.AddChild(filterRow);
-
-        // The g_maplist selection buttons (QC Add/Remove shown, Add/Remove all).
-        col.AddChild(MakeButtonBar(
-            MakeButton("Add shown", () => EditMaplist(add: true, shownOnly: true)),
-            MakeButton("Remove shown", () => EditMaplist(add: false, shownOnly: true))));
-        col.AddChild(MakeButtonBar(
-            MakeButton("Add all", () => EditMaplist(add: true, shownOnly: false)),
-            MakeButton("Remove all", () => EditMaplist(add: false, shownOnly: false))));
-
-        // Mutators... centred at 2/3 width (QC TDempty 0.5 + TD 2 of 3 columns).
-        var mutRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        mutRow.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
-        var mut = MakeButton("Mutators...", () => Menu?.Push(new DialogMutators()));
-        mut.TooltipText = Localization.Tr("Mutators and weapon arenas");
-        mut.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        mut.SizeFlagsStretchRatio = 4f;
-        mutRow.AddChild(mut);
-        mutRow.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
-        col.AddChild(mutRow);
-
-        return col;
+            cell.RemoveChild(child);
+            child.QueueFree();
+        }
+        bool enabled = slider is not null;
+        slider ??= Widgets.MixedSlider("").Finish(); // no values: the track alone, no knob, no text
+        QcLook.Slider(slider);
+        slider.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        cell.AddChild(slider);
+        CvarUi.SetEnabledRecursive(slider, enabled);
+        label.Disabled = !enabled;
     }
+
+    // ---------------------------------------------------------------------------------------------------
+    //  The maplist
+    // ---------------------------------------------------------------------------------------------------
 
     /// <summary>The current selection, read through the store: it may live in a file rather than the
     /// cvar (a selection too long for one), and an unset list means every installed map.</summary>
@@ -456,16 +370,13 @@ public partial class CreateGameScreen : MenuScreen
     /// <summary>Rebuild the visible map rows from the gametype + text filter (QC refilter).</summary>
     private void RefilterMaps()
     {
-        if (_mapRows is null)
+        if (_mapList is null)
             return;
-        foreach (MapRowButton row in _mapRowButtons)
-            row.QueueFree();
-        _mapRowButtons.Clear();
-
         string gametype = SelectedGametype() ?? "dm";
         string needle = _mapFilter.Text.Trim();
         HashSet<string> included = MaplistSet();
 
+        var rows = new List<QcMapList.Entry>();
         foreach (string map in MapList.Available())
         {
             MapInfoCache.Entry info = MapInfoCache.Get(map);
@@ -475,30 +386,18 @@ public partial class CreateGameScreen : MenuScreen
                 && !map.Contains(needle, StringComparison.OrdinalIgnoreCase)
                 && !info.Title.Contains(needle, StringComparison.OrdinalIgnoreCase))
                 continue;
-
-            var row = new MapRowButton(map, info.Title, info.Author, included.Contains(map), _mapGroup);
-            row.Pressed += () => _selectedMap = map;
-            row.ToggleIncludeRequested += () => ToggleInclude(map);
-            // QC XonoticMapList_doubleClickListBoxItem: double-clicking the row opens the map info dialog for it
-            // (using the create-game screen's currently selected gametype as the preferred "Play" gametype).
-            row.MapInfoRequested += () =>
-            {
-                _selectedMap = map;
-                Menu?.Push(new DialogCreateGameMapInfo(map, SelectedGametype()));
-            };
-            _mapRows.AddChild(row);
-            _mapRowButtons.Add(row);
-            if (map.Equals(_selectedMap, StringComparison.OrdinalIgnoreCase))
-                row.SetPressedNoSignal(true);
+            rows.Add(new QcMapList.Entry(map, info.Title, info.Author));
         }
+        _mapList.SetEntries(rows, included.Contains);
 
         // Keep the selection meaningful: default to the first shown map.
-        if (_mapRowButtons.Count > 0
-            && !_mapRowButtons.Exists(r => r.MapName.Equals(_selectedMap, StringComparison.OrdinalIgnoreCase)))
+        int index = rows.FindIndex(r => r.Map.Equals(_selectedMap, StringComparison.OrdinalIgnoreCase));
+        if (index < 0 && rows.Count > 0)
         {
-            _selectedMap = _mapRowButtons[0].MapName;
-            _mapRowButtons[0].SetPressedNoSignal(true);
+            index = 0;
+            _selectedMap = rows[0].Map;
         }
+        if (index >= 0) _mapList.SelectedItem = index;
     }
 
     /// <summary>QC g_maplistCacheToggle: clicking a row's preview adds/removes that map from g_maplist.</summary>
@@ -508,9 +407,7 @@ public partial class CreateGameScreen : MenuScreen
         if (!set.Remove(map))
             set.Add(map);
         SaveMaplist(set);
-        foreach (MapRowButton row in _mapRowButtons)
-            if (row.MapName.Equals(map, StringComparison.OrdinalIgnoreCase))
-                row.SetIncluded(set.Contains(map));
+        _mapList.SetEntries(new List<QcMapList.Entry>(_mapList.Entries), set.Contains);
     }
 
     /// <summary>QC MapList_Add/Remove_Shown/All: bulk-edit g_maplist with the filtered (or full) map set.</summary>
@@ -518,7 +415,7 @@ public partial class CreateGameScreen : MenuScreen
     {
         HashSet<string> set = MaplistSet();
         IEnumerable<string> affected = shownOnly
-            ? _mapRowButtons.ConvertAll(r => r.MapName)
+            ? new List<QcMapList.Entry>(_mapList.Entries).ConvertAll(r => r.Map)
             : MapList.Available();
         foreach (string map in affected)
         {
@@ -526,8 +423,7 @@ public partial class CreateGameScreen : MenuScreen
             else set.Remove(map);
         }
         SaveMaplist(set);
-        foreach (MapRowButton row in _mapRowButtons)
-            row.SetIncluded(set.Contains(row.MapName));
+        _mapList.SetEntries(new List<QcMapList.Entry>(_mapList.Entries), set.Contains);
     }
 
     // ---------------------------------------------------------------------------------------------------
@@ -638,151 +534,5 @@ public static class MapInfoCache
             e.Gametypes.Add("tdm");
         Cache[map] = e;
         return e;
-    }
-}
-
-/// <summary>
-/// One maplist row — what <c>XonoticMapList_drawListBoxItem</c> draws: the 4:3 mapshot (checkmark overlay
-/// when the map is in the g_maplist selection), the map title, and the author right-aligned, all dimmed
-/// when not included. Clicking the PREVIEW toggles inclusion (QC clickListBoxItem's preview-column zone);
-/// clicking the text selects the row (orange fill).
-/// </summary>
-internal partial class MapRowButton : Button
-{
-    private const int RowHeight = 48;
-    private const int ThumbWidth = 56;
-
-    public string MapName { get; }
-
-    /// <summary>Raised when the user clicks the preview zone (toggle this map in g_maplist).</summary>
-    public event Action? ToggleIncludeRequested;
-
-    /// <summary>Raised when the user double-clicks the name column (QC XonoticMapList_doubleClickListBoxItem →
-    /// pop up the map info dialog).</summary>
-    public event Action? MapInfoRequested;
-
-    private readonly Control _content;
-    private readonly TextureRect _checkmark;
-    private bool _included;
-
-    public MapRowButton(string map, string title, string author, bool included, ButtonGroup group)
-    {
-        MapName = map;
-        _included = included;
-        ToggleMode = true;
-        ButtonGroup = group;
-        FocusMode = FocusModeEnum.None;
-        SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        CustomMinimumSize = new Vector2(0, RowHeight);
-
-        AddThemeStyleboxOverride("normal", new StyleBoxEmpty());
-        AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
-        AddThemeStyleboxOverride("hover", new StyleBoxFlat { BgColor = new Color(0.09f, 0.42f, 0.69f, 0.30f) });
-        var selectedFill = new StyleBoxFlat { BgColor = new Color(0.9f, 0.53f, 0.28f, 0.95f) };
-        AddThemeStyleboxOverride("pressed", selectedFill);
-        AddThemeStyleboxOverride("hover_pressed", selectedFill);
-
-        var pad = new MarginContainer { MouseFilter = MouseFilterEnum.Ignore };
-        pad.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            pad.AddThemeConstantOverride(side, 3);
-        AddChild(pad);
-
-        var box = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
-        box.AddThemeConstantOverride("separation", 10);
-        pad.AddChild(box);
-
-        var thumbFrame = new Control
-        {
-            CustomMinimumSize = new Vector2(ThumbWidth, RowHeight - 6),
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        var thumb = new TextureRect
-        {
-            Texture = MenuSkin.Image("maps/" + map) ?? MenuSkin.SkinImage("nopreview_map"),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.Scale,
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        thumb.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        thumbFrame.AddChild(thumb);
-        _checkmark = new TextureRect
-        {
-            Texture = MenuSkin.SkinImage("checkmark"),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            MouseFilter = MouseFilterEnum.Ignore,
-            AnchorLeft = 1, AnchorTop = 1, AnchorRight = 1, AnchorBottom = 1,
-            OffsetLeft = -20, OffsetTop = -20, OffsetRight = -1, OffsetBottom = -1,
-        };
-        thumbFrame.AddChild(_checkmark);
-        box.AddChild(thumbFrame);
-
-        var text = new VBoxContainer
-        {
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            MouseFilter = MouseFilterEnum.Ignore,
-            Alignment = BoxContainer.AlignmentMode.Center,
-        };
-        text.AddThemeConstantOverride("separation", 0);
-        var titleLabel = new Label
-        {
-            Text = MenuColorCodes.Strip(title),
-            MouseFilter = MouseFilterEnum.Ignore,
-            ClipText = true,
-        };
-        titleLabel.AddThemeColorOverride("font_color", new Color(0.96f, 0.99f, 1f));
-        text.AddChild(titleLabel);
-        if (author.Length > 0)
-        {
-            var authorLabel = new Label
-            {
-                Text = MenuColorCodes.Strip(author),
-                HorizontalAlignment = HorizontalAlignment.Right,
-                MouseFilter = MouseFilterEnum.Ignore,
-                ClipText = true,
-            };
-            authorLabel.AddThemeColorOverride("font_color", MenuSkin.Header);
-            authorLabel.AddThemeFontSizeOverride("font_size", 13);
-            text.AddChild(authorLabel);
-        }
-        box.AddChild(text);
-        _content = box;
-        ApplyIncludedLook();
-
-        GuiInput += ev =>
-        {
-            if (ev is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb)
-                return;
-
-            // QC clickListBoxItem: a click within the preview column toggles g_maplist inclusion.
-            if (mb.Position.X <= ThumbWidth + 6)
-            {
-                ToggleIncludeRequested?.Invoke();
-                AcceptEvent();
-                return;
-            }
-
-            // QC XonoticMapList_doubleClickListBoxItem: a double-click on the name column (outside the preview)
-            // pops up the map info dialog.
-            if (mb.DoubleClick)
-            {
-                MapInfoRequested?.Invoke();
-                AcceptEvent();
-            }
-        };
-    }
-
-    public void SetIncluded(bool included)
-    {
-        _included = included;
-        ApplyIncludedLook();
-    }
-
-    private void ApplyIncludedLook()
-    {
-        // QC SKINALPHA_MAPLIST_INCLUDEDFG vs NOTINCLUDEDFG: not-included rows render dim.
-        _content.Modulate = new Color(1, 1, 1, _included ? 1f : 0.45f);
-        _checkmark.Visible = _included;
     }
 }

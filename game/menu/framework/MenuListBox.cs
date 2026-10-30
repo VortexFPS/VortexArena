@@ -98,8 +98,9 @@ public abstract partial class MenuListBox : Control
     /// <summary>The visible height — the QC's "1" (one page).</summary>
     protected float ViewHeight => Size.Y;
 
-    /// <summary>The scrollbar gutter width in pixels (SKINWIDTH_SCROLLBAR), 0 when the list can't scroll.</summary>
-    protected float ScrollbarWidth => GetTotalHeight() > ViewHeight ? MenuSkin.ScrollbarWidth : 0f;
+    /// <summary>The scrollbar gutter width (SKINWIDTH_SCROLLBAR). ListBox_resizeNotify reserves it whether or not the
+    /// list can scroll (controlWidth), and ListBox_draw always draws its groove; only the grabber needs content.</summary>
+    protected virtual float ScrollbarWidth => MenuSkin.ScrollbarWidth;
 
     /// <summary>Width available to a row — the control minus the scrollbar gutter.</summary>
     protected float ContentWidth => Size.X - ScrollbarWidth;
@@ -379,6 +380,7 @@ public abstract partial class MenuListBox : Control
     /// <summary>QC <c>ListBox_mouseRelease</c>: the click (or double-click, within 0.3 s) lands here.</summary>
     private void MouseRelease(Vector2 pos)
     {
+        LastReleasePosition = pos;
         if (_pressed == 2)
         {
             _pressed = 3; // set before SetSelected, so it can tell the button is already up (QC comment)
@@ -403,6 +405,12 @@ public abstract partial class MenuListBox : Control
 
     /// <summary>QC <c>clickListBoxItem</c> — a single click on an already-selected row. Base does nothing.</summary>
     protected virtual void OnItemClicked(int index) { }
+
+    /// <summary>Where the last click was released, in the list's coordinates (QC clickListBoxItem's <c>where</c>).</summary>
+    protected Vector2 LastReleasePosition { get; private set; }
+
+    /// <summary>Drawn under a row's selection/hover fill (the maplist's included-map tint). Base draws nothing.</summary>
+    protected virtual void DrawItemBackground(int index, Rect2 rect, bool isSelected, bool isFocused) { }
 
     private void HandleMouseMotion(InputEventMouseMotion mm)
     {
@@ -595,6 +603,7 @@ public abstract partial class MenuListBox : Control
             bool isSelected = i == _selectedItem;
             bool isFocused = i == _focusedItem;
 
+            DrawItemBackground(i, rect, isSelected, isFocused);
             if (isSelected && ShowSelection)
                 DrawRect(HighlightRect(i, rect), MenuSkin.Fade(MenuSkin.Selection, MenuSkin.SelectionAlpha));
             else if (isFocused)

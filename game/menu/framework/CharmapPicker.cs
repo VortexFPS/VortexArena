@@ -21,7 +21,6 @@ public partial class CharmapPicker : PickerGrid
         _inputBox = inputBox;
         Rows = MenuPickerMath.CharmapRows;
         Columns = MenuPickerMath.CharmapColumns;
-        CustomMinimumSize = new Vector2(0, 140);
         SizeFlagsHorizontal = SizeFlags.ExpandFill;
     }
 
@@ -41,11 +40,15 @@ public partial class CharmapPicker : PickerGrid
         string ch = MenuPickerMath.CharmapCellToChar(cell);
         if (ch == "") return;
 
-        Font font = MenuSkin.BoldFont ?? ThemeDB.FallbackFont;
-        int fontSize = Mathf.Max(8, (int)(rect.Size.Y * 0.7f));
-        // Center the glyph in the cell (QC draw_CenterText at the char offset).
-        Vector2 textSize = font.GetStringSize(ch, HorizontalAlignment.Left, -1, fontSize);
-        Vector2 at = rect.Position + (rect.Size - textSize) * 0.5f + new Vector2(0, font.GetAscent(fontSize));
-        DrawString(font, at, ch, HorizontalAlignment.Left, -1, fontSize, MenuSkin.Text);
+        // XonoticCharmap_resizeNotify: a square font as big as the cell's smaller side, but never above
+        // SKINFONTSIZE_NORMAL; draw_CenterText at charOffset (horizontal centre, vertically centred).
+        float font = System.Math.Min(System.Math.Min(rect.Size.X, rect.Size.Y), MenuMetrics.FontNormalU);
+        float menuPx = font / MenuMetrics.DesignUnit;
+        float w = QcDraw.TextWidth(ch, menuPx);
+        Color color = MenuSkin.TextLift(MenuSkin.Fade(MenuSkin.SkinColor("COLOR_CHARMAP_CHAR", 1f, 1f, 1f),
+            MenuSkin.SkinNumber("ALPHA_CHARMAP_CHAR", 0.85f)));
+        QcDraw.Text(this, rect.Position + new Vector2(0.5f * (rect.Size.X - w), 0.5f * (rect.Size.Y - font)), ch, color, menuPx);
     }
+
+    public override Vector2 _GetMinimumSize() => Vector2.Zero;
 }

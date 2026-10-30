@@ -10,9 +10,10 @@ namespace VortexArena.Game.Menu;
 /// The player-model selector — a C# port of <c>XonoticPlayerModelSelector</c>
 /// (qcsrc/menu/xonotic/playermodel.qc). Enumerates the player-model datafiles (the QC glob
 /// <c>get_model_datafilename(null,-1,"txt")</c> → <c>models/player/*.iqm_N.txt</c> / <c>models/ok_player/*.dpm_N.txt</c>),
-/// reads each model's <c>name</c> (skipping hidden ones), and lets the user cycle them with the
-/// <c>&lt;</c>/<c>&gt;</c> buttons. The selected model's preview image (the sibling <c>..._N.tga</c>) is shown
-/// with the model title beneath it (QC draw at '0.5 0.8 0').
+/// reads each model's <c>name</c> and <c>sex</c> (skipping hidden ones); the dialog's &lt;&lt; / &gt;&gt; buttons
+/// call <see cref="Prev"/> / <see cref="Next"/>. Drawn as the QC draws it: the model's preview image (the sibling
+/// <c>..._N.tga</c>) fitted to the box at its own aspect (XonoticImage, forcedAspect -1), the title in bold at
+/// SKINFONTSIZE_TITLE centred at 80% of the height, and the description lines centred at the bottom.
 ///
 /// As in QC <c>saveCvars</c>, cycling writes <c>_cl_playermodel</c> + <c>_cl_playerskin</c> but DOES NOT apply
 /// the model live — the Profile dialog's "Apply" button does that (avoiding the engine's name/model flood
@@ -20,7 +21,7 @@ namespace VortexArena.Game.Menu;
 /// preview); here we show the model's preview .tga (the same currentModelImage QC draws when the engine lacks a
 /// live 3D preview), cycled by &lt;/&gt;. Degrades to the model name + a "no preview" note without the asset.
 /// </summary>
-public partial class PlayerModelSelector : VBoxContainer
+public partial class PlayerModelSelector : Control
 {
     private sealed class ModelEntry
     {
@@ -28,6 +29,7 @@ public partial class PlayerModelSelector : VBoxContainer
         public string Model = "";   // _cl_playermodel value, e.g. "models/player/erebus.iqm"
         public string Skin = "0";   // _cl_playerskin value
         public string ImageBase = ""; // VFS base (no ext) of the preview .tga
+        public string Description = ""; // what draw prints under the title (XONVOTE186: the sex)
     }
 
     private static CvarService Cvars => MenuState.Cvars;
@@ -35,40 +37,13 @@ public partial class PlayerModelSelector : VBoxContainer
     private readonly List<ModelEntry> _models = new();
     private int _index;
 
-    private TextureRect _preview = null!;
-    private Label _title = null!;
-
     public PlayerModelSelector()
     {
-        SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        AddThemeConstantOverride("separation", 6);
+        MouseFilter = MouseFilterEnum.Ignore;
     }
 
     public override void _Ready()
     {
-        var top = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        top.AddThemeConstantOverride("separation", 8);
-
-        top.AddChild(Ui.Button("<", Prev));
-
-        var center = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _preview = new TextureRect
-        {
-            CustomMinimumSize = new Vector2(0, 160),
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-        };
-        center.AddChild(_preview);
-        _title = new Label { HorizontalAlignment = HorizontalAlignment.Center };
-        _title.AddThemeColorOverride("font_color", MenuSkin.Bright);
-        if (MenuSkin.BoldFont is { } bold) _title.AddThemeFontOverride("font", bold);
-        center.AddChild(_title);
-        top.AddChild(center);
-
-        top.AddChild(Ui.Button(">", Next));
-        AddChild(top);
-
         LoadModels();
     }
 
@@ -90,7 +65,7 @@ public partial class PlayerModelSelector : VBoxContainer
                     // "models/player/erebus.iqm_0.txt" → model "models/player/erebus.iqm", skin "0".
                     if (!TryParseDatafile(fn, out string model, out string skin)) continue;
                     if (!seen.Add(model + "\0" + skin)) continue;
-                    (string? name, bool hidden) = ReadModelParams(vfs, fn);
+                    (string? name, bool hidden, string sex) = ReadModelParams(vfs, fn);
                     if (hidden || string.IsNullOrEmpty(name)) continue;
                     _models.Add(new ModelEntry
                     {
@@ -98,6 +73,8 @@ public partial class PlayerModelSelector : VBoxContainer
                         Model = model,
                         Skin = skin,
                         ImageBase = model + "_" + skin, // sibling preview: "<model>_<skin>.tga"
+                        // XONVOTE186: "\n" then "\n<sex>", trailing newlines dropped.
+                        Description = sex.Length > 0 ? "\n\n" + sex : "",
                     });
                 }
             }
@@ -110,7 +87,7 @@ public partial class PlayerModelSelector : VBoxContainer
         for (int i = 0; i < _models.Count; i++)
             if (_models[i].Model == curModel && _models[i].Skin == curSkin) { _index = i; break; }
 
-        Show();
+        QueueRedraw();
     }
 
     private static bool TryParseDatafile(string fn, out string model, out string skin)
@@ -129,51 +106,80 @@ public partial class PlayerModelSelector : VBoxContainer
     }
 
     /// <summary>Read the QC model-parameter file: the <c>name</c> line + the <c>hidden</c> flag.</summary>
-    private static (string? Name, bool Hidden) ReadModelParams(VirtualFileSystem vfs, string fn)
+    private static (string? Name, bool Hidden, string Sex) ReadModelParams(VirtualFileSystem vfs, string fn)
     {
         string? text = vfs.Exists(fn) ? vfs.ReadText(fn) : null;
-        if (text is null) return (null, false);
-        string? name = null;
+        if (text is null) return (null, false, "");
+        string? name = null, sex = "";
         bool hidden = false;
         foreach (string raw in text.Split('\n'))
         {
             string line = raw.Trim();
             if (line.StartsWith("name "))
                 name = line[5..].Trim();
+            else if (line.StartsWith("sex "))
+                sex = line[4..].Trim();
             else if (line == "hidden" || line.StartsWith("hidden "))
                 hidden = true;
         }
-        return (name, hidden);
+        return (name, hidden, sex);
     }
 
-    private void Prev()
+    public void Prev()
     {
         if (_models.Count == 0) return;
         _index = (_index - 1 + _models.Count) % _models.Count;
-        Show();
+        QueueRedraw();
         SaveCvars();
     }
 
-    private void Next()
+    public void Next()
     {
         if (_models.Count == 0) return;
         _index = (_index + 1) % _models.Count;
-        Show();
+        QueueRedraw();
         SaveCvars();
     }
 
-    private void Show()
+    public override void _Draw()
     {
+        float fs = MenuMetrics.FontNormalU;
         if (_models.Count == 0)
         {
-            _title.Text = "<no model found>";
-            _preview.Texture = null;
+            DrawCentred(new Vector2(0.5f * Size.X, 0.5f * Size.Y), "<no model found>", MenuSkin.Fade(MenuSkin.Text, 0.6f), MenuMetrics.FontNormal, false);
             return;
         }
         ModelEntry e = _models[_index];
-        _title.Text = e.Title;
-        _preview.Texture = MenuSkin.Image(e.ImageBase); // null → blank preview (the QC "nopreview_player" fallback)
+        // XonoticImage with forcedAspect -1: the picture at its own aspect, as large as fits, centred.
+        Texture2D? image = MenuSkin.Image(e.ImageBase) ?? MenuSkin.SkinImage("nopreview_player");
+        if (image is not null && image.GetHeight() > 0 && Size.Y > 0)
+        {
+            float asp = (float)image.GetWidth() / image.GetHeight();
+            Vector2 size = Size.X > asp * Size.Y ? new Vector2(Size.Y * asp, Size.Y) : new Vector2(Size.X, Size.X / asp);
+            DrawTextureRect(image, new Rect2((Size - size) * 0.5f, size), false);
+        }
+        // draw_CenterText('0.5 0.8 0', title, realFontSize * titleFontSize / fontSize, SKINCOLOR_MODELTITLE, ...)
+        Color titleColor = MenuSkin.TextLift(MenuSkin.SkinColor("COLOR_MODELTITLE", 0.96f, 0.99f, 1f));
+        DrawCentred(new Vector2(0.5f * Size.X, 0.8f * Size.Y), e.Title,
+            MenuSkin.Fade(titleColor, MenuSkin.SkinNumber("ALPHA_MODELTITLE", 0.8f)), MenuMetrics.FontTitle, true);
+        string[] lines = e.Description.Split('\n');
+        float y = Size.Y - fs * (lines.Length + 0.5f);
+        foreach (string line in lines)
+        {
+            DrawCentred(new Vector2(0.5f * Size.X, y), line, MenuSkin.TextLift(MenuSkin.SkinColor("COLOR_TEXT", 0.96f, 0.99f, 1f)), MenuMetrics.FontNormal, false);
+            y += fs;
+        }
     }
+
+    // draw_CenterText: the text's top centre at the point.
+    private void DrawCentred(Vector2 topCentre, string text, Color color, float menuPx, bool bold)
+    {
+        if (text.Length == 0) return;
+        float w = QcDraw.TextWidth(text, menuPx, bold);
+        QcDraw.Text(this, topCentre - new Vector2(0.5f * w, 0f), text, color, menuPx, bold);
+    }
+
+    public override Vector2 _GetMinimumSize() => Vector2.Zero;
 
     /// <summary>QC saveCvars: write the model/skin cvars but DON'T apply live (the Apply button does).</summary>
     private void SaveCvars()

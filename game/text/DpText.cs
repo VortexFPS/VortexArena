@@ -59,6 +59,10 @@ public static class DpText
         /// <summary>The loadfont sizes in REAL pixels (virtual size times pixels per unit), unrounded.</summary>
         public float[] RealSizes = Array.Empty<float>();
         public float Scale = 1, VerticalOffset;
+        /// <summary>The slot's bitmap font (its first file that is a picture, else gfx/conchars) and width table:
+        /// what DrawQ_String draws U+E000..U+E0FF, the old Quake character set, with.</summary>
+        public string BitmapPicture = "gfx/conchars";
+        public LegacyBitmapFontWidths BitmapWidths = new();
     }
 
     private readonly record struct CachedLayout(LegacyTextLayout Layout, float YShift);
@@ -179,7 +183,12 @@ public static class DpText
 
         LoadFontConfig();
         for (int slot = 0; slot < States.Length; slot++) States[slot] = ResolveSlot(slot);
+        Changed?.Invoke();
     }
+
+    /// <summary>Raised when what text looks like changed (fonts, window size, an r_text* or r_font_* cvar): what
+    /// something that drew text - or a colour derived from the r_text* lift - must redraw on.</summary>
+    public static event Action? Changed;
 
     /// <summary>
     /// quake.rc: "if_client exec font-xolonium.cfg" (the menu re-executes <c>$menu_font_cfg</c>). Only the
@@ -253,6 +262,21 @@ public static class DpText
             }
         }
         state.Faces = faces.ToArray();
+        // "E000..E0FF: emulate old-font characters (to still have smileys and such available)": the bitmap font
+        // is the first file that is not an outline font and exists as a picture (gfx/vera-sans for Xonotic).
+        foreach (string file in record.Files)
+        {
+            if (file.EndsWith(".otf", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".ttf", StringComparison.OrdinalIgnoreCase)) continue;
+            if (VortexArena.Game.Menu.MenuSkin.Image(file) is null) continue;
+            state.BitmapPicture = file;
+            break;
+        }
+        try
+        {
+            string widthFile = state.BitmapPicture + ".width";
+            if (_vfs is { } wvfs && wvfs.Exists(widthFile)) state.BitmapWidths = LegacyBitmapFontWidths.Parse(wvfs.ReadText(widthFile));
+        }
+        catch (System.IO.IOException) { }
         // Font_VirtualToRealSize: each loadfont size becomes a font map of that many REAL pixels.
         float[] sizes = record.Sizes;
         state.RealSizes = new float[sizes.Length];
@@ -409,6 +433,13 @@ public static class DpText
         foreach (Rune rune in text.EnumerateRunes())
         {
             if (rune.Value < ' ') continue;
+            if (rune.Value is >= 0xE000 and <= 0xE0FF)
+            {
+                // An old-font character: as wide as the bitmap font's width table says; "prevch = 0" after it.
+                raster += State(slot).BitmapWidths.Advance(rune.Value - 0xE000, layout.Cell);
+                previous = 0;
+                continue;
+            }
             raster += KerningFor(slot, layout.PixelSize, previous, rune.Value) + GlyphFor(slot, layout.PixelSize, rune.Value).Advance;
             previous = rune.Value;
         }
@@ -461,6 +492,24 @@ public static class DpText
             foreach (Rune rune in text.EnumerateRunes())
             {
                 if (rune.Value < ' ') continue;
+                if (rune.Value is >= 0xE000 and <= 0xE0FF)
+                {
+                    // Its cell of the 16 x 16 bitmap font, as wide as the width table says, in the text's colour
+                    // ("s = (ch & 15)*0.0625f + (0.5f / tw)", "u = 0.0625f * thisw - (1.0f / tw)").
+                    int g = rune.Value - 0xE000;
+                    SlotState bitmap = State(slot);
+                    float w = bitmap.BitmapWidths.Widths[g];
+                    if (VortexArena.Game.Menu.MenuSkin.Image(bitmap.BitmapPicture) is { } sheet)
+                    {
+                        Vector2 ss = sheet.GetSize();
+                        var region = new Rect2((g & 15) / 16f * ss.X + 0.5f, (g >> 4) / 16f * ss.Y + 0.5f, w / 16f * ss.X - 1f, ss.Y / 16f - 1f);
+                        if (region.Size.X > 0 && region.Size.Y > 0)
+                            target.DrawTextureRectRegion(sheet, new Rect2(x + pen * sx + drop, y + drop, layout.Cell * w * sx, layout.Cell * sy), region, modulate);
+                    }
+                    pen += bitmap.BitmapWidths.Advance(g, layout.Cell);
+                    previous = 0;
+                    continue;
+                }
                 // "if (prevch && Font_GetKerningForMap(...)) x += kx * dw;"
                 pen += KerningFor(slot, pixelSize, previous, rune.Value);
                 previous = rune.Value;

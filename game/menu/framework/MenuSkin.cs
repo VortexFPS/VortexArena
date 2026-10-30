@@ -134,8 +134,8 @@ public static class MenuSkin
     /// <summary>How far the mod icon fades for a server running modified settings (ALPHA_SERVERLIST_ICON_NONPURE).</summary>
     public static float ServerListIconNonPureAlpha => TableNum("ALPHA_SERVERLIST_ICON_NONPURE", 0.5f);
 
-    /// <summary>The listbox scrollbar width in menu px (WIDTH_SCROLLBAR).</summary>
-    public static float ScrollbarWidth => TableNum("WIDTH_SCROLLBAR", 16f);
+    /// <summary>The listbox scrollbar width (WIDTH_SCROLLBAR, menu px) in design units.</summary>
+    public static float ScrollbarWidth => TableNum("WIDTH_SCROLLBAR", 16f) * MenuMetrics.DesignUnit;
 
     /// <summary>Scale <paramref name="c"/>'s alpha by <paramref name="alpha"/> (the QC <c>draw_alpha *=</c> idiom).</summary>
     public static Color Fade(Color c, float alpha) => new(c.R, c.G, c.B, c.A * alpha);
@@ -165,6 +165,11 @@ public static class MenuSkin
     /// </summary>
     public static Texture2D? Logo => LoadLogo();
 
+    /// <summary>Where <see cref="Logo"/> is cut from, in pixels of background_l2 (alpha bounding box of the luma logo).</summary>
+    public static readonly Rect2 LogoRegion = new(46, 0, 1367, 466);
+    /// <summary>The size of background_l2, which menu.qc stretches over the whole menu canvas.</summary>
+    public static readonly Vector2 LogoLayerSize = new(2560, 2048);
+
     private static Texture2D? LoadLogo()
     {
         const string key = "__logo";
@@ -178,7 +183,7 @@ public static class MenuSkin
             if (img != null)
             {
                 // The luma logo occupies this top-left region of the 2560×2048 layer (alpha bounding box).
-                var box = new Rect2I(46, 0, 1367, 466);
+                var box = new Rect2I((Vector2I)LogoRegion.Position, (Vector2I)LogoRegion.Size);
                 box = box.Intersection(new Rect2I(0, 0, img.GetWidth(), img.GetHeight()));
                 if (box.Size.X > 0 && box.Size.Y > 0)
                 {
@@ -196,6 +201,17 @@ public static class MenuSkin
 
     /// <summary>The Xolonium-bold font (titles/headers), or null if it could not be loaded.</summary>
     public static FontFile? BoldFont => Font(bold: true);
+
+    /// <summary>Any skin colour by its skinvalues.txt key (e.g. <c>COLOR_MAPLIST_AUTHOR</c>), with the luma value as fallback.</summary>
+    public static Color SkinColor(string key, float r, float g, float b) => TableRgb(key, r, g, b);
+    /// <summary>Any skin number by its skinvalues.txt key (e.g. <c>ALPHA_MAPLIST_NOTINCLUDEDFG</c>).</summary>
+    public static float SkinNumber(string key, float fallback) => TableNum(key, fallback);
+
+    /// <summary>MARGIN_INPUTBOX_CHARS: how far, in characters, an input box's text sits in from each end.</summary>
+    public static float InputBoxMarginChars => TableNum("MARGIN_INPUTBOX_CHARS", 1f);
+
+    /// <summary>The body font (Xolonium regular at SKINFONTSIZE_NORMAL, asked for at <see cref="BodySize"/>).</summary>
+    public static FontFile? BodyFont => Font(bold: false);
 
     // ---------------------------------------------------------------------------------------------------------
     //  Theme construction

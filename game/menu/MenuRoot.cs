@@ -56,9 +56,35 @@ public partial class MenuRoot : Control
     /// <summary>Fire <see cref="DisconnectRequested"/>.</summary>
     public void RequestDisconnect() => DisconnectRequested?.Invoke();
 
+    private void OnTextLookChanged() => Callable.From(() => { if (IsInsideTree()) RedrawTree(this); }).CallDeferred();
+
+    private static void RedrawTree(Node node)
+    {
+        if (node is CanvasItem item) item.QueueRedraw();
+        foreach (Node child in node.GetChildren(includeInternal: true)) RedrawTree(child);
+    }
+
+    private void SyncSnapping()
+    {
+        if (IsInsideTree()) GetViewport().GuiSnapControlsToPixels = !IsVisibleInTree();
+    }
+
+    // Whether keyboard focus lights a widget depends on whether the keyboard is what is moving it (QcLook).
+    public override void _Input(InputEvent @event) => QcLook.NoteInput(@event);
+
     public override void _Ready()
     {
         Name = "MenuRoot";
+        // Xonotic's menu draws its pictures at fractional positions (a dialog row is 21.4 menu px apart) and only
+        // snaps text. Godot's per-control snapping rounds every nested control's position in the scaled design
+        // space instead, which piles up into whole-pixel offsets against Xonotic's layout, so it is off while the
+        // menu is showing (text is snapped by QcDraw as DrawQ_String snaps it).
+        VisibilityChanged += SyncSnapping;
+        SyncSnapping();
+        // Text, and every colour the r_text* lift is folded into, is drawn once and kept; when DarkPlaces' text
+        // look changes (the cvars arriving after the first frame, a window resize), the whole menu redraws.
+        VortexArena.Game.Text.DpText.Changed += OnTextLookChanged;
+        TreeExiting += () => VortexArena.Game.Text.DpText.Changed -= OnTextLookChanged;
         // Top-left anchors (not full-rect): a Control under a CanvasLayer isn't auto-sized to the viewport, so
         // we drive Position+Size ourselves via FitToViewport. Equal opposite anchors also avoid Godot's
         // "size overridden after _ready" warning that full-rect anchors + an explicit Size would trip.
@@ -226,18 +252,22 @@ public partial class MenuRoot : Control
             k = 1f;
         // Design space is as wide as the viewport's aspect demands (so pillarboxing is computed in design coords)
         // and exactly DesignHeight tall; scaling by k = vp.Y/DesignHeight maps it back to fill the real viewport.
+        // The width is DarkPlaces' vid_conwidth in design units, which vid_conwidthauto rounds DOWN (1066 at 1280x720,
+        // not 1066.67): the menu is drawn 1280/1066 wide per unit but 720/600 high, and matching that keeps the
+        // right-hand side of a dialog from drifting a fraction of a pixel against Xonotic's.
+        float conWidth = MathF.Max(1f, MathF.Floor(MenuMetrics.ConHeight * vp.X / vp.Y));
+        float designWidth = conWidth * MenuMetrics.DesignUnit;
         _screenHost.Position = Vector2.Zero;
-        _screenHost.Scale = new Vector2(k, k);
-        _screenHost.Size = new Vector2(vp.X / k, DesignHeight);
+        _screenHost.Scale = new Vector2(vp.X / designWidth, k);
+        _screenHost.Size = new Vector2(designWidth, DesignHeight);
     }
 
     private void BuildBackground()
     {
         // The Xonotic menu backdrop: the luma skin's space/earth photo (gfx/menu/luma/background.tga), scaled to
-        // cover the viewport (the skin's ALIGN_BACKGROUND "c5h5" = crop-centre, fit-to-height) and darkened a
-        // little so the full-bleed dialog text stays legible over it. The full QC menu also crossfades rotating
-        // map screenshots in front of this (nexposee.qc) — an animation polish item — but the skinned space
-        // backdrop itself is the signature look, and it's real here.
+        // cover the viewport and centred (the skin's ALIGN_BACKGROUND "c5h5": crop, centred). The full QC menu
+        // also crossfades rotating map screenshots in front of this (nexposee.qc) — an animation polish item —
+        // but the skinned space backdrop itself is the signature look, and it's real here.
         Texture2D? space = MenuSkin.Background;
         if (space != null)
         {
@@ -246,10 +276,11 @@ public partial class MenuRoot : Control
                 Name = "Background",
                 Texture = space,
                 StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
+                // Without IgnoreSize the rect is never smaller than the 2560x2048 picture, and "covered" then
+                // showed a zoomed-in corner of it (stars) instead of the whole photo cropped to the window.
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
                 MouseFilter = MouseFilterEnum.Stop,
-                // Near-full brightness like Base — the nexposee/dialog panels supply their own dark backing, so
-                // the space backdrop is meant to read vivid rather than dimmed (only a faint cool tint).
-                Modulate = new Color(0.92f, 0.94f, 1.0f, 1f),
+                // drawBackground draws it untinted.
             };
             bg.SetAnchorsPreset(LayoutPreset.FullRect);
             _background = bg;

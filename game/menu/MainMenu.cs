@@ -43,9 +43,12 @@ public partial class MainMenu : MenuScreen
         public Vector2 InitialOrigin;  // centered top-left (normalized canvas coords)
         public Vector2 SmallOrigin;    // fan slot top-left (after scale calc + pull)
         public Vector2 SizeNorm;       // (intendedWidth, dialogHeight/conHeight)
+        public float Alpha = SmallAlpha; // eased toward its target each frame, as Nexposee_draw does
     }
 
-    private const float ClosedAlpha = 0.85f; // SKINALPHAS_MAINMENU preview alpha
+    // SKINALPHAS_MAINMENU '0.8 0.9 1': a preview's alpha, the one under the pointer's, and (z) the open dialog's.
+    private const float SmallAlpha = 0.8f, MediumAlpha = 0.9f;
+    private float _delta;
     private const float AnimSpeed = 6.0f;
 
     private readonly List<Tile> _tiles = new();
@@ -115,6 +118,7 @@ public partial class MainMenu : MenuScreen
                 {
                     _active = t; _opening = true; _factor = 1f;
                     MoveChild(t.Slot, GetChildCount() - 1);
+                    MoveChild(t.TitleLabel, GetChildCount() - 1);
                     if (parts.Length > 1)
                         foreach (Node n in t.ContentHolder.GetChildren())
                             switch (n)
@@ -151,7 +155,9 @@ public partial class MainMenu : MenuScreen
         // item/borderimage.qc: the title, bold at SKINFONTSIZE_TITLE in SKINCOLOR_TEXT @ SKINALPHA_TEXT, centred in
         // the top border.
         var titleLabel = new QcLabel(title, 0.5f) { Bold = true, FontSize = MenuMetrics.FontTitle };
-        slot.AddChild(titleLabel);
+        // Not inside the slot: zoomed out, the title is drawn at its full size above the shrunken panel
+        // (borderimage.qc isNexposeeTitleBar), so it must not take the slot's scale. See LayoutFrame.
+        titleLabel.MouseFilter = MouseFilterEnum.Ignore;
 
         // Close (X) button, top-right corner of the title bar.
         var close = new Button { Name = "Close", MouseFilter = MouseFilterEnum.Stop, Flat = true };
@@ -179,16 +185,16 @@ public partial class MainMenu : MenuScreen
         catcher.AddThemeStyleboxOverride("normal", empty);
         catcher.AddThemeStyleboxOverride("disabled", empty);
         catcher.AddThemeStyleboxOverride("pressed", empty);
-        var glow = new StyleBoxFlat { BgColor = new Color(MenuSkin.Accent.R, MenuSkin.Accent.G, MenuSkin.Accent.B, 0.14f) };
-        glow.SetCornerRadiusAll(6);
-        catcher.AddThemeStyleboxOverride("hover", glow);
-        catcher.AddThemeStyleboxOverride("focus", glow);
+        // No highlight of its own: the one under the pointer is told apart by its alpha alone (MediumAlpha).
+        catcher.AddThemeStyleboxOverride("hover", empty);
+        catcher.AddThemeStyleboxOverride("focus", empty);
         catcher.Pressed += () => OpenPanel(t);
         slot.AddChild(catcher);
 
         t.Slot = slot; t.Frame = frame; t.TitleLabel = titleLabel; t.Close = close; t.ContentHolder = holder; t.Catcher = catcher;
         _tiles.Add(t);
         AddChild(slot);
+        AddChild(titleLabel);
     }
 
     /// <summary>Nexposee_calc: the largest preview scale that keeps the fan from overlapping, then ×0.95.</summary>
@@ -209,7 +215,7 @@ public partial class MainMenu : MenuScreen
             if (s < 0.2f)
                 break;
         }
-        _scale = s; // the largest non-overlapping scale (panels just touch) → fan as large/tight as Base
+        _scale = s * 0.95f; // Nexposee_calc: the largest scale with no overlap, then "scale *= 0.95"
         CalcSmall(_scale);
     }
 
@@ -250,6 +256,7 @@ public partial class MainMenu : MenuScreen
         // reappears anyway (the animation restarts from _factor).
         if (!IsVisibleInTree())
             return;
+        _delta = (float)delta;
         if (_active != null)
         {
             float dir = _opening ? 1f : -1f;
@@ -295,12 +302,12 @@ public partial class MainMenu : MenuScreen
             Vector2 closedOrigin = new(canvasLeft + t.SmallOrigin.X * canvasW, canvasTop + t.SmallOrigin.Y * canvasH);
 
             bool isActive = t == _active;
-            float scale, alpha; Vector2 origin;
+            float scale, target; Vector2 origin;
             if (isActive)
             {
                 scale = Mathf.Lerp(_scale, 1f, _factor);
                 origin = closedOrigin.Lerp(openOrigin, _factor);
-                alpha = Mathf.Lerp(ClosedAlpha, 1f, _factor);
+                target = Mathf.Lerp(MediumAlpha, 1f, _factor);
                 t.Catcher.MouseFilter = _factor > 0.5f ? MouseFilterEnum.Ignore : MouseFilterEnum.Stop;
                 t.Close.Visible = _factor > 0.85f;
                 t.Slot.Visible = true;
@@ -309,15 +316,29 @@ public partial class MainMenu : MenuScreen
             {
                 scale = _scale;
                 origin = closedOrigin;
-                alpha = _active == null ? ClosedAlpha : ClosedAlpha * (1f - _factor);
+                target = _active == null
+                    ? (t.Catcher.IsHovered() ? MediumAlpha : SmallAlpha)
+                    : SmallAlpha * (1f - _factor);
                 t.Catcher.MouseFilter = _active == null ? MouseFilterEnum.Stop : MouseFilterEnum.Ignore;
                 t.Close.Visible = false;
-                t.Slot.Visible = alpha > 0.02f;
             }
+            // "setAlphaOf(e, e.Container_alpha * (1 - f) + a * f)" with f = min(1, frametime * 10).
+            float ease = Mathf.Min(1f, _delta * 10f);
+            float alpha = t.Alpha = _delta <= 0f ? target : t.Alpha * (1f - ease) + target * ease;
+            t.Slot.Visible = isActive || alpha > 0.02f;
 
             t.Slot.Scale = new Vector2(scale, scale);
             t.Slot.Position = origin;
             t.Slot.Modulate = new Color(1f, 1f, 1f, alpha);
+
+            // The title bar: zoomed out it sits one title-font height ABOVE the panel at full size; open, it is
+            // centred in the panel's top border; in between both are interpolated (BorderImage_draw).
+            float f = isActive ? _factor : 0f;
+            float titleFont = MenuMetrics.FontTitle * fit, border = MenuMetrics.TitleHeight * fit * scale;
+            t.TitleLabel.Position = new Vector2(origin.X, origin.Y + Mathf.Lerp(-titleFont, 0f, f));
+            t.TitleLabel.Size = new Vector2(openSize.X * scale, Mathf.Lerp(titleFont, border, f));
+            t.TitleLabel.Modulate = t.Slot.Modulate;
+            t.TitleLabel.Visible = t.Slot.Visible;
         }
 
         // The logo stays put when a dialog opens: in menu.qc it is a layer of the background (background_l2,
@@ -343,8 +364,6 @@ public partial class MainMenu : MenuScreen
             if (_frameStyle != null)
                 t.Frame.AddThemeStyleboxOverride("panel", _frameStyle);
 
-            t.TitleLabel.Position = new Vector2(th, 0);
-            t.TitleLabel.Size = new Vector2(Mathf.Max(1, openSize.X - 2 * th), th);
 
             t.Close.Position = new Vector2(openSize.X - th, 0);
             t.Close.Size = new Vector2(th, th);
@@ -359,7 +378,8 @@ public partial class MainMenu : MenuScreen
         if (_active != null) return;
         _active = t;
         _opening = true;
-        MoveChild(t.Slot, GetChildCount() - 1); // above the rest
+        MoveChild(t.Slot, GetChildCount() - 1); // above the rest, with its title over it
+        MoveChild(t.TitleLabel, GetChildCount() - 1);
     }
 
     /// <summary>Begin collapsing the open dialog back to its fan slot. Safe when nothing is open.</summary>

@@ -85,8 +85,12 @@ public static class QcDraw
             LegacyTextLook look = DpText.Look;
             float k = look.Contrast != 0f ? 1f / look.Contrast : 1f;
             var raw = new Color((color.R - look.Brightness) * k, (color.G - look.Brightness) * k, (color.B - look.Brightness) * k, color.A);
+            // A scaled-down dialog (a nexposee preview) draws smaller text, as draw_scale makes it in the QC.
+            float scale = Godot.Engine.GetMainLoop() is SceneTree t && t.Root.Size.Y > 0
+                ? xf.Scale.Y / (t.Root.Size.Y / DpBitmapFont.MenuDesignHeight)
+                : 1f;
             ci.DrawSetTransformMatrix(xf.AffineInverse());
-            DpText.Draw(ci, slot, xf * topLeft, text, menuPx * DpText.PixelsPerUnit, raw, Vector2.Zero, condense);
+            DpText.Draw(ci, slot, xf * topLeft, text, menuPx * DpText.PixelsPerUnit * scale, raw, Vector2.Zero, condense);
             ci.DrawSetTransformMatrix(Transform2D.Identity);
             return;
         }

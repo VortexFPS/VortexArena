@@ -564,6 +564,9 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   `nexposee:<Title>[:<Tab>]` (e.g. `nexposee:Multiplayer:Create`) instead opens a main-menu dialog where the
   player sees it — centred in the nexposee, at Xonotic's size — which is what to compare against Xonotic's own
   menu (`--legacy-menu`, driven by `VORTEX_LEGACY_SCRIPT`; `menu_cmd directmenu servers` / `profile` there).
+  `tools/menu-parity/capture.sh` takes both shots in one go (plus menu.dat's draw list, the exact position of
+  everything it draws) and `tools/menu-parity/compare.py` diffs them: per-region pixel offsets, label extents,
+  a side-by-side sheet. A dialog ported onto `QcGrid`/`QcLook` should come out at zero offset everywhere.
 
 ---
 

@@ -2411,6 +2411,7 @@ public sealed partial class NetGame : Node3D
         float vFov = Client.FirstPersonView.ComputeVerticalFov(_view.BaseFov, 1f);
         _camera = new Camera3D { Name = "Camera3D", Fov = vFov, Near = 1f, Current = true };
         AddChild(_camera);
+        ApplyFarClip();
 
         // (E3/E5) The editor nodes are constructed in SetupRender, which runs BEFORE this method — so the
         // Attach calls there handed them a null camera, and both silently stood down every frame: the
@@ -13349,6 +13350,25 @@ public sealed partial class NetGame : Node3D
     }
 
     /// <summary>
+    /// Set the view camera's far plane the way DarkPlaces does (<c>r_farclip_base + world radius * r_farclip_world
+    /// * 2</c>, see <see cref="VortexArena.Common.Math.RenderFarClip"/>). Without it the camera kept Godot's default
+    /// Far of 4000 units — Quake units here — and cut big maps off mid-distance (playtest-bugs #79). Called when the
+    /// camera is made (the listen host already has its BSP) and again from <see cref="ApplyMapSky"/> once a pure
+    /// client learns its map. Portal and water cameras copy this camera's Far, so they follow.
+    /// </summary>
+    private void ApplyFarClip()
+    {
+        if (_camera is null || !GodotObject.IsInstanceValid(_camera))
+            return;
+        float farBase = _sharedCvars is { } c && c.Has("r_farclip_base") ? c.GetFloat("r_farclip_base") : VortexArena.Common.Math.RenderFarClip.DefaultBase;
+        float farWorld = _sharedCvars is { } c2 && c2.Has("r_farclip_world") ? c2.GetFloat("r_farclip_world") : VortexArena.Common.Math.RenderFarClip.DefaultWorld;
+        bool haveWorld = _bsp is not null && _bsp.Models.Length > 0;
+        _camera.Far = VortexArena.Common.Math.RenderFarClip.Compute(farBase, farWorld,
+            haveWorld ? _bsp!.Models[0].Mins : null, haveWorld ? _bsp!.Models[0].Maxs : null);
+        VortexArena.Common.Diagnostics.Log.Trace($"[view] far clip {_camera.Far:0} (r_farclip_base {farBase:0} + world radius x r_farclip_world {farWorld:0.##} x 2)");
+    }
+
+    /// <summary>
     /// Re-apply the real map's skybox, fog and colour-tint baseline to the live <see cref="WorldEnvironment"/>,
     /// replacing the procedural sky <see cref="AddLight"/> put up before the map was known. Called by
     /// <see cref="LoadClientMapFromServer"/> once a pure <c>--connect</c> client has loaded the server's BSP.
@@ -13358,6 +13378,7 @@ public sealed partial class NetGame : Node3D
     {
         if (_worldEnv is null || _bsp is null)
             return;
+        ApplyFarClip(); // the world radius is known only now on a pure client (#79)
         Sky? sky = VortexArena.Game.Loaders.SkyboxLoader.TryBuild(_bsp, _assets?.Assets);
         if (sky is not null)
             _worldEnv.Sky = sky;

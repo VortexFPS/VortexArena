@@ -20,6 +20,7 @@ namespace VortexArena.Tests;
 /// twin of the C trace), a divergence here is a pure physics-math difference between the port and the QC —
 /// the movement-fidelity guard the task asked for ("never A/B'd against actual Darkplaces traces").
 /// </summary>
+[Collection("GlobalState")]
 public class MovementParityTests
 {
     private readonly ITestOutputHelper _out;
@@ -44,13 +45,50 @@ public class MovementParityTests
         new object[] { "ramp_run_up" },
         new object[] { "stair_step_up" },
         new object[] { "swim_forward" },
+        // Playtest 2026-07-31 #71: jumping into a step keeps velocity.z (the in-loop step-up is positional), and
+        // a rejected in-loop step (a tall wall) does not report a step, so the step-down still runs.
+        new object[] { "step_jump_up" },
+        new object[] { "wall_scrape_stepdown" },
+        // Playtest #68: 5 s of held-jump strafing at the live 64 Hz tick, yaw chosen greedily by the reference.
+        new object[] { "strafe_bhop_side_5s" },
+        new object[] { "strafe_bhop_fwdside_5s" },
     };
 
     [Theory]
     [MemberData(nameof(Scenarios))]
-    public void Port_Matches_DarkplacesReference(string name)
+    public void Port_Matches_DarkplacesReference(string name) => Replay(name, cvars: null);
+
+    /// <summary>
+    /// The same replay, but with the cvars the game actually SHIPS: the whole server config chain
+    /// (xonotic-server.cfg -> physicsX.cfg ... -> the vortex-*.cfg layer) loaded into a real store. The plain
+    /// test above runs on the compiled-in defaults, so a shipped .cfg value that diverges from Xonotic is
+    /// invisible to it — which is exactly how <c>sv_step_upspeed_max 1</c> (playtest 2026-07-31 #71) hid.
+    /// </summary>
+    [Theory]
+    [InlineData("step_jump_up")]
+    [InlineData("wall_scrape_stepdown")]
+    [InlineData("bunnyhop_chain")]
+    [InlineData("strafe_bhop_side_5s")]
+    [InlineData("strafe_bhop_fwdside_5s")]
+    public void Port_Matches_DarkplacesReference_UnderShippedConfig(string name)
+    {
+        string pk3 = TestPaths.CorePk3Dir;
+        Assert.True(System.IO.File.Exists(System.IO.Path.Combine(pk3, "xonotic-server.cfg")),
+            $"core .cfg files are committed; missing from {pk3} means a broken checkout");
+        var cvars = new VortexArena.Engine.Simulation.CvarService();
+        VortexArena.Common.Config.ConfigLoader.LoadServerConfig(cvars, path =>
+        {
+            string full = System.IO.Path.Combine(pk3, path);
+            return System.IO.File.Exists(full) ? System.IO.File.ReadAllText(full) : null;
+        });
+        Replay(name, cvars);
+    }
+
+    private void Replay(string name, ICvarService? cvars)
     {
         GoldenTrace g = LoadGolden(name);
+        MovementParameters.PredictionOverride = null;
+        MovementParameters.PresetProvider = null;
 
         // The C reference runs the bare physics with no mutators. Other tests in the suite may have left
         // mutator handlers (multijump/bloodloss/…) on these global chains, which the jump/crouch paths call;
@@ -61,7 +99,7 @@ public class MovementParityTests
 
         var world = AnalyticWorld.FromPlanes(g.World);
         var clock = new MutableClock();
-        Api.Services = new MovementTestServices(world, clock);
+        Api.Services = new MovementTestServices(world, clock, cvars);
         var physics = new PlayerPhysics();
 
         var player = new Entity
@@ -97,6 +135,13 @@ public class MovementParityTests
             float velErr = (player.Velocity - tick.Out.Velocity).Length();
             if (posErr > worstPos) { worstPos = posErr; worstTick = t; }
             if (velErr > worstVel) worstVel = velErr;
+            if (t == g.Ticks.Count - 1 || velErr > VelTol || posErr > PosTol)
+            {
+                // the end state (or the first divergence) as concrete numbers, port vs reference
+                _out.WriteLine($"{name} tick {t}: port vel {player.Velocity} (h {PMAccelerate.Vec2(player.Velocity).Length():F1}) "
+                    + $"origin {player.Origin} | ref vel {tick.Out.Velocity} (h {PMAccelerate.Vec2(tick.Out.Velocity).Length():F1}) "
+                    + $"origin {tick.Out.Origin}");
+            }
 
             int ong = player.OnGround ? 1 : 0;
             Assert.True(ong == tick.Out.OnGround,
@@ -109,6 +154,56 @@ public class MovementParityTests
         _out.WriteLine($"{name}: {g.Ticks.Count} ticks, worst pos err {worstPos:F4} qu (tick {worstTick}), worst vel err {worstVel:F4} qu/s");
         Assert.True(worstPos <= PosTol, $"{name}: worst position error {worstPos:F4} qu at tick {worstTick} exceeds {PosTol} qu");
         Assert.True(worstVel <= VelTol, $"{name}: worst velocity error {worstVel:F4} qu/s exceeds {VelTol} qu/s");
+    }
+
+    /// <summary>
+    /// Playtest 2026-07-31 #68 ("nowhere near as much strafe power"), frame-rate leg. Xonotic applies one move per
+    /// 1/64 s usercmd; the port's default <c>cl_movement_perframe 1</c> predicts (and the server replays) one move
+    /// per RENDER frame at the real frame dt. Replay the 5 s greedy strafe streams with every 1/64 tick split into
+    /// N equal sub-moves (same view angle and keys) — 64 / 128 / 256 / 512 Hz input — and require the end speed to
+    /// stay within 3% of the reference's one-move-per-tick result. (The per-tick speed clamp of
+    /// sv_airaccel_qw_stretchfactor scales with dt, so the gain per second should not depend on the move rate.)
+    /// </summary>
+    [Theory]
+    [InlineData("strafe_bhop_side_5s")]
+    [InlineData("strafe_bhop_fwdside_5s")]
+    public void StrafePower_DoesNotDependOnInputRate(string name)
+    {
+        GoldenTrace g = LoadGolden(name);
+        float reference = PMAccelerate.Vec2(g.Ticks[^1].Out.Velocity).Length();
+        foreach (int split in new[] { 1, 2, 4, 8 })
+        {
+            MovementParameters.PredictionOverride = null;
+            MovementParameters.PresetProvider = null;
+            VortexArena.Common.Gameplay.MutatorHooks.PlayerJump.Clear();
+            VortexArena.Common.Gameplay.MutatorHooks.PlayerCanCrouch.Clear();
+            VortexArena.Common.Gameplay.MutatorHooks.PlayerPhysics.Clear();
+            var clock = new MutableClock();
+            Api.Services = new MovementTestServices(AnalyticWorld.FromPlanes(g.World), clock);
+            var physics = new PlayerPhysics();
+            var player = new Entity
+            {
+                Origin = g.Start.Origin, Velocity = g.Start.Velocity, Angles = new Vector3(0f, g.Start.VAngle.Y, 0f),
+                Mins = g.Hull.Mins, Maxs = g.Hull.Maxs, Gravity = 1f, Flags = DecodeFlags(g.Start.Flags),
+            };
+            foreach (GoldenTick tick in g.Ticks)
+            {
+                float sub = tick.In.Dt / split;
+                for (int k = 0; k < split; k++)
+                {
+                    clock.Time += sub;
+                    physics.Move(player, new MovementInput
+                    {
+                        ViewAngles = tick.In.Ang, MoveValues = tick.In.Move, FrameTime = sub,
+                        ButtonJump = tick.In.Jump != 0, ButtonCrouch = tick.In.Crouch != 0,
+                    });
+                }
+            }
+            float end = PMAccelerate.Vec2(player.Velocity).Length();
+            _out.WriteLine($"{name}: {64 * split} Hz moves -> end speed {end:F1} u/s (reference, 64 Hz: {reference:F1}; {100f * (end / reference - 1f):F2}%)");
+            Assert.True(MathF.Abs(end / reference - 1f) <= 0.03f,
+                $"{name}: {64 * split} Hz input ends at {end:F1} u/s vs the reference's {reference:F1}");
+        }
     }
 
     private static EntFlags DecodeFlags(int cflags)

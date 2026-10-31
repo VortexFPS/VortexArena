@@ -355,7 +355,14 @@ public partial class MenuRoot : Control
     private void AddScreen(Control screen, bool framed, bool resumeOnClose = false)
     {
         if (_stack.Count > 0)
-            _stack[^1].Host.Visible = false;
+        {
+            // ModalController state 2: under a QC dialog the screen it was opened from stays drawn, faded to
+            // SKINALPHA_BEHIND (MainWindow.fadedAlpha); anything else replaces the screen beneath it.
+            if (framed && screen is IQcDialog)
+                _stack[^1].Host.Modulate = new Color(1f, 1f, 1f, MenuSkin.SkinNumber("ALPHA_BEHIND", 0.5f));
+            else
+                _stack[^1].Host.Visible = false;
+        }
 
         if (screen is IMenuScreen ms)
             ms.Menu = this;
@@ -363,7 +370,12 @@ public partial class MenuRoot : Control
         Control host;
         // A dialog that draws its own modal frame (its own dim backdrop + centered panel, e.g. the quit
         // confirm) opts out of the outer frame so it isn't double-framed into a tiny panel-in-a-panel.
-        if (framed && screen is not ISelfFramedDialog)
+        if (framed && screen is IQcDialog qcDialog)
+        {
+            // A dialog that knows its QC size gets Xonotic's own frame for it, centred at that size.
+            host = new QcDialogFrame(screen, qcDialog, Pop);
+        }
+        else if (framed && screen is not ISelfFramedDialog)
         {
             // A centered panel inset from the viewport edges; the PanelContainer lays the screen out to fill
             // its content area, so the screen's own layout reflows inside the frame with no per-dialog changes.
@@ -408,7 +420,10 @@ public partial class MenuRoot : Control
         top.QueueFree();
 
         if (_stack.Count > 0)
+        {
             _stack[^1].Host.Visible = true;
+            _stack[^1].Host.Modulate = Colors.White;
+        }
 
         // QC m_goto(name, true): a directmenu-opened dialog hides the whole menu on close, dropping the player
         // back into the live match. The Shell's ResumeRequested handler no-ops when no match is running, so this

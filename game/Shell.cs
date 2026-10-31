@@ -555,6 +555,8 @@ public partial class Shell : Node
             "hudpanels" => new DialogHudPanels(),
             "hudweapons" => new DialogHudPanelWeapons(),
             "cvarlist" => new DialogCvarList(),
+            "settingsreset" => new DialogSettingsReset(),
+            "bindingsreset" => new DialogBindingsReset(),
             "disclaimer" => new DialogDisclaimer(),
             "sandbox" => new DialogSandboxTools(),
             _ => null,

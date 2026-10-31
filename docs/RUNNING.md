@@ -556,14 +556,16 @@ ToS/welcome/team-select, tools, confirms). Architecture:
 - `--menu-screen <id>` → open one dialog for a screenshot. ids: `settings` (or `settings:Audio` to pick a tab),
   `media` (or `media:Demos`), `multiplayer`, `singleplayer`, `create`, `credits`, `pause`, `profile`,
   `mutators`, `serverinfo`, `incompatible`, `teamselect`, `firstrun`, `tos`, `welcome`, `hudpanels`,
-  `hudweapons`, `cvarlist`, `sandbox`, `disclaimer`. e.g.:
+  `hudweapons`, `cvarlist`, `settingsreset`, `bindingsreset`, `sandbox`, `disclaimer`. e.g.:
   ```bash
   "$GODOT" --path . --menu-screen "settings:Audio" --screenshot "$PWD/screenshots/audio.png"
   ```
   Then `Read` the PNG to inspect the dialog. (Headless renders blank — run windowed.)
-  `nexposee:<Title>[:<Tab>]` (e.g. `nexposee:Multiplayer:Create`) instead opens a main-menu dialog where the
+  `nexposee:<Title>[:<Tab>]` (e.g. `nexposee:Multiplayer:Create`, or `nexposee:Settings:Game/HUD` for a topic of
+  the Settings dialog's Game tab) instead opens a main-menu dialog where the
   player sees it — centred in the nexposee, at Xonotic's size — which is what to compare against Xonotic's own
-  menu (`--legacy-menu`, driven by `VORTEX_LEGACY_SCRIPT`; `menu_cmd directmenu servers` / `profile` there).
+  menu (`--legacy-menu`, driven by `VORTEX_LEGACY_SCRIPT`; `menu_cmd directmenu servers` / `profile` / `settings`
+  there, and a tab or topic with no name of its own is reached by `mouse x y` + `click` lines in window pixels).
   `tools/menu-parity/capture.sh` takes both shots in one go (plus menu.dat's draw list, the exact position of
   everything it draws) and `tools/menu-parity/compare.py` diffs them: per-region pixel offsets, label extents,
   a side-by-side sheet. A dialog ported onto `QcGrid`/`QcLook` should come out at zero offset everywhere.

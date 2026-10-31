@@ -29,8 +29,13 @@ namespace VortexArena.Game.Menu;
 ///     sibling arena cvar to its off value (the QC <c>cvarOffValue</c> semantics).
 /// The QC "OK" button just closed the dialog (<c>Dialog_Close</c>); here that is the standard Back.
 /// </summary>
-public partial class DialogMutators : MenuScreen
+public partial class DialogMutators : MenuScreen, IQcDialog
 {
+    // dialog_multiplayer_create_mutators.qh: the QC dialog's title, intendedWidth and rows, for MenuRoot's QC frame.
+    public string QcTitle => Localization.Tr("Mutators");
+    public float QcIntendedWidth => 0.9f;
+    public float QcRows => 21;
+
     // The g_*_weaponstartoverride cvars the QC "No start weapons" radio drives together via makeMulti(...).
     // Selecting "No start weapons" sets every one to "0"; deselecting restores the cvarOffValue "-1" (default).
     private const string StartWeaponMulti =
@@ -86,7 +91,7 @@ public partial class DialogMutators : MenuScreen
         root.AddThemeConstantOverride("separation", 14);
         margin.AddChild(root);
 
-        root.AddChild(MakeTitle("Mutators"));
+        if (!HostProvidesTitle) root.AddChild(MakeTitle("Mutators"));
 
         // The QC dialog is a wide two-column table; reproduce that with two side-by-side scrolling columns so
         // the dense content stays on one screen. NEVER nest a TabContainer here — these are plain scrolls.

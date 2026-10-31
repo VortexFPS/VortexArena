@@ -21,8 +21,13 @@ namespace VortexArena.Game.Menu;
 /// QC ("// TODO: Add bookmark button here") so it is reproduced here as a disabled, noted placeholder.
 /// This dialog binds no cvars (it is a static info layout).
 /// </summary>
-public partial class DialogServerInfo : MenuScreen
+public partial class DialogServerInfo : MenuScreen, IQcDialog
 {
+    // dialog_multiplayer_join_serverinfo.qh: the QC dialog's title, intendedWidth and rows, for MenuRoot's QC frame.
+    public string QcTitle => Localization.Tr("Server Info");
+    public float QcIntendedWidth => 0.96f;
+    public float QcRows => 19;
+
     // The address of the selected server. QC stores this in me.currentServerCName (host-cache SLIST_FIELD_CNAME)
     // and Join_Click runs `connect <that address>`. Populated from the create/multiplayer screen's selected row.
     private readonly string _serverAddress;
@@ -57,7 +62,7 @@ public partial class DialogServerInfo : MenuScreen
         root.AddThemeConstantOverride("separation", 14);
         margin.AddChild(root);
 
-        root.AddChild(MakeTitle("Server Information"));
+        if (!HostProvidesTitle) root.AddChild(MakeTitle("Server Information"));
 
         // Note reflects whether a live row was resolved from the server browser. When a row IS present the
         // detail rows below carry its real fields (name/address/gametype/map/player counts).

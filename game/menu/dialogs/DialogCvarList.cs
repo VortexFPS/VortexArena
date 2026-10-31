@@ -22,8 +22,14 @@ namespace VortexArena.Game.Menu;
 /// revert it (QC CvarList_Revert_Click → <c>cvar_set(name, default)</c>). The QC "OK" button just closed the
 /// dialog (<c>Dialog_Close</c>); here that is the standard Back. QC title "Advanced settings".
 /// </summary>
-public partial class DialogCvarList : MenuScreen
+public partial class DialogCvarList : MenuScreen, IQcDialog
 {
+    // dialog_settings_misc_cvars.qh: the QC dialog's title, intendedWidth and rows, for MenuRoot's QC frame.
+    public string QcTitle => Localization.Tr("Advanced settings");
+    public float QcIntendedWidth => 0.8f;
+    public float QcRows => 24;
+    public Color QcBorderColor => MenuSkin.SkinColor("COLOR_DIALOG_CVARS", 1f, 0.2f, 0.15f);
+
     private CvarService Cvars => MenuState.Cvars;
 
     // Detail-panel widgets (the QC cvarNameBox/cvarTypeBox/cvarValueBox/cvarDescriptionBox + Reset button).
@@ -48,7 +54,7 @@ public partial class DialogCvarList : MenuScreen
         root.AddThemeConstantOverride("separation", 14);
         margin.AddChild(root);
 
-        root.AddChild(MakeTitle("Advanced settings"));
+        if (!HostProvidesTitle) root.AddChild(MakeTitle("Advanced settings"));
 
         // ---- Filter row (QC: "Filter:" input + "Modified cvars only" checkbox) ---------------------------
         // The filter box is live; with no enumerable list to filter yet it filters the by-name lookup below

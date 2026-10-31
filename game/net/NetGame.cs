@@ -272,6 +272,10 @@ public sealed partial class NetGame : Node3D
     private bool _predictFire = true;
     private float _fireClock;
     private readonly Dictionary<int, float> _weaponReadyTime = new();
+    // Pairs each predicted fire sound with the server's copy of the same shot, so exactly one plays. A networked
+    // fire sound from the local player with no predicted partner (every secondary attack, and any shot the refire
+    // clock did not predict) plays normally — playtest #65/#66.
+    private readonly VortexArena.Net.PredictedFireSoundLedger _fireSoundLedger = new();
     private bool _loggedAccept;
     private bool _hostJoinDone;                  // [#44] the listen host's early_join_requested `join` actually spawned it
     private float _hostJoinNextRetryMsec;        // [#44] next allowed `join` attempt (bounded retry — a blocked spawn no-ops)
@@ -12065,10 +12069,10 @@ public sealed partial class NetGame : Node3D
             // elapsed, so a burst of taps / wheel-fire can't out-run the refire rate. FirePredictReady + the
             // MarkFirePredicted cadence are the client mirror of the server's ATTACK_FINISHED gate.
             if (a1 && !LocalDeadNow() && HasAmmoNow()
-                && TryActivePrimaryFire(out int wid, out string fireSound, out float refire) && FirePredictReady(wid)
+                && TryActivePrimaryFire(out int wid, out string fireSound, out float fireVolume, out float refire) && FirePredictReady(wid)
                 && (!PrimaryRefireRequiresRelease(wid) || _rlReleaseMirror)) // #24: release-gated weapons need the armed latch, not a press edge
             {
-                PredictFireShot(fireSound);
+                PredictFireShot(fireSound, fireVolume);
                 MarkFirePredicted(wid, refire, dt);
                 _rlReleaseMirror = false; // QC: rl_release = 0 on the shot (inert for non-gated weapons)
             }
@@ -12156,23 +12160,36 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>Play one predicted local shot: the view-model muzzle flash + recoil, the HUD crosshair pulse, and
     /// the weapon's primary fire sound at the predicted eye (auto-stack channel so rapid fire doesn't cut off).
-    /// Source net-id = the local player so the matching networked copy is dropped in <see cref="OnSoundReceived"/>.</summary>
-    private void PredictFireShot(string fireSound)
+    /// Source net-id = the local player; the shot is noted in <see cref="_fireSoundLedger"/> so the server's copy
+    /// of it is dropped in <see cref="OnSoundReceived"/> (and skipped here if that copy already arrived).</summary>
+    private void PredictFireShot(string fireSound, float volume)
     {
         _hud?.PulseFire();
         _viewModel?.Fire();
-        if (!string.IsNullOrEmpty(fireSound) && _render is not null && _client is not null)
-            _render.OnSound(fireSound, _client.PredictedOrigin, 1f, 0.5f,
+        if (!string.IsNullOrEmpty(fireSound) && _render is not null && _client is not null
+            && _fireSoundLedger.OnPredicted(fireSound, FireSoundClock()))
+            _render.OnSound(fireSound, _client.PredictedOrigin, volume, 0.5f,
                 (int)VortexArena.Common.Services.SoundChannel.WeaponAuto, _client.LocalNetId, 1f);
+    }
+
+    /// <summary>The wall clock the fire-sound ledger runs on (seconds). Both of its callers, the predicted shot and
+    /// the arriving networked sound, read it, so it must be one clock independent of the input/frame accumulators.
+    /// The echo window follows the measured round trip: a predicted shot waits roughly two pings for its echo.</summary>
+    private float FireSoundClock()
+    {
+        int ping = _client?.PingMs ?? 0;
+        _fireSoundLedger.EchoWindow = Math.Clamp(ping * 0.002f + 0.35f, 0.4f, 2f);
+        return Time.GetTicksMsec() * 0.001f;
     }
 
     /// <summary>The active weapon's id + primary fire sound + refire interval, or false when it can't be predicted
     /// (no active weapon, or a loop/grapple weapon absent from <see cref="WeaponFireSounds"/> → its networked sound
     /// plays normally and is NOT suppressed).</summary>
-    private bool TryActivePrimaryFire(out int weaponId, out string fireSound, out float refire)
+    private bool TryActivePrimaryFire(out int weaponId, out string fireSound, out float volume, out float refire)
     {
         weaponId = -1;
         fireSound = "";
+        volume = 1f;
         refire = 0.1f;
         if (_client is null || _client.ActiveWeaponId < 0)
             return false;
@@ -12180,9 +12197,10 @@ public sealed partial class NetGame : Node3D
         VortexArena.Common.Gameplay.Weapon w = VortexArena.Common.Gameplay.Weapons.ById(weaponId);
         if (w is null)
             return false;
-        fireSound = WeaponFireSounds.PrimaryFor(w.NetName);
+        fireSound = WeaponFireSounds.PrimaryFor(w);
         if (string.IsNullOrEmpty(fireSound))
             return false;
+        volume = WeaponFireSounds.VolumeFor(w.NetName);
         refire = w.RefireFor(VortexArena.Common.Gameplay.FireMode.Primary);
         if (refire <= 0f) refire = 0.1f;
         return true;
@@ -12742,13 +12760,14 @@ public sealed partial class NetGame : Node3D
         if (_render is null || !GodotObject.IsInstanceValid(_render))
             return;
 
-        // Drop the local player's OWN primary fire sound (cl_predictfire): we already played it locally on the
-        // refire clock, so the networked echo would double it. Keyed by source net-id + a predicted fire sample so
-        // it never suppresses footsteps/pain/reload/secondary (other channels/samples), and remote players are
-        // unaffected (they don't match LocalNetId). A non-predicted weapon (loops/grapple) isn't in the set → its
-        // networked fire sound plays normally.
-        if (_predictFire && _client is not null && e.SourceNetId == _client.LocalNetId
-            && WeaponFireSounds.IsPredicted(e.Sample))
+        // Drop the local player's OWN fire sound when it is the echo of a shot already played locally
+        // (cl_predictfire). Only samples a primary press can predict are checked, and only from the local player;
+        // the ledger then drops the sound ONLY if it pairs with a predicted copy still waiting for its echo. A
+        // secondary attack that shares a primary's sample (Machinegun burst, Mortar/Hagar/HLAC secondaries, the
+        // Vaporizer laser) has no predicted partner and plays — the old sample-only match silenced all of those
+        // for the shooter (playtest #65/#66).
+        if (_predictFire && _client is not null && e.SourceNetId == _client.LocalNetId && !e.Stop
+            && WeaponFireSounds.IsPredicted(e.Sample) && _fireSoundLedger.OnNetworked(e.Sample, FireSoundClock()))
             return;
 
         if (e.Stop)

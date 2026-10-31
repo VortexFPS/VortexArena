@@ -487,6 +487,9 @@ public static class MapInfoCache
         public string Title = "";
         public string Author = "";
         public readonly HashSet<string> Gametypes = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>The .mapinfo's <c>forbidden</c> / <c>hidden</c> / <c>frustrating</c> lines, which decide
+        /// whether a map list offers the map at all (<see cref="MapList.Available"/>).</summary>
+        public VortexArena.Common.Menu.InstalledMaps.Flags Flags;
     }
 
     private static readonly Dictionary<string, Entry> Cache = new(StringComparer.OrdinalIgnoreCase);
@@ -504,10 +507,19 @@ public static class MapInfoCache
         var e = new Entry { Title = map };
         if (MenuState.Vfs is { } vfs && vfs.Exists($"maps/{map}.mapinfo"))
         {
+            bool forbidden = false, hidden = false, frustrating = false;
             foreach (string raw in vfs.ReadText($"maps/{map}.mapinfo").Split('\n'))
             {
                 string line = raw.Trim();
-                if (line.StartsWith("title ", StringComparison.OrdinalIgnoreCase))
+                // QC MapInfo_Get_ByName_NoFallbacks: a flag line is a bare first token.
+                string first = line.Split(' ', '\t')[0];
+                if (first.Equals("forbidden", StringComparison.OrdinalIgnoreCase))
+                    forbidden = true;
+                else if (first.Equals("hidden", StringComparison.OrdinalIgnoreCase))
+                    hidden = true;
+                else if (first.Equals("frustrating", StringComparison.OrdinalIgnoreCase))
+                    frustrating = true;
+                else if (line.StartsWith("title ", StringComparison.OrdinalIgnoreCase))
                     e.Title = line[6..].Trim();
                 else if (line.StartsWith("author ", StringComparison.OrdinalIgnoreCase))
                     e.Author = line[7..].Trim();
@@ -520,6 +532,7 @@ public static class MapInfoCache
                         e.Gametypes.Add(tok[1]);
                 }
             }
+            e.Flags = new VortexArena.Common.Menu.InstalledMaps.Flags(forbidden, hidden, frustrating);
         }
         // QC Duel.m_isForcedSupported (duel.qh:15-28): any DM map also supports duel, unless
         // g_duel_not_dm_maps is set. Mirrors MapInfoBackend.ApplyForcedGametypes.

@@ -611,9 +611,12 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   `planning/`, `.godot/`, `obj/`, `bin/` so it doesn't double-compile the libraries. Don't drop those removes.
 - **`dotnet build VortexArena.csproj` outputs to `.godot/mono/temp/bin`** (the Godot SDK redirects it), not `bin/` —
   that's where the engine looks for the assembly.
-- **Maps:** the **32 pinned compiled maps** install as one `.pk3` each into `data/maps/` via `tools/data/fetch-maps.py`
-  (downloaded from the `xonotic-0.8.6.zip` release; `xonotic-20230620-nexcompat.pk3` adds the Nexuiz-compat set).
-  `maps/_init/_init.bsp` is still present (inside the maps pk3) as the lightweight placeholder. To add more,
+- **Maps:** the **31 pinned packs** in `data/maps.lock.json` (29 playable maps, the `_hudsetup` utility level and
+  `shared`) install as one `.pk3` each into `data/maps/` via `tools/data/fetch-maps.py`, from the `VortexFPS/VortexMaps`
+  release named there. DarkPlaces' `_init` boot stub is no longer one of them (dropped in maps-2026.08), and the
+  `startmap_dm` alias that loaded it is gone from `xonotic-server.cfg`. Map lists offer only `maps/<name>.bsp` (never
+  a nested bsp) and skip a map whose `.mapinfo` says `forbidden` (`_hudsetup`), or `hidden`/`frustrating` unless
+  `g_maplist_allow_hidden`/`g_maplist_allow_frustrating` allow it — such a map still loads by name. To add more,
   drop another `*.pk3` into `data/maps/` — `MountGameDir` picks it up automatically. **A player** adds maps to
   `~/XonData/data/maps/` instead (the user gamedir, above), which needs no write access to the install.
 - **`fs_rescan`** (DP `FS_Rescan_f`) re-reads the content search path *without a restart*: drop a `.pk3` into

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using VortexArena.Common.Menu;
 
 namespace VortexArena.Game.Menu;
 
@@ -40,18 +41,24 @@ public static class MapList
         var vfs = MenuState.Vfs;
         if (vfs is not null)
         {
+            // QC MapInfo_ForbiddenFlags/RequiredFlags, read once per call rather than per map.
+            var cvars = MenuState.Cvars;
+            bool allowHidden = cvars.GetFloat("g_maplist_allow_hidden") != 0f;
+            float allowFrustrating = cvars.GetFloat("g_maplist_allow_frustrating");
+
             foreach (string vpath in vfs.Find("maps/", "bsp"))
             {
-                // vpath like "maps/stormkeep.bsp" (or a "maps/sub/foo.bsp"); take the file stem.
-                string name = vpath;
-                int slash = name.LastIndexOf('/');
-                if (slash >= 0)
-                    name = name[(slash + 1)..];
-                if (name.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase))
-                    name = name[..^".bsp".Length];
-                // Skip brush/prefab box models (b_*.bsp) the compiler ships; they aren't playable maps.
-                if (name.Length > 0 && !name.StartsWith("b_", StringComparison.OrdinalIgnoreCase))
-                    found.Add(name);
+                // Only maps/<name>.bsp is a map (DP's "maps/*.bsp" never matches a subdirectory, and a nested
+                // bsp could not be loaded by its bare name anyway); b_*.bsp prefab boxes are not levels.
+                if (InstalledMaps.BspName(vpath) is not { } name)
+                    continue;
+                // A `forbidden` utility level (_hudsetup) and, unless allowed, a `hidden` or `frustrating`
+                // one is not offered — not in Create Game, lsmaps, or an empty g_maplist's rotation. It is
+                // still loadable by name (`map _hudsetup` is how the HUD editor gets there).
+                MapInfoCache.Entry info = MapInfoCache.Get(name);
+                if (!InstalledMaps.IsOffered(info.Flags, allowHidden, allowFrustrating))
+                    continue;
+                found.Add(name);
             }
         }
 

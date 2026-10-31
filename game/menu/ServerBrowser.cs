@@ -191,15 +191,19 @@ public sealed class ServerBrowser : IDisposable
     private const string InfoChallenge = "rebirth";
 
     /// <summary>
-    /// Stock Xonotic master servers (the <c>sv_master*</c> defaults in xonotic-common.cfg). Mutable so a
+    /// The masters a stock Xonotic client asks: <c>sv_master1</c>-<c>4</c> from xonotic-common.cfg, then
+    /// DarkPlaces' own <c>sv_masterextra1</c>-<c>2</c> (Xonotic blanks <c>sv_masterextra3</c>). Mutable so a
     /// caller can point the browser at a private master; <see cref="RefreshInternet"/> resolves each
-    /// <c>host:port</c> and queries it.
+    /// <c>host:port</c> and queries it. Several publish only an IPv6 address — see <see cref="MasterAddress"/>.
     /// </summary>
     public List<string> Masters { get; } = new()
     {
         "dpm4.xonotic.xyz:27777",
         "dpm6.xonotic.xyz:27777",
         "master3.xonotic.org:27950",
+        "master4.xonotic.org:42863",
+        "dpmaster.deathmask.net:27950",
+        "dpmaster.tchr.no:27950",
     };
 
     private readonly List<ServerEntry> _servers = new();
@@ -218,6 +222,13 @@ public sealed class ServerBrowser : IDisposable
 
     /// <summary>The shared UDP socket for master queries + per-server info probes. Lazily created on refresh.</summary>
     private MasterServerLink? _link;
+
+    /// <summary>
+    /// The IPv6 twin of <see cref="_link"/>, for the masters that publish only an IPv6 address (an IPv4 socket
+    /// cannot send to them). Null when the OS has no IPv6 stack; tried once per process.
+    /// </summary>
+    private MasterServerLink? _link6;
+    private bool _link6Tried;
 
     /// <summary>The current server rows (read-only view for the UI).</summary>
     public IReadOnlyList<ServerEntry> Servers => _servers;
@@ -308,21 +319,26 @@ public sealed class ServerBrowser : IDisposable
         MasterServerLink? link = EnsureLink();
         if (link is null)
             return; // socket unavailable (e.g. no network) — already logged
+        MasterServerLink? link6 = EnsureLink6();
 
         foreach (string master in Masters)
         {
-            if (!TryResolveEndpoint(master, out IPEndPoint? ep))
-                continue;
-            foreach (string game in GameNames)
+            if (!MasterAddress.TryResolve(master, allowIPv6: link6 is not null, out IPEndPoint? ep, out string? problem))
             {
-                try
-                {
-                    link.RequestServers(ep!, game, Protocol);
-                }
-                catch (Exception e)
-                {
-                    GD.Print($"[Menu] master query to {master} for '{game}' failed: {e.Message}");
-                }
+                GD.Print($"[Menu] skipping master '{master}': {problem}");
+                continue;
+            }
+            MasterServerLink target = ep!.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? link6! : link;
+            // One line per master, not per game: both queries fail together when the route is missing (an
+            // IPv6-only master on a machine whose IPv6 has no route out says "network is unreachable" here).
+            try
+            {
+                foreach (string game in GameNames)
+                    target.RequestServers(ep, game, Protocol);
+            }
+            catch (Exception e)
+            {
+                GD.Print($"[Menu] master query to {master} ({ep.Address}) failed: {e.Message}");
             }
         }
     }
@@ -336,6 +352,7 @@ public sealed class ServerBrowser : IDisposable
         try
         {
             _link?.Poll();
+            _link6?.Poll();
         }
         catch (Exception e)
         {
@@ -355,41 +372,7 @@ public sealed class ServerBrowser : IDisposable
             return _link;
         try
         {
-            // The master hands back on the order of a thousand servers and we probe them all at once, so the
-            // replies arrive in a burst. Draining only the stock 64 per frame would make the ping column read
-            // "how deep in the queue this reply was" instead of "how far away this server is" — every row
-            // landing on the same handful of values. See MaxPacketsPerPoll.
-            var link = new MasterServerLink { MaxPacketsPerPoll = 4096 };
-
-            // A master answered: add a placeholder row per server and probe each for its details/ping.
-            link.ServerListReceived += servers =>
-            {
-                foreach ((IPAddress ip, int port) in servers)
-                {
-                    string address = $"{ip}:{port}";
-                    if (!_servers.Exists(s => s.Address == address))
-                        AddAndReturn(new ServerEntry { Name = address, Address = address });
-                    try
-                    {
-                        _probeSent[address] = NowMs;
-                        link.RequestInfo(new IPEndPoint(ip, port), InfoChallenge);
-                    }
-                    catch (Exception e) { GD.Print($"[Menu] info probe to {address} failed: {e.Message}"); }
-                }
-            };
-
-            // A server answered our probe: find/create its row and populate it from the infostring.
-            link.InfoReceived += (from, info) =>
-            {
-                string address = $"{from.Address}:{from.Port}";
-                ServerEntry entry = _servers.Find(s => s.Address == address)
-                                    ?? AddAndReturn(new ServerEntry { Address = address });
-                if (_probeSent.TryGetValue(address, out long sent))
-                    entry.Ping = (int)Math.Min(int.MaxValue, NowMs - sent);
-                PopulateFromInfo(entry, info);
-            };
-
-            _link = link;
+            _link = CreateLink(System.Net.Sockets.AddressFamily.InterNetwork);
             return _link;
         }
         catch (Exception e)
@@ -397,6 +380,76 @@ public sealed class ServerBrowser : IDisposable
             GD.Print($"[Menu] internet server query unavailable: {e.Message}");
             return null;
         }
+    }
+
+    /// <summary>
+    /// The IPv6 link, created on first use; null (logged once) when the OS has no IPv6 stack. Opening it says
+    /// nothing about whether IPv6 has a route out — that shows up as a failed send in <see cref="RefreshInternet"/>.
+    /// </summary>
+    private MasterServerLink? EnsureLink6()
+    {
+        if (_link6 is not null || _link6Tried)
+            return _link6;
+        _link6Tried = true;
+        if (!System.Net.Sockets.Socket.OSSupportsIPv6)
+        {
+            GD.Print("[Menu] no IPv6 on this machine: IPv6-only masters are skipped.");
+            return null;
+        }
+        try
+        {
+            _link6 = CreateLink(System.Net.Sockets.AddressFamily.InterNetworkV6);
+        }
+        catch (Exception e)
+        {
+            GD.Print($"[Menu] no IPv6 socket ({e.Message}): IPv6-only masters are skipped.");
+        }
+        return _link6;
+    }
+
+    /// <summary>
+    /// A link of <paramref name="family"/> with the list-populating handlers attached. Each link is created
+    /// once, so repeated <see cref="Refresh"/> calls don't stack duplicate subscriptions.
+    /// </summary>
+    private MasterServerLink CreateLink(System.Net.Sockets.AddressFamily family)
+    {
+        // The master hands back on the order of a thousand servers and we probe them all at once, so the
+        // replies arrive in a burst. Draining only the stock 64 per frame would make the ping column read
+        // "how deep in the queue this reply was" instead of "how far away this server is" — every row
+        // landing on the same handful of values. See MaxPacketsPerPoll.
+        var link = new MasterServerLink(0, family) { MaxPacketsPerPoll = 4096 };
+
+        // A master answered: add a placeholder row per server and probe each for its details/ping. A getservers
+        // list holds IPv4 servers only (even from an IPv6 master), so the probes go out on the IPv4 link.
+        link.ServerListReceived += servers =>
+        {
+            MasterServerLink probe = _link ?? link;
+            foreach ((IPAddress ip, int port) in servers)
+            {
+                string address = $"{ip}:{port}";
+                if (!_servers.Exists(s => s.Address == address))
+                    AddAndReturn(new ServerEntry { Name = address, Address = address });
+                try
+                {
+                    _probeSent[address] = NowMs;
+                    probe.RequestInfo(new IPEndPoint(ip, port), InfoChallenge);
+                }
+                catch (Exception e) { GD.Print($"[Menu] info probe to {address} failed: {e.Message}"); }
+            }
+        };
+
+        // A server answered our probe: find/create its row and populate it from the infostring.
+        link.InfoReceived += (from, info) =>
+        {
+            string address = $"{from.Address}:{from.Port}";
+            ServerEntry entry = _servers.Find(s => s.Address == address)
+                                ?? AddAndReturn(new ServerEntry { Address = address });
+            if (_probeSent.TryGetValue(address, out long sent))
+                entry.Ping = (int)Math.Min(int.MaxValue, NowMs - sent);
+            PopulateFromInfo(entry, info);
+        };
+
+        return link;
     }
 
     /// <summary>Add an entry to the list (bumping <see cref="Revision"/>) and hand it back so callers can keep populating it.</summary>
@@ -573,31 +626,6 @@ public sealed class ServerBrowser : IDisposable
 
     /// <summary>The heading a category draws (the CTX'd SLCAT^ strings of serverlist.qh:150).</summary>
     public static string CategoryTitle(ServerCategory cat) => Localization.Tr(ServerListInfo.CategoryTitle(cat));
-
-    /// <summary>
-    /// Resolve a <c>host:port</c> string to an <see cref="IPEndPoint"/> via DNS. Returns false (and logs)
-    /// for a malformed address or a resolution failure, so the caller can simply skip it.
-    /// </summary>
-    private static bool TryResolveEndpoint(string hostPort, out IPEndPoint? ep)
-    {
-        ep = null;
-        int colon = hostPort.LastIndexOf(':');
-        if (colon <= 0 || !int.TryParse(hostPort[(colon + 1)..], out int port))
-            return false;
-        try
-        {
-            IPAddress[] addrs = Dns.GetHostAddresses(hostPort[..colon]);
-            if (addrs.Length == 0)
-                return false;
-            ep = new IPEndPoint(addrs[0], port);
-            return true;
-        }
-        catch (Exception e)
-        {
-            GD.Print($"[Menu] could not resolve master '{hostPort}': {e.Message}");
-            return false;
-        }
-    }
 
     /// <summary>
     /// Best-effort LAN discovery: broadcast the real DP <c>getinfo</c> probe and collect immediate replies.
@@ -823,5 +851,8 @@ public sealed class ServerBrowser : IDisposable
     {
         _link?.Dispose();
         _link = null;
+        _link6?.Dispose();
+        _link6 = null;
+        _link6Tried = false;
     }
 }

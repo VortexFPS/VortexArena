@@ -1169,6 +1169,7 @@ public sealed class ClientNet : IDisposable
         "cl_handicap_damage_taken",
         "cl_noantilag",
         "g_xonoticversion",
+        "cl_gunalign",          // common/weapons/all.qc:804 REPLICATE(cvar_cl_gunalign) — the shot-origin side
         // --- port-specific (not in Base REPLICATE) ---
         "cl_weaponpriority",
         "cl_physics",

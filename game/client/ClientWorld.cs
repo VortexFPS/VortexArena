@@ -308,6 +308,8 @@ public partial class ClientWorld : Node3D
         // host may set Assets before OR after _Ready, so wire it from both sites (null until _Ready ran).
         if (Lasers is not null)
             Lasers.TextureLoader = _assets.LoadTexture;
+        if (HookRope is not null)
+            HookRope.TextureLoader = _assets.LoadTexture; // particles/hook_* (the chain picture)
     }
 
     /// <summary>
@@ -523,6 +525,8 @@ public partial class ClientWorld : Node3D
         // renderers lease from — without it HookRopeRenderer gates on the null Lines and idles. Self-driving off
         // the ambient entity facade, exactly like Lasers/PortoPreview above (live on a listen host/demo).
         HookRope = new HookRopeRenderer { Name = "HookRope", Lines = CylindricLines };
+        if (_assets is not null)
+            HookRope.TextureLoader = _assets.LoadTexture;
         AddChild(HookRope);
 
         // Mirror in-process effect emissions (server/local gameplay calling EffectEmitter.Emit) onto the

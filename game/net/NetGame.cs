@@ -2471,6 +2471,14 @@ public sealed partial class NetGame : Node3D
                 || _view.ChaseActive || _client.MatchIntermission;
         }
 
+        // Draw_GrapplingHook: the local player's chain starts at the rendered view's gun (view_origin + the
+        // hook_shotorigin offset), or at the eye in chase view; everyone else's at the server reel origin.
+        if (_render.HookRope is not null)
+        {
+            _render.HookRope.LocalPlayerProvider = () => LocalServerPlayer;
+            _render.HookRope.ChaseActiveProvider = () => _view.ChaseActive;
+        }
+
         // Bridge the HUD's texture cache to the mounted game data so weapon icons / crosshairs / kill-notify
         // icons draw the REAL Xonotic art instead of colored-box fallbacks (mirrors GameDemo.SetupHud).
         // Dedicated-slim: skipped — the font loads are eager, and headless HUD panels never draw anyway.
@@ -2911,7 +2919,26 @@ public sealed partial class NetGame : Node3D
         // latch _equippedWeaponId while the placeholder is still up, and this early-out would then freeze it.)
         if (id == _equippedWeaponId && vmOverride == _equippedVmOverride && _pendingEquipModel is null)
         {
-            _switchDropLeft = -1f;        // a staged switch back to the current weapon dissolves
+            // Switching BACK to the held weapon while its drop is staged (A→B→A: a quick double-tap of "last
+            // weapon", or a scroll-wheel spin that wraps round). Base does not cancel a drop: in WS_DROP the new
+            // m_switchweapon is only latched, w_clear still empties the slot when the drop ends, and the WS_CLEAR
+            // branch then raises the weapon again — the port's server does the same (WeaponFireDriver). So finish
+            // the lowering and raise the same gun. Dissolving the staged switch here instead left the gun parked
+            // at the bottom of the screen until the holster auto-recovery gave up on it (playtest #70).
+            if (_switchDropLeft >= 0f && !hidden)
+            {
+                _viewModel.Visible = true;
+                _viewModel.PlayHolster(); // keep lowering (refreshes the recovery grace while we own the slide)
+                _switchDropLeft -= (float)GetProcessDeltaTime();
+                if (_switchDropLeft > 0f)
+                    return;
+                _switchDropLeft = -1f;
+                _viewModel.PlayRaise();
+                VortexArena.Common.Gameplay.Weapon? held = VortexArena.Common.Gameplay.Weapons.ById(id);
+                _switchRaiseLeft = held?.SwitchDelayRaise() ?? 0f; // the server slot is raising: hold fire prediction
+                return;
+            }
+            _switchDropLeft = -1f;
             _viewModel.Visible = !hidden; // no weapon/model change; just track the dead/holstered visibility edge
             return;
         }
@@ -12233,8 +12260,17 @@ public sealed partial class NetGame : Node3D
         // (v1: phantom persisted), and Api.Cvars threw / broke the whole prediction path (v2: no flash at all). The
         // guidestop-1 config (continuous fire, no guiding) is rare and non-default; treating the Devastator as
         // always release-gated only costs a slightly under-predicted FX cadence in that rare case (cosmetic).
-        return wid >= 0 && wid < VortexArena.Common.Gameplay.Weapons.Count
-            && (VortexArena.Common.Gameplay.Weapons.ById(wid)?.NetName ?? "") == "devastator";
+        if (wid < 0 || wid >= VortexArena.Common.Gameplay.Weapons.Count)
+            return false;
+        VortexArena.Common.Gameplay.Weapon? w = VortexArena.Common.Gameplay.Weapons.ById(wid);
+        // The Crylink primary is the other stock case (playtest #73): Base sets crylink_waitrelease after a
+        // join-enabled volley (joinspread != 0 && shots > 1 — stock primary) and wr_think refuses to refire that
+        // mode until the button is RELEASED (the release is what makes the spikes join). The refire clock alone
+        // predicted a muzzle flash, fire animation and fire sound every refire while held, though no shot left.
+        // Read off the weapon descriptor (cvar-seeded at bootstrap; on a listen host that is the server's balance).
+        if (w is VortexArena.Common.Gameplay.Crylink crylink)
+            return crylink.WaitsForRelease(secondary: false);
+        return (w?.NetName ?? "") == "devastator";
     }
 
     /// <summary>

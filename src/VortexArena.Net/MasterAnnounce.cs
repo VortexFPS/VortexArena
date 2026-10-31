@@ -45,6 +45,7 @@ public sealed class MasterAnnounce : IDisposable
     private Task? _worker;
     private DateTime _nextAnnounce = DateTime.MinValue;
     private volatile bool _announceNow;
+    private volatile bool _catalogRefreshRequested;
     private string? _serverId;
 
     /// <summary>Everything the announce needs, sampled on the sim thread and handed across. The
@@ -81,6 +82,17 @@ public sealed class MasterAnnounce : IDisposable
     /// <summary>Call from the server tick. Cheap by construction.</summary>
     public void Tick()
     {
+        // A rescan someone asked for from another thread (RequestCatalogRefresh). Started here because this is
+        // the thread that may sample the snapshot. Held while a scan is still running, so it re-reads the pool
+        // after that one instead of being dropped as "already in progress" with the stale package list.
+        if (_catalogRefreshRequested && !_catalog.Building)
+        {
+            _catalogRefreshRequested = false;
+            var current = _snapshot();
+            if (current.SvPublic == 1 && current.ReportCatalog)
+                _catalog.Refresh(current.PackagePaths, current.CatalogDownloadUrl);
+        }
+
         if (DateTime.UtcNow < _nextAnnounce && !_announceNow)
             return;
 
@@ -114,6 +126,12 @@ public sealed class MasterAnnounce : IDisposable
 
     /// <summary>Re-announce immediately on a map change, per the protocol's freshness contract.</summary>
     public void OnMapChanged() => _announceNow = true;
+
+    /// <summary>Rebuild the map catalog at the next <see cref="Tick"/> — for <c>fs_rescan</c>, which changes
+    /// the mounted packages and can run on any thread. Safe from any thread; the rescan itself runs on the
+    /// catalog's worker, and the previous pool stays announceable until it lands. A no-op on a server that
+    /// is private or does not report a catalog.</summary>
+    public void RequestCatalogRefresh() => _catalogRefreshRequested = true;
 
     /// <summary>The <c>sv_master_catalog_refresh</c> console command (map catalog §10). Call from the sim
     /// thread: it samples the snapshot there, exactly like <see cref="Tick"/>, and the scan it starts runs

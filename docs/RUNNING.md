@@ -632,6 +632,10 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   - It refreshes where files are *found*, not what is already loaded (same line DP draws): the shader table and
     the menu's map/preview caches are rebuilt, but textures/models already decoded this session keep their
     loaded copies until a map change or `vid_restart`.
+  - Everything that lists maps reads the rescanned path: `map`/`gotomap`/`editor <map>`, `lsmaps`, the Create
+    Game list (an open one refreshes itself), and an empty `g_maplist`'s rotation. A public server with
+    `sv_master_catalog 1` also rebuilds the map catalog it reports to the master (in the background, as
+    `sv_master_catalog_refresh` does).
   - Deleting a mounted `.pk3` works on Windows too (the archives are opened `FILE_SHARE_DELETE`); the name is
     released when the rescan disposes the mount. Overwriting one **in place** while it is mounted still is not
     possible on Windows — delete, `fs_rescan`, then copy the replacement.

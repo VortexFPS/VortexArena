@@ -329,14 +329,10 @@ public partial class ConsoleOverlay : CanvasLayer
             SceneTreeTimer timer = GetTree().CreateTimer(seconds, processAlways: true, processInPhysics: false, ignoreTimeScale: true);
             timer.Timeout += () =>
             {
-                if (line.Length > 1 && line[0] is '+' or '-' && !line.Contains(' '))
-                {
-                    const string key = "__defer";
-                    VortexArena.Engine.Console.BindTable.Bind(key, "+" + line[1..]);
-                    VortexArena.Engine.Console.BindTable.HandleBind(key, line[0] == '+', c => interp.ExecuteLine(c));
-                    VortexArena.Engine.Console.BindTable.Unbind(key);
-                }
-                else interp.ExecuteLine(line);
+                // As typed, with no key: a deferred "-forward" lets go however many keys hold the button (DP KeyUp).
+                if (!(line.Length > 1 && line[0] is '+' or '-' && !line.Contains(' ')
+                      && VortexArena.Engine.Console.BindTable.ButtonCommand(line, key: null)))
+                    interp.ExecuteLine(line);
             };
         }, "run a command after a delay: defer <seconds> <command>");
 

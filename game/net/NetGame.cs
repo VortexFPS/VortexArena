@@ -260,6 +260,9 @@ public sealed partial class NetGame : Node3D
     // InputCommand and cleared, so a tap shorter than one 1/72 s input tick still reaches the server.
     private bool _attackLatch;
     private bool _attack2Latch;
+    // DP's impulse-down bit for every move button (BindTable.TapLatch): a press since the last sampled command is
+    // in that command even when the key is already up again — a +jump on the mouse wheel, a short side-button click.
+    private readonly BindTable.TapLatch _tapLatch = new();
 
     // Local fire prediction (cl_predictfire, default on): a client-side refire clock that fires the view-model
     // muzzle flash + a local fire SOUND on every shot the moment the player fires (not just the first), so
@@ -12355,14 +12358,14 @@ public sealed partial class NetGame : Node3D
             forward = BindTable.Forward;
             side = BindTable.Side;
             up = BindTable.Up;
-            if (BindTable.AttackHeld) buttons |= InputButtons.Attack;
-            if (BindTable.Attack2Held) buttons |= InputButtons.Attack2;
-            if (BindTable.JumpHeld) buttons |= InputButtons.Jump;
-            if (BindTable.CrouchHeld) buttons |= InputButtons.Crouch;
-            if (BindTable.ZoomHeld) buttons |= InputButtons.Zoom;
-            if (BindTable.UseHeld) buttons |= InputButtons.Use;
+            if (_tapLatch.Sample(BindTable.MoveButton.Attack)) buttons |= InputButtons.Attack;
+            if (_tapLatch.Sample(BindTable.MoveButton.Attack2)) buttons |= InputButtons.Attack2;
+            if (_tapLatch.Sample(BindTable.MoveButton.Jump)) buttons |= InputButtons.Jump;
+            if (_tapLatch.Sample(BindTable.MoveButton.Crouch)) buttons |= InputButtons.Crouch;
+            if (_tapLatch.Sample(BindTable.MoveButton.Zoom)) buttons |= InputButtons.Zoom;
+            if (_tapLatch.Sample(BindTable.MoveButton.Use)) buttons |= InputButtons.Use;
             // PHYS_INPUT_BUTTON_HOOK (+hook): the offhand-fire button — grapple hook / offhand blaster / nade.
-            if (BindTable.HookHeld) buttons |= InputButtons.Hook;
+            if (_tapLatch.Sample(BindTable.MoveButton.Hook)) buttons |= InputButtons.Hook;
 
             // Sub-tick fire latch (set per render frame in UpdateLocalFireFeedback): OR a press that landed since
             // the last sampled command into THIS command — so a tap shorter than one input tick still fires —
@@ -12371,6 +12374,8 @@ public sealed partial class NetGame : Node3D
             if (_attackLatch) { buttons |= InputButtons.Attack; _attackLatch = false; }
             if (_attack2Latch) { buttons |= InputButtons.Attack2; _attack2Latch = false; }
         }
+        else
+            _tapLatch.Skip(); // a press the menu/console owned is not a tap when play resumes
 
         // While FOLLOWING a player (spectatee_status > 0), the server keeps us MOVETYPE_NONE and glues us to the
         // spectatee — so suppress local movement (don't predict our own walk, which would fight the follow-cam),

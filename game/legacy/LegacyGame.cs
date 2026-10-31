@@ -147,6 +147,8 @@ public partial class LegacyGame : Node
 
     // Input.
     private LegacyHeldButtons _scriptHeld;
+    // The engine buttons behind _scriptHeld, by name: which keys hold each one (cl_input.c kbutton_t).
+    private readonly Dictionary<string, (KeyButton Button, ButtonSetter Set)> _scriptButtons = new(StringComparer.Ordinal);
     private byte _pendingImpulse;
     private Vector2 _mouseDelta, _mousePosition, _reportedMousePosition = new(-1, -1);
     private bool _showScores;
@@ -917,14 +919,36 @@ public partial class LegacyGame : Node
         Button("button15", (ref LegacyHeldButtons h, bool down) => h.Button15 = down);
         Button("button16", (ref LegacyHeldButtons h, bool down) => h.Button16 = down);
 
+        // KeyDown / KeyUp: Key_Event sends "+jump 32" and "-jump 32", so the button stays down until every key
+        // that pressed it is up; a bare "-jump" (typed, or an alias like -fire → -attack) lets go of all of them.
         void Button(string name, ButtonSetter set)
         {
-            _commands.Register(interpreter, "+" + name, _ => set(ref _scriptHeld, true), "engine button: press");
-            _commands.Register(interpreter, "-" + name, _ => set(ref _scriptHeld, false), "engine button: release");
+            if (!_scriptButtons.TryGetValue(name, out var entry))
+                _scriptButtons[name] = entry = (new KeyButton(), set);
+            KeyButton button = entry.Button;
+            _commands.Register(interpreter, "+" + name, argv =>
+            {
+                button.Press(KeyArgument(argv));
+                set(ref _scriptHeld, button.Down);
+            }, "engine button: press");
+            _commands.Register(interpreter, "-" + name, argv =>
+            {
+                button.Release(KeyArgument(argv));
+                set(ref _scriptHeld, button.Down);
+            }, "engine button: release");
         }
+
+        static string? KeyArgument(IReadOnlyList<string> argv) => argv.Count > 1 && argv[1].Length > 0 ? argv[1] : null;
     }
 
     private delegate void ButtonSetter(ref LegacyHeldButtons held, bool down);
+
+    /// <summary>No held key is carried over: every engine button up, whichever keys held it.</summary>
+    private void ReleaseScriptButtons()
+    {
+        _scriptHeld = default;
+        foreach ((KeyButton button, _) in _scriptButtons.Values) button.Clear();
+    }
 
     private static string JoinArguments(IReadOnlyList<string> argv)
     {
@@ -1634,7 +1658,7 @@ public partial class LegacyGame : Node
                     {
                         // The goodbye of a game that "map" replaced. No held key is carried into the next one.
                         Log("the server ended the connection to start a new game; the session waits for its level");
-                        _scriptHeld = default;
+                        ReleaseScriptButtons();
                         _pendingImpulse = 0;
                         break;
                     }
@@ -1701,7 +1725,7 @@ public partial class LegacyGame : Node
             // what is left is this node's: no held keys carried over, the loading screen until signon is done.
             _inGame = false;
             _levelChangePending = false;
-            _scriptHeld = default;
+            ReleaseScriptButtons();
             _pendingImpulse = 0;
             _chatLines.Clear();
             if (_textureBank is { } resting) resting.Playing = false;

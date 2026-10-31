@@ -865,9 +865,9 @@ public partial class ViewModel : Node3D
     /// rapid fire re-triggers visibly (Godot <c>Play()</c> on the current animation does not restart it).
     /// (playtest r8 #3)
     /// </summary>
-    public void PlayFireClip()
+    public void PlayFireClip(bool fire2 = false)
     {
-        string n = FindFireClip(); // plays the clip when found (IQM/DPM or MD3 path)
+        string n = FindFireClip(fire2); // plays the clip when found (IQM/DPM or MD3 path)
         if (_iqmAnimPlayer is not null && GodotObject.IsInstanceValid(_iqmAnimPlayer)
             && !string.IsNullOrEmpty(n) && _iqmAnimPlayer.CurrentAnimation == n)
             _iqmAnimPlayer.Seek(0.0, update: true);
@@ -893,12 +893,19 @@ public partial class ViewModel : Node3D
         PlayIdle();
     }
 
-    private string FindFireClip()
+    // Clip names tried for WFRAME_FIRE1 and WFRAME_FIRE2. Base anim_fire2 is framegroup 1 of the h_ model; the
+    // IQM builder names a 4-row nameless framegroups file fire/fire2/idle/reload, so "fire2" is that group. A model
+    // without one falls back to the fire clip.
+    private static readonly string[] Fire1Clips = { "fire", "shoot", "attack", "fire1" };
+    private static readonly string[] Fire2Clips = { "fire2", "fire", "shoot", "attack", "fire1" };
+
+    private string FindFireClip(bool fire2 = false)
     {
+        string[] names = fire2 ? Fire2Clips : Fire1Clips;
         // IQM/DPM path (h_* rigs with an AnimationPlayer — the live equip path).
         if (_iqmAnimPlayer is not null && GodotObject.IsInstanceValid(_iqmAnimPlayer))
         {
-            foreach (string n in new[] { "fire", "shoot", "attack", "fire1" })
+            foreach (string n in names)
             {
                 if (_iqmAnimPlayer.HasAnimation(n))
                 {
@@ -911,7 +918,7 @@ public partial class ViewModel : Node3D
         // MD3 vertex-morph path (legacy SetWeapon(Md3Data) path).
         if (_animator is not null)
         {
-            foreach (string n in new[] { "fire", "shoot", "attack", "fire1" })
+            foreach (string n in names)
                 if (_animator.PlayIfChanged(n)) return n;
             return _animator.CurrentClip;
         }
@@ -1014,6 +1021,9 @@ public partial class ViewModel : Node3D
                 break;
             case 2: // WFRAME_RELOAD
                 PlayReload();
+                break;
+            case 5: // WFRAME_FIRE2 — the fire2 clip once (the Shotgun's melee swing; most secondaries)
+                FindFireClip(fire2: true);
                 break;
             // case 3 (raise) / case 4 (drop): the PlayRaise/PlayHolster slide already covers the local viewmodel,
             // so the networked raise/drop selector is a no-op here (no clip to start).

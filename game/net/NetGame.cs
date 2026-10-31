@@ -3305,7 +3305,7 @@ public sealed partial class NetGame : Node3D
             // during sustained fire; the AttackFinished VALUE change can.
             float af = st.AttackFinished;
             if (!reloading && af > _viewmodelLastAttackFinished && _serverWorld is { } sw && af > (float)sw.Time)
-                _viewModel.PlayFireClip();
+                _viewModel.PlayFireClip(fire2: st.FireAnimFrame == VortexArena.Common.Gameplay.Weapon.WFrameFire2);
             else if (_serverWorld is { } sw2 && af <= (float)sw2.Time)
                 // Attack window closed (refire expired, no new shot): re-assert idle like Base's weapon state
                 // machine does explicitly (w_ready → weapon_thinkf(WFRAME_IDLE)). Needed because SOME fire

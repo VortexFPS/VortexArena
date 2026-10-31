@@ -132,6 +132,7 @@ public abstract partial class Weapon
         }
 
         ++st.BulletCounter;
+        st.FireAnimFrame = FireFrameFor(fire); // QC weapon_thinkf(..., WFRAME_FIRE1/2, ...) -> .wframe
 
         // weapon_thinkf(actor, weaponentity, WFRAME_FIRE*, animtime, w_ready): schedule the return to READY
         // once the fire animation ends. With animtime 0 the slot is READY again next tick (the refire timer
@@ -233,6 +234,16 @@ public abstract partial class Weapon
     /// <c>WEP_CVAR_PRI/SEC(this, animtime)</c>. Default mirrors <see cref="RefireFor"/>'s cvar convention.
     /// </summary>
     public virtual float AnimtimeFor(FireMode fire) => BalanceTiming(fire, "animtime", 0f);
+
+    /// <summary>Weapon frame constants for <see cref="FireFrameFor"/> (QC <c>WFRAME_FIRE1</c> / <c>WFRAME_FIRE2</c>).</summary>
+    public const int WFrameFire1 = 1, WFrameFire2 = 2;
+
+    /// <summary>
+    /// The weapon frame an attack in <paramref name="fire"/> mode plays — the <c>WFRAME_*</c> its QC
+    /// <c>wr_think</c> passes to <c>weapon_thinkf</c>. Nearly every stock secondary uses <c>WFRAME_FIRE2</c> and
+    /// every primary <c>WFRAME_FIRE1</c>; the exceptions (Arc bolts, Vortex, Seeker, Shotgun triple-shot) override.
+    /// </summary>
+    public virtual int FireFrameFor(FireMode fire) => fire == FireMode.Secondary ? WFrameFire2 : WFrameFire1;
 
     /// <summary>
     /// Whether this weapon's <paramref name="secondary"/> (or primary) mode currently has ammo — QC

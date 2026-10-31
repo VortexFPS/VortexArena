@@ -167,6 +167,11 @@ public sealed class Ctf : GameType
     // QC VEHICLE_FLAG_OFFSET (sv_ctf.qh:64) = '0 0 96': a boarding flag-carrier's flag is parked directly above
     // the craft's origin (the VehicleEnter / ctf_Handle_Pickup vehicle branches setorigin(flag, VEHICLE_FLAG_OFFSET)).
     private static readonly Vector3 FlagVehicleCarryOffset = new(0f, 0f, 96f);
+    /// <summary>QC FLAG_SCALE (sv_ctf.qh:51): 0.5625 = 9/16 — the model draws at this scale (and FlagMins/FlagMaxs
+    /// below are already the bbox at this scale). playtest-bugs #80: the port never set it, so flags drew at 16/9.</summary>
+    public const float FlagScale = 0.5625f;
+    /// <summary>QC VEHICLE_FLAG_SCALE (sv_ctf.qh:65): a flag riding a vehicle draws at full size.</summary>
+    public const float FlagVehicleScale = 1f;
     /// <summary>Flag bbox (QC CTF_FLAG.m_mins/m_maxs scaled; here the vrint'd 60x60x70-ish hull).</summary>
     private static readonly Vector3 FlagMins = new(-30f, -30f, -32f);
     private static readonly Vector3 FlagMaxs = new(30f, 30f, 38f);
@@ -1196,6 +1201,9 @@ public sealed class Ctf : GameType
         float now = Now;
         flag.Status = FlagStatus.Dropped;
         flag.Carrier = null;
+        // QC ctf_Handle_Drop (sv_ctf.qc:1256): a flag dropped from a vehicle goes back to FLAG_SCALE.
+        if (flag.Entity is Entity dropped)
+            dropped.ScaleFactor = FlagScale;
         flag.DropOrigin = carrier.Origin;
         flag.DropTime = now;
         flag.Dropper = carrier;
@@ -1507,6 +1515,9 @@ public sealed class Ctf : GameType
         {
             e.Angles = angles;
             e.GtSpawnAngles = angles;
+            // QC ctf_FlagSetup: if(!flag.scale) flag.scale = FLAG_SCALE (a mapper-set "scale" key would win; the
+            // port's flag entity is created here rather than from the map edict, so there is none to honour).
+            e.ScaleFactor = FlagScale;
             e.GtStatus = (int)FlagStatus.AtBase;
             e.NextThink = GametypeEntities.Now + 0.2f; // QC FLAG_THINKRATE
             // QC ctf_FlagSetup: flag.reset = ctf_Reset (sv_ctf.qc:1380). The engine round/map reset
@@ -1587,6 +1598,7 @@ public sealed class Ctf : GameType
         // scale the port can't network yet, and the additive/env shield material are follow-ups; see #4 notes.)
         if (_captureShieldMaxRatio > 0f)
         {
+            s.ScaleFactor = 0.5f; // QC ctf_CaptureShield_Spawn: shield.scale = 0.5 (sv_ctf.qc:352)
             s.Effects |= EfAdditive;
             s.AVelocity = new Vector3(7f, 0f, 11f); // QC avelocity '7 0 11'
             s.Model = "models/ctf/shield.md3"; // QC MDL_CTF_SHIELD = "models/ctf/shield.md3"
@@ -1643,6 +1655,7 @@ public sealed class Ctf : GameType
         if (flag.Entity is not Entity e)
             return;
         GametypeEntities.DetachFromCarrier(e);
+        e.ScaleFactor = FlagScale; // a flag captured/returned from a vehicle carry drops VEHICLE_FLAG_SCALE
         e.Solid = Solid.Trigger;
         e.MoveType = MoveType.None;
         e.TakeDamage = DamageMode.No;
@@ -1952,6 +1965,9 @@ public sealed class Ctf : GameType
                 // pre-negated this yaw to cancel a mirrored yaw-only render path on the client; #76 fixed that path
                 // in EntityNode, so the true yaw is sent again.)
                 cfe.Angles = new Vector3(0f, anchor.Angles.Y, 0f);
+                // QC VEHICLE_FLAG_SCALE while riding a vehicle (ctf_Handle_Pickup / VehicleEnter), FLAG_SCALE back
+                // on foot (VehicleExit, sv_ctf.qc:2568).
+                cfe.ScaleFactor = carrier.Vehicle is not null ? FlagVehicleScale : FlagScale;
             }
             // QC ctf_FlagThink FLAG_PASSING: re-aim / retrieve / give up an in-flight passed flag every tick.
             else if (flag.Status == FlagStatus.Passing)

@@ -109,6 +109,91 @@ public static class WeaponFiring
         => actor is not null && MuzzleOffsets.TryGetValue(actor.ActiveWeaponId, out Vector3 o)
             ? o : DefaultMuzzleOffset;
 
+    /// <summary>
+    /// QC <c>CS_CVAR(player).cvar_cl_gunalign</c> (common/weapons/all.qc:804 <c>REPLICATE(cvar_cl_gunalign, int,
+    /// "cl_gunalign")</c>): the firing player's replicated gun alignment — 1/2 = centre, 3 = right, 4 = left. The
+    /// server wires it to its per-client replicated-cvar table; null (tests, a client-side caller) or a non-player
+    /// reads the Base default 3. Consumed by <see cref="ShotOrgAdjust"/> only when the server leaves the shot
+    /// origin to the client (g_shootfromeye 0, g_shootfromcenter 0, g_shootfromfixedorigin "").
+    /// </summary>
+    public static System.Func<Entity, int>? GunAlignProvider;
+
+    /// <summary>The firing actor's preferred gun alignment, clamped as QC <c>W_GunAlign</c> does (out of 1..4 → 3).</summary>
+    public static int GunAlignFor(Entity actor)
+    {
+        int algn = GunAlignProvider?.Invoke(actor) ?? 3;
+        return algn is < 1 or > 4 ? 3 : algn;
+    }
+
+    /// <summary>
+    /// Port of QC <c>shotorg_adjustfromclient</c> (common/weapons/all.qc:241): move a model-local shot offset
+    /// (X fwd, Y +left, Z up) to the requested gun side. 3 = right (authored, unchanged), 4 = left (mirror Y),
+    /// 1/2 = centre (Y = 0, Z drops 2u). This is also Base's VISUAL alignment (<c>movedir_aligned</c>), which the
+    /// first-person view applies in ViewModel.MovedirAligned.
+    /// </summary>
+    public static Vector3 ShotOrgAdjustFromClient(Vector3 vecs, int algn)
+    {
+        switch (algn)
+        {
+            default:
+            case 3: break;                              // right alignment
+            case 4: vecs.Y = -vecs.Y; break;            // left
+            case 1:
+            case 2: vecs.Y = 0f; vecs.Z -= 2f; break;   // center
+        }
+        return vecs;
+    }
+
+    /// <summary>
+    /// Port of QC <c>shotorg_adjust(vecs, y_is_right: false, visual: false, algn)</c> (common/weapons/all.qc:260)
+    /// as <c>CL_WeaponEntity_SetModel</c> applies it to the weapon's <c>movedir</c> — the AUTHORITATIVE shot
+    /// origin W_SetupShot fires from. In priority order: <c>g_shootfromeye</c> (Base default 1) fires from the eye
+    /// line (Y = Z = 0, only the forward X kept); <c>g_shootfromcenter</c> centres the gun (Y = 0, Z −2);
+    /// <c>g_shootfromfixedorigin "[X] Y Z"</c> forces side/height (and the forward distance when X ≠ 0);
+    /// otherwise the shooter's own <c>cl_gunalign</c> picks the side (<see cref="ShotOrgAdjustFromClient"/>).
+    /// Base skips the adjustment when the authored X is negative (all.qc:476 <c>movedir.x &gt;= 0</c>).
+    /// </summary>
+    public static Vector3 ShotOrgAdjust(Vector3 vecs, int algn)
+    {
+        if (vecs.X < 0f)
+            return vecs;
+        if (Api.Services is null)
+            return ShotOrgAdjustFromClient(vecs, algn);
+        ICvarService cv = Api.Cvars;
+        if (cv.GetFloat("g_shootfromeye") != 0f)
+        {
+            vecs.Y = 0f;
+            vecs.Z = 0f;
+        }
+        else if (cv.GetFloat("g_shootfromcenter") != 0f)
+        {
+            vecs.Y = 0f;
+            vecs.Z -= 2f;
+        }
+        else if (cv.GetString("g_shootfromfixedorigin") is { Length: > 0 } fixedOrigin)
+        {
+            Vector3 v = Stov(fixedOrigin);
+            if (v.X != 0f)
+                vecs.X = v.X;
+            vecs.Y = v.Y;
+            vecs.Z = v.Z;
+        }
+        else
+        {
+            vecs = ShotOrgAdjustFromClient(vecs, algn);
+        }
+        return vecs;
+    }
+
+    /// <summary>QC <c>stov</c> for a plain "x y z" string (missing/unparsable components read 0).</summary>
+    private static Vector3 Stov(string s)
+    {
+        string[] parts = s.Trim().Trim('\'').Split((char[]?)null, System.StringSplitOptions.RemoveEmptyEntries);
+        float C(int i) => i < parts.Length && float.TryParse(parts[i], System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float f) ? f : 0f;
+        return new Vector3(C(0), C(1), C(2));
+    }
+
     /// <summary>QC Q3SURFACEFLAG_SKY — a shot hitting this surface stops (no impact/penetration).</summary>
     public const int Q3SurfaceFlagSky = 0x4;
 
@@ -209,7 +294,10 @@ public static class WeaponFiring
         // Z=up) — Base's right*(-md.y) handles Quake +y=left — and the shot DIRECTION is recomputed to the trueaim
         // point below, so the round still lands on the crosshair. Tracebox each leg so the muzzle never ends up
         // inside a wall.
-        Vector3 muzzle = MuzzleOffsetFor(actor);
+        // QC CL_WeaponEntity_SetModel runs the raw tag through shotorg_adjust before storing movedir, so the fired
+        // origin honours g_shootfromeye / g_shootfromcenter / g_shootfromfixedorigin and otherwise the shooter's
+        // replicated cl_gunalign (playtest #62: a centre-aligned gun kept firing from the right-hand muzzle).
+        Vector3 muzzle = ShotOrgAdjust(MuzzleOffsetFor(actor), GunAlignFor(actor));
         if (muzzle != Vector3.Zero && (actor.Flags & EntFlags.Client) != 0)
         {
             QMath.AngleVectors(actor.Angles, out _, out Vector3 right, out Vector3 up);

@@ -3160,6 +3160,7 @@ public sealed class ServerNet : IDisposable
                 // colormap after spawn) and both QC encodings (packed 1024+ vs a sub-1024 slot reference)
                 // survive the wire. 0 on the overwhelming majority of entities → the delta bit stays clear.
                 ColorMapOverride = e.ColorMapOverride & 0xFFFF,
+                Scale = NetEntityState.EncodeScale(e.ScaleFactor), // QC .scale (protocol v23; 0 = unscaled, not sent)
                 Health = (int)e.Health,
                 Alpha = QuantizeAlpha(e.Alpha), // [W1-alpha-net] per-entity render transparency (e.g. Cloaked items)
                 Owner = (e.Owner is Player op && _byPlayer.TryGetValue(op, out PeerState? ops)) ? ops.PeerId : 0,

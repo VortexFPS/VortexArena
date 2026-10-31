@@ -64,13 +64,11 @@ public static class SkyboxLoader
 
         // A legacy session on display values (DisplayFramebuffer) writes the faces' stored texels, as
         // DarkPlaces' R_SkyBox does; otherwise they are decoded to linear light.
-        string code = VortexArena.Game.Client.DisplayFramebuffer.Active ? ShaderCode.Replace(" : source_color, filter_linear_mipmap", " : filter_linear_mipmap") : ShaderCode;
+        string code = VortexArena.Game.Client.DisplayFramebuffer.Active ? ShaderCode.Replace(" : source_color, filter_linear,", " : filter_linear,") : ShaderCode;
         var mat = new ShaderMaterial { Shader = new Shader { Code = code } };
+        // No mipmaps, as in DP: r_sky.c loads the six sides TEXF_CLAMP only (no TEXF_MIPMAP). See the shader note.
         for (int i = 0; i < 6; i++)
-        {
-            faces[i].GenerateMipmaps();
             mat.SetShaderParameter(Uniforms[i], ImageTexture.CreateFromImage(faces[i]));
-        }
 
         GD.Print($"[Skybox] loaded '{name}'.");
         return new Sky { SkyMaterial = mat, RadianceSize = Sky.RadianceSizeEnum.Size256 };
@@ -156,15 +154,22 @@ public static class SkyboxLoader
     // samples the (canonical-oriented) face texture with the same per-vertex texcoords DP's box uses.
     // EYEDIR is Godot world space (Y-up); q is the Quake-space ray (see game/Coords.cs ToQuake). The faces
     // are loaded sRGB (source_color) so they tonemap with the rest of the linear-space frame.
+    //
+    // Sampling is filter_linear + repeat_disable with NO mipmaps — DP's exact sampler state (r_sky.c loads the
+    // sides TEXF_CLAMP, without TEXF_MIPMAP). playtest-bugs #78 (lines along the box's edges and corners): the
+    // faces used to be mipmapped and sampled with an implicit-LOD texture(). Along a cube edge a 2x2 pixel quad
+    // straddles two faces, so the UV jumps from ~1 to ~0 (or onto another axis) between neighbouring pixels;
+    // that derivative picks the smallest mip, the face's average colour, and drew a thin line down every edge.
+    // DP draws real box geometry with continuous UVs per face, and no mips to pick from either way.
     private const string ShaderCode = @"
 shader_type sky;
 
-uniform sampler2D face_px : source_color, filter_linear_mipmap, repeat_disable;
-uniform sampler2D face_nx : source_color, filter_linear_mipmap, repeat_disable;
-uniform sampler2D face_py : source_color, filter_linear_mipmap, repeat_disable;
-uniform sampler2D face_ny : source_color, filter_linear_mipmap, repeat_disable;
-uniform sampler2D face_pz : source_color, filter_linear_mipmap, repeat_disable;
-uniform sampler2D face_nz : source_color, filter_linear_mipmap, repeat_disable;
+uniform sampler2D face_px : source_color, filter_linear, repeat_disable;
+uniform sampler2D face_nx : source_color, filter_linear, repeat_disable;
+uniform sampler2D face_py : source_color, filter_linear, repeat_disable;
+uniform sampler2D face_ny : source_color, filter_linear, repeat_disable;
+uniform sampler2D face_pz : source_color, filter_linear, repeat_disable;
+uniform sampler2D face_nz : source_color, filter_linear, repeat_disable;
 
 void sky() {
     // Godot (Y-up) view direction -> Quake (Z-up) direction.

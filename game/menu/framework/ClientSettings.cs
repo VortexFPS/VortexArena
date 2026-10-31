@@ -257,6 +257,10 @@ public static class ClientSettings
         // (draws 2026-08-02) The sun's shadow pass — output provably unconsumed by both world and model
         // shaders, so OFF by default; kept as a cvar for A/B or a future shader that reads it.
         c.Register("r_sun_shadow", "0");
+        // DarkPlaces' view far plane (gl_rmain.c): farclip = r_farclip_base + world radius * r_farclip_world * 2.
+        // Read when the camera is made and when a map binds (NetGame.ApplyFarClip). Not archived, as in DP.
+        c.Register("r_farclip_base", "65536");
+        c.Register("r_farclip_world", "2");
         // (draws 2026-08-02) Portal render tuning: render every Nth frame (1 = every frame, DP-parity),
         // inherit the main viewport's MSAA (1 = parity; 0 = portals render MSAA-off — cheaper, and removes
         // an MSAA-keyed PSO family the warm pass would otherwise have to cover), and skip portals whose

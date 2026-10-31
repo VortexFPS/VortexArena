@@ -473,7 +473,28 @@ public sealed partial class DpAudio : Node
     {
         _running = false;
         _thread?.Join(500);
+        StopDirect();
         SaveCapture();
+    }
+
+    // At shutdown the audio thread must be done with the stream before the C# side goes: a "_mix" call that finds
+    // the script gone falls through to the engine's required virtual and logs "AudioStreamPlayback::_mix must be
+    // overridden" (the headless smoke's hard error). Stop the player, then wait until the thread has stopped
+    // calling (it fades a stopped stream out over one more block) - at most a tenth of a second.
+    private void StopDirect()
+    {
+        if (!Direct || _player is not { } player) return;
+        player.Stop();
+        long deadline = System.Diagnostics.Stopwatch.GetTimestamp() + System.Diagnostics.Stopwatch.Frequency / 10;
+        long calls = DirectCalls;
+        while (System.Diagnostics.Stopwatch.GetTimestamp() < deadline)
+        {
+            Thread.Sleep(20);
+            long now = DirectCalls;
+            if (now == calls) break;
+            calls = now;
+        }
+        Direct = false;
     }
 
     /// <summary>Write what a capture run recorded. Safe to call more than once.</summary>

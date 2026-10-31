@@ -226,6 +226,22 @@ public class VortexConfigLayerTests
     }
 
     /// <summary>
+    /// Shots leave the barrel <c>cl_gunalign</c> picks, not the eye line: the layer's <c>g_shootfromeye 0</c>
+    /// has to beat xonotic-server.cfg:201's <c>1</c>, so this loads the REAL server chain (playtest-bugs #62).
+    /// </summary>
+    [Fact]
+    public void Layer_Fires_From_The_Barrel_Not_The_Eye()
+    {
+        RequireCoreContent();
+        var cvars = new CvarService();
+        ConfigLoader.LoadServerConfig(cvars, DiskReader);
+
+        Assert.Equal(0f, cvars.GetFloat("g_shootfromeye"));
+        Assert.Equal(0f, cvars.GetFloat("g_shootfromcenter"));
+        Assert.Equal("", cvars.GetString("g_shootfromfixedorigin"));
+    }
+
+    /// <summary>
     /// Every file <c>vortex-common.cfg</c> execs must exist. A missing one is a no-op by design, which is
     /// what lets the layer ship incrementally — but it also means a typo in an <c>exec</c> line is
     /// invisible. Pinning <c>FilesMissing</c> to zero is what keeps that counter usable as a signal.

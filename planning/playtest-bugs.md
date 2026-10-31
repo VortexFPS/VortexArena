@@ -1461,7 +1461,7 @@ below is just for picking work.
   which mouse indices are enumerated at all, then whether the event is being consumed upstream.
 
 ### 62. "Shoot from center" doesn't move the shot origin
-- [x] **Status:** FIXED `1157ddea` (2026-10-31, branch `fix/playtest-0731`). `WeaponFiring.SetupShot` ignored `g_shootfromeye`/`g_shootfromcenter`/`g_shootfromfixedorigin` and never received `cl_gunalign`. Ported Base `shotorg_adjust`; `cl_gunalign` now replicates. Stock (`g_shootfromeye 1`, as Base) fires from the crosshair line.
+- [x] **Status:** FIXED `1157ddea` (2026-10-31, branch `fix/playtest-0731`). `WeaponFiring.SetupShot` ignored `g_shootfromeye`/`g_shootfromcenter`/`g_shootfromfixedorigin` and never received `cl_gunalign`. Ported Base `shotorg_adjust`; `cl_gunalign` now replicates. Vortex ships `g_shootfromeye 0` (Base ships 1; decided 2026-10-31), so shots leave the barrel `cl_gunalign` picks; `g_shootfromeye 1` in server.cfg restores Base.
 - **Symptom:** Toggling the shoot-from-center setting changes the viewmodel/visual, but the
   actual shot origin doesn't move with it.
 - **Expected:** Base's `cl_gunalign` moves the *real* shot origin (`shotorg`) too — the setting

@@ -147,7 +147,7 @@ public static class WeaponFiring
     /// <summary>
     /// Port of QC <c>shotorg_adjust(vecs, y_is_right: false, visual: false, algn)</c> (common/weapons/all.qc:260)
     /// as <c>CL_WeaponEntity_SetModel</c> applies it to the weapon's <c>movedir</c> — the AUTHORITATIVE shot
-    /// origin W_SetupShot fires from. In priority order: <c>g_shootfromeye</c> (Base default 1) fires from the eye
+    /// origin W_SetupShot fires from. In priority order: <c>g_shootfromeye</c> (Base ships 1, Vortex 0 — vortex-server.cfg) fires from the eye
     /// line (Y = Z = 0, only the forward X kept); <c>g_shootfromcenter</c> centres the gun (Y = 0, Z −2);
     /// <c>g_shootfromfixedorigin "[X] Y Z"</c> forces side/height (and the forward distance when X ≠ 0);
     /// otherwise the shooter's own <c>cl_gunalign</c> picks the side (<see cref="ShotOrgAdjustFromClient"/>).

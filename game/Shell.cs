@@ -545,6 +545,10 @@ public partial class Shell : Node
             "serverinfo" => new DialogServerInfo(),
             // Reached by clicking a map's picture in the Create tab; Afterslime is the list's first map there.
             "mapinfo" => new DialogCreateGameMapInfo("afterslime", "dm"),
+            // Reached only from a running match (Demos tab) and from a user-bind row (Input tab).
+            "democonfirm" => new DialogDemoConfirm(false, () => { }),
+            "userbind" => new DialogUserbindEdit("userbind1"),
+            "screenshotviewer" => DialogScreenshotViewer.OnFirstScreenshot(),
             // Reachable only by clicking a Xonotic row in the browser, so it needs an id of its own to be
             // inspectable in a capture at all.
             "incompatible" => new DialogIncompatibleServer("^3Example ^7Xonotic Server", "192.0.2.10:26000"),

@@ -10,8 +10,8 @@ namespace VortexArena.Game.Menu;
 /// <para>Where the QC picks a cvar by which one the engine has, the joystick row asks DarkPlaces' own cvar table
 /// (<c>joy_enable</c>, else <c>joystick</c>); the system-acceleration row is the QC's greyed fallback, as on Windows,
 /// because <c>vid_dgamouse</c> and <c>apple_mouse_noaccel</c> belong to other platforms' video drivers.
-/// "Edit..." needs the user-bind editor (dialog_settings_input_userbind.qc), which is not ported: it is enabled on a
-/// user-bind row as in Xonotic, and does nothing yet.</para>
+/// "Edit..." is enabled on a user-bind row, as in Xonotic, and opens the user-bind editor
+/// (<see cref="DialogUserbindEdit"/>).</para>
 /// </summary>
 public partial class DialogSettingsInput : QcTab
 {
@@ -34,8 +34,10 @@ public partial class DialogSettingsInput : QcTab
             var change = QcLook.Button(new Button { Text = Localization.Tr("Change key...") }, forcePressed: () => kb.Grabbing);
             change.Pressed += kb.Change;
             kb.KeyGrabButton = TD(1, 1, change);
-            kb.UserbindEditButton = TD(1, 1, Qc.Button("Edit...",
-                () => GD.Print("[Menu] Userbind editor (dialog_settings_input_userbind.qc) is not ported yet.")));
+            kb.UserbindEditButton = TD(1, 1, Qc.Button("Edit...", () =>
+            {
+                if (kb.SelectedUserbind is { } userbind) Menu?.Push(new DialogUserbindEdit(userbind));
+            }));
             kb.ClearButton = TD(1, 1, Qc.Button("Clear", kb.Clear));
         TR();
             TD(1, 3, Qc.Button("Reset all", () => Menu?.Push(new DialogBindingsReset())));

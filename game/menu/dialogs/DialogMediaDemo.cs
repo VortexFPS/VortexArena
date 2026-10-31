@@ -99,16 +99,25 @@ public partial class DialogMediaDemo : QcTab
         return MenuTextFormat.Decolorize(s);
     }
 
-    // XonoticDemoList_startDemo / timeDemo.
+    // XonoticDemoList_startDemo / timeDemo, behind DemoConfirm_ListClick_Check_Gamestatus: in a match the player
+    // confirms first (DialogDemoConfirm).
     private void StartDemo()
     {
         if (SelectedDemo() is { } s)
-            MenuCommand.Run($"playdemo \"demos/{s}.dem\"; wait; togglemenu");
+            Confirm(timing: false, () => MenuCommand.Run($"playdemo \"demos/{s}.dem\"; wait; togglemenu"));
     }
 
     private void TimeDemo()
     {
         if (SelectedDemo() is { } s)
-            MenuCommand.Run($"timedemo \"demos/{s}.dem\"; wait; togglemenu");
+            Confirm(timing: true, () => MenuCommand.Run($"timedemo \"demos/{s}.dem\"; wait; togglemenu"));
+    }
+
+    private void Confirm(bool timing, System.Action start)
+    {
+        if (MenuCommand.InMatch?.Invoke() ?? false)
+            Menu?.Push(new DialogDemoConfirm(timing, start));
+        else
+            start();
     }
 }

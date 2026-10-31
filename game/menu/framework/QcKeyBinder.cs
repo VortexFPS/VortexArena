@@ -182,6 +182,20 @@ public partial class QcKeyBinder : MenuListBox
     private static bool IsSpecial(string func) => func.StartsWith('*');
     private static bool IsOverrider(string func) => func.StartsWith(';');
     private static bool IsUserbind(string descr) => descr.StartsWith('$');
+
+    /// <summary>KeyBinder_Bind_Edit / editUserbind: the selected row's user bind ("userbindN", the prefix of its
+    /// _description / _press / _release cvars), or null when the row is not one.</summary>
+    public string? SelectedUserbind
+    {
+        get
+        {
+            int i = SelectedItem;
+            if (i < 0 || i >= _entries.Count) return null;
+            Entry e = _entries[i];
+            if (e.Func.Length == 0 || IsSpecial(e.Func) || !IsUserbind(e.Descr)) return null;
+            return e.Descr[1..];
+        }
+    }
     private bool Unselectable(int i) => _entries[i].Func.Length == 0 || IsSpecial(_entries[i].Func);
 
     /// <summary>The function a row binds (an overrider's first part).</summary>

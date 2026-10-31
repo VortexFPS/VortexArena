@@ -8,8 +8,8 @@ namespace VortexArena.Game.Menu;
 /// row down, the screenshot list (<see cref="QcNameList"/>, screenshotlist.qc: <c>screenshots/*.jpg|tga|png</c>, one
 /// subdirectory level too) from row 2, "Open in the viewer" under it.
 ///
-/// The screenshot viewer dialog itself (dialog_media_screenshot_viewer.qc) is not ported; "Open in the viewer"
-/// sends <c>menu_showscreenshotviewer</c>.
+/// "Open in the viewer" (or a double-click)
+/// opens the screenshot viewer (<see cref="DialogScreenshotViewer"/>) on it.
 /// </summary>
 public partial class DialogMediaScreenshot : QcTab
 {
@@ -49,6 +49,6 @@ public partial class DialogMediaScreenshot : QcTab
     private void OpenViewer()
     {
         if (_list.SelectedItem >= 0 && _list.SelectedItem < _list.Names.Count)
-            MenuCommand.Run("menu_showscreenshotviewer");
+            Menu?.Push(new DialogScreenshotViewer(_list));
     }
 }

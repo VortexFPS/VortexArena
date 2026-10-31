@@ -79,6 +79,13 @@ public partial class QcDialogFrame : Control
 
     public override void _Ready() => Layout();
 
+    // A dialog's title can change while it is open (the screenshot viewer names the picture it shows).
+    public override void _Process(double delta)
+    {
+        string title = _dialog.QcTitle;
+        if (_title.Text != title) _title.Text = title;
+    }
+
     private void Layout()
     {
         float u = MenuMetrics.DesignUnit;

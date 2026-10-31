@@ -23,6 +23,14 @@ public enum ServerCategory
     Overkill,
     Instagib,
     Defrag,
+
+    /// <summary>
+    /// VORTEX-ONLY, appended last so it sorts below every Vortex server: a queried server that answered without
+    /// the Vortex key, i.e. stock Xonotic (or another DarkPlaces game). Those are joined through legacy
+    /// compatibility mode, so they are listed — under their own heading, so nobody mistakes one for a Vortex
+    /// server (playtest-bugs #91).
+    /// </summary>
+    Xonotic,
 }
 
 /// <summary>
@@ -129,7 +137,8 @@ public static class ServerListInfo
         bool PureAvailable,
         int QcFreeSlots,
         int Humans,
-        int Ping);
+        int Ping,
+        bool IsStockXonotic = false);
 
     /// <summary>The <c>menu_slist_recommendations*</c> cvar family, passed in so this stays store-agnostic.</summary>
     public readonly record struct RecommendationRules(
@@ -148,6 +157,10 @@ public static class ServerListInfo
     {
         if (e.IsFavorite)
             return ServerCategory.Favorited;
+        // DIVERGENCE: a stock Xonotic server is a different game to this client (legacy mode joins it), so it
+        // gets its own heading ahead of the recommendation vote and the mod table. A bookmark still wins.
+        if (e.IsStockXonotic)
+            return ServerCategory.Xonotic;
 
         float impure = e.PureAvailable && !e.Pure ? 1f : 0f;
         if (!IsStockGame(e.ModName))
@@ -215,7 +228,9 @@ public static class ServerListInfo
     /// <summary>The hardcoded "categories off" override column of SLIST_CATEGORIES (serverlist.qh:150).</summary>
     private static string DisabledOverride(ServerCategory cat) => cat switch
     {
-        ServerCategory.Favorited or ServerCategory.Recommended => "",
+        // Xonotic stays apart too: folding it into "Servers" would hide the one heading that says those rows are
+        // not Vortex servers.
+        ServerCategory.Favorited or ServerCategory.Recommended or ServerCategory.Xonotic => "",
         _ => "CAT_SERVERS",
     };
 
@@ -230,6 +245,7 @@ public static class ServerListInfo
         ServerCategory.Modified => "CAT_MODIFIED",
         ServerCategory.Overkill => "CAT_OVERKILL",
         ServerCategory.Instagib => "CAT_INSTAGIB",
+        ServerCategory.Xonotic => "CAT_XONOTIC",
         _ => "CAT_DEFRAG",
     };
 
@@ -245,6 +261,7 @@ public static class ServerListInfo
         "CAT_OVERKILL" => ServerCategory.Overkill,
         "CAT_INSTAGIB" => ServerCategory.Instagib,
         "CAT_DEFRAG" => ServerCategory.Defrag,
+        "CAT_XONOTIC" => ServerCategory.Xonotic,
         _ => null,
     };
 
@@ -262,6 +279,7 @@ public static class ServerListInfo
         ServerCategory.Modified => "Modified Servers",
         ServerCategory.Overkill => "Overkill",
         ServerCategory.Instagib => "InstaGib",
+        ServerCategory.Xonotic => "Xonotic Servers (legacy mode)",
         _ => "Defrag Mode",
     };
 

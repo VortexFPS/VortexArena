@@ -70,9 +70,10 @@ public sealed class ServerEntry
     public ServerCategory Category = ServerCategory.Normal;
 
     // --- Joinability. The browser asks the STOCK Xonotic masters for its internet list, so most of what comes
-    //     back is Darkplaces servers running the original QuakeC game. VortexArena's netcode is a ground-up
-    //     reimplementation and shares no wire format with them, so those rows are listed (they are real
-    //     servers, and hiding them would just look like the browser is broken) but not connectable.
+    //     back is Darkplaces servers running the original QuakeC game. The native netcode shares no wire
+    //     format with them; they are joined through legacy compatibility mode (planning/specs/legacy-compat.md)
+    //     when Xonotic data is configured, and refused with setup instructions when it is not. Either way they
+    //     sort under their own "Xonotic Servers (legacy mode)" heading (ServerCategory.Xonotic).
 
     /// <summary>True once this row has been filled in from a real <c>infoResponse</c>, rather than being a
     /// placeholder built from a bookmark or a typed address. Only a queried row can be judged.</summary>
@@ -179,8 +180,8 @@ public sealed class ServerBrowser : IDisposable
     /// <summary>
     /// The game names asked for in <c>getservers</c>. Both, against every configured master: <c>Vortex</c>
     /// because that is what this game's servers report (<see cref="GameIdentity.Name"/>), and <c>Xonotic</c>
-    /// because the browser deliberately keeps listing upstream's servers — they are shown, and then refused
-    /// at Join with an explanation, until backwards-compatible support exists. A master that knows nothing
+    /// because the browser deliberately lists upstream's servers too — under their own heading, joined through
+    /// legacy compatibility mode when Xonotic data is configured. A master that knows nothing
     /// about one of the two simply doesn't answer that query.
     /// </summary>
     private static readonly string[] GameNames = { GameIdentity.Name, GameIdentity.LegacyName };
@@ -604,7 +605,8 @@ public sealed class ServerBrowser : IDisposable
             PureAvailable: e.PureAvailable,
             QcFreeSlots: e.QcFreeSlots,
             Humans: e.Humans,
-            Ping: e.Ping);
+            Ping: e.Ping,
+            IsStockXonotic: e.IsIncompatibleXonotic);
         var rules = new ServerListInfo.RecommendationRules(
             Mode: (int)cv.GetFloat("menu_slist_recommendations"),
             MaxPing: cv.GetFloat("menu_slist_recommendations_maxping"),

@@ -1808,7 +1808,7 @@ below is just for picking work.
 - **First look:** `game/vmap/EditorController.cs` map-open path; `MapCatalogScan`/`MapCatalogCache`.
 
 ### 91. Remove the existing servers from the server list
-- [ ] **Status:** NEEDS DECISION (2026-10-31). Since this report, legacy compat mode joins stock Xonotic servers from the browser, so removing them would break that. Vortex servers announce only to Conductor (not deployed; 503) and the browser doesn't read it. No seeded server list exists.
+- [x] **Status:** FIXED (2026-10-31, branch `fix/playtest-0731`) per decision D1-B: stock Xonotic servers stay listed (legacy compat mode joins them) but always under their own "Xonotic Servers (legacy mode)" heading, below Vortex servers, even with categories off. Open: Vortex servers announce only to Conductor (not deployed) and the browser does not read it yet.
 - **Request:** Drop the inherited server entries from the in-game server list — they're real
   Xonotic servers and aren't compatible with Vortex anyway.
 - **Notes:** Touches the master/announce path — `src/VortexArena.Net/MasterAnnounce.cs` and

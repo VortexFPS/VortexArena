@@ -869,7 +869,8 @@ features:
       - "menu/xonotic/skinlist.qc:XonoticSkinList_getSkins/setSkin"
       - "menu/xonotic/hudskinlist.qc"
     port_refs:
-      - "game/menu/dialogs/DialogMediaSkinList.cs (embedded in DialogSettingsUser)"
+      - "game/menu/framework/QcSettingsLists.cs:QcSkinList (the User tab's skin list, skinlist.qc row drawing)"
+      - "game/menu/dialogs/DialogHudSetupExit.cs (the HUD-skin list, filter, Set/Save skin and the Reset HUD skin confirm)"
       - "game/menu/framework/MenuSkin.cs:Reload"
     constants:
       - { name: "skin scan", base: "gfx/menu/*/skinvalues.txt (title/author/skinpreview)", port: "same scan via VFS", match: true }
@@ -884,9 +885,10 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "hudskinlist.qc (the HUD-skin picker with its skinvalues scan + 'set HUD skin' apply, hosted by dialog_hudsetup_exit) has no port picker UI — hud_skin only changes via console (the cvar IS live: HudManager.ApplyHudSkin)."
+      - "The HUD-skin list in DialogHudSetupExit draws its rows with the demo list's QcNameList (title and author per row) rather than a dedicated hudskinlist.qc row widget; a skin saved during the session may not show on Refresh until the file mounts rescan (unverified)."
     verification:
-      - { kind: code, ref: "DialogMediaSkinList scans skinvalues.txt, binds menu_skin, Set-skin triggers MenuSkin.Reload via menu_restart", result: pass }
+      - { kind: code, ref: "QcSkinList scans skinvalues.txt, binds menu_skin, Set-skin triggers MenuSkin.Reload via menu_restart", result: pass }
+      - { kind: capture, ref: "tools/menu-parity: Settings > User and the HUD setup dialog against Xonotic's menu.dat at 1280x720, dx=0 dy=0 (2026-10-31)", result: pass }
     confidence: high
     notes: "Default-skin '(Default)' title suffix behavior not checked — minor."
 

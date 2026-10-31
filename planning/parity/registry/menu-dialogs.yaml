@@ -416,7 +416,7 @@ features:
       - "menu/xonotic/dialog_settings_user_languagewarning.qc:XonoticLanguageWarningDialog_fill"
     port_refs:
       - "game/menu/dialogs/DialogSettingsUser.cs:Fill (37-88)"
-      - "game/menu/dialogs/DialogMediaSkinList.cs (skin scan+set, embedded)"
+      - "game/menu/framework/QcSettingsLists.cs:QcSkinList, QcLanguageList (skin and language lists)"
       - "game/menu/framework/Localization.cs:SetLanguage"
       - "game/menu/dialogs/DialogLanguageWarning.cs (DEAD — no caller)"
     constants:
@@ -432,11 +432,10 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Language list is a TextSlider of names, not the QC listbox with translation-percentage dimming (menu-core.lists.language records the same)."
       - "The in-match language-warning dialog is dead (DialogLanguageWarning.cs, zero callers): switching language while connected applies silently instead of warning + offering disconnect."
       - "cl_gentle is only partially consumed (ViewEffects.cs:272 reads cl_gentle/cl_gentle_damage for the damage flash); gib/blood content gating and cl_gentle_messages text-replacement are unverified — and 'Just the gore' drops its cl_gentle_damage sibling write."
     verification:
-      - { kind: code, ref: "DialogMediaSkinList scans gfx/menu/*/skinvalues.txt + menu_skin + MenuSkin.Reload (menu-core.lists.skins verifies); Localization.SetLanguage + menu_restart live; grep DialogLanguageWarning -> definition only", result: pass }
+      - { kind: code, ref: "QcSkinList scans gfx/menu/*/skinvalues.txt + menu_skin + MenuSkin.Reload (menu-core.lists.skins verifies); Localization.SetLanguage + menu_restart live; grep DialogLanguageWarning -> definition only", result: pass }
     confidence: high
     notes: "Skin/language list widget internals owned by menu-core.lists.skins / menu-core.lists.language."
 

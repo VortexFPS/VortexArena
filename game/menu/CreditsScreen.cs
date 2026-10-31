@@ -1,20 +1,19 @@
+using System.Collections.Generic;
 using Godot;
-using System;
 
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// Credits screen — full port of the Xonotic credits roll from
-/// <c>qcsrc/menu/xonotic/credits.qc</c>. Auto-scrolling list with pause/resume.
+/// The Credits dialog — <c>XonoticCreditsDialog_fill</c> (qcsrc/menu/xonotic/dialog_credits.qc) on its
+/// SKINROWS_CREDITS x 2 grid: the credits list over every row but the last, and "OK" (Dialog_Close) under it.
+///
+/// The list is <c>XonoticCreditsList</c> (xonotic/credits.qc): one line per row — a title, a function, a person or
+/// an empty line — centred, in the title / function / person colour and alpha of the skin. It rolls by one row a
+/// second from a second after the dialog gets focus (<c>focusEnter</c>), until a key is pressed in it.
 /// </summary>
-public partial class CreditsScreen : MenuScreen
+public partial class CreditsScreen : MenuScreen, IQcFocusEnter
 {
-    private ScrollContainer _scroll = null!;
-    private Button _autoButton = null!;
-    private bool _autoScroll = true;
-    private double _scrollAccumulator;
-
-    private const float ScrollSpeed = 28f;
+    private readonly QcCreditsList _list = new(Lines());
 
     private enum EntryKind { Title, Function }
 
@@ -689,95 +688,108 @@ public partial class CreditsScreen : MenuScreen
         }),
     };
 
+    /// <summary>The empty lines (CREDITS NL()) after a section of the credits.qc macro where there is not exactly one.</summary>
+    private static readonly Dictionary<string, int> BlankLinesAfter = new()
+    {
+        ["Extended Team"] = 2, ["Legal"] = 2, ["Game Engine"] = 0, ["Engine Additions"] = 2, ["Compiler"] = 0,
+        ["GMQCC"] = 3, ["Ukrainian"] = 2, ["Past Contributors"] = 0,
+    };
+
+    /// <summary>credits_build: the list's lines, "**" before a title and "*" before a function.</summary>
+    private static List<string> Lines()
+    {
+        var lines = new List<string>();
+        foreach (var (kind, section, names) in Credits)
+        {
+            lines.Add((kind == EntryKind.Title ? "**" : "*") + Localization.Tr(section));
+            lines.AddRange(names);
+            int blank = BlankLinesAfter.TryGetValue(section, out int n) ? n : 1;
+            for (int i = 0; i < blank; i++) lines.Add("");
+        }
+        return lines;
+    }
+
     protected override void BuildUi()
     {
         Name = "CreditsScreen";
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 32);
-        AddChild(margin);
+        var me = new QcGrid(rows: MenuSkin.SkinNumber("ROWS_CREDITS", 20f), columns: 2);
+        me.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(me);
 
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 16);
-        margin.AddChild(root);
-
-        if (!HostProvidesTitle) root.AddChild(MakeTitle("Credits"));
-
-        _scroll = new ScrollContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
-        _scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
-        root.AddChild(_scroll);
-
-        var list = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        list.AddThemeConstantOverride("separation", 10);
-        _scroll.AddChild(list);
-
-        list.AddChild(new Control { CustomMinimumSize = new Vector2(0, 24) });
-
-        bool first = true;
-        foreach (var (kind, section, names) in Credits)
-        {
-            if (kind == EntryKind.Title)
-            {
-                if (!first)
-                    list.AddChild(new Control { CustomMinimumSize = new Vector2(0, 12) });
-
-                var title = MakeTitle(section);
-                title.HorizontalAlignment = HorizontalAlignment.Center;
-                list.AddChild(title);
-            }
-            else
-            {
-                var header = MakeHeader(section);
-                header.HorizontalAlignment = HorizontalAlignment.Center;
-                list.AddChild(header);
-            }
-
-            foreach (var name in names)
-            {
-                var line = MakeLabel(name);
-                line.HorizontalAlignment = HorizontalAlignment.Center;
-                list.AddChild(line);
-            }
-
-            list.AddChild(new Control { CustomMinimumSize = new Vector2(0, 18) });
-            first = false;
-        }
-
-        _autoButton = MakeButton("Pause scroll", OnToggleAuto);
-        root.AddChild(MakeButtonBar(_autoButton, MakeButton("Back", GoBack)));
+        me.TR();
+            me.TD(me.Rows - 1, me.Columns, _list);
+        me.GotoRC(me.Rows - 1, 0);
+            me.TD(1, me.Columns, Qc.Button("OK", GoBack));
     }
+
+    /// <summary>XonoticCreditsDialog_focusEnter: the roll starts a second from now.</summary>
+    public void FocusEnter() => _list.StartScrolling();
+}
+
+/// <summary>
+/// xonotic/credits.qc <c>XonoticCreditsList</c>: rowsPerItem 1, no selection, no background; each line
+/// draw_CenterText'd at the row's middle in SKINCOLOR/ALPHA_CREDITS_TITLE, _FUNCTION or _PERSON. While
+/// <c>scrolling</c> is set the scroll position is pinned to one row per second since it was set, up to the end.
+/// </summary>
+public partial class QcCreditsList : MenuListBox
+{
+    private readonly List<string> _lines;
+    private double _scrolling; // the QC's `scrolling`: the time the roll starts, 0 = not rolling
+
+    public QcCreditsList(List<string> lines)
+    {
+        _lines = lines;
+        ItemHeight = MenuMetrics.FontNormalU;
+        ItemCount = _lines.Count;
+        SelectionDoesntMatter = true;
+    }
+
+    // drawListBoxItem draws only the line: no background (alphaBG 0), no selection or hover fill.
+    protected override bool DrawsBackground => false;
+    protected override bool ShowSelection => false;
+    protected override bool DrawsOwnHighlight => true;
+
+    private static double Now => Time.GetTicksMsec() / 1000.0;
+
+    public void StartScrolling() => _scrolling = Now + 1;
 
     public override void _Process(double delta)
     {
-        // (perf 2026-08-03) Gated on _autoScroll but NOT on visibility, so an opened-then-hidden credits
-        // pane kept auto-scrolling (writing ScrollVertical) through an entire match.
-        if (!_autoScroll || _scroll is null || !IsVisibleInTree())
-            return;
-
-        int max = (int)_scroll.GetVScrollBar().MaxValue - (int)_scroll.Size.Y;
-        if (max <= 0)
-            return;
-
-        _scrollAccumulator += ScrollSpeed * delta;
-        if (_scrollAccumulator >= 1.0)
+        if (_scrolling != 0)
         {
-            int step = (int)_scrollAccumulator;
-            _scrollAccumulator -= step;
-            int next = _scroll.ScrollVertical + step;
-            if (next >= max)
-            {
-                next = 0;
-                _scrollAccumulator = 0;
-            }
-            _scroll.ScrollVertical = next;
+            double pos = System.Math.Clamp((Now - _scrolling) * ItemHeight, 0, System.Math.Max(0, GetTotalHeight() - ViewHeight));
+            SetScrollImmediate(pos);
         }
+        base._Process(delta);
     }
 
-    private void OnToggleAuto()
+    protected override bool HandleKey(InputEventKey key)
     {
-        _autoScroll = !_autoScroll;
-        _autoButton.Text = _autoScroll ? "Pause scroll" : "Resume scroll";
+        _scrolling = 0; // XonoticCreditsList_keyDown
+        return base.HandleKey(key);
+    }
+
+    protected override void DrawItem(int index, Rect2 rect, bool isSelected, bool isFocused)
+    {
+        if (index < 0 || index >= _lines.Count) return;
+        string s = _lines[index];
+        Color c;
+        if (s.StartsWith("**"))
+        {
+            s = s[2..];
+            c = MenuSkin.Fade(MenuSkin.SkinColor("COLOR_CREDITS_TITLE", 1f, 1f, 1f), MenuSkin.SkinNumber("ALPHA_CREDITS_TITLE", 1f));
+        }
+        else if (s.StartsWith('*'))
+        {
+            s = s[1..];
+            c = MenuSkin.Fade(MenuSkin.SkinColor("COLOR_CREDITS_FUNCTION", 1f, 1f, 1f), MenuSkin.SkinNumber("ALPHA_CREDITS_FUNCTION", 0.7f));
+        }
+        else
+            c = MenuSkin.Fade(MenuSkin.SkinColor("COLOR_CREDITS_PERSON", 0.7f, 0.7f, 1f), MenuSkin.SkinNumber("ALPHA_CREDITS_PERSON", 0.7f));
+        if (s.Length == 0) return;
+        c = MenuSkin.TextLift(c);
+        float ch = MenuMetrics.FontNormalU;
+        QcDraw.Text(this, rect.Position + new Vector2(0.5f * rect.Size.X - 0.5f * QcDraw.TextWidth(s), 0.5f * (rect.Size.Y - ch)), s, c);
     }
 }

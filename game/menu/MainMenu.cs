@@ -73,7 +73,7 @@ public partial class MainMenu : MenuScreen
         AddTile("Media", new MediaScreen(), 0.96f, 18, new Vector2(0.15f, 1.00f), false);
         AddTile("Settings", new DialogSettings(), 0.96f, 18, new Vector2(0.85f, 1.00f), false);
         AddTile("Credits", new CreditsScreen(), 0.50f, 20, new Vector2(-0.05f, 1.20f), true);
-        AddTile("Quit", new QuitDialog { Embedded = true }, 0.50f, 3, new Vector2(1.05f, 1.20f), true);
+        AddTile("Quit", new QuitDialog(), 0.50f, 3, new Vector2(1.05f, 1.20f), true);
 
         ComputeFanScale();
 
@@ -117,6 +117,8 @@ public partial class MainMenu : MenuScreen
                 if (t.Title.Equals(parts[0], StringComparison.OrdinalIgnoreCase))
                 {
                     _active = t; _opening = true; _factor = 1f;
+                    foreach (Node n in t.ContentHolder.GetChildren())
+                        if (n is IQcFocusEnter fe) fe.FocusEnter();
                     MoveChild(t.Slot, GetChildCount() - 1);
                     MoveChild(t.TitleLabel, GetChildCount() - 1);
                     if (parts.Length > 1)
@@ -260,7 +262,12 @@ public partial class MainMenu : MenuScreen
         if (_active != null)
         {
             float dir = _opening ? 1f : -1f;
+            float before = _factor;
             _factor = Mathf.Clamp(_factor + dir * AnimSpeed * (float)delta, 0f, 1f);
+            // Nexposee_draw: the dialog gets the focus (focusEnter) when the opening animation ends.
+            if (_opening && before < 1f && _factor >= 1f)
+                foreach (Node n in _active.ContentHolder.GetChildren())
+                    if (n is IQcFocusEnter fe) fe.FocusEnter();
             if (!_opening && _factor <= 0f)
                 _active = null;
         }

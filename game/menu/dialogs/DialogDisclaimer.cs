@@ -16,7 +16,7 @@ namespace VortexArena.Game.Menu;
 /// boot, the model viewer and the dev <c>--menu-screen</c> route all bypass it, so automation and CI never
 /// have to dismiss it. Reachable on demand for screenshots via <c>--menu-screen disclaimer</c>.
 ///
-/// <see cref="ISelfFramedDialog"/>: it draws its own dim backdrop + centered panel (the QuitDialog recipe), so
+/// <see cref="ISelfFramedDialog"/>: it draws its own dim backdrop + centered panel, so
 /// MenuRoot skips the outer frame rather than nesting a panel in a panel.
 /// </summary>
 public partial class DialogDisclaimer : MenuScreen, ISelfFramedDialog
@@ -31,7 +31,7 @@ public partial class DialogDisclaimer : MenuScreen, ISelfFramedDialog
     {
         Name = "DialogDisclaimer";
 
-        // --- Self-drawn modal frame: dim backdrop, then a centered panel (mirrors QuitDialog's non-embedded
+        // --- Self-drawn modal frame: dim backdrop, then a centered panel (the self-framed
         // branch, which is the port's established "modal over the menu" shape). ---
         var dim = new ColorRect
         {

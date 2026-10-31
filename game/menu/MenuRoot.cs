@@ -370,7 +370,8 @@ public partial class MenuRoot : Control
         Control host;
         // A dialog that draws its own modal frame (its own dim backdrop + centered panel, e.g. the quit
         // confirm) opts out of the outer frame so it isn't double-framed into a tiny panel-in-a-panel.
-        if (framed && screen is IQcDialog qcDialog)
+        // (The in-game menu is a root screen, framed all the same: Xonotic draws it as a dialog over the match.)
+        if ((framed || screen is PauseMenu) && screen is IQcDialog qcDialog)
         {
             // A dialog that knows its QC size gets Xonotic's own frame for it, centred at that size.
             host = new QcDialogFrame(screen, qcDialog, Pop);
@@ -411,6 +412,8 @@ public partial class MenuRoot : Control
             // top-level dialogs live inside the nexposee, not on the stack, so there's nothing to pop).
             if (Current is MainMenu nexposee)
                 nexposee.CloseActivePanel();
+            else if (Current is PauseMenu)
+                RequestResume(); // the Game menu's close button closes the menu, back to the match
             return; // never pop the root screen away
         }
 

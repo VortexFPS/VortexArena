@@ -16,6 +16,13 @@ public interface IQcDialog
     Color QcBorderColor => Colors.White;
 }
 
+/// <summary>A dialog with a QC <c>focusEnter</c>: told when it gets the focus, i.e. when the nexposee has finished
+/// opening it.</summary>
+public interface IQcFocusEnter
+{
+    void FocusEnter();
+}
+
 /// <summary>
 /// The frame of a pushed QC dialog, drawn as an open main-menu panel is (item/dialog.qc configureDialog,
 /// item/borderimage.qc): <c>intendedWidth</c> of the 750-wide menu canvas by the height its rows imply (title bar,

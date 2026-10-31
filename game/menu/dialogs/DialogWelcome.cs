@@ -3,62 +3,55 @@ using Godot;
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// Server welcome dialog — a faithful C# port of <c>XonoticWelcomeDialog_fill</c>
-/// (qcsrc/menu/xonotic/dialog_welcome.qc). On connecting to a server the engine pops this dialog showing the
-/// server's name (the dialog title) and its welcome MOTD in a scrollable text box, with Join / Spectate
-/// buttons that join or spectate and close.
+/// The server's welcome dialog — <c>XonoticWelcomeDialog_fill</c> (qcsrc/menu/xonotic/dialog_welcome.qc) on its 12 x 4
+/// grid, 0.8 of the menu wide: the server's message of the day in a text box (<see cref="QcTextBox"/>: centred,
+/// colour codes drawn, <c>\n</c> as a line break) over every row but the last, then a green "Join!"
+/// (<c>cmd join</c>) and "Spectate" (<c>cmd spectate</c>), each half the width, both closing the dialog. The title is
+/// the server's name (welcomeDialog_resetStrings: "Welcome" until a server sends one).
 ///
-/// INERT (faithful UI, no backend): the title (<c>HOSTNAME</c>) and body (<c>WELCOME</c>/<c>CAMPAIGN</c> MOTD)
-/// are supplied by the server at connect time (QC <c>readInputArgs</c> from an args buffer); VortexArena has no
-/// server-connect backend, so the title falls back to QC's reset string ("Welcome") and the body shows a
-/// short honest placeholder. The buttons are faithful and issue the SAME console commands QC does:
-///   * Join -> <c>cmd join</c> (QC <c>makeXonoticCommandButton("Join", …, "cmd join", COMMANDBUTTON_CLOSE)</c>);
-///   * Spectate -> <c>cmd spectate</c> (QC <c>"cmd spectate"</c>).
-/// Both close the dialog after running, matching COMMANDBUTTON_CLOSE; Enter/Space defaulting to Join (QC
-/// keyDown) maps to Join being the leftmost/preferred button here.
+/// The port has no server that sends the HOSTNAME / WELCOME arguments yet, so the dialog shows what the constructor
+/// is given: by default Xonotic's reset strings.
 /// </summary>
-public partial class DialogWelcome : MenuScreen
+public partial class DialogWelcome : MenuScreen, IQcDialog
 {
+    private readonly string _name;
+    private readonly string _motd;
+
+    public DialogWelcome() : this(null, "") { }
+
+    public DialogWelcome(string? serverName, string motd)
+    {
+        _name = serverName ?? Localization.Tr("Welcome");
+        _motd = motd;
+    }
+
+    public string QcTitle => _name;
+    public float QcIntendedWidth => 0.8f;
+    public float QcRows => 12;
+
     protected override void BuildUi()
     {
-        Name = "DialogWelcome";
+        Name = "DialogWelcome"; // QC XonoticWelcomeDialog
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 32);
-        AddChild(margin);
+        var me = new QcGrid(QcRows, 4);
+        me.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(me);
 
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 14);
-        margin.AddChild(root);
+        me.TR();
+            me.TD(me.Rows - 1, me.Columns, new QcTextBox { Align = 0.5f, AllowColors = true, EscapedNewLines = true, Text = _motd });
+        me.GotoRC(me.Rows - 1, 0);
+            me.TD(1, me.Columns / 2, Qc.Button("Join!", () => RunAndClose("cmd join"), tint: new Color(0, 1, 0)));
+            me.TD(1, me.Columns / 2, Qc.Button("Spectate", () => RunAndClose("cmd spectate")));
+    }
 
-        // QC: the dialog border title is the server name (serverinfo_name), default "Welcome" (resetStrings).
-        root.AddChild(MakeTitle("Welcome"));
-
-        // QC me.serverinfo_MOTD_ent = makeXonoticTextBox() (centered, allowColors, escapedNewLines). INERT:
-        // server-supplied MOTD; render a scrollable placeholder body.
-        var scroll = new ScrollContainer
+    /// <summary>XonoticWelcomeDialog_keyDown: Enter and Space press "Join!".</summary>
+    public override void _UnhandledKeyInput(InputEvent e)
+    {
+        if (e is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Enter or Key.KpEnter or Key.Space } && IsVisibleInTree())
         {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        var body = MakeLabel(
-            "(server welcome message — connect backend pending)\n\n" +
-            "When connected to a server, its welcome message (MOTD) would appear here. " +
-            "Use Join to enter the game or Spectate to watch.");
-        body.AutowrapMode = TextServer.AutowrapMode.Word;
-        body.HorizontalAlignment = HorizontalAlignment.Center; // QC serverinfo_MOTD_ent.align = 0.5
-        body.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        scroll.AddChild(body);
-        root.AddChild(scroll);
-
-        // QC bottom row: Join ('0 1 0', "cmd join", CLOSE) + Spectate ('0 0 0', "cmd spectate", CLOSE).
-        // Both close after issuing the command (COMMANDBUTTON_CLOSE) -> run then GoBack.
-        root.AddChild(MakeButtonBar(
-            MakeButton("Join", () => RunAndClose("cmd join")),
-            MakeButton("Spectate", () => RunAndClose("cmd spectate"))));
+            RunAndClose("cmd join");
+            AcceptEvent();
+        }
     }
 
     // COMMANDBUTTON_CLOSE: issue the command, then close the dialog.

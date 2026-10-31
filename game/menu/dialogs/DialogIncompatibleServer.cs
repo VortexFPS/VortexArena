@@ -12,7 +12,7 @@ namespace VortexArena.Game.Menu;
 /// anything the player could act on. Those servers are still listed (they exist, and dropping them would
 /// read as a broken browser), so this is where the truth gets told instead.</para>
 ///
-/// <para>Presented like <see cref="QuitDialog"/>: full-rect with a dimmed backdrop over the browser, so it
+/// <para>Presented as the old QuitDialog was: full-rect with a dimmed backdrop over the browser, so it
 /// reads as a modal rather than another screen on the stack.</para>
 /// </summary>
 public partial class DialogIncompatibleServer : MenuScreen, ISelfFramedDialog

@@ -552,6 +552,11 @@ public partial class Shell : Node
             "firstrun" => new DialogFirstRun(),
             "tos" => new DialogTermsOfService(),
             "welcome" => new DialogWelcome(),
+            // What a stock Xonotic server's welcome looks like (a local game on stormkeep), for a parity capture.
+            "welcome-sample" => new DialogWelcome("Xonotic git Server",
+                @"Welcome to Xonotic git\n\nGametype: ^1Deathmatch\n\nMap: ^2Stormkeep\n"
+                + @"^9by: FruitieX, Cuinnton, SavageX, Strahlemann, W. Libert, tZork, Mirio\n\n"
+                + "This match supports ^516 players maximum"),
             "hudpanels" => new DialogHudPanels(),
             "hudweapons" => new DialogHudPanelWeapons(),
             "cvarlist" => new DialogCvarList(),

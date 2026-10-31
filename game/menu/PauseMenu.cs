@@ -4,135 +4,92 @@ using Godot;
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// The in-game menu shown over a paused match (Escape) — a faithful C# port of <c>XonoticGameMenuDialog</c>
-/// (qcsrc/menu/xonotic/dialog_gamemenu.qc). Fill order mirrors the QC exactly:
-///   Main menu (menu_cmd nexposee) · Servers · Profile · Settings · Input · Guide (the four indented, via
-///   <c>menu_cmd directmenu</c> so closing them drops back into the match) · Quick menu · [gap] · Join! /
-///   Restart level (swapped on g_campaign) · Spectate · [gap] · Leave-match · [gap] · Quit.
+/// "Game menu", the in-game menu shown over a match (Escape) — <c>XonoticGameMenuDialog_fill</c>
+/// (qcsrc/menu/xonotic/dialog_gamemenu.qc) on its 14 x 1 grid, 0.3 of the menu wide, TD for TD: Main menu
+/// (<c>menu_cmd nexposee</c>); Servers, Profile, Settings, Input and Guide indented 0.1 (<c>menu_cmd directmenu</c>, so
+/// closing them drops back into the match); Quick menu; Join! (green; "Restart level" / <c>resetmatch</c> under
+/// g_campaign, as XonoticGameMenuDialog_draw swaps it); Spectate; the leave-match button; Quit (red,
+/// <c>menu_showquitdialog</c>).
 ///
-/// The Join!/Spectate/Leave-match buttons carry QC <c>COMMANDBUTTON_CLOSE</c>: after issuing the command the
-/// engine closes the menu and returns to the match — reproduced here by resuming after the command runs. The
-/// gameplay commands reach the live match through <see cref="MenuCommand.SendGameCommand"/> (wired in
-/// <see cref="Shell"/>); without that channel they'd be inert, like the team-select buttons used to be.
+/// Join!, Spectate, Quick menu and the leave-match button carry COMMANDBUTTON_CLOSE: after the command the menu
+/// closes and the match resumes. The gameplay commands reach the live match through
+/// <see cref="MenuCommand.SendGameCommand"/> (wired in <see cref="Shell"/>).
 /// </summary>
-public partial class PauseMenu : MenuScreen
+public partial class PauseMenu : MenuScreen, IQcDialog
 {
+    public string QcTitle => Localization.Tr("Game menu");
+    public float QcIntendedWidth => 0.3f;
+    public float QcRows => 14;
+
     private Button _joinButton = null!;
-    private LeaveMatchButton _leaveButton = null!;
+    private string _joinCommand = "join";
 
     protected override void BuildUi()
     {
-        Name = "PauseMenu";
+        Name = "PauseMenu"; // QC XonoticGameMenuDialog
 
-        var center = new CenterContainer();
-        center.SetAnchorsPreset(LayoutPreset.FullRect);
-        AddChild(center);
+        var me = new QcGrid(QcRows, 1);
+        me.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(me);
 
-        var column = new VBoxContainer { CustomMinimumSize = new Vector2(340, 0) };
-        column.AddThemeConstantOverride("separation", 8);
-        center.AddChild(column);
-
-        column.AddChild(MakeTitle("Game Menu"));
-        column.AddChild(Gap(10));
-
-        // "Main menu" → menu_cmd nexposee (m_goto false: shows the fan over the match, stays connected).
-        column.AddChild(NavButton("Main menu", "menu_cmd nexposee"));
-
-        // The four indented buttons use `directmenu` (m_goto true) so closing the dialog returns to the match.
-        column.AddChild(Indent(NavButton("Servers", "menu_cmd directmenu servers")));
-        column.AddChild(Indent(NavButton("Profile", "menu_cmd directmenu profile")));
-        column.AddChild(Indent(NavButton("Settings", "menu_cmd directmenu settings")));
-        column.AddChild(Indent(NavButton("Input", "menu_cmd directmenu inputsettings")));
-        column.AddChild(Indent(NavButton("Guide", "menu_cmd directmenu guide")));
-
-        // QC: "Quick menu" with COMMANDBUTTON_CLOSE. No quick-menu backend here; route the command (inert/logged)
-        // and close, matching the QC "issue command, return to match" behavior.
-        column.AddChild(CloseAfter(NavButton("Quick menu", "quickmenu")));
-
-        column.AddChild(Gap(14)); // QC two blank rows
-
-        // Join! / Restart level — onClickCommand "join" (or "resetmatch" under g_campaign, swapped in _Process).
-        _joinButton = CloseAfter(NavButton("Join!", "join"));
-        column.AddChild(_joinButton);
-
-        // Spectate — onClickCommand "spec", COMMANDBUTTON_CLOSE.
-        column.AddChild(CloseAfter(NavButton("Spectate", "spec")));
-
-        column.AddChild(Gap(14));
-
-        // Leave-match — the dedicated button: disabled when not in a match, dynamic label, disconnects on press.
-        _leaveButton = new LeaveMatchButton(() => { Menu?.RequestDisconnect(); });
-        column.AddChild(_leaveButton);
-
-        column.AddChild(Gap(14));
-
-        // Quit — red, opens the quit confirmation (QC menu_showquitdialog). NOT a close button.
-        var quit = NavButton("Quit", "menu_showquitdialog");
-        quit.AddThemeColorOverride("font_color", new Color(1f, 0.35f, 0.35f));
-        column.AddChild(quit);
+        me.TR();
+            me.TD(1, 1, Command("Main menu", "menu_cmd nexposee"));
+        me.TR();
+            me.TDempty(0.1f);
+            me.TD(1, 0.8f, Command("Servers", "menu_cmd directmenu servers"));
+        me.TR();
+            me.TDempty(0.1f);
+            me.TD(1, 0.8f, Command("Profile", "menu_cmd directmenu profile"));
+        me.TR();
+            me.TDempty(0.1f);
+            me.TD(1, 0.8f, Command("Settings", "menu_cmd directmenu settings"));
+        me.TR();
+            me.TDempty(0.1f);
+            me.TD(1, 0.8f, Command("Input", "menu_cmd directmenu inputsettings"));
+        me.TR();
+            me.TDempty(0.1f);
+            me.TD(1, 0.8f, Command("Guide", "menu_cmd directmenu guide"));
+        me.TR();
+            me.TD(1, 1, CloseAfter(Command("Quick menu", "quickmenu")));
+        me.TR();
+        me.TR();
+            _joinButton = me.TD(1, 1, CloseAfter(Qc.Button("Join!", () => MenuCommand.Run(_joinCommand), tint: new Color(0, 1, 0))));
+        me.TR();
+            me.TD(1, 1, CloseAfter(Command("Spectate", "spec")));
+        me.TR();
+        me.TR();
+            me.TD(1, 1, QcLook.Button(new LeaveMatchButton(() => Menu?.RequestDisconnect()) { CustomMinimumSize = Vector2.Zero }));
+        me.TR();
+        me.TR();
+            me.TD(1, 1, Qc.Button("Quit", () => MenuCommand.Run("menu_showquitdialog"), tint: new Color(1, 0, 0)));
 
         SetProcess(true);
     }
 
     public override void _Process(double delta)
     {
-        // (perf 2026-08-03) Once opened, this screen stays alive-but-hidden for the rest of the match
-        // (MenuRoot.Push keeps the stack), and Shell processes Always — so without this gate it ran a cvar
-        // read plus string compares every frame of gameplay. The button text only matters while visible.
+        // (perf 2026-08-03) Once opened, this screen stays alive-but-hidden for the rest of the match, and Shell
+        // processes Always — the button text only matters while visible.
         if (!IsVisibleInTree())
             return;
-        // QC XonoticGameMenuDialog_draw: under g_campaign the Join! button becomes "Restart level"/"resetmatch".
-        bool campaign = MenuState.Cvars.GetFloat("g_campaign") != 0f;
-        if (campaign && _joinButton.Text == "Join!")
+        // XonoticGameMenuDialog_draw: under g_campaign the Join! button becomes "Restart level" / resetmatch.
+        string command = MenuState.Cvars.GetFloat("g_campaign") != 0f ? "resetmatch" : "join";
+        if (command != _joinCommand)
         {
-            _joinButton.Text = "Restart level";
-            _joinButton.SetMeta(CmdMeta, "resetmatch");
-        }
-        else if (!campaign && _joinButton.Text == "Restart level")
-        {
-            _joinButton.Text = "Join!";
-            _joinButton.SetMeta(CmdMeta, "join");
+            _joinCommand = command;
+            _joinButton.Text = Localization.Tr(command == "join" ? "Join!" : "Restart level");
         }
     }
 
-    // C2/C3: the SetMeta key is cached as a StringName so this _Process path mints no per-frame allocation
-    // (godot#105750) — the XG0002 analyzer flagged the former string literal.
-    private static readonly StringName CmdMeta = "cmd";
+    /// <summary>makeXonoticCommandButton(text, '0 0 0', command, 0).</summary>
+    private static Button Command(string text, string command) => Qc.Button(text, () => MenuCommand.Run(command));
 
-    // ---- button helpers (the QC makeXonoticCommandButton + COMMANDBUTTON_CLOSE flag) ----------------------
-
-    /// <summary>A command button that runs its command through <see cref="MenuCommand"/> (QC makeXonoticCommandButton).</summary>
-    private static Button NavButton(string label, string command)
-    {
-        var b = new Button
-        {
-            Text = label,
-            CustomMinimumSize = new Vector2(0, 34),
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-        };
-        b.SetMeta("cmd", command);
-        b.Pressed += () => MenuCommand.Run(b.GetMeta("cmd").AsString());
-        return b;
-    }
-
-    /// <summary>Mark a button as QC COMMANDBUTTON_CLOSE: after the command runs, close the menu (resume the match).</summary>
-    private T CloseAfter<T>(T b) where T : Button
+    /// <summary>COMMANDBUTTON_CLOSE: after the command runs, close the menu (resume the match).</summary>
+    private T CloseAfter<T>(T b) where T : BaseButton
     {
         b.Pressed += () => Menu?.RequestResume();
         return b;
     }
-
-    /// <summary>QC me.TDempty(0.1): indent a button slightly (the Servers/Profile/Settings/Input/Guide rows).</summary>
-    private static Control Indent(Control inner)
-    {
-        var row = new MarginContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        row.AddThemeConstantOverride("margin_left", 28);
-        inner.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        row.AddChild(inner);
-        return row;
-    }
-
-    private static Control Gap(float h) => new Control { CustomMinimumSize = new Vector2(0, h) };
 }
 
 /// <summary>
@@ -163,7 +120,10 @@ public partial class LeaveMatchButton : Button
             return;
         bool inMatch = MenuCommand.InMatch?.Invoke() ?? false;
         Disabled = !inMatch;
-        // leaveMatchButton_getText: disabled → "Leave current match"; else (single network path) "Leave multiplayer".
-        Text = inMatch ? "Leave multiplayer" : "Leave current match";
+        // leaveMatchButton_getText: disabled → "Leave current match"; "Leave campaign" under g_campaign; else (the
+        // port has one network path) "Leave multiplayer".
+        string text = Localization.Tr(!inMatch ? "Leave current match"
+            : MenuState.Cvars.GetFloat("g_campaign") != 0f ? "Leave campaign" : "Leave multiplayer");
+        if (Text != text) Text = text;
     }
 }

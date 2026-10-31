@@ -69,7 +69,8 @@ public static class MenuColorCodes
                 if (col != null)
                 {
                     if (sb.Length > 0) { runs.Add((sb.ToString(), current)); sb.Clear(); }
-                    current = col.Length == 0 ? baseColor : Godot.Color.FromHtml(col) with { A = baseColor.A };
+                    // DrawQ_GetTextColor: the code's colour times the colour the string is drawn in.
+                    current = col.Length == 0 ? baseColor : Godot.Color.FromHtml(col) * baseColor;
                     i += extra;
                     continue;
                 }
@@ -96,8 +97,8 @@ public static class MenuColorCodes
                 '5' => "#00ffff",
                 '6' => "#ff00ff",
                 '7' => "",            // white == reset to the surrounding (default) colour
-                '8' => "#999999",
-                _ => "#cccccc",       // ^9
+                '8' => "#ffffff80",   // DarkPlaces string_colors: half-transparent white
+                _ => "#808080",       // ^9: half brightness
             };
         }
         if (first == 'x' && caret + 4 < s.Length

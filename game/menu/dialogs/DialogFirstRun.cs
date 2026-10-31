@@ -3,130 +3,92 @@ using Godot;
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// First-run setup dialog — a faithful C# port of <c>XonoticFirstRunDialog_fill</c>
-/// (qcsrc/menu/xonotic/dialog_firstrun.qc). Shown once on the very first launch (QC
-/// <c>shouldShow</c>: <c>_cl_name == defstring("_cl_name")</c>): it greets the player, lets them pick a
-/// language, enter a player name, and choose whether player statistics may use their nickname, then
-/// "Save settings" applies it all (and, because of the language selector, restarts the menu).
+/// The first-run dialog ("Welcome") — <c>XonoticFirstRunDialog_fill</c> (qcsrc/menu/xonotic/dialog_firstrun.qc) on its
+/// 16 x 6 grid, 0.8 of the menu wide, TD for TD: the wrapped greeting; "Name:" with the name as it will look
+/// (colour codes drawn), the <c>_cl_name</c> box, the colour picker and character map under it; "Text language:" and
+/// the language list on the right; the stats-nickname question with Yes / No / Undecided on
+/// <c>cl_allow_uid2name</c>; and "Save settings" (<c>prvm_language "$_menu_prvm_language"; saveconfig;
+/// menu_restart</c>), enabled once something was chosen (CheckFirstRunButton).
 ///
-/// It binds the SAME engine cvars the QC binds:
-///   * <c>_cl_name</c> — the player name input box;
-///   * <c>_menu_prvm_language</c> — the text-language chooser;
-///   * <c>cl_allow_uid2name</c> — the Yes/No/Undecided stats-nickname radio (1 / 0 / -1).
-/// The "Save settings" button issues the SAME console command as QC's apply button:
-/// <c>prvm_language "$_menu_prvm_language"; saveconfig; menu_restart</c>.
-///
-/// Approximations (no toolkit factory, faithful to the same cvar):
-///   * QC <c>makeXonoticLanguageList</c> (a data-driven list box scanning languages.txt) becomes a
-///     <see cref="Widgets.TextSlider"/> over the same representative locale set used by the User settings
-///     tab — same cvar (<c>_menu_prvm_language</c>), approximate option set, INERT until a localization
-///     backend exists (the Save command is still issued faithfully).
-///   * QC <c>makeXonoticColorpicker(box)</c> + <c>makeXonoticCharmap(box)</c> (the name-color picker and
-///     character map that edit the name field's colors/glyphs) have no VortexArena backend yet; rendered as a
-///     short honest note label. INERT.
+/// Shown once, on the first launch (shouldShow: <c>_cl_name</c> still at its default).
 /// </summary>
-public partial class DialogFirstRun : MenuScreen
+public partial class DialogFirstRun : MenuScreen, IQcDialog
 {
-    // Fallback locale set, used only when languages.txt can't be read (no content repo). The live picker is
-    // data-driven from languages.txt via Localization.LoadLanguages() (QC makeXonoticLanguageList), same cvar
-    // (_menu_prvm_language). Mirrors DialogSettingsUser's fallback so the two pickers agree headlessly.
-    private static readonly (string Label, string Value)[] LanguagesFallback =
-    {
-        ("English", "en"),
-        ("Deutsch", "de"),
-        ("Español", "es"),
-        ("Français", "fr"),
-        ("Italiano", "it"),
-        ("Português", "pt"),
-        ("Русский", "ru"),
-        ("中文（简体字）", "zh_CN"),
-    };
+    public string QcTitle => Localization.Tr("Welcome");
+    public float QcIntendedWidth => 0.8f;
+    public float QcRows => 16;
 
     protected override void BuildUi()
     {
-        Name = "DialogFirstRun";
+        Name = "DialogFirstRun"; // QC XonoticFirstRunDialog
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 32);
-        AddChild(margin);
+        var me = new QcGrid(QcRows, 6);
+        me.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(me);
 
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 14);
-        margin.AddChild(root);
+        me.TR();
+        me.TR();
+            me.TDempty(1);
+            me.TD(2, 4, new QcLabel("Welcome to Xonotic, please select your language preference and enter your player name to get started.  You can change these options later through the menu system.")
+            {
+                AllowWrap = true, WrapSpacing = 0.5f,
+            });
+        me.TR();
 
-        // QC: no title-size label, but the dialog title is "Welcome".
-        root.AddChild(MakeTitle("Welcome"));
+        me.TR();
+        me.TR();
+            me.TD(1, 0.5f, Qc.Label("Name:"));
+            // The name as it will look: allowCut, allowColors, alpha 1, its text the box's (label.textEntity = box).
+            var label = me.TD(1, 3.25f, new QcLabel("")
+            {
+                AllowColors = true, Color = MenuSkin.SkinColor("COLOR_TEXT", 0.96f, 0.99f, 1f),
+            });
+        me.TR();
+            var box = Widgets.InputBox("_cl_name", "", "Name under which you will appear in the game");
+            QcLook.InputBox(box, clearButton: false, editColorCodes: true); // makeXonoticInputBox_T(1, ...), enableClearButton false
+            box.TextChanged += t => label.Text = t;
+            box.TreeEntered += () => label.Text = box.Text;
+            me.TD(1, 3.75f, box);
+        me.TR();
+            var picker = HslColorPicker.ForNameBox(box);
+            picker.CustomMinimumSize = Vector2.Zero;
+            me.TD(5, 1.25f, picker);
+            me.TD(5, 2.5f, new CharmapPicker(box));
+        me.TR();
+        me.TR();
+        me.TR();
+        me.TR();
 
-        // QC: the wrapping intro text label (makeXonoticTextLabel, allowWrap = true).
-        var intro = MakeLabel(
-            "Welcome to Xonotic, please select your language preference and enter your player name to " +
-            "get started.  You can change these options later through the menu system.");
-        intro.AutowrapMode = TextServer.AutowrapMode.Word;
-        root.AddChild(intro);
+        me.GotoRC(3, 4); me.SetFirstColumn(me.CurrentColumn);
+        me.TR();
+            me.TD(1, 2, Qc.Label("Text language:"));
+        me.TR();
+            me.TD(6, 2, new QcLanguageList());
+        me.TR();
+        me.TR();
 
-        root.AddChild(Ui.Spacer());
+        me.GotoRC(me.Rows - 4, 0); me.SetFirstColumn(me.CurrentColumn);
+        me.TD(1, me.Columns, Qc.Label("Allow player statistics to use your nickname at stats.xonotic.org?", 0.5f));
 
-        // --- Player name (QC: "Name:" label + colored preview label + makeXonoticInputBox_T(1,"_cl_name")). ---
-        // QC binds _cl_name; the colored preview label mirrors the box (label.textEntity = box). We render the
-        // bound input box directly (it already shows the live cvar value).
-        root.AddChild(Ui.Row("Name:",
-            Widgets.InputBox("_cl_name", "player", "Name under which you will appear in the game")));
+        me.GotoRC(me.Rows - 3, 0);
+        var uid2name = new QcRadioGroup();
+        me.TDempty(1.5f);
+        me.TD(1, 1, Qc.Radio(uid2name, "cl_allow_uid2name", "1", "Yes"));
+        me.TD(1, 1, Qc.Radio(uid2name, "cl_allow_uid2name", "0", "No"));
+        me.TD(1, 1, Qc.Radio(uid2name, "cl_allow_uid2name", "-1", "Undecided"));
+        me.TR();
+        me.TD(1, me.Columns, Qc.Label("Player statistics are enabled by default, you can change this in the Profile menu", 0.5f));
 
-        // QC makeXonoticColorpicker(box) + makeXonoticCharmap(box): name-color picker + character map editing
-        // the name field. No VortexArena backend yet — honest note. INERT.
-        var pickerNote = MakeLabel("(name color picker / character map — editing backend pending)");
-        pickerNote.AddThemeColorOverride("font_color", new Color(0.7f, 0.7f, 0.72f));
-        root.AddChild(pickerNote);
-
-        root.AddChild(Ui.Spacer());
-
-        // --- Text language (QC: "Text language:" label + makeXonoticLanguageList). ---
-        // QC binds _menu_prvm_language. Data-driven from languages.txt (localized name -> id), like QC; falls
-        // back to a small set headlessly. Self-names are not translated (AddRaw).
-        var lang = Widgets.TextSlider("_menu_prvm_language");
-        var langs = Localization.LoadLanguages();
-        if (langs.Count > 0)
-            foreach (var l in langs)
-                lang.AddRaw(l.Localized, l.Id);
-        else
-            foreach ((string label, string value) in LanguagesFallback)
-                lang.AddRaw(label, value);
-        root.AddChild(Ui.Row("Text language:", lang));
-
-        root.AddChild(Ui.Spacer());
-
-        // --- Player statistics nickname permission (QC: prompt + Yes/No/Undecided radio on cl_allow_uid2name). ---
-        root.AddChild(MakeLabel("Allow player statistics to use your nickname at stats.xonotic.org?"));
-
-        var uidGroup = new ButtonGroup();
-        var uidRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        uidRow.AddThemeConstantOverride("separation", 8);
-        // QC makeXonoticRadioButton(1, "cl_allow_uid2name", "1"/"0"/"-1").
-        uidRow.AddChild(Widgets.RadioButton("cl_allow_uid2name", "1", "Yes", uidGroup));
-        uidRow.AddChild(Widgets.RadioButton("cl_allow_uid2name", "0", "No", uidGroup));
-        uidRow.AddChild(Widgets.RadioButton("cl_allow_uid2name", "-1", "Undecided", uidGroup));
-        root.AddChild(uidRow);
-
-        root.AddChild(MakeLabel(
-            "Player statistics are enabled by default, you can change this in the Profile menu"));
-
-        root.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill });
-
-        // QC: makeXonoticCommandButton("Save settings", …, "prvm_language \"$_menu_prvm_language\"; saveconfig;
-        // menu_restart", COMMANDBUTTON_APPLY). Same command string. We also persist the menu cvar store on the
-        // way out (saveconfig's local equivalent) and provide the universal Back.
-        var save = Widgets.CommandButton("Save settings",
-            "prvm_language \"$_menu_prvm_language\"; saveconfig; menu_restart");
-        save.Pressed += MenuState.SaveUserConfig; // mirror QC saveconfig against the VortexArena cvar store
-
-        root.AddChild(MakeButtonBar(save, MakeButton("Back", OnBack)));
+        // because of the language selector, this is a menu_restart!
+        me.GotoRC(me.Rows - 1, 0);
+        var save = Qc.Command("Save settings", "prvm_language \"$_menu_prvm_language\"; saveconfig; menu_restart");
+        save.Pressed += MenuState.SaveUserConfig; // saveconfig against the port's own cvar store
+        me.TD(1, me.Columns, save).DepFunc(CheckFirstRunButton);
     }
 
-    private void OnBack()
-    {
-        MenuState.SaveUserConfig();
-        GoBack();
-    }
+    /// <summary>CheckFirstRunButton: a name, a language other than the running one, or a stats answer was given.</summary>
+    private static bool CheckFirstRunButton()
+        => MenuState.Cvars.GetString("_cl_name") != MenuState.Cvars.GetDefault("_cl_name")
+           || MenuState.Cvars.GetString("_menu_prvm_language") != MenuState.Cvars.GetString("prvm_language")
+           || MenuState.Cvars.GetString("cl_allow_uid2name") != "-1";
 }

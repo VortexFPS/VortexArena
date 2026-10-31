@@ -39,7 +39,8 @@ public partial class QcNameList : MenuListBox
         string s = _names[index];
         if (s.StartsWith('/')) s = s[1..]; // "remove the first forward slash"
         s = QcDraw.ShortenToWidth(s, rect.Size.X - 2f * ch);
-        Color color = _skinColor ? MenuSkin.Text : MenuSkin.Fade(Colors.White, MenuSkin.Text.A);
+        // The colour DrawQ_String starts from (ColoredText lifts it): SKINCOLOR_TEXT or white, at SKINALPHA_TEXT.
+        Color color = MenuSkin.Fade(_skinColor ? MenuSkin.SkinColor("COLOR_TEXT", 0.96f, 0.99f, 1f) : Colors.White, MenuSkin.Text.A);
         QcDraw.ColoredText(this, rect.Position + new Vector2(ch, 0.5f * (rect.Size.Y - ch)), s, color);
     }
 }

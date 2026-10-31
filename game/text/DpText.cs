@@ -460,18 +460,20 @@ public static class DpText
     /// <paramref name="position"/> (in <paramref name="target"/>'s own coordinates, which are taken to be
     /// pixels), cell height <paramref name="size"/> pixels. <paramref name="origin"/> is where the canvas
     /// item's own origin sits on screen, so the string can be snapped to a whole SCREEN pixel
-    /// (snap_to_pixel_x/y) rather than a whole pixel of the item. Colour codes are not interpreted.
+    /// (snap_to_pixel_x/y) rather than a whole pixel of the item. Colour codes are not interpreted; a caller drawing a
+    /// coloured string run by run passes <paramref name="snapX"/> false after the first run, so each run starts where
+    /// the pen of the one string would be, as it does in DrawQ_String.
     /// Returns the width drawn, in pixels.
     /// </summary>
     public static float Draw(CanvasItem target, int slot, Vector2 position, string? text, float size, Color color,
-        Vector2 origin = default, float fontScaleX = 1, float fontScaleY = 1)
+        Vector2 origin = default, float fontScaleX = 1, float fontScaleY = 1, bool snapX = true)
     {
         if (string.IsNullOrEmpty(text) || !(size > 0)) return 0;
         LegacyTextLayout layout = Layout(slot, size, out float yShift, fontScaleX, fontScaleY);
         if (layout.ScaleX == 0 || layout.ScaleY == 0) return 0;
 
         // "startx = snap_to_pixel_x(startx, 0.4); starty = snap_to_pixel_y(starty, 0.4)"
-        float x = LegacyTextLayout.SnapX(origin.X + position.X) - origin.X;
+        float x = snapX ? LegacyTextLayout.SnapX(origin.X + position.X) - origin.X : position.X;
         float y = LegacyTextLayout.SnapY(origin.Y + position.Y + yShift, 0.4f) - origin.Y;
         float sx = layout.ScaleX, sy = layout.ScaleY;
         float baseline = y + layout.Baseline * sy;

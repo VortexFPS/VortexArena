@@ -1,209 +1,148 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
+using VortexArena.Game.Hud;
 
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// Guide tab — a faithful C# port of <c>XonoticGuideTab_fill</c>
-/// (qcsrc/menu/xonotic/dialog_media_guide.qc). The QC is a three-pane layout: a topic list (the
-/// <c>TOPICS</c> macro in guide/guide.qh — Introduction, Movement, Gametypes, Weapons, Items,
-/// Powerups, Buffs, Nades, Monsters, Vehicles, Turrets, Mutators, Mods), an entry list with a
-/// keyword filter box, and a description pane fed by the selected entry's <c>describe()</c>.
+/// The Guide tab — <c>XonoticGuideTab_fill</c> (qcsrc/menu/xonotic/dialog_media_guide.qc) on its 17 x 6 grid: the
+/// topic list 1.5 columns wide (<see cref="QcGuideTopicList"/>, the TOPICS of guide.qh), the entry list 1.75 wide
+/// with its filter box under it (<see cref="QcGuideEntryList"/>), the description pane in the 2.75 left over
+/// (<see cref="QcGuideDescription"/>), all from half a row down.
 ///
-/// FAITHFUL UI NOW: the topic list is real and complete (it's a fixed set, so we populate it
-/// faithfully). The entry list and descriptions come from the in-game registries (weapons, items,
-/// monsters, …) which VortexArena's menu can't yet enumerate, so the entry list is an empty
-/// <see cref="ItemList"/> with an honest note, the filter box is inert, and the description pane
-/// shows a short placeholder.
+/// The topics' sources are the registries of guide/guide.qh. Introduction, Movement and Mods are the free-text pages
+/// (<see cref="GuidePages"/>); Gametypes, Weapons and Mutators list the port's own registries with whatever
+/// description each ported thing carries. The other registries (items, powerups, buffs, nades, monsters, vehicles,
+/// turrets) have no guide text in the port yet, so those topics list nothing.
 /// </summary>
-public partial class DialogMediaGuide : Control
+public partial class DialogMediaGuide : QcTab
 {
-    // QC TOPICS(X) in guide/guide.qh — the fixed topic set, in order (labels are the _() strings).
-    private static readonly string[] Topics =
+    /// <summary>TOPICS(X) in guide/guide.qh: name and icon.</summary>
+    private static readonly (string Name, string Icon)[] Topics =
     {
-        "Introduction", "Movement", "Gametypes", "Weapons", "Items", "Powerups",
-        "Buffs", "Nades", "Monsters", "Vehicles", "Turrets", "Mutators", "Mods",
+        ("Introduction", "gametype_tdm"), ("Movement", "gametype_inv"), ("Gametypes", "gametype_dm"),
+        ("Weapons", "gametype_duel"), ("Items", "gametype_kh"), ("Powerups", "gametype_dom"), ("Buffs", "gametype_ka"),
+        ("Nades", "gametype_ft"), ("Monsters", "gametype_lms"), ("Vehicles", "gametype_rc"), ("Turrets", "gametype_as"),
+        ("Mutators", "gametype_nb"), ("Mods", "gametype_ons"),
     };
 
-    private Label _description = null!;
-    private ItemList _entryList = null!;
-    private Label _entryNote = null!;
-    // The Weapons topic's entries, parallel to _entryList rows (so a row index maps back to its weapon).
-    private readonly List<Weapon> _weaponEntries = new();
-    // The Mutators topic's entries, parallel to _entryList rows (so a row index maps back to its mutator).
-    private readonly List<MutatorBase> _mutatorEntries = new();
+    private readonly QcGuideTopicList _topicList = new(Topics.Select(t => (Localization.Tr(t.Name), t.Icon)).ToArray());
+    private readonly QcGuideEntryList _entryList = new();
+    private readonly QcGuideDescription _description = new();
+    private LineEdit _filterBox = null!;
+    private string? _filter;
 
-    public override void _Ready()
+    public DialogMediaGuide() : base(rows: 17f, columns: 6f, intendedWidth: 0.96f) { }
+
+    protected override void Fill()
     {
-        SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        SizeFlagsVertical = SizeFlags.ExpandFill;
+        float col = 0, width = 1.5f;
+        GotoRC(0.5f, col); SetFirstColumn(CurrentColumn);
+            TD(Rows - 0.5f, width, _topicList);
+                _topicList.ItemSelected += _ => TopicChanged();
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (string side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 16);
-        AddChild(margin);
-
-        // Three side-by-side panes (QC widths 1.5 / 1.75 / 2.75).
-        var columns = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        columns.AddThemeConstantOverride("separation", 12);
-        margin.AddChild(columns);
-
-        columns.AddChild(BuildTopicPane());
-        columns.AddChild(BuildEntryPane());
-        columns.AddChild(BuildDescriptionPane());
-    }
-
-    /// <summary>Left pane: the topic list (QC me.topicList) — faithfully populated.</summary>
-    private Control BuildTopicPane()
-    {
-        var pane = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        pane.AddThemeConstantOverride("separation", 6);
-        pane.AddChild(Ui.Header("Topics"));
-
-        var topicList = new ItemList
-        {
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(150, 240),
-        };
-        foreach (string t in Topics)
-            topicList.AddItem(t);
-        topicList.ItemSelected += OnTopicSelected;
-        pane.AddChild(topicList);
-        return pane;
-    }
-
-    /// <summary>Middle pane: the entry list (QC me.entryList) + keyword filter (QC stringFilterBox).</summary>
-    private Control BuildEntryPane()
-    {
-        var pane = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        pane.AddThemeConstantOverride("separation", 6);
-        pane.AddChild(Ui.Header("Entries"));
-
-        _entryList = new ItemList
-        {
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(160, 200),
-        };
-        _entryList.ItemSelected += OnEntrySelected;
-        pane.AddChild(_entryList);
-        _entryNote = Ui.Label("(select the Weapons topic to browse weapon descriptions)");
-        pane.AddChild(_entryNote);
-
-        // QC: stringFilterBox (keyword filter), inert without the registry.
-        var filter = new LineEdit { PlaceholderText = "Filter…", SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        pane.AddChild(Ui.Row("Filter:", filter, 60f));
-        return pane;
-    }
-
-    /// <summary>Right pane: the description pane (QC me.descriptionPane).</summary>
-    private Control BuildDescriptionPane()
-    {
-        var pane = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        pane.AddThemeConstantOverride("separation", 6);
-        pane.AddChild(Ui.Header("Description"));
-
-        var scroll = new ScrollContainer
-        {
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        _description = Ui.Label("Select a topic, then an entry, to read its description.\n\n(entry descriptions — guide registry pending)");
-        _description.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        _description.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        scroll.AddChild(_description);
-        pane.AddChild(scroll);
-        return pane;
-    }
-
-    // QC topicChangeNotify reloads the entry list from the topic's source. The Weapons topic enumerates the
-    // weapon registry (Registry<Weapon>.All, like WeaponPriorityList) and shows each weapon's ported describe()
-    // text; the other topics' registry sources (items/monsters/…) aren't enumerated here yet.
-    private void OnTopicSelected(long index)
-    {
-        _entryList.Clear();
-        _weaponEntries.Clear();
-        _mutatorEntries.Clear();
-
-        if (index < 0 || index >= Topics.Length)
-            return;
-
-        if (Topics[index] == "Mutators")
-        {
-            // The QC Mutators topic lists the mutator registry; each entry's describe() feeds the description
-            // pane. We only have ported describe() text for some mutators, so list those that provide it.
-            foreach (MutatorBase m in Mutators.All)
+        col += width;
+        width = 1.75f;
+        GotoRC(0.5f, col); SetFirstColumn(CurrentColumn);
+            TD(Rows - 1.5f, width, _entryList);
+                _entryList.ItemSelected += _ => EntryChanged();
+        GotoRC(Rows - 1, col);
+            TD(1, 0.3f, Qc.Label("Filter:"));
+            _filterBox = TD(1, width - 0.3f, QcLook.InputBox(new LineEdit
             {
-                if (m is null || m.NetName.Length == 0 || m.GuideDescription is not { Length: > 0 })
-                    continue;
-                _mutatorEntries.Add(m);
-                _entryList.AddItem(Humanize(m.NetName));
-            }
-            _entryNote.Text = "(select a mutator to read its description)";
-            _description.Text = "Mutators\n\nSelect a mutator from the entry list to read its description.";
-            return;
-        }
+                TooltipText = Localization.Tr("Click here or CTRL+F to provide a keyword to narrow down the list; CTRL+DEL to clear; ENTER when done."),
+            }));
+                _filterBox.TextChanged += t => { _filter = t.Length > 0 ? t : null; Refilter(sourceChanged: false); };
 
-        if (Topics[index] == "Weapons")
-        {
-            // The QC Weapons topic lists the in-game weapon registry, sorted; each entry's describe() feeds the
-            // description pane. Mirror that with Registry<Weapon>.All.
-            foreach (Weapon w in Registry<Weapon>.All)
-            {
-                if (w is null || w.NetName.Length == 0)
-                    continue;
-                _weaponEntries.Add(w);
-                _entryList.AddItem(w.DisplayName.Length > 0 ? w.DisplayName : w.NetName);
-            }
-            _entryNote.Text = "(select a weapon to read its description)";
-            _description.Text = "Weapons\n\nSelect a weapon from the entry list to read its description.";
-            return;
-        }
+        col += width;
+        width = 2.75f;
+        GotoRC(0.5f, col); SetFirstColumn(CurrentColumn);
+            TD(Rows - 0.5f, width, _description);
 
-        _entryNote.Text = "(entry list / descriptions for this topic — guide registry enumeration pending)";
-        _description.Text = $"{Topics[index]}\n\n(entry list / descriptions for this topic — guide registry enumeration pending)";
+        _topicList.SetSelected(0);
+        TopicChanged();
     }
 
-    // An entry was picked: show the selected entry's ported describe() prose (or a note if none is ported yet).
-    private void OnEntrySelected(long index)
+    /// <summary>topicChangeNotify: the topic's source into the entry list, the filter cleared.</summary>
+    private void TopicChanged()
     {
-        if (index < 0)
-            return;
-
-        if (_mutatorEntries.Count > 0)
-        {
-            if (index >= _mutatorEntries.Count)
-                return;
-            MutatorBase m = _mutatorEntries[(int)index];
-            string mname = Humanize(m.NetName);
-            _description.Text = m.GuideDescription is { Length: > 0 } mdesc
-                ? $"{mname}\n\n{mdesc}"
-                : $"{mname}\n\n(no guide description ported for this mutator yet)";
-            return;
-        }
-
-        if (index >= _weaponEntries.Count)
-            return;
-        Weapon w = _weaponEntries[(int)index];
-        string name = w.DisplayName.Length > 0 ? w.DisplayName : w.NetName;
-        _description.Text = w.GuideDescription is { Length: > 0 } desc
-            ? $"{name}\n\n{desc}"
-            : $"{name}\n\n(no guide description ported for this weapon yet)";
+        _filterBox.SetBlockSignals(true);
+        _filterBox.Text = "";
+        _filterBox.SetBlockSignals(false);
+        _filter = null;
+        Refilter(sourceChanged: true);
     }
 
-    // Render a registry NetName (e.g. "offhand_blaster") as a readable label ("Offhand Blaster") for the
-    // entry list — the port has no per-mutator localized display-name field (QC's `message` ATTRIB).
+    /// <summary>XonoticEntryList_refilter.</summary>
+    private void Refilter(bool sourceChanged)
+    {
+        _entryList.SetEntries(Source(_topicList.SelectedItem, _filter), sourceChanged);
+        EntryChanged();
+    }
+
+    /// <summary>entryChangeNotify: the selected entry's describe() into the description pane.</summary>
+    private void EntryChanged()
+    {
+        int i = _entryList.SelectedItem;
+        if (_entryList.Entries.Count <= 0 || i < 0 || i >= _entryList.Entries.Count) return;
+        _description.SetDescription(_entryList.Entries[i].Describe());
+    }
+
+    /// <summary>The topic's DataSource reload(filter): entries whose name holds the filter, case-insensitively.</summary>
+    private static IReadOnlyList<GuideEntry> Source(int topic, string? filter)
+    {
+        IEnumerable<GuideEntry> entries = (topic >= 0 && topic < Topics.Length ? Topics[topic].Name : "") switch
+        {
+            "Introduction" => Pages(GuidePages.Introduction),
+            "Movement" => Pages(GuidePages.Movement),
+            "Mods" => Pages(GuidePages.Mods),
+            "Gametypes" => GameTypes.All
+                .Where(g => g is not null && g.NetName.Length > 0)
+                .Select(g => new GuideEntry(Name(g.DisplayName, g.NetName), MenuSkin.SkinImage("gametype_" + g.NetName), () => g.MenuDescription ?? "")),
+            "Weapons" => WeaponEntries(),
+            "Mutators" => Mutators.All
+                .Where(m => m is not null && m.NetName.Length > 0 && m.GuideDescription is { Length: > 0 })
+                .Select(m => new GuideEntry(Humanize(m.NetName), null, () => m.GuideDescription ?? "")),
+            _ => Enumerable.Empty<GuideEntry>(),
+        };
+        if (!string.IsNullOrEmpty(filter))
+            entries = entries.Where(e => e.Name.Contains(filter, StringComparison.OrdinalIgnoreCase));
+        return entries.ToList();
+    }
+
+    private static IEnumerable<GuideEntry> Pages(IReadOnlyList<GuidePages.Page> pages)
+        => pages.Select(p => new GuideEntry(p.Name, null, p.Describe));
+
+    /// <summary>WeaponSource: the regular weapons, then Overkill's, then Overkill's superweapons; hidden ones left out.</summary>
+    private static IEnumerable<GuideEntry> WeaponEntries()
+    {
+        static bool Ok(Weapon w) => w.NetName.StartsWith("ok", StringComparison.Ordinal) && w.NetName != "ok";
+        var shown = Registry<Weapon>.All.Where(w => w is not null && w.NetName.Length > 0 && w.MenuRegistered
+            && (w.SpawnFlags & WeaponFlags.Hidden) == 0).ToList();
+        IEnumerable<Weapon> ordered = shown.Where(w => !Ok(w))
+            .Concat(shown.Where(w => Ok(w) && !w.IsSuperWeapon))
+            .Concat(shown.Where(w => Ok(w) && w.IsSuperWeapon));
+        foreach (Weapon w in ordered)
+        {
+            Weapon weapon = w;
+            yield return new GuideEntry(Name(w.DisplayName, w.NetName), WeaponHud.Icon(w), () => weapon.GuideDescription ?? "");
+        }
+    }
+
+    private static string Name(string display, string netName) => display.Length > 0 ? display : Humanize(netName);
+
+    // A registry NetName ("offhand_blaster") as a readable label ("Offhand Blaster"): the port keeps no localized
+    // display name (QC's `message`) for mutators.
     private static string Humanize(string netName)
     {
         string[] parts = netName.Split('_');
         for (int i = 0; i < parts.Length; i++)
             if (parts[i].Length > 0)
-                parts[i] = char.ToUpperInvariant(parts[i][0]) + parts[i].Substring(1);
+                parts[i] = char.ToUpperInvariant(parts[i][0]) + parts[i][1..];
         return string.Join(" ", parts);
     }
 }

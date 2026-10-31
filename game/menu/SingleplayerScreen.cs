@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using Godot;
 using VortexArena.Common.Gameplay;
 using VortexArena.Server; // CampaignCatalog / CampaignLevel
@@ -8,126 +7,73 @@ using VortexArena.Server; // CampaignCatalog / CampaignLevel
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// The Singleplayer dialog — C# successor to <c>XonoticSingleplayerDialog_fill</c> + the campaign listbox
-/// (qcsrc/menu/xonotic/dialog_singleplayer.qc + campaign.qc). Faithful layout, top to bottom:
-/// the big centred "Instant action with bots!" button, the campaign title row (&lt;&lt; / title / &gt;&gt;
-/// cycling <c>maps/campaign*.txt</c>), the campaign LIST whose rows each contain the map preview, the
-/// "Level N:" title line, the wrapped briefing text, the gametype icon and the completion checkmark —
-/// exactly what <c>XonoticCampaignList_drawListBoxItem</c> draws INSIDE every 10-row item — then the
+/// The Singleplayer dialog — <c>XonoticSingleplayerDialog_fill</c> (qcsrc/menu/xonotic/dialog_singleplayer.qc) on its
+/// 24 x 5 grid: the big "Instant action with bots!" button over the middle three columns, the campaign title row
+/// (&lt;&lt; / title / &gt;&gt; cycling <c>maps/campaign*.txt</c>), the campaign list (<see cref="QcCampaignList"/>), the
 /// Campaign Difficulty radios (<c>g_campaign_skill</c>) and the Leave-match / "Play campaign!" row.
 ///
-/// Unlock model is faithful to <c>XonoticCampaignList_loadCvars</c>: the saved frontier
-/// <c>g_campaign&lt;id&gt;_index</c> is the highest unlocked level; the list reveals exactly
-/// <c>frontier+2</c> rows — completed (dimmed + checkmark), the current one, and ONE locked "???" peek.
-/// Starting a level fires the shared <see cref="CreateGameScreen.StartGameRequested"/> callback with the
-/// campaign id + level index; Instant Action rolls the QC probability table for a random bot match.
+/// Starting a level fires the shared <see cref="CreateGameScreen.StartGameRequested"/> callback with the campaign id
+/// and level index; Instant Action rolls the QC probability table for a random bot match.
 /// </summary>
 public partial class SingleplayerScreen : MenuScreen
 {
-    private Label _titleLabel = null!;
+    private QcLabel _titleLabel = null!;
     private Button _prevButton = null!;
     private Button _nextButton = null!;
-    private Button _leaveButton = null!;
-    private ScrollContainer _listScroll = null!;
-    private VBoxContainer _rowsBox = null!;
-    private readonly ButtonGroup _rowGroup = new();
+    private QcCampaignList _list = null!;
 
-    private readonly List<CampaignRowButton> _rows = new();
     private readonly List<CampaignLevel> _levels = new();
     private string _campaignId = CampaignCatalog.DefaultName;
     private string _campaignTitle = "Campaign";
-    private int _frontier;       // QC campaignIndex: highest unlocked level (the current playable one)
-    private int _selected = -1;  // QC selectedItem
+    private int _frontier; // QC campaignIndex: highest unlocked level (the current playable one)
 
     protected override void BuildUi()
     {
         Name = "SingleplayerScreen";
 
+        var me = new QcGrid(rows: 24, columns: 5);
+        me.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(me);
+
+        me.TR();
+            me.TDempty((me.Columns - 3) * 0.5f);
+            me.TD(2, 3, QcLook.Button(new Button { Text = Localization.Tr("Instant action with bots!") }, image: "bigbutton"))
+                .Pressed += OnInstantAction;
+        me.TR();
+        me.TR();
+        me.TR();
+            _prevButton = me.TD(1, 1, Qc.Button("<<", () => CycleCampaign(-1)));
+            _titleLabel = me.TD(1, me.Columns - 2, Qc.Header("???"));
+            _nextButton = me.TD(1, 1, Qc.Button(">>", () => CycleCampaign(+1)));
+        me.TR();
+            _list = me.TD(me.Rows - 6, me.Columns, new QcCampaignList());
+            _list.ItemActivated += _ => OnStartLevel();
+
+        me.GotoRC(me.Rows - 2, 0);
+            me.TD(1, 2, Qc.Label("Campaign Difficulty:", 0.5f));
+            var skill = new QcRadioGroup();
+            me.TD(1, 1, Qc.Radio(skill, "g_campaign_skill", "-2", "Easy"));
+            me.TD(1, 1, Qc.Radio(skill, "g_campaign_skill", "0", "Medium"));
+            me.TD(1, 1, Qc.Radio(skill, "g_campaign_skill", "2", "Hard"));
+        me.TR();
+            me.TDempty(me.Columns * 1f / 13f);
+            var leave = new LeaveMatchButton(() => MenuCommand.Run("disconnect")) { CustomMinimumSize = Vector2.Zero };
+            me.TD(1, me.Columns * 5f / 13f, QcLook.Button(leave));
+            me.TDempty(me.Columns * 1f / 13f);
+            me.TD(1, me.Columns * 5f / 13f, Qc.Button("Play campaign!", OnStartLevel, tint: new Color(0, 1, 0)));
+
         LoadCampaign();
-
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 18);
-        AddChild(margin);
-
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 10);
-        margin.AddChild(root);
-
-        if (!HostProvidesTitle) root.AddChild(MakeTitle("Singleplayer"));
-
-        // --- the big centred Instant-action button (QC makeXonoticBigButton spanning 3 of 5 columns) ----
-        var bigRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        bigRow.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
-        var big = MakeButton("Instant action with bots!", OnInstantAction);
-        big.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        big.SizeFlagsStretchRatio = 3f;
-        big.CustomMinimumSize = new Vector2(0, 52);
-        bigRow.AddChild(big);
-        bigRow.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
-        root.AddChild(bigRow);
-
-        // --- campaign title row: << | title | >> (QC btnPrev/lblTitle/btnNext, MultiCampaign_Prev/Next) --
-        var titleRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        titleRow.AddThemeConstantOverride("separation", 10);
-        _prevButton = MakeButton("<<", () => CycleCampaign(-1));
-        _prevButton.SizeFlagsHorizontal = SizeFlags.Fill;
-        _prevButton.CustomMinimumSize = new Vector2(64, 30);
-        _titleLabel = MakeHeader(_campaignTitle);
-        _titleLabel.HorizontalAlignment = HorizontalAlignment.Center;
-        _titleLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        _nextButton = MakeButton(">>", () => CycleCampaign(+1));
-        _nextButton.SizeFlagsHorizontal = SizeFlags.Fill;
-        _nextButton.CustomMinimumSize = new Vector2(64, 30);
-        titleRow.AddChild(_prevButton);
-        titleRow.AddChild(_titleLabel);
-        titleRow.AddChild(_nextButton);
-        root.AddChild(titleRow);
-
-        // --- the campaign listbox: flat translucent-black backing, big self-contained rows --------------
-        var listPanel = new PanelContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
-        listPanel.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.25f) });
-        _listScroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        _rowsBox = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _rowsBox.AddThemeConstantOverride("separation", 2);
-        _listScroll.AddChild(_rowsBox);
-        listPanel.AddChild(_listScroll);
-        root.AddChild(listPanel);
-
-        PopulateList();
-
-        // --- Campaign Difficulty: Easy / Medium / Hard (g_campaign_skill -2 / 0 / 2) ---------------------
-        var diff = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        diff.AddThemeConstantOverride("separation", 14);
-        var diffLabel = MakeLabel("Campaign Difficulty:");
-        diffLabel.HorizontalAlignment = HorizontalAlignment.Right;
-        diffLabel.VerticalAlignment = VerticalAlignment.Center;
-        diffLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        diff.AddChild(diffLabel);
-        var group = new ButtonGroup();
-        foreach (var (value, label) in new[] { ("-2", "Easy"), ("0", "Medium"), ("2", "Hard") })
-        {
-            var radio = Widgets.RadioButton("g_campaign_skill", value, label, group);
-            radio.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            diff.AddChild(radio);
-        }
-        root.AddChild(diff);
-
-        // --- bottom row: Leave current match | Play campaign! -------------------------------------------
-        _leaveButton = MakeButton("Leave current match", () => MenuCommand.Run("disconnect"));
-        root.AddChild(MakeButtonBar(_leaveButton, MakeButton("Play campaign!", OnStartLevel)));
     }
 
     public override void _Process(double delta)
     {
-        if (IsVisibleInTree())
-            _leaveButton.Disabled = MenuCommand.InMatch is null || !MenuCommand.InMatch();
+        // XonoticCampaignList_draw: reload when the campaign or its progress changed underneath (a level was won).
+        if (!IsVisibleInTree()) return;
+        string name = MenuState.Cvars.GetString("g_campaign_name");
+        if (string.IsNullOrWhiteSpace(name)) name = CampaignCatalog.DefaultName;
+        if (!string.Equals(name, _campaignId, StringComparison.OrdinalIgnoreCase)
+            || Math.Clamp((int)MenuState.Cvars.GetFloat(ProgressCvar), 0, _levels.Count) != _frontier)
+            LoadCampaign();
     }
 
     // -------------------------------------------------------------------------------------------------
@@ -137,7 +83,8 @@ public partial class SingleplayerScreen : MenuScreen
     /// <summary>The saved-progress cvar (QC <c>strcat("g_campaign", name, "_index")</c>).</summary>
     private string ProgressCvar => $"g_campaign{_campaignId}_index";
 
-    /// <summary>Read the shipped campaign definition (default <c>xonoticbeta</c>) + the saved frontier.</summary>
+    /// <summary>XonoticCampaignList_loadCvars: read the campaign file (default <c>xonoticbeta</c>) and the saved
+    /// frontier, then refill the list and the title.</summary>
     private void LoadCampaign()
     {
         _campaignId = MenuState.Cvars.GetString("g_campaign_name");
@@ -157,10 +104,17 @@ public partial class SingleplayerScreen : MenuScreen
 
         if (_levels.Count == 0)
             GD.PrintErr($"[Singleplayer] campaign '{path}' not found or empty in the VFS — the level list is empty.");
+
+        _titleLabel.Text = _campaignTitle;
+        List<string> ids = CampaignIds();
+        int at = ids.FindIndex(s => string.Equals(s, _campaignId, StringComparison.OrdinalIgnoreCase));
+        _prevButton.Disabled = at <= 0;               // hasPrevCampaign = (j != 0)
+        _nextButton.Disabled = at < 0 || at >= ids.Count - 1; // hasNextCampaign = (j != n - 1)
+        _list.SetCampaign(_levels, _frontier);
     }
 
     /// <summary>All shipped campaign ids (QC search "maps/campaign*.txt"), for the &lt;&lt;/&gt;&gt; cycler.</summary>
-    private List<string> CampaignIds()
+    private static List<string> CampaignIds()
     {
         var ids = new List<string>();
         if (MenuState.Vfs is { } vfs)
@@ -176,76 +130,32 @@ public partial class SingleplayerScreen : MenuScreen
         return ids;
     }
 
-    /// <summary>QC MultiCampaign_Prev/Next: step through the campaign files, reload + rebuild.</summary>
+    /// <summary>QC MultiCampaign_Prev/Next → campaignGo: step through the campaign files and reload.</summary>
     private void CycleCampaign(int step)
     {
         List<string> ids = CampaignIds();
         if (ids.Count == 0)
             return;
         int at = ids.FindIndex(s => string.Equals(s, _campaignId, StringComparison.OrdinalIgnoreCase));
-        int next = at < 0 ? (step >= 0 ? 0 : ids.Count - 1) : Math.Clamp(at + step, 0, ids.Count - 1);
-        if (next == at)
-            return;
+        int next = at < 0 ? (step >= 0 ? 0 : ids.Count - 1) : ((at + step) % ids.Count + ids.Count) % ids.Count;
         MenuState.Cvars.Set("g_campaign_name", ids[next]);
         MenuState.Cvars.MarkArchived("g_campaign_name");
         LoadCampaign();
-        _titleLabel.Text = _campaignTitle;
-        PopulateList();
-    }
-
-    // -------------------------------------------------------------------------------------------------
-    //  The list rows (QC XonoticCampaignList_drawListBoxItem)
-    // -------------------------------------------------------------------------------------------------
-
-    /// <summary>Rebuild the rows: frontier+2 revealed — completed (✓, dim), current, one locked "???" peek.</summary>
-    private void PopulateList()
-    {
-        foreach (CampaignRowButton row in _rows)
-            row.QueueFree();
-        _rows.Clear();
-
-        List<string> ids = CampaignIds();
-        int at = ids.FindIndex(s => string.Equals(s, _campaignId, StringComparison.OrdinalIgnoreCase));
-        _prevButton.Disabled = ids.Count <= 1 || at <= 0;
-        _nextButton.Disabled = ids.Count <= 1 || at >= ids.Count - 1;
-
-        int shown = Math.Min(_frontier + 2, _levels.Count); // QC nItems = min(campaignIndex + 2, entries)
-        for (int i = 0; i < shown; i++)
-        {
-            var row = new CampaignRowButton(_levels[i], i, _frontier, _rowGroup);
-            int index = i;
-            row.Pressed += () => _selected = index;
-            row.PlayRequested += () => { _selected = index; OnStartLevel(); };
-            _rowsBox.AddChild(row);
-            _rows.Add(row);
-        }
-
-        if (shown > 0)
-        {
-            _selected = Math.Min(_frontier, shown - 1);     // QC setSelected(min(campaignIndex, nItems-1))
-            _rows[_selected].SetPressedNoSignal(true);
-            CampaignRowButton target = _rows[_selected];
-            // Scroll the current level into view once layout has sized the rows.
-            Callable.From(() => _listScroll.EnsureControlVisible(target)).CallDeferred();
-        }
-        else
-        {
-            _selected = -1;
-        }
     }
 
     // -------------------------------------------------------------------------------------------------
     //  Actions
     // -------------------------------------------------------------------------------------------------
 
-    /// <summary>Start the selected campaign level via the shared StartGame callback, in campaign mode.</summary>
+    /// <summary>QC CampaignList_LoadMap: start the selected level via the shared StartGame callback, in campaign mode.</summary>
     private void OnStartLevel()
     {
-        // QC CampaignList_LoadMap: only an unlocked level launches (setSelected clamps to campaignIndex).
-        if (_selected < 0 || _selected > _frontier || _selected >= _levels.Count)
+        int selected = _list.SelectedItem;
+        // Only an unlocked level launches (setSelected clamps to campaignIndex).
+        if (selected < 0 || selected > _frontier || selected >= _levels.Count)
             return;
 
-        CampaignLevel lvl = _levels[_selected];
+        CampaignLevel lvl = _levels[selected];
         var config = new MatchConfig
         {
             // The menu's pre-resolved copy (loads the BSP + fills bots client-side); the server re-resolves the
@@ -318,139 +228,127 @@ public partial class SingleplayerScreen : MenuScreen
 }
 
 /// <summary>
-/// One campaign listbox row — everything <c>XonoticCampaignList_drawListBoxItem</c> draws inside an item:
-/// the 4:3 map preview (with the gametype icon in its corner), the "Level N: title" line, the wrapped
-/// briefing text, and the completion checkmark on the right. A toggle <see cref="Button"/> so selection
-/// (orange fill, SKINCOLOR_LISTBOX_SELECTED) and hover (faint blue) come from the button states; a locked
-/// future level renders as "???" at the QC's 0.2 alpha and is not selectable.
+/// xonotic/campaign.qc: ten text rows per level — the 4:3 mapshot with the gametype icon in its lower-right quarter
+/// (unlocked levels), "Level N: title" half a row down, the briefing wrapped to the name column two rows below it
+/// (at most seven lines, "..." when it runs over; an empty line is half a row), the checkmark in the row's lower
+/// right for a beaten level. Beaten levels are SKINCOLOR/ALPHA_CAMPAIGN_SELECTABLE, the current one _CURRENT, the
+/// one locked level shown _FUTURE as "???". The list holds the levels up to one past the current; the selection
+/// never goes past the current one.
 /// </summary>
-internal partial class CampaignRowButton : Button
+public partial class QcCampaignList : MenuListBox
 {
-    /// <summary>Row height ≈ the QC 10-text-rows item (shows ~2 rows in the list like Base).</summary>
-    private const int RowHeight = 170;
+    private const int RowsPerItem = 10;
+    private const float EmptyLineHeight = 0.5f;
 
-    /// <summary>Double-click / Enter on a row plays it (QC doubleClickListBoxItem → CampaignList_LoadMap).</summary>
-    public event Action? PlayRequested;
+    private IReadOnlyList<CampaignLevel> _levels = Array.Empty<CampaignLevel>();
+    private int _campaignIndex;
+    private readonly List<string> _wrapped = new();
+    private float _wrappedFor = -1f;
 
-    public CampaignRowButton(CampaignLevel level, int index, int frontier, ButtonGroup group)
+    public QcCampaignList()
     {
-        ToggleMode = true;
-        ButtonGroup = group;
-        FocusMode = FocusModeEnum.None;
-        SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        CustomMinimumSize = new Vector2(0, RowHeight);
+        ItemHeight = RowsPerItem * MenuMetrics.FontNormalU;
+        Resized += () => _wrappedFor = -1f;
+    }
 
-        bool completed = index < frontier;
-        bool current = index == frontier;
-        bool locked = index > frontier;
-        // QC alphas: SELECTABLE 0.6 (done), CURRENT 1, FUTURE 0.2; description ×0.8.
-        float alpha = completed ? 0.6f : current ? 1f : 0.2f;
+    /// <summary>loadCvars: nItems = min(campaignIndex + 2, entries), the current level selected, the last row scrolled
+    /// into view.</summary>
+    public void SetCampaign(IReadOnlyList<CampaignLevel> levels, int campaignIndex)
+    {
+        _levels = levels;
+        _campaignIndex = campaignIndex;
+        _wrappedFor = -1f;
+        ItemCount = Math.Min(campaignIndex + 2, levels.Count);
+        SetSelected(Math.Min(campaignIndex, ItemCount - 1));
+        if (ItemCount - 1 > campaignIndex)
+            ScrollToItem(ItemCount - 1);
+        QueueRedraw();
+    }
 
-        // The QC fills: selection = solid orange, hover = faint blue, otherwise nothing (the listbox backing).
-        AddThemeStyleboxOverride("normal", new StyleBoxEmpty());
-        AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
-        AddThemeStyleboxOverride("disabled", new StyleBoxEmpty());
-        AddThemeStyleboxOverride("hover", new StyleBoxFlat { BgColor = new Color(0.09f, 0.42f, 0.69f, 0.30f) });
-        var selectedFill = new StyleBoxFlat { BgColor = new Color(0.9f, 0.53f, 0.28f, 0.95f) };
-        AddThemeStyleboxOverride("pressed", selectedFill);
-        AddThemeStyleboxOverride("hover_pressed", selectedFill);
+    // "prevent too late items from being played"
+    public override void SetSelected(int i) => base.SetSelected(Math.Min(i, _campaignIndex));
 
-        Disabled = locked; // the locked peek: visible but not selectable (QC setSelected clamps)
+    private float CheckMarkSize => 0.5f * ItemHeight;
+    private float PreviewWidth => ItemHeight * 4f / 3f;
+    private float NameSize => ContentWidth - PreviewWidth - CheckMarkSize - 4f * MenuMetrics.FontNormalU;
 
-        var pad = new MarginContainer { MouseFilter = MouseFilterEnum.Ignore };
-        pad.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            pad.AddThemeConstantOverride(side, 6);
-        AddChild(pad);
-
-        var box = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
-        box.AddThemeConstantOverride("separation", 12);
-        pad.AddChild(box);
-
-        // --- the 4:3 map preview, gametype icon in its bottom-right corner (QC columnPreview/typeIcon) ---
-        var previewFrame = new Control
+    /// <summary>rewrapCampaign: each briefing wrapped to the name column, at most rowsPerItem - 3 lines.</summary>
+    private void Rewrap()
+    {
+        float width = NameSize;
+        if (_wrappedFor == width) return;
+        _wrappedFor = width;
+        _wrapped.Clear();
+        var item = new Vector2(ContentWidth, ItemHeight);
+        Func<string, float> measure = t => QcDraw.TextWidthAtResize(t, item);
+        foreach (CampaignLevel level in _levels)
         {
-            CustomMinimumSize = new Vector2((RowHeight - 12) * 4f / 3f, RowHeight - 12),
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        var preview = new TextureRect
-        {
-            Texture = MenuSkin.Image("maps/" + level.MapName) ?? MenuSkin.SkinImage("nopreview_map"),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.Scale,
-            Modulate = new Color(1, 1, 1, alpha),
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        preview.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        previewFrame.AddChild(preview);
-        if (!locked && MenuSkin.SkinImage("gametype_" + level.Gametype) is { } typeIcon)
-        {
-            var icon = new TextureRect
+            float l = RowsPerItem - 3;
+            var r = new System.Text.StringBuilder();
+            bool tooLong = false;
+            foreach (string paragraph in level.LongDesc.Replace("\\n", "\n").Split('\n'))
             {
-                Texture = typeIcon,
-                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-                MouseFilter = MouseFilterEnum.Ignore,
-                AnchorLeft = 1, AnchorTop = 1, AnchorRight = 1, AnchorBottom = 1,
-                OffsetLeft = -30, OffsetTop = -30, OffsetRight = -2, OffsetBottom = -2,
-            };
-            previewFrame.AddChild(icon);
+                if (paragraph.Length == 0)
+                {
+                    l -= EmptyLineHeight;
+                    r.Append('\n');
+                    continue;
+                }
+                string? remaining = paragraph;
+                while (remaining is not null)
+                {
+                    string s = QcDraw.WrappedLine(ref remaining, width, measure: measure);
+                    if (--l < 0) { tooLong = true; break; }
+                    r.Append(s).Append('\n');
+                }
+                if (tooLong) break;
+            }
+            string text = r.ToString();
+            if (tooLong) text = text.TrimEnd('\n') + "...\n";
+            _wrapped.Add(text.Length > 0 ? text[..^1] : text);
         }
-        box.AddChild(previewFrame);
+    }
 
-        // --- the text column: "Level N: <title>" + the wrapped briefing (QC name + longdesc lines) -------
-        var text = new VBoxContainer
+    protected override void DrawItem(int index, Rect2 rect, bool isSelected, bool isFocused)
+    {
+        if (index < 0 || index >= _levels.Count) return;
+        Rewrap();
+        CampaignLevel level = _levels[index];
+        float h = rect.Size.Y, ch = MenuMetrics.FontNormalU, pw = PreviewWidth, cm = CheckMarkSize;
+
+        (string which, float a, Color c) = index < _campaignIndex ? ("SELECTABLE", 0.8f, new Color(1, 1, 1))
+            : index == _campaignIndex ? ("CURRENT", 1f, new Color(1, 1, 0)) : ("FUTURE", 0.2f, new Color(1, 1, 1));
+        float alpha = MenuSkin.SkinNumber("ALPHA_CAMPAIGN_" + which, a);
+        Color color = MenuSkin.SkinColor("COLOR_CAMPAIGN_" + which, c.R, c.G, c.B);
+
+        Texture2D? shot = MenuSkin.Image("maps/" + level.MapName) ?? MenuSkin.SkinImage("nopreview_map");
+        if (shot is not null)
+            DrawTextureRect(shot, new Rect2(rect.Position, new Vector2(pw, h)), false, MenuSkin.Fade(Colors.White, alpha));
+
+        if (index <= _campaignIndex && MenuSkin.SkinImage("gametype_" + level.Gametype) is { } icon)
+            DrawTextureRect(icon, new Rect2(rect.Position + new Vector2(pw - cm, h - cm), new Vector2(cm, cm)), false);
+
+        float nameOrigin = pw + ch, nameSize = NameSize;
+        if (index < _campaignIndex && MenuSkin.SkinImage("checkmark") is { } check)
+            DrawTextureRect(check, new Rect2(rect.Position + new Vector2(nameOrigin + nameSize + 2f * ch, h - cm), new Vector2(cm, cm)), false);
+
+        string title = index <= _campaignIndex ? level.ShortDesc : "???";
+        string s = QcDraw.ShortenToWidth(string.Format(Localization.Tr("Level {0}:"), index + 1) + " " + title, nameSize);
+        Color textColor = MenuSkin.TextLift(MenuSkin.Fade(color, alpha));
+        QcDraw.Text(this, rect.Position + new Vector2(nameOrigin, 0.5f * ch), s, textColor);
+
+        if (index > _campaignIndex || index >= _wrapped.Count) return;
+        Color descColor = MenuSkin.TextLift(MenuSkin.Fade(color, alpha * MenuSkin.SkinNumber("ALPHA_CAMPAIGN_DESCRIPTION", 0.7f)));
+        float y = 2.5f * ch;
+        foreach (string line in _wrapped[index].Split('\n'))
         {
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        text.AddThemeConstantOverride("separation", 4);
-
-        string title = locked
-            ? string.Format(Localization.Tr("Level {0}:"), index + 1) + " ???"
-            : string.Format(Localization.Tr("Level {0}:"), index + 1) + " " +
-              (string.IsNullOrWhiteSpace(level.ShortDesc) ? level.MapName : level.ShortDesc);
-        var titleLabel = new Label { Text = title, MouseFilter = MouseFilterEnum.Ignore };
-        titleLabel.AddThemeColorOverride("font_color", new Color(0.96f, 0.99f, 1f, alpha));
-        if (MenuSkin.BoldFont is { } bold) titleLabel.AddThemeFontOverride("font", bold);
-        text.AddChild(titleLabel);
-
-        if (!locked)
-        {
-            var desc = new Label
+            if (line.Length > 0)
             {
-                // The longdesc stores line breaks as the literal two characters "\n".
-                Text = level.LongDesc.Replace("\\n", "\n"),
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-                ClipText = true,
-                SizeFlagsVertical = SizeFlags.ExpandFill,
-                MouseFilter = MouseFilterEnum.Ignore,
-            };
-            desc.AddThemeColorOverride("font_color", new Color(0.96f, 0.99f, 1f, alpha * 0.8f));
-            desc.AddThemeFontSizeOverride("font_size", 14);
-            text.AddChild(desc);
+                QcDraw.Text(this, rect.Position + new Vector2(nameOrigin, y), line, descColor);
+                y += ch;
+            }
+            else
+                y += ch * EmptyLineHeight;
         }
-        box.AddChild(text);
-
-        // --- the completion checkmark on the right (QC checkMark, only for beaten levels) ----------------
-        if (completed && MenuSkin.SkinImage("checkmark") is { } check)
-        {
-            var mark = new TextureRect
-            {
-                Texture = check,
-                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-                CustomMinimumSize = new Vector2(30, 30),
-                SizeFlagsVertical = SizeFlags.ShrinkEnd,
-                MouseFilter = MouseFilterEnum.Ignore,
-            };
-            box.AddChild(mark);
-        }
-
-        GuiInput += ev =>
-        {
-            if (ev is InputEventMouseButton { DoubleClick: true, ButtonIndex: MouseButton.Left } && !Disabled)
-                PlayRequested?.Invoke();
-        };
     }
 }

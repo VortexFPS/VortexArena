@@ -565,7 +565,8 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   the Settings dialog's Game tab) instead opens a main-menu dialog where the
   player sees it — centred in the nexposee, at Xonotic's size — which is what to compare against Xonotic's own
   menu (`--legacy-menu`, driven by `VORTEX_LEGACY_SCRIPT`; `menu_cmd directmenu servers` / `profile` / `settings`
-  there, and a tab or topic with no name of its own is reached by `mouse x y` + `click` lines in window pixels).
+  / `media` there, and a tab or topic with no name of its own is reached by `mouse x y` + `click` lines in window
+  pixels. Singleplayer has no name at all: open `nexposee` and click its panel, at 450 320 in a 1280x720 window).
   `tools/menu-parity/capture.sh` takes both shots in one go (plus menu.dat's draw list, the exact position of
   everything it draws) and `tools/menu-parity/compare.py` diffs them: per-region pixel offsets, label extents,
   a side-by-side sheet. A dialog ported onto `QcGrid`/`QcLook` should come out at zero offset everywhere.

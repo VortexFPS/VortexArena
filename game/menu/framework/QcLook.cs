@@ -70,7 +70,7 @@ public static class QcDraw
     /// squeezed horizontally by <paramref name="condense"/> (a Label's condenseFactor).
     /// </summary>
     public static void Text(CanvasItem ci, Vector2 topLeft, string? text, Color color, float menuPx = MenuMetrics.FontNormal,
-        bool bold = false, float condense = 1f)
+        bool bold = false, float condense = 1f, bool snapX = true)
     {
         if (string.IsNullOrEmpty(text) || color.A <= 0f) return;
         int slot = bold ? DpText.MenuBold : DpText.Menu;
@@ -90,7 +90,7 @@ public static class QcDraw
                 ? xf.Scale.Y / (t.Root.Size.Y / DpBitmapFont.MenuDesignHeight)
                 : 1f;
             ci.DrawSetTransformMatrix(xf.AffineInverse());
-            DpText.Draw(ci, slot, xf * topLeft, text, menuPx * DpText.PixelsPerUnit * scale, raw, Vector2.Zero, condense);
+            DpText.Draw(ci, slot, xf * topLeft, text, menuPx * DpText.PixelsPerUnit * scale, raw, Vector2.Zero, condense, snapX: snapX);
             ci.DrawSetTransformMatrix(Transform2D.Identity);
             return;
         }
@@ -131,6 +131,122 @@ public static class QcDraw
         int n = text.Length;
         while (n > 0 && TextWidth(text[..n], menuPx, bold) > room) n--;
         return text[..n] + "...";
+    }
+
+    /// <summary>draw_TextWidth with allowColorCodes: the colour codes take no room.</summary>
+    public static float TextWidthColors(string? text, float menuPx = MenuMetrics.FontNormal, bool bold = false)
+        => TextWidth(MenuColorCodes.Strip(text), menuPx, bold);
+
+    /// <summary>
+    /// draw_Text with allowColorCodes: each run in its code's colour (^7 back to <paramref name="color"/>), the
+    /// alpha always <paramref name="color"/>'s.
+    /// </summary>
+    public static void ColoredText(CanvasItem ci, Vector2 topLeft, string? text, Color color, float menuPx = MenuMetrics.FontNormal)
+    {
+        // DrawQ_String snaps the start of the string once; the runs after the first carry on from the unsnapped pen.
+        Transform2D xf = ci.GetGlobalTransformWithCanvas();
+        float gx = (xf * topLeft).X;
+        float snapped = xf.X.X != 0f ? (LegacyTextLayout.SnapX(gx) - gx) / xf.X.X : 0f;
+        float x = 0f;
+        bool first = true;
+        foreach ((string run, Color c) in MenuColorCodes.Segments(text, color))
+        {
+            Text(ci, topLeft + new Vector2(first ? 0f : snapped + x, 0f), run, MenuSkin.TextLift(c), menuPx, snapX: first);
+            x += TextWidth(run, menuPx);
+            first = false;
+        }
+    }
+
+    /// <summary>
+    /// getWrappedLine (common/util.qc): takes the next line, at most <paramref name="width"/> wide, off the front of
+    /// <paramref name="remaining"/>, broken after its last space (the space dropped) or mid-word when it has none;
+    /// <paramref name="remaining"/> becomes null once nothing is left. With <paramref name="colors"/>
+    /// (draw_TextWidth_WithColors) colour codes take no room and the next line starts with the colour in force.
+    /// </summary>
+    public static string WrappedLine(ref string? remaining, float width, bool colors = false, Func<string, float>? measure = null)
+    {
+        string s = remaining ?? "";
+        if (width <= 0f) { remaining = null; return s; }
+        measure ??= t => TextWidth(t);
+        Func<string, float> w = colors ? t => measure(MenuColorCodes.Strip(t)) : measure;
+        int take = LengthUpToWidth(s, width, w, colors);
+        if (take <= 0 || take >= s.Length) { remaining = null; return s; }
+
+        // take_wrapped_line_until: back from the cut to the last ascii space.
+        int i = take, skip = 0;
+        while (i > 0)
+        {
+            --i;
+            if (s[i] == ' ') { skip = 1; break; }
+        }
+        if (i != 0) take = i;
+        string rest = s[Math.Min(s.Length, take + skip)..];
+        remaining = rest.Length == 0 ? null : colors ? LastColorCode(s[..take]) + rest : rest;
+        return s[..take];
+    }
+
+    /// <summary>
+    /// draw_TextWidth as a list's resizeNotify measures it (rewrapCampaign, wrapGuideText). m_draw calls
+    /// main.resizeNotify right after draw_reset_cropped, so draw_scale is the whole menu canvas then, not the item: the
+    /// font size, relative to an item of <paramref name="itemSize"/>, is turned into a size as many times larger as the
+    /// canvas is than the item, measured with that much larger font map, and the width scaled back down linearly.
+    /// The hinted advances of the large map are narrower or wider than those the text is drawn with, so the wrap
+    /// falls where Xonotic's falls only when measured this way.
+    /// </summary>
+    public static float TextWidthAtResize(string? text, Vector2 itemSize, float menuPx = MenuMetrics.FontNormal)
+    {
+        if (string.IsNullOrEmpty(text) || itemSize.X <= 0f || itemSize.Y <= 0f) return 0f;
+        if (MenuState.Vfs == null || DpText.Faces(DpText.Menu).Count == 0 || Godot.Engine.GetMainLoop() is not SceneTree tree || tree.Root.Size.Y <= 0)
+            return TextWidth(text, menuPx);
+        float u = MenuMetrics.DesignUnit;
+        float realPerDesign = tree.Root.Size.Y / DpBitmapFont.MenuDesignHeight;
+        float conW = MenuMetrics.ConWidth * u, conH = MenuMetrics.ConHeight * u;
+        float h = MenuMetrics.U(menuPx) * conH / itemSize.Y, w = MenuMetrics.U(menuPx) * conW / itemSize.X;
+        float px = h * realPerDesign;
+        float atCon = DpText.Measure(DpText.Menu, text, px) / realPerDesign * (w / h); // real px in and out
+        return atCon * itemSize.X / conW;
+    }
+
+    /// <summary>textLengthUpToWidth: the longest prefix no wider than <paramref name="width"/>, never cutting a
+    /// colour code in two (checkColorCode).</summary>
+    private static int LengthUpToWidth(string s, float width, Func<string, float> w, bool colors)
+    {
+        if (w(s) <= width) return s.Length;
+        int left = 0, right = s.Length;
+        do
+        {
+            int middle = (left + right) / 2;
+            int end = colors ? Math.Min(s.Length, middle + ColorCodeOverhang(s, middle)) : middle;
+            if (w(s[..end]) <= width) left = end;
+            else right = middle;
+        }
+        while (left < right - 1);
+        return left;
+    }
+
+    /// <summary>How far past <paramref name="at"/> the colour code it falls inside runs (0 outside one).</summary>
+    private static int ColorCodeOverhang(string s, int at)
+    {
+        for (int p = Math.Max(0, at - 4); p < at; p++)
+        {
+            if (s[p] != '^' || p + 1 >= s.Length || (p > 0 && s[p - 1] == '^')) continue;
+            int len = char.IsAsciiDigit(s[p + 1]) ? 2 : s[p + 1] == 'x' && p + 4 < s.Length ? 5 : 0;
+            if (len > 0 && at < p + len) return p + len - at;
+        }
+        return 0;
+    }
+
+    /// <summary>find_last_color_code: the last ^N or ^xRGB code in <paramref name="s"/>, or "".</summary>
+    private static string LastColorCode(string s)
+    {
+        for (int p = s.Length - 2; p >= 0; p--)
+        {
+            if (s[p] != '^' || (p > 0 && s[p - 1] == '^')) continue;
+            if (char.IsAsciiDigit(s[p + 1])) return s.Substring(p, 2);
+            if (s[p + 1] == 'x' && p + 4 < s.Length && Uri.IsHexDigit(s[p + 2]) && Uri.IsHexDigit(s[p + 3]) && Uri.IsHexDigit(s[p + 4]))
+                return s.Substring(p, 5);
+        }
+        return "";
     }
 
     /// <summary>A label's text drawn in <paramref name="box"/> the way <see cref="QcLabel"/> draws it.</summary>

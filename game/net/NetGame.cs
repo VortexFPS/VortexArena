@@ -2459,6 +2459,14 @@ public sealed partial class NetGame : Node3D
                 || _view.ChaseActive || _client.MatchIntermission;
         }
 
+        // Draw_GrapplingHook: the local player's chain starts at the rendered view's gun (view_origin + the
+        // hook_shotorigin offset), or at the eye in chase view; everyone else's at the server reel origin.
+        if (_render.HookRope is not null)
+        {
+            _render.HookRope.LocalPlayerProvider = () => LocalServerPlayer;
+            _render.HookRope.ChaseActiveProvider = () => _view.ChaseActive;
+        }
+
         // Bridge the HUD's texture cache to the mounted game data so weapon icons / crosshairs / kill-notify
         // icons draw the REAL Xonotic art instead of colored-box fallbacks (mirrors GameDemo.SetupHud).
         // Dedicated-slim: skipped — the font loads are eager, and headless HUD panels never draw anyway.

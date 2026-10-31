@@ -67,6 +67,7 @@ public sealed partial class CylindricLine : Node3D
             }
 
             Root.Visible = true;
+            RibbonB.Visible = true; // UpdateFacing hides the cross quad; a pooled segment may be reused here
             Root.Position = a;
             // +X along the line (the stable-basis trick from LaserRenderer/ProjectileRenderer.OrientToVelocity).
             GVec3 x = seg / len;
@@ -78,6 +79,50 @@ public sealed partial class CylindricLine : Node3D
             RibbonB.Scale = new GVec3(len, widthQuake, 1f);
             Material.BlendMode = blend;
             Material.AlbedoColor = DisplayFramebuffer.ForEngine(rgba);   // stored values on a display-value buffer
+        }
+
+        /// <summary>
+        /// Exact QC <c>Draw_CylindricLine(from, to, thickness, texture, aspect, shift, rgb, alpha, drawflag,
+        /// vieworg)</c> (lib/draw.qh): ONE quad, <paramref name="widthQuake"/> wide, turned about the line to face
+        /// <paramref name="viewOrgQuake"/> (thickdir = normalize(cross(axis, vieworg - from))), with U running from
+        /// <paramref name="uShift"/> at <paramref name="fromQuake"/> to <c>shift + aspect*len/thickness</c> at
+        /// <paramref name="toQuake"/> (so the texture repeats every thickness/aspect units) and V across the width.
+        /// The cross quad is hidden. Hides the segment when it is shorter than one unit, like <see cref="Update"/>.
+        /// </summary>
+        public void UpdateFacing(NVec3 fromQuake, NVec3 toQuake, float widthQuake, NVec3 viewOrgQuake,
+            Texture2D? tex, float aspect, float uShift, Color rgba, BaseMaterial3D.BlendModeEnum blend)
+        {
+            GVec3 a = Coords.ToGodot(fromQuake);
+            GVec3 b = Coords.ToGodot(toQuake);
+            GVec3 seg = b - a;
+            float len = seg.Length();
+            if (len < 1f)
+            {
+                Root.Visible = false;
+                return;
+            }
+
+            Root.Visible = true;
+            RibbonB.Visible = false;
+            Root.Position = a;
+            GVec3 x = seg / len;
+            // Coords.ToGodot is a proper rotation, so the cross product carries over unchanged.
+            GVec3 y = x.Cross(Coords.ToGodot(viewOrgQuake) - a);
+            if (y.LengthSquared() < 1e-8f) // viewer exactly on the line: any perpendicular will do
+                y = x.Cross(Mathf.Abs(x.Dot(GVec3.Up)) > 0.99f ? GVec3.Forward : GVec3.Up);
+            y = y.Normalized();
+            GVec3 z = x.Cross(y);
+            Root.Basis = new Basis(x, y, z);
+            RibbonA.Scale = new GVec3(len, widthQuake, 1f);
+
+            Material.BlendMode = blend;
+            Material.AlbedoColor = DisplayFramebuffer.ForEngine(rgba);
+            Material.AlbedoTexture = DisplayFramebuffer.ForEngine(tex);
+            Material.TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps;
+            Material.TextureRepeat = true;
+            float lengthTex = widthQuake > 0f ? aspect * len / widthQuake : 1f;
+            Material.Uv1Scale = new GVec3(lengthTex, 1f, 1f);
+            Material.Uv1Offset = new GVec3(uShift, 0f, 0f);
         }
 
         /// <summary>Apply (or clear) a scrolling beam texture, folding LaserRenderer.ApplyBeamTexture and its

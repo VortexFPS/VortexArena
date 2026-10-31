@@ -11885,6 +11885,35 @@ public sealed partial class NetGame : Node3D
     private bool QuickMenuOpen
         => _fullHud?.GetPanel<VortexArena.Game.Hud.QuickMenuPanel>() is { IsOpen: true };
 
+    /// <summary>
+    /// Escape for the in-world HUD UIs that take the keyboard, in QC CSQC_InputEvent's order: the quickmenu
+    /// (QuickMenu_InputEvent: "K_ESCAPE && key_pressed → QuickMenu_Close"), the maximized radar
+    /// (HUD_Radar_InputEvent) and the minigame menu (HUD_Minigame_InputEvent). Each closes and claims the key, so
+    /// it never also reaches the game menu. Called from Shell's Escape chain (Shell._UnhandledKeyInput), which owns
+    /// both Escape edges and runs before this node's _UnhandledInput would; returns false when none is open.
+    /// </summary>
+    public bool HandleHudEscape()
+    {
+        if (ConsoleState.IsOpen || _fullHud is null)
+            return false;
+        if (_fullHud.GetPanel<VortexArena.Game.Hud.QuickMenuPanel>() is { IsOpen: true } quick)
+        {
+            quick.Close();
+            return true;
+        }
+        if (_radar is not null && GodotObject.IsInstanceValid(_radar) && _radar.Maximized)
+        {
+            _radar.SetMaximized(false);
+            return true;
+        }
+        if (_fullHud.MinigameMenu is { IsOpen: true } minigameMenu)
+        {
+            minigameMenu.Close();
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>Any in-world HUD UI that should free the mouse cursor + suspend look/fire (minigame board/menu, the
     /// quick-chat menu, or the maximized radar). The bind channel stays live so the toggling bind can still close the
     /// panel — the maximized radar's `m` toggle + Esc/right-click close all route through it.</summary>

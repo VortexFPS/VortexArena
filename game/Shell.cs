@@ -775,6 +775,11 @@ public partial class Shell : Node
             MenuCommand.Run("menu_showhudexit");
             return;
         }
+        //   3. an in-world HUD UI that has the keyboard (quickmenu, maximized radar, minigame menu) closes, and only
+        //      that (playtest #82: Escape on the quickmenu used to close it on the press and then open the game
+        //      menu on the release). Not while a menu dialog is up: then the menu has the keys, as in DarkPlaces.
+        if (!_paused && _netGame is not null && _netGame.HandleHudEscape())
+            return;
 
         if (_paused)
         {

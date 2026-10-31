@@ -880,26 +880,39 @@ public partial class Shell : Node
         SyncAutoPause();
     }
 
-    /// <summary>QoL auto-pause (#19): freeze a SOLO local game while the player can't act on it — the pause menu
-    /// is open, the console is open, or the window is unfocused/minimized. Gated on hosting a listen server with
-    /// NO remote clients (a real multiplayer server must keep running for them) and on <c>cl_autopause</c> != 0
-    /// (default on). The Shell owns <c>GetTree().Paused</c>: the match is <see cref="Node.ProcessModeEnum.Pausable"/>
-    /// while the Shell is <see cref="Node.ProcessModeEnum.Always"/>, so this keeps running to RELEASE the pause.</summary>
+    /// <summary>Xonotic's <c>sv_autopause</c> (#19, #81): freeze a SOLO local game while the player can't act on it
+    /// — the pause menu, the console or the chat prompt is open, or the window is unfocused/minimized. That is QC
+    /// Pause_TryPause (server/main.qc), which pauses while every real client holds BUTTON_CHAT, the bit DarkPlaces
+    /// sends while <c>key_dest != key_game || key_consoleactive || !vid_activewindow</c> (cl_input.c). Gated on
+    /// hosting a listen server with NO remote clients (a real multiplayer server must keep running for them) and on
+    /// <see cref="AutoPauseEnabled"/>. The Shell owns <c>GetTree().Paused</c>: the match is
+    /// <see cref="Node.ProcessModeEnum.Pausable"/> while the Shell is <see cref="Node.ProcessModeEnum.Always"/>, so
+    /// this keeps running to RELEASE the pause.</summary>
     private void SyncAutoPause()
     {
-        var cv = MenuState.Cvars;
-        // Treat an unset cvar as ON (default-enabled) so no registration is required for the default behaviour.
-        bool cvarOn = string.IsNullOrEmpty(cv.GetString("cl_autopause")) || cv.GetFloat("cl_autopause") != 0f;
         bool eligible = MatchRunning
             && _loadingScreen is null                        // not mid-load: pausing then would stall the handshake
             && (_netGame?.IsListenServer ?? false)
             && !(_netGame?.HasRemoteClients ?? false)
-            && cvarOn;
-        bool cantAct = _paused || ConsoleState.IsOpen || !_windowFocused;
+            && !(_netGame?.InIntermission ?? false)            // QC: sv_autopause && !intermission_running
+            && AutoPauseEnabled(MenuState.Cvars);
+        bool cantAct = _paused || ConsoleState.IsOpen || Game.Hud.ChatPrompt.IsOpen || !_windowFocused;
         bool want = eligible && cantAct;
         if (GetTree().Paused != want)
             GetTree().Paused = want;
     }
+
+    /// <summary>
+    /// Whether auto-pause is on. The authority is the SERVER's <c>sv_autopause</c> (xonotic-server.cfg: <c>seta
+    /// sv_autopause 1</c>; the listen host decides whether its world stops), unset meaning on. The port's earlier
+    /// spelling <c>cl_autopause</c> is still honoured as an off switch, because launch scripts and docs pass
+    /// <c>--cvar cl_autopause 0</c>: either one at 0 turns auto-pause off.
+    /// </summary>
+    internal static bool AutoPauseEnabled(VortexArena.Engine.Simulation.CvarService cv) =>
+        !IsExplicitZero(cv, "sv_autopause") && !IsExplicitZero(cv, "cl_autopause");
+
+    private static bool IsExplicitZero(VortexArena.Engine.Simulation.CvarService cv, string name) =>
+        !string.IsNullOrEmpty(cv.GetString(name)) && cv.GetFloat(name) == 0f;
 
     public override void _Process(double delta)
     {

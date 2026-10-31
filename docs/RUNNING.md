@@ -264,10 +264,11 @@ a wrong world and an inflated netId (the real success signal is `netId 1` on a f
 should always pass a private `--port` instead of fighting over 26000.
 
 **Auto-pause vs background windows (agents, take note):** a solo local game **pauses when its window loses
-focus** (#19, `Shell.SyncAutoPause`) — and a `Start-Process` capture run usually never HAS focus, so the
-whole sim + every client animation freezes (e.g. the weapon raise stops mid-slide and the gun sits below
+focus** (#19, Xonotic's `sv_autopause`, `Shell.SyncAutoPause`) — and a `Start-Process` capture run
+usually never HAS focus, so the whole sim + every client animation freezes (e.g. the weapon raise stops mid-slide and the gun sits below
 the frame — screenshots then look like the viewmodel is missing). Scripted windowed runs should pass
-`--cvar cl_autopause 0`.
+`--cvar sv_autopause 0` (the older spelling `--cvar cl_autopause 0`, which the scripts in `tools/` still
+pass, is honoured as the same off switch).
 
 For a packaged install, `tools/run-dedicated.sh` (shipped beside the exported `linux-dedicated`
 binary by `tools/package.sh`) `cd`s to its own directory first, matching upstream's
@@ -335,11 +336,11 @@ dotnet build VortexArena.csproj -c Debug -p:VaBotPlayer=true
 ```
 
 ```bash
-"$GODOT" --path . --host stormkeep --gametype dm --bots 6 --bot-player --cvar cl_autopause 0 --quit-after-seconds 90
+"$GODOT" --path . --host stormkeep --gametype dm --bots 6 --bot-player --cvar sv_autopause 0 --quit-after-seconds 90
 ```
 
 - `--bot-player [skill]` — skill is the QC bot rung (0..10), default 5.
-- **`--cvar cl_autopause 0` is required.** A solo match auto-pauses when the window loses focus, so an
+- **`--cvar sv_autopause 0` is required.** A solo match auto-pauses when the window loses focus, so an
   unattended run silently idles and measures nothing.
 - The harness sets `g_forced_respawn 1` itself. Without it the slot dies once and stays a corpse for the rest
   of the run — every other metric still looks healthy while nothing is being exercised.

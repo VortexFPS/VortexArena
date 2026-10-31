@@ -396,6 +396,10 @@ public sealed partial class NetGame : Node3D
     /// (no server) and for a listen host that is alone (with or without bots — bots aren't peers).</summary>
     public bool HasRemoteClients => _isListenServer && (_server?.ConnectedPeerCount ?? 0) > 1;
 
+    /// <summary>The match has reached intermission (the networked flag). QC never auto-pauses then
+    /// (<c>sv_autopause &amp;&amp; !intermission_running</c>), so the scoreboard runs on to the next map.</summary>
+    public bool InIntermission => _client?.MatchIntermission ?? false;
+
     /// <summary>
     /// Raised when this listen server must change level (DP <c>changelevel</c>) — carries (map, gametype,
     /// botCount, botSkill, campaignId, campaignIndex) captured from the live match so the host can reboot the

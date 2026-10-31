@@ -170,7 +170,7 @@ public partial class HslColorPicker : Control, IQcDisableable
             if (b > 0f) DrawRect(full, new Color(1f, 1f, 1f, b));
         }
 
-        if (_mode == PickerMode.StringCvar)
+        if (_mode == PickerMode.StringCvar && !_qcDisabled) // "if(!me.disabled) draw_Picture(... _selected ...)"
         {
             Vector2 at = new(_cursor.X * Size.X, _cursor.Y * Size.Y);
             if (_selected is not null)

@@ -682,34 +682,11 @@ public partial class QcLabel : Control
     public float MarginRightChars { get; set; }
     /// <summary>QC <c>allowColors</c>: draw ^-colour codes as colours instead of as text.</summary>
     public bool AllowColors { get; set; }
-    /// <summary>QC <c>allowWrap</c>: the text wrapped (getWrappedLine) to the label's width, left-aligned, the block
-    /// centred vertically.</summary>
-    public bool AllowWrap { get; set; }
-    /// <summary>QC <c>allowWrap_spacing</c>: the gap between wrapped lines, in line heights.</summary>
-    public float WrapSpacing { get; set; }
-
     public override void _Draw()
     {
         Color color = Color ?? MenuSkin.Text;
         Color c = Disabled ? MenuSkin.Fade(color, MenuSkin.DisabledAlpha) : color;
         float ch = MenuMetrics.U(FontSize);
-        if (AllowWrap && !AllowColors)
-        {
-            // Label_recalcPositionWithText / Label_draw: count the lines, centre the block, draw line by line.
-            float left = MarginLeftChars * ch, width = Size.X - left - MarginRightChars * ch;
-            var lines = new System.Collections.Generic.List<string>();
-            string? remaining = _text;
-            while (remaining is not null)
-                lines.Add(QcDraw.WrappedLine(ref remaining, width, measure: t => QcDraw.TextWidth(t, FontSize, Bold)));
-            float height = lines.Count * ch + (lines.Count - 1) * ch * WrapSpacing;
-            var o = new Vector2(left, 0.5f * (Size.Y - height));
-            foreach (string line in lines)
-            {
-                QcDraw.Text(this, o, line, c, FontSize, Bold);
-                o.Y += ch * (1f + WrapSpacing);
-            }
-            return;
-        }
         if (!AllowColors)
         {
             QcDraw.LabelText(this, new Rect2(Vector2.Zero, Size), _text, c, Align, MarginLeftChars * ch, MarginRightChars * ch, FontSize, Bold);

@@ -23,7 +23,7 @@ public partial class DialogLanguageWarning : MenuScreen, IQcDialog
         AddChild(me);
 
         me.TR();
-            me.TD(2, 4, new QcLabel("While connected language changes will be applied only to the menu, full language changes will take effect starting from the next game")
+            me.TD(2, 4, new QcTextLabel("While connected language changes will be applied only to the menu, full language changes will take effect starting from the next game")
             {
                 AllowWrap = true, WrapSpacing = 0.5f,
             });

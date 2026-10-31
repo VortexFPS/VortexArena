@@ -17,8 +17,11 @@ public partial class QcTextLabel : QcLabel
     /// <summary>QC <c>allowCut</c>: draw_TextShortenToWidth instead of condensing.</summary>
     public bool AllowCut { get; set; }
 
-    /// <summary>QC <c>allowWrap</c>: getWrappedLine over the label's width, lines one font height apart.</summary>
+    /// <summary>QC <c>allowWrap</c>: getWrappedLine over the label's width.</summary>
     public bool AllowWrap { get; set; }
+
+    /// <summary>QC <c>allowWrap_spacing</c>: the gap between wrapped lines, in line heights.</summary>
+    public float WrapSpacing { get; set; }
 
     public override void _Draw()
     {
@@ -49,11 +52,12 @@ public partial class QcTextLabel : QcLabel
         string? remaining = t;
         while (!string.IsNullOrEmpty(remaining))
             lines.Add(QcDraw.WrappedLine(ref remaining, avail, false, s => QcDraw.TextWidth(s, FontSize, Bold)));
-        float top = 0.5f * (Size.Y - lines.Count * ch);
+        float height = lines.Count * ch + Math.Max(0, lines.Count - 1) * ch * WrapSpacing;
+        float top = 0.5f * (Size.Y - height);
         foreach (string line in lines)
         {
             QcDraw.Text(this, new Vector2(x, top), line, c, FontSize, Bold);
-            top += ch; // allowWrap_spacing 0
+            top += ch * (1f + WrapSpacing);
         }
     }
 }
@@ -129,6 +133,9 @@ public partial class QcTextBox : MenuListBox
     /// <summary>QC <c>align</c>: 0 = left, 0.5 = each line centred.</summary>
     public float Align { get; set; }
 
+    /// <summary>QC <c>escapedNewLines</c>: the two characters backslash-n break the lines, not a newline.</summary>
+    public bool EscapedNewLines { get; set; }
+
     protected override bool DrawsOwnHighlight => true;
 
     /// <summary>XonoticTextBox_setText.</summary>
@@ -151,9 +158,10 @@ public partial class QcTextBox : MenuListBox
         var item = new Vector2(width, ItemHeight);
         var lines = new List<string>();
         // tokenizebyseparator: no token after the final separator, none at all for "".
-        string text = _text.EndsWith('\n') ? _text[..^1] : _text;
+        string separator = EscapedNewLines ? @"\n" : "\n";
+        string text = _text.EndsWith(separator, StringComparison.Ordinal) ? _text[..^separator.Length] : _text;
         if (text.Length > 0)
-            foreach (string paragraph in text.Split('\n'))
+            foreach (string paragraph in text.Split(separator))
             {
                 string? remaining = paragraph;
                 while (remaining is not null)

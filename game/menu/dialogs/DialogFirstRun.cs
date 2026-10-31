@@ -14,6 +14,8 @@ namespace VortexArena.Game.Menu;
 /// </summary>
 public partial class DialogFirstRun : MenuScreen, IQcDialog
 {
+    public bool QcClosable => false;
+
     public string QcTitle => Localization.Tr("Welcome");
     public float QcIntendedWidth => 0.8f;
     public float QcRows => 16;
@@ -29,7 +31,7 @@ public partial class DialogFirstRun : MenuScreen, IQcDialog
         me.TR();
         me.TR();
             me.TDempty(1);
-            me.TD(2, 4, new QcLabel("Welcome to Xonotic, please select your language preference and enter your player name to get started.  You can change these options later through the menu system.")
+            me.TD(2, 4, new QcTextLabel("Welcome to Xonotic, please select your language preference and enter your player name to get started.  You can change these options later through the menu system.")
             {
                 AllowWrap = true, WrapSpacing = 0.5f,
             });

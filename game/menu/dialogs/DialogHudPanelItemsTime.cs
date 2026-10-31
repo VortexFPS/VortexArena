@@ -7,6 +7,8 @@ namespace VortexArena.Game.Menu;
 /// </summary>
 public partial class DialogHudPanelItemsTime : HudPanelDialog
 {
+    public override bool QcRightCentered => false; // mainwindow.qc: addItemCentered
+
     public override string QcTitle => Localization.Tr("Items Time Panel");
     public override float QcRows => 16;
 

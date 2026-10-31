@@ -17,6 +17,9 @@ public interface IQcDialog
     /// <summary>Placed with <c>addItemRightCentered</c> (xonotic/mainwindow.qc: the HUD panel dialogs) — flush with
     /// the right edge of the menu canvas, centred vertically — instead of <c>addItemCentered</c>.</summary>
     bool QcRightCentered => false;
+    /// <summary>QC <c>closable</c>: false for the first-run, terms-of-service and uid2name dialogs, which have no
+    /// close button and must be answered.</summary>
+    bool QcClosable => true;
 }
 
 /// <summary>A dialog with a QC <c>focusEnter</c>: told when it gets the focus, i.e. when the nexposee has finished
@@ -64,6 +67,7 @@ public partial class QcDialogFrame : Control
         else
             _close.Text = "X";
         _close.Pressed += close;
+        _close.Visible = dialog.QcClosable;
         AddChild(_close);
 
         if (screen is MenuScreen ms) ms.HostProvidesTitle = true;

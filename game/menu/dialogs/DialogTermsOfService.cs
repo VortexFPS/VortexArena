@@ -15,6 +15,8 @@ namespace VortexArena.Game.Menu;
 /// </summary>
 public partial class DialogTermsOfService : MenuScreen, IQcDialog
 {
+    public bool QcClosable => false;
+
     // dialog_termsofservice.qh (name "TermsOfService", closable false)
     public string QcTitle => Localization.Tr("Terms of Service");
     public float QcIntendedWidth => 0.8f;

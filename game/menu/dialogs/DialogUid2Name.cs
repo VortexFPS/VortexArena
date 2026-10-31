@@ -16,6 +16,8 @@ namespace VortexArena.Game.Menu;
 /// </summary>
 public partial class DialogUid2Name : MenuScreen, IQcDialog
 {
+    public bool QcClosable => false;
+
     private const string Cvar = "cl_allow_uid2name";
 
     // dialog_uid2name.qh

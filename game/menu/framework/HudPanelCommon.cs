@@ -146,7 +146,8 @@ public abstract partial class HudPanelDialog : MenuScreen, IQcDialog
     public float QcIntendedWidth => 0.4f;
     public abstract float QcRows { get; }
     public Color QcBorderColor => HudPanelCommon.DialogColor;
-    public bool QcRightCentered => true;
+    // mainwindow.qc adds every panel dialog with addItemRightCentered except Items Time (addItemCentered).
+    public virtual bool QcRightCentered => true;
 
     protected override void BuildUi()
     {

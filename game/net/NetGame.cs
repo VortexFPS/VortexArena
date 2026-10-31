@@ -4838,9 +4838,15 @@ public sealed partial class NetGame : Node3D
                 // which then takes a freeze-length to bleed off → looked like movement freed ~5s into live). Gate on
                 // HasMatchState (not MatchStartTime>0) so it engages from the very first post-spawn frame, on the
                 // server clock (LatestServerTime) so it releases exactly at go-live. Warmup is freely playable.
+                // MATCH-END FREEZE (#92): the same hold applies once the match is over — the server stops running
+                // PM_Main at intermission (GameWorld canMove: !MatchEnded && !Intermission.Running; Base
+                // sys_phys_pregame_hold: !game_stopped → velocity 0, MOVETYPE_NONE, disableclientprediction 2).
+                // Predicting on through the scoreboard moved the view every frame and snapped it back every
+                // snapshot — the end-of-match jitter, on the host and on a remote client alike.
                 if (_movementStep is not null)
-                    _movementStep.Frozen = _client.HasMatchState && !_client.MatchWarmup
-                        && _client.LatestServerTime < _client.MatchStartTime;
+                    _movementStep.Frozen = _client.MatchIntermission
+                        || (_client.HasMatchState && !_client.MatchWarmup
+                            && _client.LatestServerTime < _client.MatchStartTime);
             }
 
             // NET-INPUT DIAGNOSTIC (dormant; `set net_input_trace 1`). Logs the full input→movement pipeline every
@@ -12697,7 +12703,12 @@ public sealed partial class NetGame : Node3D
         // above all a damage-knockback shove (Reconciler force smoothing) — it ramps the rendered velocity from the
         // old value up to the new over the smoothing window, so the view bob/sway and the sub-tic eye extrapolation
         // below ease into the shove instead of the velocity snapping. Zeroed while dead (frozen corpse has no bob).
-        NVec3 viewVelocity = localDead ? NVec3.Zero : _client.PredictedVelocity + _client.PredictionVelocityErrorOffset(now);
+        // Intermission: Base CSQCPlayer_SetCamera uses velocity '0 0 0' while `intermission` (unless
+        // cl_movement_intermissionrunning), so the frozen player's last running speed doesn't bob/sway or
+        // extrapolate the eye on the scoreboard.
+        NVec3 viewVelocity = localDead || _client.MatchIntermission
+            ? NVec3.Zero
+            : _client.PredictedVelocity + _client.PredictionVelocityErrorOffset(now);
 
         // Sub-tic view smoothing (DP's partial final movement frame): the predicted origin only advances when an
         // input tic is drained, so it moves in discrete 1/72 s (~13.9 ms) steps while the camera renders at the

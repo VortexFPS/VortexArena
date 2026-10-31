@@ -186,6 +186,28 @@ namespace VortexArena.Common.Gameplay
         public static bool IsCreature(Entity e)
             => (e.Flags & (EntFlags.Client | EntFlags.Monster)) != 0;
 
+        /// <summary>
+        /// QC <c>EXACTTRIGGER_TOUCH</c> = <c>WarpZoneLib_ExactTrigger_Touch(trig, toucher, true)</c>
+        /// (lib/warpzone/common.qc): the engine fires a trigger's <c>.touch</c> whenever the two BOUNDING BOXES
+        /// overlap (DP SV_LinkEdict_TouchAreaGrid), so a touch function whose volume is a non-box brush — a
+        /// wedge, a ramp, an L — must confirm the toucher is really inside the brush. Without it the volume
+        /// reaches every corner of its bbox (boil's diagonal trigger_hurt killed players standing on the floor
+        /// beside it). The toucher box grows by 1 unit on Xonotic maps (not q3compat ones), as in QC. A trigger
+        /// without an inline model, or one marked boxy, is its bbox, so it passes.
+        /// </summary>
+        public static bool ExactTriggerTouch(Entity trig, Entity toucher)
+        {
+            if (string.IsNullOrEmpty(trig.Model) || trig.WarpzoneIsBoxy || Api.Services is null)
+                return true;
+            Vector3 emin = toucher.AbsMin, emax = toucher.AbsMax;
+            if (!CompatRemaps.IsQ3Compat)
+            {
+                emin -= Vector3.One;
+                emax += Vector3.One;
+            }
+            return Api.Entities.BoxTouchesBrushModel(trig, emin, emax);
+        }
+
         /// <summary>QC IS_DEAD(e).</summary>
         public static bool IsDead(Entity e) => e.DeadState != DeadFlag.No;
 

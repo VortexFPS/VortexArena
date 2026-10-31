@@ -559,7 +559,8 @@ public partial class Shell : Node
             "bindingsreset" => new DialogBindingsReset(),
             "disclaimer" => new DialogDisclaimer(),
             "sandbox" => new DialogSandboxTools(),
-            _ => null,
+            // Anything else by its QC dialog name (HUDammo, GameMenu, Uid2Name, ...), as `menu_cmd directmenu` finds it.
+            _ => MenuDialogRegistry.Create(baseId),
         };
         if (screen is not null)
         {

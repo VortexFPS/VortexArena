@@ -56,10 +56,10 @@ SUBMODULE = ROOT / "maps-src"
 REBUILD_OUT = ROOT / "_scratch" / "maps-rebuild"
 
 # 'shared' is the only pack with no .map behind it: publish.py assembles it from the art no single map
-# owns. Everything else compiles, including the two underscore packs -- _hudsetup.map sits at the top
-# level like any other, and _init nests its own (sources/maps/_init/_init.map). Naming the one genuine
-# exception keeps "every pinned pack has a source" a real check rather than a blanket excuse for
-# whatever happens to be absent. 30 top-level .map + 1 nested + shared = the 32 packs pinned below.
+# owns. Everything else compiles, including the _hudsetup utility level, whose .map sits at the top level
+# like any other. Naming the one genuine exception keeps "every pinned pack has a source" a real check
+# rather than a blanket excuse for whatever happens to be absent. 30 .map + shared = the 31 packs pinned
+# (maps-2026.08 dropped _init, the DarkPlaces boot stub whose source nests at sources/maps/_init/_init.map).
 SOURCELESS_PACKS = {"shared"}
 
 RETRIES = 4
@@ -262,8 +262,8 @@ def rebuild(lock: dict, only: list[str] | None, dry_run: bool, install: bool) ->
         if not targets:
             die("nothing to rebuild after removing packs that have no .map source")
 
-    # A source must exist for every target BEFORE anything compiles for hours. _init nests its map one
-    # level down, so both layouts count as present.
+    # A source must exist for every target BEFORE anything compiles for hours. A map may nest its source one
+    # level down (sources/maps/<m>/<m>.map, as _init did), so both layouts count as present.
     src = SUBMODULE / "sources" / "maps"
     absent = [m for m in targets
               if not (src / f"{m}.map").exists() and not (src / m / f"{m}.map").exists()]

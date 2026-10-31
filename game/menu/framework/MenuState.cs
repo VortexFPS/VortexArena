@@ -332,6 +332,14 @@ public static class MenuState
     }
 
     /// <summary>
+    /// Raised on the MAIN thread after an <c>fs_rescan</c> has rebuilt the search path and dropped the menu
+    /// caches. For state derived from the installed content that nothing re-reads on its own: an open Create
+    /// Game map list, and the map catalog a public server reports to the master (otherwise rebuilt only at the
+    /// next map change or by <c>sv_master_catalog_refresh</c>).
+    /// </summary>
+    public static event Action? ContentRescanned;
+
+    /// <summary>
     /// <c>fs_rescan</c> — re-read the content search path so a <c>.pk3</c> dropped into the user gamedir (or
     /// the shipped data dir) while the game is running becomes usable without a restart, and a pack deleted
     /// there stops being offered. Returns the rescan's tally, or null when no content is mounted at all.
@@ -372,6 +380,8 @@ public static class MenuState
         {
             MapInfoCache.Invalidate();
             MenuSkin.InvalidateImageCache();
+            // After the caches drop, so a listener that re-reads the map list sees the new search path.
+            ContentRescanned?.Invoke();
         }).CallDeferred();
 
         // The real count off the search path, not MapList.Available() — that one substitutes a hardcoded

@@ -1562,7 +1562,20 @@ public partial class Shell : Node
             _console.Print("editor: no map running — use `editor <map>`.");
             return;
         }
-        ChangeLevel(target, "editor");
+        // Open only something that exists: an installed map, or one saved from the editor (editor_save <name>
+        // writes a .vmap that may have no compiled bsp). A misspelt name used to come up as an empty flat floor
+        // with no document, which reads as the editor being broken rather than the name being wrong. Checked
+        // against the live search path, so a pack added with fs_rescan is openable at once.
+        var vfs = Menu.MenuState.Vfs;
+        string? error = VortexArena.Common.Menu.InstalledMaps.EditorOpenError(target,
+            stem => vfs is null || vfs.Exists($"maps/{stem}.bsp"),
+            stem => Vmap.VmapService.FindPackage(stem) is not null);
+        if (error is not null)
+        {
+            _console.Print(error);
+            return;
+        }
+        ChangeLevel(VortexArena.Common.Menu.InstalledMaps.Stem(target), "editor");
     }
 
     /// <summary>

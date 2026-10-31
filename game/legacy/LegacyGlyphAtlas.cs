@@ -32,7 +32,9 @@ public sealed class LegacyGlyphAtlas
 
     private sealed class Page
     {
-        public readonly Image Image = Image.CreateEmpty(PageSize, PageSize, false, Image.Format.Rgba8);
+        // The page's pixels as glyphs are added. Never the image a texture upload was handed: the renderer reads
+        // that one later, on its own thread (see Flush).
+        public Image Image = Image.CreateEmpty(PageSize, PageSize, false, Image.Format.Rgba8);
         public ImageTexture? Texture;
         public int X = 1, Y = 1, RowHeight;
         public bool Dirty;
@@ -226,7 +228,7 @@ public sealed class LegacyGlyphAtlas
         page.RowHeight = Math.Max(page.RowHeight, outHeight);
         page.Dirty = true;
         _dirty = true;
-        page.Texture ??= ImageTexture.CreateFromImage(page.Image);
+        page.Texture ??= ImageTexture.CreateFromImage((Image)page.Image.Duplicate());
         return new Glyph(page.Texture, region, offset - new Vector2(padLeft, padTop), advance);
     }
 
@@ -257,7 +259,13 @@ public sealed class LegacyGlyphAtlas
         foreach (Page page in _pages)
         {
             if (!page.Dirty || page.Texture is null) continue;
-            page.Texture.Update(page.Image);
+            // ImageTexture.Update only queues the image for the render thread. Blitting the next glyphs into that
+            // same image before the renderer has read it made the upload see an image in the middle of being
+            // rewritten ("p_image->is_empty()" from TextureStorage::_texture_2d_update, a few times a start).
+            // So the renderer gets this image to itself, and the page carries on in a copy.
+            Image sent = page.Image;
+            page.Image = (Image)sent.Duplicate();
+            page.Texture.Update(sent);
             page.Dirty = false;
         }
     }

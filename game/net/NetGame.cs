@@ -399,6 +399,10 @@ public sealed partial class NetGame : Node3D
     /// (no server) and for a listen host that is alone (with or without bots — bots aren't peers).</summary>
     public bool HasRemoteClients => _isListenServer && (_server?.ConnectedPeerCount ?? 0) > 1;
 
+    /// <summary>The match has reached intermission (the networked flag). QC never auto-pauses then
+    /// (<c>sv_autopause &amp;&amp; !intermission_running</c>), so the scoreboard runs on to the next map.</summary>
+    public bool InIntermission => _client?.MatchIntermission ?? false;
+
     /// <summary>
     /// Raised when this listen server must change level (DP <c>changelevel</c>) — carries (map, gametype,
     /// botCount, botSkill, campaignId, campaignIndex) captured from the live match so the host can reboot the
@@ -2357,7 +2361,8 @@ public sealed partial class NetGame : Node3D
             Name = "MusicPlayer",
             CdTrack = resolvedTrack,
             AudioLoader = _assets is not null ? _assets.LoadSound : null,
-            BgmVolume = _sharedCvars?.GetFloat("bgmvolume") is float bv and > 0f ? bv : 0.7f,
+            // DP's default is 1; 0 is a real setting (the Music slider at OFF), not "unset".
+            BgmVolume = CvOr("bgmvolume", 1f),
         };
 
         // On a listen server, give the music player direct access to the entity list so it can scan
@@ -4205,7 +4210,7 @@ public sealed partial class NetGame : Node3D
     // lookups: seeded on first frame, refreshed only when the shared store raises Changed for one of them.
     // With no shared store (bare CLI client) the seeds match the old per-frame defaults.
     private bool _processCvarsHooked;
-    private float _bgmVolumeCv = 0.7f;
+    private float _bgmVolumeCv = 1f;
     private bool _predictFireCv = true;
     private bool _perFrameInputCv;
     // Path A send model. cl_netfps (DP-faithful, default 72) = datagram send rate; cl_movement_send_all (default 0):
@@ -4275,7 +4280,7 @@ public sealed partial class NetGame : Node3D
 
     private void RefreshProcessCvars()
     {
-        _bgmVolumeCv = _sharedCvars?.GetFloat("bgmvolume") ?? 0.7f;
+        _bgmVolumeCv = CvOr("bgmvolume", 1f);   // unset → DP's default 1; an explicit 0 mutes the music
         // cl_predictfire defaults ON: unset GetString reads "" → treat anything but "0" as on.
         _predictFireCv = (_sharedCvars?.GetString("cl_predictfire") ?? "") != "0";
         _perFrameInputCv = _sharedCvars?.GetFloat("cl_movement_perframe") is float pf && pf != 0f;
@@ -4507,12 +4512,15 @@ public sealed partial class NetGame : Node3D
 
         // Feed the music player the current server time so trigger_music touch freshness works.
         if (_musicPlayer is not null && _serverWorld is not null)
-        {
             _musicPlayer.ServerTime = _serverWorld.Time;
-            // Keep bgmvolume in sync (cached; the Changed hook refreshes it on a menu/console set). Only the
-            // no-shared-store path still reads the server store live (rare: bare CLI host).
-            float bgm = _sharedCvars is not null ? _bgmVolumeCv : _serverWorld.Services.Cvars.GetFloat("bgmvolume");
-            if (bgm > 0f) _musicPlayer.BgmVolume = bgm;
+        // Keep bgmvolume in sync on EVERY client, as QC target_music reads autocvar_bgmvolume each frame (cached
+        // here; the Changed hook refreshes it on a menu/console set). It used to be fed only on a listen host and
+        // only when above 0, so a remote client's Music slider did nothing and OFF never silenced the music (#60).
+        // Only the no-shared-store path still reads the server store live (rare: bare CLI host).
+        if (_musicPlayer is not null)
+        {
+            if (_sharedCvars is not null) _musicPlayer.BgmVolume = _bgmVolumeCv;
+            else if (_serverWorld is not null) _musicPlayer.BgmVolume = _serverWorld.Services.Cvars.GetFloat("bgmvolume");
         }
 
         // [T51] HUD feeds produced by the server-side mutators (host path only — a pure remote client has no
@@ -11879,6 +11887,35 @@ public sealed partial class NetGame : Node3D
     /// click select rows, so the cursor must be freed and gameplay look/fire suspended while open).</summary>
     private bool QuickMenuOpen
         => _fullHud?.GetPanel<VortexArena.Game.Hud.QuickMenuPanel>() is { IsOpen: true };
+
+    /// <summary>
+    /// Escape for the in-world HUD UIs that take the keyboard, in QC CSQC_InputEvent's order: the quickmenu
+    /// (QuickMenu_InputEvent: "K_ESCAPE && key_pressed → QuickMenu_Close"), the maximized radar
+    /// (HUD_Radar_InputEvent) and the minigame menu (HUD_Minigame_InputEvent). Each closes and claims the key, so
+    /// it never also reaches the game menu. Called from Shell's Escape chain (Shell._UnhandledKeyInput), which owns
+    /// both Escape edges and runs before this node's _UnhandledInput would; returns false when none is open.
+    /// </summary>
+    public bool HandleHudEscape()
+    {
+        if (ConsoleState.IsOpen || _fullHud is null)
+            return false;
+        if (_fullHud.GetPanel<VortexArena.Game.Hud.QuickMenuPanel>() is { IsOpen: true } quick)
+        {
+            quick.Close();
+            return true;
+        }
+        if (_radar is not null && GodotObject.IsInstanceValid(_radar) && _radar.Maximized)
+        {
+            _radar.SetMaximized(false);
+            return true;
+        }
+        if (_fullHud.MinigameMenu is { IsOpen: true } minigameMenu)
+        {
+            minigameMenu.Close();
+            return true;
+        }
+        return false;
+    }
 
     /// <summary>Any in-world HUD UI that should free the mouse cursor + suspend look/fire (minigame board/menu, the
     /// quick-chat menu, or the maximized radar). The bind channel stays live so the toggling bind can still close the

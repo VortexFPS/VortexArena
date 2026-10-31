@@ -730,6 +730,19 @@ public partial class ConsoleOverlay : CanvasLayer
             return;
         }
 
+        // DP keys.c Key_Event: "in all modes shift-escape toggles console", an engine binding no bind table can
+        // lose, so a player can always get the console back; the release then goes nowhere. Toggled on the press,
+        // or on the release when the press never arrived (a captured pointer can swallow it - see
+        // Shell._UnhandledKeyInput); a release whose press was handled is eaten by the check above.
+        if (@event is InputEventKey { Echo: false, Keycode: Key.Escape, ShiftPressed: true } shiftEscape)
+        {
+            Toggle();
+            if (shiftEscape.Pressed)
+                _eatEscapeRelease = true;
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (!IsOpen)
             return;
 

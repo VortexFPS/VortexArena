@@ -2570,6 +2570,14 @@ public sealed class GameWorld
         if (!p.IsBot)
             p.ButtonAttack2 = p.Vehicle is null && (InputProvider(p)?.ButtonAttack2 ?? false);
 
+        // QC PHYS_INPUT_BUTTON_CHAT is CS(this).buttonchat, which DarkPlaces copies from EVERY received usercmd —
+        // not only when PM_Main runs. The port set ButtonChat only inside PlayerPhysics.Move, so a player whose
+        // movement is held (the pre-match countdown, intermission) kept the value from their last moving tick:
+        // ready up from the console or chat in warmup and the "typing" bubble stayed up through the whole
+        // countdown (playtest #67). Publish it from this tick's input for humans, before the bubble reads it.
+        if (!p.IsBot)
+            p.ButtonChat = InputProvider(p)?.Typing ?? false;
+
         // QC UpdateChatBubble (client.qc:1377, called from PlayerPreThink): the floating "typing" sprite over a
         // chatting player's head, visible to every client. Runs for bots too (they never set ButtonChat — a
         // cheap no-op) so the state machine lives in one place. (playtest #35c)

@@ -96,6 +96,8 @@ public static class HudPanelCommon
                 me.TDempty(0.2f);
                 me.TD(1, 3.8f, Qc.Check(0, hideOnDeath, "Hide on death"));
         }
+
+        me.GotoRC(me.CurrentRow + 0.5f, 0); me.SetFirstColumn(me.CurrentColumn);
     }
 
     /// <summary>

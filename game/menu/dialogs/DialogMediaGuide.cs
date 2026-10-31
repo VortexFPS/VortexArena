@@ -102,7 +102,7 @@ public partial class DialogMediaGuide : QcTab
             "Mods" => Pages(GuidePages.Mods),
             "Gametypes" => GameTypes.All
                 .Where(g => g is not null && g.NetName.Length > 0)
-                .Select(g => new GuideEntry(Name(g.DisplayName, g.NetName), MenuSkin.SkinImage("gametype_" + g.NetName), () => g.MenuDescription ?? "")),
+                .Select(g => new GuideEntry(EntryName(g.DisplayName, g.NetName), MenuSkin.SkinImage("gametype_" + g.NetName), () => g.MenuDescription ?? "")),
             "Weapons" => WeaponEntries(),
             "Mutators" => Mutators.All
                 .Where(m => m is not null && m.NetName.Length > 0 && m.GuideDescription is { Length: > 0 })
@@ -129,11 +129,11 @@ public partial class DialogMediaGuide : QcTab
         foreach (Weapon w in ordered)
         {
             Weapon weapon = w;
-            yield return new GuideEntry(Name(w.DisplayName, w.NetName), WeaponHud.Icon(w), () => weapon.GuideDescription ?? "");
+            yield return new GuideEntry(EntryName(w.DisplayName, w.NetName), WeaponHud.Icon(w), () => weapon.GuideDescription ?? "");
         }
     }
 
-    private static string Name(string display, string netName) => display.Length > 0 ? display : Humanize(netName);
+    private static string EntryName(string display, string netName) => display.Length > 0 ? display : Humanize(netName);
 
     // A registry NetName ("offhand_blaster") as a readable label ("Offhand Blaster"): the port keeps no localized
     // display name (QC's `message`) for mutators.

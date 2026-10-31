@@ -189,10 +189,13 @@ public partial class CvarCheckBox : CheckBox
         if (v == _on)
         {
             ButtonPressed = true;
-            return;
         }
-        float off = float.TryParse(_off, NumberStyles.Float, CultureInfo.InvariantCulture, out float o2) ? o2 : 0f;
-        ButtonPressed = !Mathf.IsEqualApprox(CvarUi.Cvars.GetFloat(_cvar), off);
+        else
+        {
+            float off = float.TryParse(_off, NumberStyles.Float, CultureInfo.InvariantCulture, out float o2) ? o2 : 0f;
+            ButtonPressed = !Mathf.IsEqualApprox(CvarUi.Cvars.GetFloat(_cvar), off);
+        }
+        // (An early return on the exact match used to leave _updating set, so every later click was ignored.)
         _updating = false;
     }
 

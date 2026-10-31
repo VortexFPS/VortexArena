@@ -104,6 +104,16 @@ public interface IEntityService
     /// = the implementation doesn't expose one (minimal test fakes); callers must fall back to FindByClass.
     /// </summary>
     IReadOnlyList<Entity>? All => null;
+
+    /// <summary>
+    /// The accurate half of QC <c>WarpZoneLib_BoxTouchesBrush</c> (lib/warpzone/common.qc): does the world box
+    /// [<paramref name="mins"/>, <paramref name="maxs"/>] overlap one of <paramref name="trigger"/>'s inline
+    /// brush-model brushes — the real brush volume, not its bounding box. QC gets this from a zero-length
+    /// tracebox against the trigger made temporarily SOLID_BSP. True when the entity has no brush model to test
+    /// (QC: no modelindex → the bbox already decided it). The default (minimal test fakes, no collision data)
+    /// answers true, i.e. the bounding-box answer the touch pass already gave.
+    /// </summary>
+    bool BoxTouchesBrushModel(Entity trigger, Vector3 mins, Vector3 maxs) => true;
 }
 
 [Flags]

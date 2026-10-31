@@ -74,6 +74,26 @@ public class MasterServerLinkTests
         Assert.Contains((IPAddress.Parse("200.100.50.25"), 27500), listed);
     }
 
+    [Fact]
+    public void An_IPv6_Link_Round_Trips_Over_IPv6_Loopback()
+    {
+        // The browser's second link, for IPv6-only masters. Loopback needs no IPv6 route out, only a stack.
+        if (!System.Net.Sockets.Socket.OSSupportsIPv6)
+            return;
+        using var server = new MasterServerLink(0, System.Net.Sockets.AddressFamily.InterNetworkV6);
+        using var client = new MasterServerLink(0, System.Net.Sockets.AddressFamily.InterNetworkV6);
+        Assert.Equal(System.Net.Sockets.AddressFamily.InterNetworkV6, client.Family);
+        var serverEp = new IPEndPoint(IPAddress.IPv6Loopback, server.LocalEndPoint.Port);
+
+        server.GetInfoRequested += (from, _) => server.SendInfoResponse(from, new Dictionary<string, string> { ["hostname"] = "v6" });
+        string? hostname = null;
+        client.InfoReceived += (_, d) => hostname = d["hostname"];
+
+        client.RequestInfo(serverEp, "six");
+        Assert.True(PumpUntil(() => hostname is not null, server, client), "expected an infoResponse over IPv6 loopback");
+        Assert.Equal("v6", hostname);
+    }
+
     private static byte[] BuildGetServersResponse(params (string ip, int port)[] servers)
     {
         var bytes = new List<byte>();

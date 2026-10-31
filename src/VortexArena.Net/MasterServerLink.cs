@@ -19,12 +19,23 @@ public sealed class MasterServerLink : IDisposable
 {
     private readonly UdpClient _udp;
 
+    /// <summary>The wildcard of this link's family — Receive needs a sender placeholder of the socket's own family.</summary>
+    private readonly IPAddress _any;
+
     /// <summary>The local UDP endpoint actually bound (port is ephemeral when 0 was requested).</summary>
     public IPEndPoint LocalEndPoint => (IPEndPoint)_udp.Client.LocalEndPoint!;
 
-    public MasterServerLink(int localPort = 0)
+    /// <summary>The address family this link sends and receives on (IPv4 unless asked otherwise).</summary>
+    public AddressFamily Family { get; }
+
+    /// <param name="localPort">Port to bind; 0 = ephemeral.</param>
+    /// <param name="family">IPv4 (the default, and what every server-side caller uses) or IPv6 — the client
+    /// browser opens a second, IPv6 link for the masters that publish only an IPv6 address.</param>
+    public MasterServerLink(int localPort = 0, AddressFamily family = AddressFamily.InterNetwork)
     {
-        _udp = new UdpClient(new IPEndPoint(IPAddress.Any, localPort));
+        Family = family;
+        _any = family == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any;
+        _udp = new UdpClient(new IPEndPoint(_any, localPort));
         _udp.Client.Blocking = false;
     }
 
@@ -108,7 +119,7 @@ public sealed class MasterServerLink : IDisposable
             {
                 if (_udp.Available <= 0)
                     return;
-                var ep = new IPEndPoint(IPAddress.Any, 0);
+                var ep = new IPEndPoint(_any, 0);
                 data = _udp.Receive(ref ep);
                 from = ep;
             }

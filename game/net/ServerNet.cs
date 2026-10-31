@@ -1319,20 +1319,14 @@ public sealed class ServerNet : IDisposable
             => MutatorActivation.BuildMutatorsPrettyString("").Length > 0;
     }
 
+    // The heartbeat socket is IPv4, so an IPv6-only master is skipped here, once, rather than handed to the
+    // heartbeat loop, where the send would throw on every tick (MasterAddress has the why).
     private static bool TryResolve(string hostPort, out IPEndPoint? ep)
     {
-        ep = null;
-        int colon = hostPort.LastIndexOf(':');
-        if (colon <= 0 || !int.TryParse(hostPort[(colon + 1)..], out int port))
-            return false;
-        try
-        {
-            IPAddress[] addrs = Dns.GetHostAddresses(hostPort[..colon]);
-            if (addrs.Length == 0) return false;
-            ep = new IPEndPoint(addrs[0], port);
+        if (MasterAddress.TryResolve(hostPort, allowIPv6: false, out ep, out string? problem))
             return true;
-        }
-        catch (Exception ex) { GD.PrintErr($"[ServerNet] master resolve '{hostPort}' failed: {ex.Message}"); return false; }
+        GD.PrintErr($"[ServerNet] master '{hostPort}' skipped: {problem}");
+        return false;
     }
 
     // =====================================================================================

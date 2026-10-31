@@ -3,61 +3,48 @@ using Godot;
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// "Enter HUD editor" confirm popup — a faithful C# port of <c>XonoticHUDConfirmDialog</c>
-/// (qcsrc/menu/xonotic/dialog_settings_game_hudconfirm.qc). Two message lines then a Yes/No row.
+/// "Enter HUD editor" — <c>XonoticHUDConfirmDialog_fill</c> (qcsrc/menu/xonotic/dialog_settings_game_hudconfirm.qc)
+/// on its 4 x 2 grid, 0.5 of the menu wide, in SKINCOLOR_DIALOG_HUDCONFIRM: two centred lines, then a red "Yes"
+/// (<c>HUDSetup_Start</c>) and a green "No" that closes it.
 ///
-/// In the QC, "Yes" runs <c>HUDSetup_Start</c>: if you're not already in a game
-/// (<c>!(gamestatus &amp; (GAME_CONNECTED | GAME_ISSERVER))</c>) it execs <c>map _hudsetup</c>, otherwise it
-/// runs <c>togglemenu 0</c> to drop back into the running match; either way it then sets <c>_hud_configure 1</c>
-/// to open the in-game HUD editor. Reached from the menu (not in a match) the not-connected branch is taken, so
-/// we issue <c>map _hudsetup</c> + <c>_hud_configure 1</c> and close.
-///
-/// The flow is LIVE end-to-end: <c>map _hudsetup</c> routes through <see cref="MenuCommand"/> (StartMap hook;
-/// the map ships in the maps pk3), <c>_hud_configure 1</c> lands in the shared cvar store via the bare-cvar
-/// fallback, and the in-game editor it enables is <see cref="Game.Hud.HudConfigEditor"/> (the hud_config.qc
-/// port). "No" was QC <c>Dialog_Close</c> — here the universal Back. Binds no persistent settings cvars of
-/// its own. QC title "Enter HUD editor".
+/// <para><c>HUDSetup_Start</c>: outside a game (<c>!(gamestatus &amp; (GAME_CONNECTED | GAME_ISSERVER))</c>,
+/// <see cref="MenuCommand.InMatch"/>) it runs <c>map _hudsetup</c>, inside one <c>togglemenu 0</c>; either way then
+/// <c>_hud_configure 1</c>, which the in-game editor (<see cref="Game.Hud.HudConfigEditor"/>) follows.</para>
 /// </summary>
-public partial class DialogHudConfirm : MenuScreen
+public partial class DialogHudConfirm : MenuScreen, IQcDialog
 {
+    public string QcTitle => Localization.Tr("Enter HUD editor");
+    public float QcIntendedWidth => 0.5f;
+    public float QcRows => 4;
+    public Color QcBorderColor => MenuSkin.SkinColor("COLOR_DIALOG_HUDCONFIRM", 1f, 0.2f, 0.15f);
+
     protected override void BuildUi()
     {
         Name = "DialogHudConfirm"; // QC XonoticHUDConfirmDialog
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 32);
-        AddChild(margin);
+        var me = new QcGrid(QcRows, 2);
+        me.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(me);
 
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 14);
-        margin.AddChild(root);
-
-        root.AddChild(MakeTitle("Enter HUD editor"));
-
-        // The two QC message rows (makeXonoticTextLabel, centered align 0.5).
-        var line1 = MakeLabel("In order for the HUD editor to show, you must first be in game.");
-        line1.HorizontalAlignment = HorizontalAlignment.Center;
-        var line2 = MakeLabel("Do you wish to start a local game to set up the HUD?");
-        line2.HorizontalAlignment = HorizontalAlignment.Center;
-        root.AddChild(line1);
-        root.AddChild(line2);
-
-        root.AddChild(Ui.Spacer());
-
-        // QC HUDSetup_Start (not-connected branch, taken from the menu): map _hudsetup; _hud_configure 1.
-        var yes = MakeButton("Yes", OnYes);
-        yes.TooltipText = "Start a local game and open the HUD editor";
-        root.AddChild(MakeButtonBar(yes, MakeButton("No", GoBack)));
+        me.TR();
+            me.TD(1, 2, Qc.Label("In order for the HUD editor to show, you must first be in game.", 0.5f));
+        me.TR();
+            me.TD(1, 2, Qc.Label("Do you wish to start a local game to set up the HUD?", 0.5f));
+        me.TR();
+        me.TR();
+            me.TD(1, 1, Qc.Button("Yes", HudSetupStart, tint: new Color(1, 0, 0)));
+            me.TD(1, 1, Qc.Button("No", GoBack, tint: new Color(0, 1, 0)));
     }
 
-    /// <summary>QC <c>HUDSetup_Start</c>: load the HUD-setup map, enable the HUD editor, then close.</summary>
-    private void OnYes()
+    /// <summary>QC <c>HUDSetup_Start</c>, then closing the dialog (the port's menu stays up otherwise).</summary>
+    private void HudSetupStart()
     {
-        // From the menu we are not connected, so this mirrors the QC `localcmd("map _hudsetup\n")` branch,
-        // followed by `_hud_configure 1`. (The in-match branch would instead toggle the menu off.)
-        MenuCommand.Run("map _hudsetup; _hud_configure 1");
+        if (MenuCommand.InMatch?.Invoke() != true)
+            MenuCommand.Run("map _hudsetup");
+        else
+            MenuCommand.Run("togglemenu 0");
+
+        MenuCommand.Run("_hud_configure 1");
         GoBack();
     }
 }

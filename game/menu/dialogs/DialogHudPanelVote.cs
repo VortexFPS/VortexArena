@@ -1,64 +1,24 @@
-using Godot;
-
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// HUD "Vote" panel config dialog — a faithful C# port of <c>XonoticHUDVoteDialog_fill</c>
-/// (qcsrc/menu/xonotic/dialog_hudpanel_vote.qc).
-///
-/// Emits the common panel block first (<c>dialog_hudpanel_main_checkbox</c> "Enable" on
-/// <c>hud_panel_vote</c>, then the <c>dialog_hudpanel_main_settings</c> "Background" group on
-/// <c>hud_panel_vote_bg*</c>), then the single panel-specific row: "Opacity after voting".
-///
-/// FAITHFUL UI NOW: the binding writes the real <c>hud_panel_vote*</c> cvars the in-game vote panel reads;
-/// there is no live HUD editor/preview in VortexArena yet, so nothing previews here.
+/// "Vote Panel" — <c>XonoticHUDVoteDialog_fill</c> (qcsrc/menu/xonotic/dialog_hudpanel_vote.qc) on its 15.5 x 4 grid:
+/// the shared rows, then the opacity after voting.
 /// </summary>
-public partial class DialogHudPanelVote : MenuScreen
+public partial class DialogHudPanelVote : HudPanelDialog
 {
-    private const string Panel = "vote";
+    public override string QcTitle => Localization.Tr("Vote Panel");
+    public override float QcRows => 15.5f;
 
-    protected override void BuildUi()
+    protected override void Fill(QcGrid me)
     {
-        Name = "DialogHudPanelVote";
+        const string panelname = "vote";
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (string side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 32);
-        AddChild(margin);
+        HudPanelCommon.MainCheckbox(me, panelname);
 
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 14);
-        margin.AddChild(root);
+        HudPanelCommon.MainSettings(me, panelname);
 
-        root.AddChild(MakeTitle("Vote Panel"));
-
-        var scroll = new ScrollContainer
-        {
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        root.AddChild(scroll);
-
-        var box = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        box.AddThemeConstantOverride("separation", 8);
-        scroll.AddChild(box);
-
-        // Common HUD-panel block: enable mode + Background group.
-        HudPanelCommon.BuildCommon(box, Panel);
-
-        box.AddChild(Ui.Spacer());
-
-        // --- Panel-specific rows (dialog_hudpanel_vote.qc) ----------------------------------------------
-
-        // QC: makeXonoticSlider(0.1, 1, 0.1, "hud_panel_vote_alreadyvoted_alpha"); formatString "%".
-        box.AddChild(Ui.Row("Opacity after voting:",
-            Widgets.Slider("hud_panel_vote_alreadyvoted_alpha", 0.1f, 1f, 0.1f, format: Percent)));
-
-        root.AddChild(MakeButtonBar(MakeButton("Back", GoBack)));
+        me.TR();
+            me.TD(1, 1.4f, Qc.Label("Opacity after voting:"));
+            me.TD(1, 2.6f, Qc.Slider(0.1f, 1, 0.1f, "hud_panel_vote_alreadyvoted_alpha", "", "%"));
     }
-
-    /// <summary>QC slider formatString "%": show a 0..1 alpha as a percentage.</summary>
-    private static string Percent(float v) => $"{Mathf.RoundToInt(v * 100f)}%";
 }

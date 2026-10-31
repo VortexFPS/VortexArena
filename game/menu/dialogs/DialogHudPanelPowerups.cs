@@ -1,87 +1,44 @@
-using Godot;
-
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// HUD "Powerups" panel configuration dialog — a faithful C# port of <c>XonoticHUDPowerupsDialog_fill</c>
-/// (qcsrc/menu/xonotic/dialog_hudpanel_powerups.qc). It opens with the common HUD-panel block (Enable mode +
-/// Background group from <c>dialog_hudpanel_main_*</c>) then declares the panel-specific rows: the status bar
-/// checkbox and its 4-way alignment radio (gated on the checkbox), and the icon-alignment radio.
-///
-/// FAITHFUL UI NOW: drives the real <c>hud_panel_powerups_*</c> cvars (the shared store the in-game HUD reads).
-/// The Background color uses a string-RGB color picker, built via the shared
-/// <see cref="Widgets.ColorButton"/> (<see cref="CvarColorButton"/>) bound to the same "r g b" string cvar.
+/// "Powerups Panel" — <c>XonoticHUDPowerupsDialog_fill</c> (qcsrc/menu/xonotic/dialog_hudpanel_powerups.qc) on its
+/// 16 x 4 grid: the shared rows, then the status bar and its alignment, and the icon alignment.
 /// </summary>
-public partial class DialogHudPanelPowerups : MenuScreen
+public partial class DialogHudPanelPowerups : HudPanelDialog
 {
-    private const string Panel = "powerups";
+    public override string QcTitle => Localization.Tr("Powerups Panel");
+    public override float QcRows => 16;
 
-    protected override void BuildUi()
+    protected override void Fill(QcGrid me)
     {
-        Name = "DialogHudPanelPowerups"; // QC ATTRIB name "HUDpowerups"
+        const string panelname = "powerups";
+        const string bar = "hud_panel_powerups_progressbar";
+        var barAlign = new QcRadioGroup();
+        var iconAlign = new QcRadioGroup();
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (string side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 32);
-        AddChild(margin);
+        HudPanelCommon.MainCheckbox(me, panelname);
 
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 14);
-        margin.AddChild(root);
+        HudPanelCommon.MainSettings(me, panelname);
 
-        root.AddChild(MakeTitle("Powerups Panel"));
+        me.TR();
+            me.TD(1, 4, Qc.Check(0, bar, "Enable status bar"));
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 3.8f, Qc.Label("Status bar alignment:")).Dep(bar, 1, 1);
+        me.TR();
+            me.TDempty(0.4f);
+                me.TD(1, 3.6f / 4, Qc.Radio(barAlign, "hud_panel_powerups_baralign", "0", "Left")).Dep(bar, 1, 1);
+                me.TD(1, 3.6f / 4, Qc.Radio(barAlign, "hud_panel_powerups_baralign", "1", "Right")).Dep(bar, 1, 1);
+                me.TD(1, 3.6f / 4, Qc.Radio(barAlign, "hud_panel_powerups_baralign", "2", "Inward")).Dep(bar, 1, 1);
+                me.TD(1, 3.6f / 4, Qc.Radio(barAlign, "hud_panel_powerups_baralign", "3", "Outward")).Dep(bar, 1, 1);
 
-        var scroll = new ScrollContainer
-        {
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        root.AddChild(scroll);
-
-        var box = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        box.AddThemeConstantOverride("separation", 8);
-        scroll.AddChild(box);
-
-        // --- Common HUD-panel block (dialog_hudpanel_main_checkbox + dialog_hudpanel_main_settings) ---------
-        HudPanelCommon.BuildCommon(box, Panel);
-
-        // --- Panel-specific rows (XonoticHUDPowerupsDialog_fill) ---------------------------------------------
-        box.AddChild(Ui.Spacer());
-
-        // QC: checkbox hud_panel_powerups_progressbar "Enable status bar".
-        box.AddChild(Widgets.CheckBox("hud_panel_powerups_progressbar", "Enable status bar"));
-
-        // QC: "Status bar alignment:" label + radio group 2 over hud_panel_powerups_baralign
-        // (Left=0/Right=1/Inward=2/Outward=3), every widget setDependent(progressbar, 1, 1).
-        var barLabel = Ui.Label("Status bar alignment:");
-        box.AddChild(barLabel);
-        Dependent.Bind(barLabel, "hud_panel_powerups_progressbar", 1, 1);
-        var barGroup = new ButtonGroup();
-        var barRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        barRow.AddThemeConstantOverride("separation", 8);
-        barRow.AddChild(Widgets.RadioButton("hud_panel_powerups_baralign", "0", "Left", barGroup));
-        barRow.AddChild(Widgets.RadioButton("hud_panel_powerups_baralign", "1", "Right", barGroup));
-        barRow.AddChild(Widgets.RadioButton("hud_panel_powerups_baralign", "2", "Inward", barGroup));
-        barRow.AddChild(Widgets.RadioButton("hud_panel_powerups_baralign", "3", "Outward", barGroup));
-        box.AddChild(barRow);
-        Dependent.Bind(barRow, "hud_panel_powerups_progressbar", 1, 1); // setDependent(...,1,1)
-
-        box.AddChild(Ui.Spacer());
-
-        // QC: "Icon alignment:" label + radio group 3 over hud_panel_powerups_iconalign
-        // (Left=0/Right=1/Inward=2/Outward=3) — no dependency.
-        box.AddChild(Ui.Label("Icon alignment:"));
-        var iconGroup = new ButtonGroup();
-        var iconRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        iconRow.AddThemeConstantOverride("separation", 8);
-        iconRow.AddChild(Widgets.RadioButton("hud_panel_powerups_iconalign", "0", "Left", iconGroup));
-        iconRow.AddChild(Widgets.RadioButton("hud_panel_powerups_iconalign", "1", "Right", iconGroup));
-        iconRow.AddChild(Widgets.RadioButton("hud_panel_powerups_iconalign", "2", "Inward", iconGroup));
-        iconRow.AddChild(Widgets.RadioButton("hud_panel_powerups_iconalign", "3", "Outward", iconGroup));
-        box.AddChild(iconRow);
-
-        root.AddChild(MakeButtonBar(MakeButton("Back", GoBack)));
+        me.TR();
+            me.TD(1, 4, Qc.Label("Icon alignment:"));
+        me.TR();
+            me.TDempty(0.2f);
+                me.TD(1, 3.8f / 4, Qc.Radio(iconAlign, "hud_panel_powerups_iconalign", "0", "Left"));
+                me.TD(1, 3.8f / 4, Qc.Radio(iconAlign, "hud_panel_powerups_iconalign", "1", "Right"));
+                me.TD(1, 3.8f / 4, Qc.Radio(iconAlign, "hud_panel_powerups_iconalign", "2", "Inward"));
+                me.TD(1, 3.8f / 4, Qc.Radio(iconAlign, "hud_panel_powerups_iconalign", "3", "Outward"));
     }
 }

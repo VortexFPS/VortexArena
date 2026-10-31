@@ -1,250 +1,307 @@
-using System.Globalization;
+using System;
+using System.Collections.Generic;
 using Godot;
-using VortexArena.Engine.Simulation;
 
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// The "Exit HUD setup" dialog — a faithful C# port of <c>XonoticHUDExitDialog_fill</c>
-/// (qcsrc/menu/xonotic/dialog_hudsetup_exit.qc). This is the panel that overlays the live HUD editor: a HUD
-/// skin list (filter + Refresh / Set skin / Save current skin), the panel-background defaults applied to every
-/// HUD panel (<c>hud_panel_bg*</c>), the HUD Dock settings (<c>hud_dock*</c>), the configure-mode grid options
-/// (<c>hud_configure_grid*</c> + the centerline checkbox), and the "Exit setup" button that leaves edit mode.
-/// Every cvar control binds the same engine cvar the QC binds, with the same <c>setDependent</c> grey-outs.
+/// "Panel HUD Setup" — <c>XonoticHUDExitDialog_fill</c> (qcsrc/menu/xonotic/dialog_hudsetup_exit.qc) on its
+/// 18 x 8.2 grid, 0.8 of the menu wide, in SKINCOLOR_DIALOG_TEAMSELECT: on the left the HUD skin list (filter,
+/// Refresh, "Set skin" through the <see cref="DialogHudSkinReset"/> confirm, "Save current skin" with its name
+/// box); on the right the panel background defaults, the HUD dock and the editor grid; "Exit setup"
+/// (<c>_hud_configure 0</c>, COMMANDBUTTON_CLOSE) across the bottom.
 ///
-/// FAITHFUL UI NOW: the cvar bindings are real (they write the shared <see cref="MenuState.Cvars"/> store the
-/// in-game HUD reads), and "Save current skin" runs the real exporter (the <c>hud save</c> backend,
-/// <see cref="Game.Hud.HudConfigEditor.ExportCfg"/>). Still honest stubs:
-///   * the HUD skin <b>list</b> (QC <c>makeXonoticHUDSkinList</c>, which scans data/data/*.cfg) has no file-scan
-///     backend, so the list area is an honest short note; the Filter input is a real cvar-less field and the
-///     Refresh / Set skin buttons are logged inert until the list backend lands;
-///   * the two QC <c>makeXonoticColorpickerString</c> widgets are built via the shared
-///     <see cref="Widgets.ColorButton"/> (<see cref="CvarColorButton"/>, a Godot color picker on the same cvar);
-///   * "Exit setup" runs the QC command <c>_hud_configure 0</c> through <see cref="Widgets.CommandButton"/>.
-/// The QC <c>makeXonoticMixedSlider</c> rows (border size, the two team-color sliders) are reproduced as
-/// <see cref="Widgets.TextSlider"/>s carrying the same "Disable"=0 entry + the same discrete value range.
+/// <para>The skin list is <c>XonoticHUDSkinList</c> drawn by the demo list's row widget (<see cref="QcNameList"/>:
+/// one SKINCOLOR_TEXT row a character in, shortened to fit), filled the QC way: <c>hud_*.cfg</c> then
+/// <c>data/hud_*.cfg</c> from the mounted files (or <see cref="HudPanelCommon.SkinListProvider"/> when set), sorted
+/// by file name, each row the cfg's <c>//title</c> or its name, with <c>(//author)</c> after it.</para>
 /// </summary>
-public partial class DialogHudSetupExit : MenuScreen
+public partial class DialogHudSetupExit : MenuScreen, IQcDialog
 {
+    public string QcTitle => Localization.Tr("Panel HUD Setup");
+    public float QcIntendedWidth => 0.8f;
+    public float QcRows => 18;
+    public Color QcBorderColor => HudPanelCommon.DialogColor;
+
+    private const float Columns = 8.2f;
+
+    private readonly List<string> _paths = new();
+    private QcNameList _list = null!;
+    private string? _filter;
+    private string _savedName = "";
+
     protected override void BuildUi()
     {
-        Name = "DialogHudSetupExit"; // QC ATTRIB title "Panel HUD setup"
+        Name = "DialogHudSetupExit"; // QC XonoticHUDExitDialog, "HUDExit"
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (string side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 32);
-        AddChild(margin);
+        var me = new QcGrid(QcRows, Columns);
+        me.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(me);
 
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 14);
-        margin.AddChild(root);
+        _list = new QcNameList(skinColor: true);
+        _list.ItemActivated += _ => SetHudSkin(); // doubleClickListBoxItem / Enter
+        float vs = QcLook.DefaultValueSpace;
 
-        root.AddChild(MakeTitle("Panel HUD setup"));
+        me.TR();
+            me.TD(1, 4, Qc.Header("HUD skins"));
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 0.7f, Qc.Label("Filter:", 0.5f));
+            var filter = me.TD(1, 2.9f, QcLook.InputBox(new LineEdit()));
+                filter.TextChanged += FilterChange;
+        me.TR();
+            me.TD(12, 4, _list);
+        me.GotoRC(QcRows - 4, 0);
+            me.TDempty(0.2f);
+            me.TD(1, 1.4f, Qc.Button("Refresh", RefreshClick));
+            me.TD(1, 2.2f, Qc.Button("Set skin", () => Menu?.Push(new DialogHudSkinReset(SetHudSkin))));
+        me.GotoRC(QcRows - 2.5f, 0);
+            me.TD(1, 2, Qc.Button("Save current skin", SaveHudSkin,
+                "Note: HUD skins are saved in data/data/ directory and can be manually renamed/deleted from there"));
+            var saveName = me.TD(1, 2, QcLook.InputBox(new LineEdit()));
+                saveName.TextChanged += t => _savedName = t;
 
-        // The QC dialog is a wide two-column table: the left column is the HUD skin list, the right column the
-        // panel/dock/grid default settings. Reproduce that with two side-by-side scrolling columns.
-        var columns = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
-        columns.AddThemeConstantOverride("separation", 24);
-        root.AddChild(columns);
+        me.GotoRC(0, 4.2f); me.SetFirstColumn(me.CurrentColumn);
+            me.TD(1, 4, Qc.Label("Panel background defaults:"));
+        me.TR();
+            me.TD(1, 1.4f, Qc.Label("Background:"));
+                me.TD(1, 2.6f, HudPanelCommon.TextSlider("hud_panel_bg", 4f / 3f)
+                    .Add(Localization.Tr("Disable"), "0")
+                    .Add("border_default", "border_default")); // this is a file name!
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Color:"));
+            me.TD(2, 2.6f, HudPanelCommon.ColorPicker("hud_panel_bg_color"));
+        me.TR();
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Border size:"));
+                me.TD(1, 2.6f, Qc.Mixed("hud_panel_bg_border")
+                    .Add("Disable", 0)
+                    .AddRange(2, 20, 2)
+                    .Done());
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Opacity:"));
+                me.TD(1, 2.6f, Qc.Slider(0.05f, 1, 0.05f, "hud_panel_bg_alpha", "", "%"));
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Team color:"));
+                me.TD(1, 2.6f, Qc.Mixed("hud_panel_bg_color_team", "", "%")
+                    .Add("Disable", 0)
+                    .AddRange(0.1f, 1, 0.1f)
+                    .Done());
+        me.TR();
+            me.TDempty(0.4f);
+            me.TD(1, 3.6f, Qc.Check(0, "hud_configure_teamcolorforced", "Test team color in configure mode"));
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Padding:"));
+                me.TD(1, 2.6f, Qc.Slider(-5, 5, 1, "hud_panel_bg_padding"));
 
-        columns.AddChild(MakeColumn(BuildSkinColumn));
-        columns.AddChild(MakeColumn(BuildDefaultsColumn));
+        me.TR();
+            me.TD(1, 1.4f, Qc.Label("HUD Dock:"));
+                me.TD(1, 2.6f, HudPanelCommon.TextSlider("hud_dock")
+                    .Add(HudPanelCommon.Z("DOCK^Disabled"), "0")
+                    .Add(HudPanelCommon.Z("DOCK^Small"), "dock_small")
+                    .Add(HudPanelCommon.Z("DOCK^Medium"), "dock_medium")
+                    .Add(HudPanelCommon.Z("DOCK^Large"), "dock_large"));
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Color:"));
+            me.TD(2, 2.6f, HudPanelCommon.ColorPicker("hud_dock_color"));
+        me.TR();
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Opacity:"));
+                me.TD(1, 2.6f, Qc.Slider(0.05f, 1, 0.05f, "hud_dock_alpha", "", "%"));
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Team color:"));
+                me.TD(1, 2.6f, Qc.Mixed("hud_dock_color_team", "", "%")
+                    .Add("Disable", 0)
+                    .AddRange(0.1f, 1, 0.1f)
+                    .Done());
+        me.TR();
+            me.TD(1, 1.4f, Qc.Label("Grid settings:"));
+            me.TD(1, 2.6f, Qc.Check(0, "hud_configure_grid", "Snap panels to grid"));
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Grid size:")).Dep("hud_configure_grid", 1, 1);
+            me.TD(1, 0.2f, Qc.Label("X:")).Dep("hud_configure_grid", 1, 1);
+                me.TD(1, 1.1f, Qc.Slider(0.005f, 0.07f, 0.005f, "hud_configure_grid_xsize", "", "%", vs))
+                    .Dep("hud_configure_grid", 1, 1);
+            me.TD(1, 0.2f, Qc.Label("Y:")).Dep("hud_configure_grid", 1, 1);
+                me.TD(1, 1.1f, Qc.Slider(0.005f, 0.07f, 0.005f, "hud_configure_grid_ysize", "", "%", vs))
+                    .Dep("hud_configure_grid", 1, 1);
+        me.TR();
+            me.TDempty(0.2f);
+            const string verticalLines = "hud_configure_vertical_lines";
+            me.TD(1, 3.6f, Qc.CheckEx(0.5f, 0, verticalLines, "Center line",
+                Localization.Tr("Show a vertical centerline to help align panels. It's possible to show more vertical lines by editing %s in the console")
+                    .Replace("%s", verticalLines)));
 
-        // QC bottom row: a single full-width "Exit setup" command button (runs "_hud_configure 0").
-        // It both leaves the HUD editor and closes the dialog (COMMANDBUTTON_CLOSE); Back also closes here.
-        var exit = Widgets.CommandButton("Exit setup", "_hud_configure 0",
-            "Exit the HUD editor and return to the menu");
-        root.AddChild(MakeButtonBar(exit, MakeButton("Back", GoBack)));
-    }
+        me.GotoRC(QcRows - 1, 0);
+            var exit = me.TD(1, Columns, Qc.Command("Exit setup", "_hud_configure 0"));
+                exit.Pressed += GoBack; // COMMANDBUTTON_CLOSE
 
-    /// <summary>One scrolling column holding a vertical list filled by <paramref name="fill"/>.</summary>
-    private static ScrollContainer MakeColumn(System.Action<VBoxContainer> fill)
-    {
-        var scroll = new ScrollContainer
-        {
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        var box = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        box.AddThemeConstantOverride("separation", 8);
-        scroll.AddChild(box);
-        fill(box);
-        return scroll;
-    }
-
-    // -----------------------------------------------------------------------------------------------------
-    //  Left column — "HUD skins" list (filter + the list + Refresh / Set skin / Save).
-    // -----------------------------------------------------------------------------------------------------
-
-    private void BuildSkinColumn(VBoxContainer box)
-    {
-        box.AddChild(Ui.Header("HUD skins")); // QC makeXonoticHeaderLabel(_("HUD skins"))
-
-        // QC: a "Filter:" label + an inputbox whose onChange filters the list (HUDSkinList_Filter_Change).
-        // The filter field is not cvar-bound in the QC; with no list backend it is an honest, inert field.
-        box.AddChild(Ui.Row("Filter:", new LineEdit
-        {
-            PlaceholderText = "Filter skins…",
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-        }, labelMinWidth: 80f));
-
-        // QC: makeXonoticHUDSkinList — a scrolling list of HUD skin .cfg files under data/data/. There is no
-        // file-scan / skin-list backend yet, so render the list area as an honest short note rather than fake
-        // entries. Set skin / Save below still route the real QC commands.
-        var listNote = MakeLabel("(HUD skin list — scans data/data/*.cfg; skin-list backend pending)");
-        listNote.AddThemeColorOverride("font_color", new Color(0.70f, 0.72f, 0.78f));
-        listNote.CustomMinimumSize = new Vector2(0, 120);
-        listNote.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        box.AddChild(listNote);
-
-        // QC: Refresh (HUDSkinList_Refresh_Click) + Set skin (opens the reset-confirm dialog, then applies the
-        // selected skin). No list backend → these route through MenuCommand and are logged inert.
-        var listBtns = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        listBtns.AddThemeConstantOverride("separation", 8);
-        listBtns.AddChild(MakeButton("Refresh", () => OnInert("HUD skin list refresh")));
-        listBtns.AddChild(MakeButton("Set skin", () => OnInert("apply selected HUD skin (menu_loadhud)")));
-        box.AddChild(listBtns);
-
-        box.AddChild(Ui.Spacer());
-
-        // QC: makeXonoticButton_T(_("Save current skin"), …) + an inputbox for the name. Saving routes the QC
-        // `hud save <name>` effect — the HUD_Panel_ExportCfg port (HudConfigEditor.ExportCfg) — writing
-        // hud_<skin>_<name>.cfg with every hud_* cvar, same as the editor's Ctrl+S.
-        var saveName = new LineEdit
-        {
-            PlaceholderText = "New skin name…",
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-        };
-        var save = MakeButton("Save current skin", () =>
-        {
-            string name = saveName.Text.Trim();
-            Game.Hud.HudConfigEditor.ExportCfg(string.IsNullOrEmpty(name) ? "myconfig" : name);
-        });
-        save.TooltipText =
-            "Note: HUD skins are saved in data/data/ directory and can be manually renamed/deleted from there";
-        box.AddChild(save);
-        box.AddChild(saveName);
-    }
-
-    // -----------------------------------------------------------------------------------------------------
-    //  Right column — "Panel background defaults", "HUD Dock", "Grid settings".
-    // -----------------------------------------------------------------------------------------------------
-
-    private void BuildDefaultsColumn(VBoxContainer box)
-    {
-        // ---- Panel background defaults: -----------------------------------------------------------------
-        box.AddChild(Ui.Header("Panel background defaults:")); // QC makeXonoticTextLabel header
-
-        // Background — QC makeXonoticTextSlider("hud_panel_bg"): "Disable"=0 + "border_default" (a file name).
-        // The QC also pulls the available skin border files in via configureXonoticTextSliderValues; without
-        // that scan we expose the two literal entries the QC adds explicitly.
-        box.AddChild(Ui.Row("Background:", Widgets.TextSlider("hud_panel_bg")
-            .Add("Disable", "0")
-            .Add("border_default", "border_default")));
-
-        // Color — QC makeXonoticColorpickerString("hud_panel_bg_color", …).
-        box.AddChild(Ui.Row("Color:", new CvarColorButton("hud_panel_bg_color")));
-
-        // Border size — QC makeXonoticMixedSlider("hud_panel_bg_border"): "Disable"=0 + addRange(2,20,2).
-        box.AddChild(Ui.Row("Border size:", MakeMixedSlider("hud_panel_bg_border", 2f, 20f, 2f)));
-
-        // Opacity — QC makeXonoticSlider(0.05, 1, 0.05, "hud_panel_bg_alpha") with formatString "%".
-        box.AddChild(Ui.Row("Opacity:", Widgets.Slider("hud_panel_bg_alpha", 0.05f, 1f, 0.05f, format: Percent)));
-
-        // Team color — QC makeXonoticMixedSlider("hud_panel_bg_color_team"): "Disable"=0 + addRange(0.1,1,0.1),
-        // formatString "%".
-        box.AddChild(Ui.Row("Team color:", MakeMixedSlider("hud_panel_bg_color_team", 0.1f, 1f, 0.1f, Percent)));
-
-        // QC makeXonoticCheckBox(0, "hud_configure_teamcolorforced", _("Test team color in configure mode")).
-        box.AddChild(Widgets.CheckBox("hud_configure_teamcolorforced", "Test team color in configure mode"));
-
-        // Padding — QC makeXonoticSlider(-5, 5, 1, "hud_panel_bg_padding").
-        box.AddChild(Ui.Row("Padding:", Widgets.Slider("hud_panel_bg_padding", -5f, 5f, 1f)));
-
-        box.AddChild(Ui.Spacer());
-
-        // ---- HUD Dock: ----------------------------------------------------------------------------------
-        box.AddChild(Ui.Header("HUD Dock:")); // QC "HUD Dock:" label row leads this group
-
-        // QC makeXonoticTextSlider("hud_dock"): Disabled=0 / Small / Medium / Large (the dock background image).
-        box.AddChild(Ui.Row("Dock:", Widgets.TextSlider("hud_dock")
-            .Add("Disabled", "0")
-            .Add("Small", "dock_small")
-            .Add("Medium", "dock_medium")
-            .Add("Large", "dock_large")));
-
-        // Color — QC makeXonoticColorpickerString("hud_dock_color", …).
-        box.AddChild(Ui.Row("Color:", new CvarColorButton("hud_dock_color")));
-
-        // Opacity — QC makeXonoticSlider(0.05, 1, 0.05, "hud_dock_alpha") with formatString "%".
-        box.AddChild(Ui.Row("Opacity:", Widgets.Slider("hud_dock_alpha", 0.05f, 1f, 0.05f, format: Percent)));
-
-        // Team color — QC makeXonoticMixedSlider("hud_dock_color_team"): "Disable"=0 + addRange(0.1,1,0.1), "%".
-        box.AddChild(Ui.Row("Team color:", MakeMixedSlider("hud_dock_color_team", 0.1f, 1f, 0.1f, Percent)));
-
-        box.AddChild(Ui.Spacer());
-
-        // ---- Grid settings: -----------------------------------------------------------------------------
-        box.AddChild(Ui.Header("Grid settings:")); // QC "Grid settings:" label row leads this group
-
-        // QC makeXonoticCheckBox(0, "hud_configure_grid", _("Snap panels to grid")).
-        box.AddChild(Widgets.CheckBox("hud_configure_grid", "Snap panels to grid"));
-
-        // Grid size X / Y — QC two makeXonoticSlider(0.005, 0.07, 0.005, …) with formatString "%", valueDigits 3,
-        // each setDependent(e, "hud_configure_grid", 1, 1).
-        var xRow = Ui.Row("Grid size X:",
-            Widgets.Slider("hud_configure_grid_xsize", 0.005f, 0.07f, 0.005f, format: PercentFine));
-        box.AddChild(xRow);
-        Dependent.Bind(xRow, "hud_configure_grid", 1, 1); // QC setDependent(e,"hud_configure_grid",1,1)
-
-        var yRow = Ui.Row("Grid size Y:",
-            Widgets.Slider("hud_configure_grid_ysize", 0.005f, 0.07f, 0.005f, format: PercentFine));
-        box.AddChild(yRow);
-        Dependent.Bind(yRow, "hud_configure_grid", 1, 1); // QC setDependent(e,"hud_configure_grid",1,1)
-
-        // QC makeXonoticCheckBoxEx_T(0.5, 0, "hud_configure_vertical_lines", _("Center line"), <tooltip>):
-        // the cvar holds a count of vertical lines; the checkbox toggles between 0 and 0.5 (one centerline).
-        box.AddChild(Widgets.CheckBox("hud_configure_vertical_lines", "Center line",
-            "Show a vertical centerline to help align panels. It's possible to show more vertical lines by " +
-            "editing hud_configure_vertical_lines in the console",
-            on: "0.5", off: "0"));
+        GetHudSkins(); // showNotify
     }
 
     // -----------------------------------------------------------------------------------------------------
-    //  Helpers
+    //  XonoticHUDSkinList (xonotic/hudskinlist.qc)
     // -----------------------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// The C# stand-in for one QC <c>makeXonoticMixedSlider</c>: a "Disable"=0 entry followed by a discrete
-    /// range of values (QC <c>addText(_("Disable"),0)</c> + <c>addRange(min,max,step)</c>). Rendered as a
-    /// <see cref="Widgets.TextSlider"/> on the same cvar; <paramref name="percent"/> formats the labels as a
-    /// percentage when the QC set <c>formatString "%"</c>.
-    /// </summary>
-    private static CvarTextSlider MakeMixedSlider(string cvar, float min, float max, float step,
-        System.Func<float, string>? percent = null)
+    /// <summary>XonoticHUDSkinList_getHUDSkins: <c>hud_*.cfg</c> and <c>data/hud_*.cfg</c> through the filter, sorted
+    /// by file name, each shown as its title (or name) and author.</summary>
+    private void GetHudSkins()
     {
-        var slider = Widgets.TextSlider(cvar).Add("Disable", "0");
-        for (float v = min; v <= max + step * 0.5f; v += step)
+        IEnumerable<string> files = HudPanelCommon.SkinListProvider?.Invoke() ?? ScanSkinFiles();
+        var entries = new List<(string File, string Path)>();
+        foreach (string f in files)
         {
-            float val = Mathf.Snapped(v, step);
-            string label = percent != null ? percent(val) : CleanNumber(val);
-            slider.Add(label, val.ToString(CultureInfo.InvariantCulture));
+            int slash = f.LastIndexOf('/');
+            string file = slash >= 0 ? f[(slash + 1)..] : f;
+            if (!file.StartsWith("hud_", StringComparison.OrdinalIgnoreCase)
+                || !file.EndsWith(".cfg", StringComparison.OrdinalIgnoreCase)
+                || !DialogMediaDemo.Matches(file[..^4], _filter is null ? null : "hud_" + _filter))
+                continue;
+            entries.Add((file, f));
         }
-        return slider;
+        entries.Sort((a, b) => string.CompareOrdinal(a.File, b.File)); // buf_sort by filename
+
+        _paths.Clear();
+        var rows = new List<string>();
+        foreach ((string file, string path) in entries)
+        {
+            _paths.Add(path);
+            (string title, string author) = ReadTitleAuthor(path);
+            string s = title.Length > 0 ? title : file[4..^4]; // strip "hud_" and ".cfg"
+            if (author.Length > 0) s += " (" + author + ")";
+            rows.Add(s);
+        }
+        _list.SetNames(rows);
     }
 
-    /// <summary>Run an action the QC backed with a HUD-editor/skin command VortexArena lacks; log it honestly.</summary>
-    private static void OnInert(string what)
-        => GD.Print($"[DialogHudSetupExit] {what}: HUD editor / skin-list backend pending — inert.");
+    /// <summary>getHUDSkinFiles(me, sortbuf, "") and (…, "data/"): only files directly in each directory.</summary>
+    private static IEnumerable<string> ScanSkinFiles()
+    {
+        foreach (string dir in new[] { "", "data/" })
+            foreach (string f in MenuDataBridge.Files.Find(dir + "hud_", ".cfg"))
+                if (f.IndexOf('/', dir.Length) < 0)
+                    yield return f;
+    }
 
-    /// <summary>Render a 0..1 value as a whole percentage (QC slider formatString "%").</summary>
-    private static string Percent(float v) => $"{Mathf.RoundToInt(v * 100f)}%";
+    /// <summary>The cfg's leading <c>//title …</c> / <c>//author …</c> comment lines (tokenize_console, argv(1)).</summary>
+    private static (string Title, string Author) ReadTitleAuthor(string path)
+    {
+        string title = "", author = "";
+        string? text = MenuDataBridge.ReadText(path);
+        if (text is null) return (title, author);
+        foreach (string raw in text.Split('\n'))
+        {
+            string line = raw.TrimEnd('\r');
+            if (!line.StartsWith("//", StringComparison.Ordinal)) break;
+            List<string> argv = Tokenize(line[2..]);
+            if (argv.Count < 2) continue;
+            if (argv[0] == "title") title = argv[1];
+            else if (argv[0] == "author") author = argv[1];
+        }
+        return (title, author);
+    }
 
-    /// <summary>Render a small fractional grid size as a percentage with one decimal (QC valueDigits 3, "%").</summary>
-    private static string PercentFine(float v) => $"{(v * 100f).ToString("0.0", CultureInfo.InvariantCulture)}%";
+    /// <summary>tokenize_console: whitespace-separated words, a double-quoted run being one word.</summary>
+    private static List<string> Tokenize(string s)
+    {
+        var argv = new List<string>();
+        int i = 0;
+        while (i < s.Length)
+        {
+            while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+            if (i >= s.Length) break;
+            int start;
+            if (s[i] == '"')
+            {
+                start = ++i;
+                while (i < s.Length && s[i] != '"') i++;
+                argv.Add(s[start..i]);
+                i++;
+            }
+            else
+            {
+                start = i;
+                while (i < s.Length && !char.IsWhiteSpace(s[i])) i++;
+                argv.Add(s[start..i]);
+            }
+        }
+        return argv;
+    }
 
-    /// <summary>A tidy number with no trailing zeros (the plain mixed-slider entry labels).</summary>
-    private static string CleanNumber(float v) => v.ToString("0.###", CultureInfo.InvariantCulture);
+    /// <summary>HUDSkinList_Refresh_Click.</summary>
+    private void RefreshClick()
+    {
+        GetHudSkins();
+        _list.SetSelected(0); // always select the first element after a list update
+    }
+
+    /// <summary>HUDSkinList_Filter_Change: a plain word matches anywhere in the name.</summary>
+    private void FilterChange(string text)
+    {
+        _filter = DialogMediaDemo.Glob(text);
+        GetHudSkins();
+    }
+
+    /// <summary>SaveHUDSkin_Click: <c>hud save "name"</c> ("myconfig" when empty), the list refreshed a second later.</summary>
+    private void SaveHudSkin()
+    {
+        string s = _savedName.Length > 0 ? _savedName : "myconfig";
+        Game.Hud.HudConfigEditor.ExportCfg(s);
+        GetTree()?.CreateTimer(1.0).Connect(SceneTreeTimer.SignalName.Timeout, Callable.From(() =>
+        {
+            if (IsInstanceValid(this) && IsInsideTree()) RefreshClick();
+        }));
+    }
+
+    /// <summary>XonoticHUDSkinList_setHUDSkin: exec the selected skin's cfg.</summary>
+    private void SetHudSkin()
+    {
+        int i = _list.SelectedItem;
+        if (i < 0 || i >= _paths.Count) return;
+        MenuCommand.Run("exec \"" + _paths[i] + "\"");
+    }
+}
+
+/// <summary>
+/// "Reset HUD skin" — <c>XonoticSkinResetDialog_fill</c> (qcsrc/menu/xonotic/dialog_hudsetup_exit.qc) on its 3 x 2
+/// grid, 0.5 of the menu wide, in SKINCOLOR_DIALOG_QUIT: the question, then a red "Yes" that applies the selected
+/// skin (<c>SetHUDSkin_Click</c>, which leaves the dialog open, as the QC does) and a green "No" that closes it.
+/// </summary>
+public partial class DialogHudSkinReset : MenuScreen, IQcDialog
+{
+    private readonly Action? _setHudSkin;
+
+    public DialogHudSkinReset() { }
+
+    public DialogHudSkinReset(Action setHudSkin) => _setHudSkin = setHudSkin;
+
+    public string QcTitle => Localization.Tr("Reset HUD skin");
+    public float QcIntendedWidth => 0.5f;
+    public float QcRows => 3;
+    public Color QcBorderColor => MenuSkin.SkinColor("COLOR_DIALOG_QUIT", 1f, 1f, 1f);
+
+    protected override void BuildUi()
+    {
+        Name = "DialogHudSkinReset"; // QC XonoticSkinResetDialog
+
+        var me = new QcGrid(QcRows, 2);
+        me.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(me);
+
+        me.TR();
+            me.TD(1, 2, Qc.Label("Are you sure you want to reset your HUD to this skin?", 0.5f));
+        me.TR();
+        me.TR();
+            me.TD(1, 1, Qc.Button("Yes", () => _setHudSkin?.Invoke(), tint: new Color(1, 0, 0)));
+            me.TD(1, 1, Qc.Button("No", GoBack, tint: new Color(0, 1, 0)));
+    }
 }

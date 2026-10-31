@@ -14,6 +14,9 @@ public interface IQcDialog
     float QcIntendedWidth { get; }
     float QcRows { get; }
     Color QcBorderColor => Colors.White;
+    /// <summary>Placed with <c>addItemRightCentered</c> (xonotic/mainwindow.qc: the HUD panel dialogs) — flush with
+    /// the right edge of the menu canvas, centred vertically — instead of <c>addItemCentered</c>.</summary>
+    bool QcRightCentered => false;
 }
 
 /// <summary>
@@ -70,6 +73,13 @@ public partial class QcDialogFrame : Control
         float u = MenuMetrics.DesignUnit;
         var size = new Vector2(MenuMetrics.DialogWidth(_dialog.QcIntendedWidth), MenuMetrics.DialogHeight(_dialog.QcRows)) * u;
         Vector2 origin = (Size - size) * 0.5f;
+        if (_dialog.QcRightCentered)
+        {
+            // Container_addItemRightCentered: origin.x = 1 - 0.5 * w, bounded to 1 - w, of the 1.25-aspect canvas
+            // the menu draws in, centred in the window (menu.qc draw_reset_cropped).
+            float canvasRight = 0.5f * (Size.X + MenuMetrics.ConWidth * u);
+            origin.X = Mathf.Max(0f, canvasRight - size.X);
+        }
         float th = MenuMetrics.TitleHeight * u;
 
         int borderPx = Mathf.Max(1, Mathf.RoundToInt(th));

@@ -1,66 +1,36 @@
-using Godot;
-
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// HUD "Quick Menu" panel config dialog — a faithful C# port of <c>XonoticHUDQuickMenuDialog_fill</c>
-/// (qcsrc/menu/xonotic/dialog_hudpanel_quickmenu.qc). This panel has NO main enable cvar (the QC comments out
-/// <c>dialog_hudpanel_main_checkbox</c>: "this panel has no main cvar"), so the common block is built with its
-/// Enable row suppressed — only the Background group. Then the quickmenu-specific rows: text alignment radio
-/// set and the translate-commands / use-server-quickmenu checkboxes.
-///
-/// FAITHFUL UI NOW: the quick-menu panel is drawn by the HUD backend VortexArena hasn't wired up; all cvar
-/// bindings are real (they write the shared store the game reads).
+/// "Quick Menu Panel" — <c>XonoticHUDQuickMenuDialog_fill</c> (qcsrc/menu/xonotic/dialog_hudpanel_quickmenu.qc) on
+/// its 15.5 x 4 grid. The panel has no main cvar, so there is no enable row: the shared background rows start half
+/// a row down, then text alignment, command translation and the server's quickmenu.
 /// </summary>
-public partial class DialogHudPanelQuickMenu : MenuScreen
+public partial class DialogHudPanelQuickMenu : HudPanelDialog
 {
-    protected override void BuildUi()
+    public override string QcTitle => Localization.Tr("Quick Menu Panel");
+    public override float QcRows => 15.5f;
+
+    protected override void Fill(QcGrid me)
     {
-        Name = "DialogHudPanelQuickMenu";
+        const string panelname = "quickmenu";
+        var align = new QcRadioGroup();
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (string side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 32);
-        AddChild(margin);
+        // this panel has no main cvar
+        //HudPanelCommon.MainCheckbox(me, panelname);
 
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 14);
-        margin.AddChild(root);
+        HudPanelCommon.MainSettings(me, panelname);
 
-        root.AddChild(MakeTitle("Quick Menu Panel"));
+        me.TR();
+            me.TD(1, 4, Qc.Label("Text alignment:"));
+        me.TR();
+            me.TDempty(0.2f);
+                me.TD(1, 3.8f / 3, Qc.Radio(align, "hud_panel_quickmenu_align", "0", "Left"));
+                me.TD(1, 3.8f / 3, Qc.Radio(align, "hud_panel_quickmenu_align", "0.5", "Center"));
+                me.TD(1, 3.8f / 3, Qc.Radio(align, "hud_panel_quickmenu_align", "1", "Right"));
 
-        var scroll = new ScrollContainer
-        {
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        root.AddChild(scroll);
-
-        var box = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        box.AddThemeConstantOverride("separation", 8);
-        scroll.AddChild(box);
-
-        // QC: dialog_hudpanel_main_checkbox is commented out (no main cvar). Only dialog_hudpanel_main_settings.
-        HudPanelCommon.BuildCommon(box, "quickmenu", includeEnable: false);
-
-        // QC: "Text alignment:" label + makeXonoticRadioButton(3, "hud_panel_quickmenu_align", "0"/"0.5"/"1",
-        // Left/Center/Right).
-        box.AddChild(Ui.Label("Text alignment:"));
-        var alignGroup = new ButtonGroup();
-        var alignRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        alignRow.AddThemeConstantOverride("separation", 8);
-        alignRow.AddChild(Widgets.RadioButton("hud_panel_quickmenu_align", "0", "Left", alignGroup));
-        alignRow.AddChild(Widgets.RadioButton("hud_panel_quickmenu_align", "0.5", "Center", alignGroup));
-        alignRow.AddChild(Widgets.RadioButton("hud_panel_quickmenu_align", "1", "Right", alignGroup));
-        box.AddChild(alignRow);
-
-        // QC: two independent checkboxes.
-        box.AddChild(Widgets.CheckBox("hud_panel_quickmenu_translatecommands", "Translate commands"));
-        box.AddChild(Widgets.CheckBox("hud_panel_quickmenu_server_is_default", "Use the server's quickmenu"));
-
-        // QC HUD-panel dialogs close with Dialog_Close → universal Back.
-        root.AddChild(MakeButtonBar(MakeButton("Back", GoBack)));
+        me.TR();
+            me.TD(1, 4, Qc.Check(0, "hud_panel_quickmenu_translatecommands", "Translate commands"));
+        me.TR();
+            me.TD(1, 4, Qc.Check(0, "hud_panel_quickmenu_server_is_default", "Use the server's quickmenu"));
     }
 }

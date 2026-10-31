@@ -1,124 +1,208 @@
-using System.Globalization;
+using System;
+using System.Collections.Generic;
 using Godot;
 
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// The common opening block every HUD-panel config dialog shares — the single C# successor to QC
-/// <c>dialog_hudpanel_main_checkbox</c> + <c>dialog_hudpanel_main_settings</c> (qcsrc/menu/xonotic/util.qc).
-/// Every <c>dialog_hudpanel_&lt;P&gt;.qc</c> opens with this: the panel "Enable" mode then the "Background"
-/// group (background style / color / border / opacity / team color / padding), all bound to the same
-/// <c>hud_panel_&lt;P&gt;*</c> cvars the QC binds, with the same <c>setDependent</c> grey-outs.
-///
-/// <para>
-/// This is the one shared builder for ALL HUD-panel dialogs (ammo, healtharmor, weapons, centerprint, chat,
-/// timer, radar, …). It replaces the per-family copies that earlier ports duplicated. The QC enable is a plain
-/// checkbox on <c>hud_panel_&lt;P&gt;</c>, but the cvar takes the 0..3 show-mode the HUD editor uses
-/// (<c>HUD_Panel_GetSettingMaxValue</c>), so the faithful control is the 4-mode <see cref="Widgets.TextSlider"/>.
-/// The QC border/alpha/team/padding widgets are <c>makeXonoticTextSlider</c>s with discrete preset strings, so
-/// we use <see cref="Widgets.TextSlider"/> carrying the QC's exact preset values (the same cvar strings get
-/// written). The color row is a <see cref="CvarColorButton"/> (QC <c>makeXonoticColorpickerString</c>).
-/// </para>
+/// The rows every HUD-panel dialog shares — <c>dialog_hudpanel_main_checkbox</c> and
+/// <c>dialog_hudpanel_main_settings</c> (qcsrc/menu/xonotic/util.qc) — written on a <see cref="QcGrid"/> TD for TD,
+/// so a <c>DialogHudPanel*</c> fill calls them exactly where its <c>XonoticHUD*Dialog_fill</c> does. Also the
+/// small factories those rows need that the <see cref="Qc"/> set has no counterpart for:
+/// <c>makeXonoticTextSlider</c> over a string cvar and <c>makeXonoticColorpickerString</c>.
 /// </summary>
 public static class HudPanelCommon
 {
-    /// <summary>Render a 0..1 alpha/scale value as a percentage (the QC slider formatString "%").</summary>
-    public static string Percent(float v) => $"{Mathf.RoundToInt(v * 100f)}%";
-
     /// <summary>
-    /// HUD skin-list backend hook (QC <c>makeXonoticHUDSkinList</c> / <c>HUD_Panel_ExportCfg</c>, which scan +
-    /// write <c>data/data/hud_*.cfg</c>). The configure-mode editor (T27, <see cref="Game.Hud.HudConfigEditor"/>)
-    /// exports the live skin via Ctrl+S → the <c>hud save</c> command; the menu-side skin LIST that enumerates
-    /// the saved <c>.cfg</c> files for <see cref="DialogHudSetupExit"/> has no file-scan backend yet. When that
-    /// backend lands, point this delegate at it and the dialog's list/Refresh/Set/Save route through it; until
-    /// then it stays null and the dialog renders the honest "pending" note. Intentionally deferred (T27 scope is
-    /// the in-HUD editor, not the menu skin-list enumeration).
+    /// The HUD skin files for <see cref="DialogHudSetupExit"/>'s list (QC <c>getHUDSkinFiles</c>: <c>hud_*.cfg</c>
+    /// and <c>data/hud_*.cfg</c>), as paths relative to the game directory. The menu has no file scan of its own
+    /// for these yet; until something sets this the list is empty. The editor's Ctrl+S and "Save current skin"
+    /// write the files (<see cref="Game.Hud.HudConfigEditor.ExportCfg"/>).
     /// </summary>
-    public static System.Func<System.Collections.Generic.IEnumerable<string>>? SkinListProvider { get; set; }
+    public static Func<IEnumerable<string>>? SkinListProvider { get; set; }
 
-    /// <summary>
-    /// Emit the common panel block into <paramref name="box"/> for HUD panel <paramref name="panel"/>: the
-    /// Enable mode (when <paramref name="includeEnable"/>) then the Background group. Panels that declare their
-    /// own enable control first (physics, radar, pressedkeys, strafehud, itemstime, quickmenu) pass
-    /// <paramref name="includeEnable"/> = <c>false</c> so only the Background group is emitted.
-    /// </summary>
-    public static void BuildCommon(VBoxContainer box, string panel, bool includeEnable = true)
+    /// <summary>The QC dialog colour of every HUD-editor dialog (SKINCOLOR_DIALOG_TEAMSELECT).</summary>
+    public static Color DialogColor => MenuSkin.SkinColor("COLOR_DIALOG_TEAMSELECT", 1f, 1f, 1f);
+
+    /// <summary>dialog_hudpanel_main_checkbox(me, panelname).</summary>
+    public static void MainCheckbox(QcGrid me, string panelname)
     {
-        string p = "hud_panel_" + panel;
+        me.TR();
+            me.TDempty(1.5f);
+            me.TD(1, 2.5f, Qc.Check(0, "hud_panel_" + panelname, "Enable"));
+    }
 
-        if (includeEnable)
+    /// <summary>dialog_hudpanel_main_settings(me, panelname).</summary>
+    public static void MainSettings(QcGrid me, string panelname)
+    {
+        string p = "hud_panel_" + panelname;
+
+        me.GotoRC(me.CurrentRow + 1.5f, 0);
+            me.TD(1, 1.4f, Qc.Label("Background:"));
+                me.TD(1, 2.6f, TextSlider(p + "_bg", 1.25f)
+                    .Add(Localization.Tr("Default"), "")
+                    .Add(Localization.Tr("Disable"), "0")
+                    .Add("border_" + panelname, "border_" + panelname));
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Color:")).DepStringNot(p + "_bg", "0");
+            me.TD(2, 2.6f, ColorPicker(p + "_bg_color")).DepStringNot(p + "_bg_color", "");
+        me.TR();
+            me.TDempty(0.4f);
+            me.TD(1, 3.6f, CheckString("", "1 1 1", p + "_bg_color", "Default"));
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Border size:"));
+                QcTextSlider border = TextSlider(p + "_bg_border")
+                    .Add(Localization.Tr("Default"), "")
+                    .Add(Localization.Tr("Disable"), "0");
+                for (int i = 1; i <= 10; ++i)
+                    border.Add(QcFormat.Decimals(i * 2, 0), QcFormat.MinDecimals(i * 2));
+                me.TD(1, 2.6f, border);
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Opacity:"));
+                QcTextSlider alpha = TextSlider(p + "_bg_alpha")
+                    .Add(Localization.Tr("Default"), "");
+                for (int i = 1; i <= 20; ++i)
+                    alpha.Add(QcFormat.Decimals(i / 20f * 100f, 0) + "%", QcFormat.MinDecimals(i / 20f));
+                me.TD(1, 2.6f, alpha);
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Team color:")).DepNot(p + "_bg_alpha", 0);
+                QcTextSlider team = TextSlider(p + "_bg_color_team")
+                    .Add(Localization.Tr("Default"), "")
+                    .Add(Localization.Tr("Disable"), "0");
+                for (int i = 1; i <= 10; ++i)
+                    team.Add(QcFormat.Decimals(i / 10f * 100f, 0) + "%", QcFormat.MinDecimals(i / 10f));
+                me.TD(1, 2.6f, team).DepNot(p + "_bg_alpha", 0);
+        me.TR();
+            me.TDempty(0.4f);
+            me.TD(1, 3.6f, Qc.Check(0, "hud_configure_teamcolorforced", "Test team color in configure mode"));
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(1, 1.2f, Qc.Label("Padding:"));
+                QcTextSlider padding = TextSlider(p + "_bg_padding")
+                    .Add(Localization.Tr("Default"), "");
+                for (int i = 0; i <= 10; ++i)
+                    padding.Add(QcFormat.Decimals(i - 5, 0), QcFormat.MinDecimals(i - 5));
+                me.TD(1, 2.6f, padding);
+
+        // cvar_type(hide_ondeath) & CVAR_TYPEFLAG_EXISTS: only the panels that have the cvar get the row.
+        string hideOnDeath = p + "_hide_ondeath";
+        if (MenuState.Cvars.Has(hideOnDeath))
         {
-            // QC dialog_hudpanel_main_checkbox: a checkbox on hud_panel_<P>. The cvar is 0..3
-            // (HUD_Panel_GetSettingMaxValue), so present the full discrete show-mode range the HUD editor uses.
-            box.AddChild(Ui.Row("Enable:",
-                Widgets.TextSlider(p, "When this panel is shown")
-                    .Add("Disabled", 0)
-                    .Add("Enabled", 1)
-                    .Add("Also enabled in the editor", 2)
-                    .Add("Always", 3)));
+            me.TR();
+                me.TDempty(0.2f);
+                me.TD(1, 3.8f, Qc.Check(0, hideOnDeath, "Hide on death"));
         }
+    }
 
-        box.AddChild(Ui.Spacer(6));
-        box.AddChild(Ui.Header("Background"));
-
-        // QC: makeXonoticTextSlider(hud_panel_<P>_bg) — Default("") / Disable("0") / border_<P> (a preset name).
-        box.AddChild(Ui.Row("Background:",
-            Widgets.TextSlider(p + "_bg", "Background mode for this panel")
-                .Add("Default", "")
-                .Add("Disable", "0")
-                .Add("border_" + panel, "border_" + panel)));
-
-        // QC: makeXonoticColorpickerString(hud_panel_<P>_bg_color, ...); enabled while the background isn't
-        // explicitly disabled (setDependentStringNotEqual(bg, "0") — a string compare, so the "border_<P>" and
-        // Default("") presets correctly keep the color row enabled).
-        var colorRow = Ui.Row("Color:", Widgets.ColorButton(p + "_bg_color"));
-        box.AddChild(colorRow);
-        Dependent.BindStringNotEqual(colorRow, p + "_bg", "0");
-
-        // QC: makeXonoticCheckBoxString("", "1 1 1", hud_panel_<P>_bg_color, _("Default")) — checked while the
-        // color cvar is "" (use the global default); checking writes "", unchecking writes the explicit "1 1 1".
-        box.AddChild(Widgets.CheckBox(p + "_bg_color", "Default", on: "", off: "1 1 1"));
-
-        // QC: makeXonoticTextSlider(hud_panel_<P>_bg_border) — Default("") / Disable("0") / 2..20 step 2.
-        var border = Widgets.TextSlider(p + "_bg_border", "Border size of this panel's background")
-            .Add("Default", "")
-            .Add("Disable", "0");
-        for (int i = 1; i <= 10; i++)
-            border.Add((i * 2).ToString(CultureInfo.InvariantCulture), (i * 2).ToString(CultureInfo.InvariantCulture));
-        box.AddChild(Ui.Row("Border size:", border));
-
-        // QC: makeXonoticTextSlider(hud_panel_<P>_bg_alpha) — Default("") then 5%..100% (i/20, i=1..20).
-        var alpha = Widgets.TextSlider(p + "_bg_alpha", "Opacity of this panel's background").Add("Default", "");
-        for (int i = 1; i <= 20; i++)
+    /// <summary>
+    /// makeXonoticTextSlider(cvar) (xonotic/textslider.qc): values identified by the cvar's string, "Custom" when
+    /// it holds none of them; <paramref name="valueSpaceFactor"/> is a following <c>setValueSpace(e, e.valueSpace *
+    /// factor)</c>. Add the values, then place it (the QC's configureXonoticTextSliderValues is the first load).
+    /// </summary>
+    public static QcTextSlider TextSlider(string cvar, float valueSpaceFactor = 1f)
+    {
+        string c = CvarUi.EnsureEngine(cvar);
+        var s = new QcTextSlider(() => MenuState.Cvars.GetString(c), id =>
         {
-            float v = i / 20f;
-            alpha.Add($"{Mathf.RoundToInt(v * 100f)}%", v.ToString("0.###", CultureInfo.InvariantCulture));
-        }
-        box.AddChild(Ui.Row("Opacity:", alpha));
+            MenuState.Cvars.Set(c, id);
+            MenuState.Cvars.MarkArchived(c);
+        });
+        return QcLook.Slider(s, valueSpaceFactor * QcLook.DefaultValueSpace);
+    }
 
-        // QC: makeXonoticTextSlider(hud_panel_<P>_bg_color_team) — Default("") / Disable("0") / 10%..100%
-        // (i/10, i=1..10); enabled only while the background opacity isn't 0 (setDependentNOT(bg_alpha, 0)).
-        var team = Widgets.TextSlider(p + "_bg_color_team", "Team color of this panel's background")
-            .Add("Default", "")
-            .Add("Disable", "0");
-        for (int i = 1; i <= 10; i++)
-        {
-            float v = i / 10f;
-            team.Add($"{Mathf.RoundToInt(v * 100f)}%", v.ToString("0.###", CultureInfo.InvariantCulture));
-        }
-        var teamRow = Ui.Row("Team color:", team);
-        box.AddChild(teamRow);
-        Dependent.BindNot(teamRow, p + "_bg_alpha", 0);
+    /// <summary>makeXonoticColorpickerString(cvar, defaultCvar): the HSL image picker writing "r g b" to the cvar.
+    /// (The QC's default cvar is stored but never read, so it is not taken here.) No minimum size: a QC item is
+    /// its cell.</summary>
+    public static HslColorPicker ColorPicker(string cvar)
+    {
+        HslColorPicker picker = HslColorPicker.ForStringCvar(CvarUi.EnsureEngine(cvar));
+        picker.CustomMinimumSize = Vector2.Zero;
+        return picker;
+    }
 
-        // QC: makeXonoticCheckBox(0, "hud_configure_teamcolorforced", _("Test team color in configure mode")).
-        box.AddChild(Widgets.CheckBox("hud_configure_teamcolorforced", "Test team color in configure mode"));
+    /// <summary>makeXonoticCheckBoxString(yes, no, cvar, text): checked while the cvar is the yes string.</summary>
+    public static QcCheckBoxString CheckString(string yes, string no, string cvar, string text)
+        => QcLook.CheckBox(new QcCheckBoxString(yes, no, cvar, text));
 
-        // QC: makeXonoticTextSlider(hud_panel_<P>_bg_padding) — Default("") then -5..5 (i-5, i=0..10).
-        var padding = Widgets.TextSlider(p + "_bg_padding", "Padding of this panel's background").Add("Default", "");
-        for (int i = 0; i <= 10; i++)
-            padding.Add((i - 5).ToString(CultureInfo.InvariantCulture), (i - 5).ToString(CultureInfo.InvariantCulture));
-        box.AddChild(Ui.Row("Padding:", padding));
+    /// <summary>The QC <c>ZCTX(_("CONTEXT^Text"))</c> idiom: translated, context prefix stripped.</summary>
+    public static string Z(string source) => Localization.CtxTr(source);
+}
 
-        box.AddChild(Ui.Spacer(6));
+/// <summary>
+/// What every <c>XonoticHUD*Dialog</c> (xonotic/dialog_hudpanel_*.qh) declares alike: a root dialog 0.4 of the menu
+/// wide on a 4-column grid, coloured SKINCOLOR_DIALOG_TEAMSELECT, placed by mainwindow.qc with
+/// <c>addItemRightCentered</c> at SKINALPHAS_MAINMENU_z (1). A panel dialog gives its title and rows and its
+/// <c>_fill</c> as <see cref="Fill"/>.
+/// </summary>
+public abstract partial class HudPanelDialog : MenuScreen, IQcDialog
+{
+    public abstract string QcTitle { get; }
+    public float QcIntendedWidth => 0.4f;
+    public abstract float QcRows { get; }
+    public Color QcBorderColor => HudPanelCommon.DialogColor;
+    public bool QcRightCentered => true;
+
+    protected override void BuildUi()
+    {
+        Name = GetType().Name;
+        var me = new QcGrid(QcRows, 4);
+        me.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(me);
+        Fill(me);
+    }
+
+    /// <summary>The QC <c>XonoticHUD*Dialog_fill(me)</c>.</summary>
+    protected abstract void Fill(QcGrid me);
+}
+
+/// <summary>
+/// XonoticCheckBoxString (xonotic/checkbox_string.qc): checked while the cvar's string is exactly the yes string;
+/// toggling writes the yes or the no string. Unlike <see cref="CvarCheckBox"/> it never compares numerically, so
+/// an empty yes string ("use the global default", the HUD panels' bg colour) works.
+/// </summary>
+public partial class QcCheckBoxString : CheckBox
+{
+    private readonly string _yes, _no, _cvar;
+    private bool _updating;
+
+    public QcCheckBoxString(string yes, string no, string cvar, string text)
+    {
+        _yes = yes;
+        _no = no;
+        _cvar = CvarUi.EnsureEngine(cvar);
+        Text = Localization.Tr(text);
+        ToggleMode = true;
+        Toggled += OnToggled;
+    }
+
+    public override void _EnterTree()
+    {
+        CvarUi.Cvars.Changed += OnCvarChanged;
+        Load();
+    }
+
+    public override void _ExitTree() => CvarUi.Cvars.Changed -= OnCvarChanged;
+
+    private void OnCvarChanged(string name)
+    {
+        if (string.Equals(name, _cvar, StringComparison.OrdinalIgnoreCase)) Load();
+    }
+
+    private void Load()
+    {
+        _updating = true;
+        ButtonPressed = CvarUi.Cvars.GetString(_cvar) == _yes;
+        _updating = false;
+    }
+
+    private void OnToggled(bool on)
+    {
+        if (_updating) return;
+        CvarUi.Cvars.Set(_cvar, on ? _yes : _no);
+        CvarUi.Cvars.MarkArchived(_cvar);
     }
 }

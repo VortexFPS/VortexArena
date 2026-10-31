@@ -606,6 +606,8 @@ public partial class Shell : Node
         // like DP — no vid_restart needed for the non-window-mode video cvars. Wired after boot-config load so
         // the bulk cfg exec doesn't re-apply per line.
         ClientSettings.InstallLiveVideoCvars(MenuState.Cvars);
+        // ...and the volumes (playtest #60): DP reads them every frame, so a slider is heard as it moves.
+        ClientSettings.InstallLiveAudioCvars(MenuState.Cvars);
         // QC `map`/`devmap`: in a running match this is a changelevel (keep mode + bots); at the menu it starts a
         // fresh listen server on the map then self-connects (the real "start a game" path).
         // ...unless Xonotic's own menu or a local Xonotic game is what is running: then "map" is that console's

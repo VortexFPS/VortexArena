@@ -49,8 +49,11 @@ public static class WeaponFireSounds
     };
 
     // Weapons whose fire sound is played at other than the default volume, so the predicted copy sounds the
-    // same as the server's copy of the same shot.
-    private static readonly Dictionary<string, float> Volume = new();
+    // same as the server's copy of the same shot. Vaporizer: vaporizer.qc:139 VOL_BASE * 0.8.
+    private static readonly Dictionary<string, float> Volume = new()
+    {
+        ["vaporizer"] = VortexArena.Common.Gameplay.SoundLevels.VolBase * 0.8f,
+    };
 
     // Every sample a primary press can predict, for the "is this one of my predicted sounds" filter (keyed by
     // sample, since several weapons share one — uzi/lasergun/nexfire/etc.).

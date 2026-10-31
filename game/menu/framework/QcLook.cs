@@ -379,9 +379,11 @@ public static class QcLook
     /// <summary>
     /// A XonoticCheckBox / XonoticRadioButton: the font-size square picture centred in the first row-height of
     /// the box (Button_draw's non-multi branch with keepspaceLeft = height / width), the label after it.
-    /// <paramref name="image"/> is <c>"checkbox"</c> or <c>"radiobutton"</c>.
+    /// <paramref name="image"/> is <c>"checkbox"</c> or <c>"radiobutton"</c>; <paramref name="pictureTint"/> is the
+    /// picture's <c>color</c>/<c>colorC</c>/<c>colorF</c>/<c>colorD</c> when a dialog sets them (the cvar list's
+    /// SKINCOLOR_CVARLIST_CONTROLS) — the label keeps its own colour.
     /// </summary>
-    public static T CheckBox<T>(T c, string image = "checkbox") where T : Button
+    public static T CheckBox<T>(T c, string image = "checkbox", Color? pictureTint = null) where T : Button
     {
         State s = Track(c);
         s.Image = image;
@@ -399,7 +401,8 @@ public static class QcLook
             float keep = Math.Min(0.8f * c.Size.X, h);
             string suffix = c.ButtonPressed ? "1" : "0";
             string state = c.Disabled ? "_d" : s.Held ? "_c" : Focused(c) ? "_f" : "_n";
-            Color tint = c.Disabled ? MenuSkin.Fade(Colors.White, MenuSkin.DisabledAlpha) : Colors.White;
+            Color picture = pictureTint ?? Colors.White;
+            Color tint = c.Disabled ? MenuSkin.Fade(picture, MenuSkin.DisabledAlpha) : picture;
             if (QcDraw.Skin(s.Image + state + suffix) is { } tex)
                 c.DrawTextureRect(tex, new Rect2(0.5f * (keep - fs), 0.5f * (h - fs), fs, fs), false, tint);
             Color color = c.Disabled ? MenuSkin.Fade(MenuSkin.Text, MenuSkin.DisabledAlpha) : MenuSkin.Text;
@@ -567,8 +570,10 @@ public static class QcLook
     /// A XonoticInputBox: the inputbox picture (focused or not), the text one character in from each side and
     /// clear of the clear button, white, with the <c>_</c> cursor - steady while the box is unfocused, blinking
     /// while it is being typed in (item/inputbox.qc <c>InputBox_draw</c>). Godot still does the editing.
+    /// <paramref name="pictureTint"/> is the box's <c>color</c>/<c>colorF</c> and the clear button's <c>cb_color*</c>
+    /// when a dialog sets them (the cvar list's SKINCOLOR_CVARLIST_CONTROLS).
     /// </summary>
-    public static LineEdit InputBox(LineEdit e, bool clearButton = true, bool editColorCodes = false)
+    public static LineEdit InputBox(LineEdit e, bool clearButton = true, bool editColorCodes = false, Color? pictureTint = null)
     {
         State s = Track(e);
         s.Image = "inputbox";
@@ -618,13 +623,13 @@ public static class QcLook
         {
             float h = e.Size.Y;
             bool focused = e.HasFocus() && e.Editable;
-            QcDraw.ButtonPicture(e, new Rect2(Vector2.Zero, e.Size), QcDraw.Skin(focused ? "inputbox_f" : "inputbox_n"), Colors.White);
+            QcDraw.ButtonPicture(e, new Rect2(Vector2.Zero, e.Size), QcDraw.Skin(focused ? "inputbox_f" : "inputbox_n"), pictureTint ?? Colors.White);
             if (clearButton && e.Text.Length > 0)
             {
                 bool over = Focused(e) && e.GetLocalMousePosition().X >= e.Size.X - h;
                 string state = focused && over ? (s.Held ? "_c" : "_f") : "_n";
                 if (QcDraw.Skin("clearbutton" + state) is { } cb)
-                    e.DrawTextureRect(cb, new Rect2(e.Size.X - h, 0f, h, h), false, Colors.White);
+                    e.DrawTextureRect(cb, new Rect2(e.Size.X - h, 0f, h, h), false, pictureTint ?? Colors.White);
             }
             clip.QueueRedraw();
         };

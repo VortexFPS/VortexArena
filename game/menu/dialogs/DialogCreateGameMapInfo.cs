@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Godot;
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Menu;
@@ -6,29 +5,42 @@ using VortexArena.Common.Menu;
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// The Create-Game map-info popup — a faithful C# port of <c>XonoticMapInfoDialog</c>
-/// (qcsrc/menu/xonotic/dialog_multiplayer_create_mapinfo.qc): the dialog that pops up when a map is
-/// double-clicked in the create-game map list. The QC <c>loadMapInfo</c> (lines 9-39) runs
-/// <c>MapInfo_Get_ByID</c>, then shows the bsp name, the (decolorized, author-stripped) title, the author,
-/// the description, the preview image (with the <c>/maps/&lt;bsp&gt;</c> → <c>/levelshots/&lt;bsp&gt;</c> →
-/// <c>nopreview_map</c> fallback chain), and a checklist of EVERY gametype with the ones the map doesn't
-/// support disabled. The bottom row is "Close" and "MAP^Play" (which loads the map — QC
-/// <c>MapList_LoadMap</c>, gated by <c>g_campaign 0</c>).
+/// "Map Information" — <c>XonoticMapInfoDialog_fill</c> + <c>loadMapInfo</c>
+/// (qcsrc/menu/xonotic/dialog_multiplayer_create_mapinfo.qc) on its 11 x 10 grid, the full menu width, titled with
+/// the map's bsp name (<c>me.border.setText</c>): the 4:3 preview over rows 0..8 on the left (the
+/// <c>/maps/&lt;bsp&gt;</c> → <c>/levelshots/&lt;bsp&gt;</c> → <c>nopreview_map</c> chain); from column 3.5 the title
+/// and author (decolorized, cut to fit, in SKINCOLOR_MAPLIST_TITLE / _AUTHOR), "Gametypes:", and every menu
+/// gametype (util.qc GAMETYPES then HIDDEN_GAMETYPES, 4 per row) — disabled when the map does not support it; the
+/// description on row 9; "Close" and "MAP^Play" on the last row, Play disabled while <c>g_campaign</c> is on.
 ///
-/// This is a working port over the headless <see cref="MapInfoBackend"/> (the C# .mapinfo parser): the
-/// metadata + the gametype checklist come from the real <c>maps/&lt;bsp&gt;.mapinfo</c> when present, and the
-/// preview falls through the same chain. "Play" gathers a <see cref="MatchConfig"/> for the chosen map (using
-/// the map's first supported gametype, or the currently selected create-game gametype) and fires
-/// <see cref="CreateGameScreen.RaiseStartGame"/> — the same path the create-game Start button uses.
+/// The metadata comes from the headless <see cref="MapInfoBackend"/> (the C# .mapinfo parser). Play gathers a
+/// <see cref="MatchConfig"/> for the map (the create-game screen's gametype when the map supports it, else the
+/// map's first) and fires <see cref="CreateGameScreen.RaiseStartGame"/> — the Start button's path (QC
+/// <c>MapList_LoadMap</c>).
 /// </summary>
-public partial class DialogCreateGameMapInfo : Control, IMenuScreen
+public partial class DialogCreateGameMapInfo : MenuScreen, IQcDialog
 {
+    // util.qc GAMETYPES + HIDDEN_GAMETYPES: GameType_GetID(i) for i < GameType_GetTotalCount(), as (port NetName,
+    // MapInfo_Type_ToText fallback when the registry lacks it).
+    private static readonly (string Net, string Name)[] MenuGametypes =
+    {
+        ("dm", "Deathmatch"), ("tdm", "Team Deathmatch"), ("ctf", "Capture the Flag"), ("ca", "Clan Arena"),
+        ("freezetag", "Freeze Tag"), ("mayhem", "Mayhem"), ("tmayhem", "Team Mayhem"), ("ka", "Keepaway"),
+        ("tka", "Team Keepaway"), ("kh", "Key Hunt"), ("lms", "Last Man Standing"), ("dom", "Domination"),
+        ("nb", "Nexball"), ("ons", "Onslaught"), ("as", "Assault"), ("surv", "Survival"),
+        ("rc", "Race"), ("cts", "Race CTS"), ("inv", "Invasion"),
+    };
+
     private readonly string _bspName;
     private readonly string? _preferredGametype;
 
-    /// <summary>The host menu — assigned by <see cref="MenuRoot.Push"/> so Close/Play can pop this dialog cleanly
-    /// (without it, Close would orphan the framing PanelContainer on the menu stack).</summary>
-    public MenuRoot? Menu { get; set; }
+    // dialog_multiplayer_create_mapinfo.qh
+    public string QcTitle => _bspName.Length > 0 ? _bspName : Localization.Tr("Map Information");
+    public float QcIntendedWidth => 1.0f;
+    public float QcRows => 11;
+    public Color QcBorderColor => MenuSkin.SkinColor("COLOR_DIALOG_MAPINFO", 1f, 1f, 1f);
+
+    public DialogCreateGameMapInfo() : this("") { }
 
     /// <param name="bspName">The map file stem (e.g. "stormkeep") — QC MapInfo_Map_bspname.</param>
     /// <param name="preferredGametype">The create-game screen's currently selected gametype NetName, used for Play
@@ -39,122 +51,84 @@ public partial class DialogCreateGameMapInfo : Control, IMenuScreen
         _preferredGametype = preferredGametype;
     }
 
-    public override void _Ready()
+    protected override void BuildUi()
     {
-        SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        SizeFlagsVertical = SizeFlags.ExpandFill;
+        Name = "DialogCreateGameMapInfo"; // QC XonoticMapInfoDialog
 
         var backend = new MapInfoBackend(MenuDataBridge.ReadText, MenuDataBridge.ImageExists)
         {
-            // QC Duel.m_isForcedSupported: wire g_duel_not_dm_maps (default 0 → forced support active).
+            // QC Duel.m_isForcedSupported: g_duel_not_dm_maps (default 0 → forced support active).
             ForceDuelOnDmMaps = MenuState.Cvars.GetFloat("g_duel_not_dm_maps") == 0f,
-            // QC TeamDeathmatch.m_isForcedSupported: wire g_tdm_on_dm_maps (default 0 → forced support OFF;
-            // set to 1 to auto-offer TDM on every DM map). Opposite polarity to the duel cvar above.
+            // QC TeamDeathmatch.m_isForcedSupported: g_tdm_on_dm_maps (opposite polarity).
             ForceTdmOnDmMaps = MenuState.Cvars.GetFloat("g_tdm_on_dm_maps") != 0f,
         };
-        MapInfo info = backend.Get(_bspName);          // QC MapInfo_Get_ByID
-        string previewBase = backend.PreviewImage(_bspName); // QC preview fallback chain
+        MapInfo info = backend.Get(_bspName);                 // MapInfo_Get_ByID
+        string previewBase = backend.PreviewImage(_bspName);  // the preview fallback chain
 
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        foreach (string side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 24);
-        AddChild(margin);
+        var me = new QcGrid(QcRows, 10);
+        me.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(me);
 
-        var root = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        root.AddThemeConstantOverride("separation", 12);
-        margin.AddChild(root);
+        float alpha = MenuSkin.Text.A;
+        me.TR();
+            me.TDempty(0.2f);
+            me.TD(me.Rows - 2, 3, new QcImage(ResolvePreview(previewBase), 4f / 3f));
+        me.GotoRC(0, 3.5f); me.SetFirstColumn(me.CurrentColumn);
+        float w = me.Columns - me.CurrentColumn;
+            me.TD(1, 1, Qc.Label("Title:"));
+            me.TD(1, w - 1, new QcTextLabel
+            {
+                Text = MenuColorCodes.Strip(info.Title),
+                AllowCut = true,
+                Color = MenuSkin.TextLift(MenuSkin.Fade(MenuSkin.SkinColor("COLOR_MAPLIST_TITLE", 1f, 1f, 1f), alpha)),
+            });
+        me.TR();
+            me.TD(1, 1, Qc.Label("Author:"));
+            me.TD(1, w - 1, new QcTextLabel
+            {
+                Text = MenuColorCodes.Strip(info.Author),
+                AllowCut = true,
+                Color = MenuSkin.TextLift(MenuSkin.Fade(MenuSkin.SkinColor("COLOR_MAPLIST_AUTHOR", 0.4f, 0.4f, 0.7f), alpha)),
+            });
+        me.TR();
+            me.TD(1, w, Qc.Label("Gametypes:"));
 
-        // QC: me.border.setText(currentMapBSPName) — the bsp name heads the dialog.
-        root.AddChild(Ui.Title(_bspName));
-
-        var body = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        body.AddThemeConstantOverride("separation", 18);
-        root.AddChild(body);
-
-        // ------------------------------------------------------------------- LEFT: 4:3 preview image
-        var preview = new TextureRect
+        int total = MenuGametypes.Length;
+        int n = (int)System.MathF.Ceiling(total / (me.Rows - 6));
+        float wgt = (w - 0.2f) / n;
+        for (int i = 0; i < total; ++i)
         {
-            Texture = ResolvePreview(previewBase),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            CustomMinimumSize = new Vector2(240, 180), // QC makeXonoticImage(_, 4.0/3.0)
-            SizeFlagsVertical = SizeFlags.ShrinkCenter,
-        };
-        body.AddChild(preview);
-
-        // ------------------------------------------------------------------- RIGHT: metadata + gametypes
-        var details = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        details.AddThemeConstantOverride("separation", 6);
-        body.AddChild(details);
-
-        details.AddChild(Ui.Row("Title:", ColoredValue(info.Title, MenuSkin.Bright), 80f));
-        details.AddChild(Ui.Row("Author:", ColoredValue(info.Author, MenuSkin.Text), 80f));
-
-        details.AddChild(Ui.Spacer(4f));
-        details.AddChild(Ui.Header("Gametypes:"));
-
-        // QC: every gametype is shown; the ones the map doesn't support are disabled (greyed) — fill the grid.
-        var gtGrid = new GridContainer { Columns = 2, SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        gtGrid.AddThemeConstantOverride("h_separation", 12);
-        gtGrid.AddThemeConstantOverride("v_separation", 2);
-        details.AddChild(gtGrid);
-
-        foreach (GameType gt in GameTypes.All)
-        {
-            bool supported = info.Supports(gt.NetName);
-            var lbl = Ui.Label(string.IsNullOrEmpty(gt.DisplayName) ? gt.NetName : gt.DisplayName);
-            if (!supported)
-                lbl.AddThemeColorOverride("font_color", new Color(0.45f, 0.47f, 0.52f)); // disabled (QC e.disabled = true)
-            gtGrid.AddChild(lbl);
+            if (i % n == 0)
+            {
+                me.TR();
+                me.TDempty(0.2f);
+            }
+            (string net, string name) = MenuGametypes[i];
+            me.TD(1, wgt, new QcLabel(GametypeName(net, name)) { Disabled = !info.Supports(net) });
         }
 
-        if (!info.HasMapInfoFile)
-        {
-            var noinfo = Ui.Label("(no .mapinfo for this map — gametype support unknown)");
-            noinfo.AddThemeColorOverride("font_color", new Color(0.70f, 0.72f, 0.78f));
-            details.AddChild(noinfo);
-        }
+        me.GotoRC(me.Rows - 2, 0);
+            me.TD(1, me.Columns, new QcTextLabel("", 0.5f) { Text = info.Description, AllowCut = true });
 
-        // QC: descriptionLabel spans the bottom (allowCut).
-        if (!string.IsNullOrEmpty(info.Description))
-        {
-            details.AddChild(Ui.Spacer(4f));
-            var desc = Ui.Label(info.Description);
-            desc.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-            desc.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            details.AddChild(desc);
-        }
-
-        // ------------------------------------------------------------------- BOTTOM: Close / Play
-        var buttons = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        buttons.AddThemeConstantOverride("separation", 12);
-        buttons.AddChild(Ui.Button("Close", Close));
-        var play = Ui.Button("Play", () => Play(info)); // QC ZCTX(_("MAP^Play")) → MapList_LoadMap
-        play.TooltipText = "Load this map (QC MapList_LoadMap; disabled in campaign)";
-        buttons.AddChild(play);
-        root.AddChild(buttons);
+        me.GotoRC(me.Rows - 1, 0);
+            me.TDempty(0.5f);
+            me.TD(1, me.Columns - 5.5f, Qc.Button("Close", GoBack));
+            me.TD(1, me.Columns - 5.5f, Qc.Button("Play", () => Play(info), "Load this map"))
+                .Dep("g_campaign", 0, 0);
     }
 
-    /// <summary>QC Dialog_Close — close the popup. Pops the menu stack when hosted by a <see cref="MenuRoot"/>
-    /// (so the framing PanelContainer is removed and the screen beneath is re-shown); falls back to a direct
-    /// self-removal when shown standalone (e.g. a test).</summary>
-    private void Close()
+    /// <summary>MapInfo_Type_ToText: the registry's name for the gametype, else the QC one.</summary>
+    private static string GametypeName(string net, string fallback)
     {
-        if (Menu is not null)
-        {
-            Menu.Pop();
-            return;
-        }
-        if (GetParent() is { } parent)
-            parent.RemoveChild(this);
-        QueueFree();
+        foreach (GameType gt in GameTypes.All)
+            if (gt.NetName == net && !string.IsNullOrEmpty(gt.DisplayName))
+                return gt.DisplayName;
+        return fallback;
     }
 
     /// <summary>
-    /// QC MapList_LoadMap: start the match on this map. Pick the gametype the create-game screen had selected
-    /// when the map supports it; otherwise the map's first supported gametype; else fall back to "dm". Fires
-    /// the same <see cref="CreateGameScreen.RaiseStartGame"/> path the Start button uses.
+    /// QC MapList_LoadMap: start the match on this map, with the gametype the create-game screen had selected when
+    /// the map supports it, otherwise the map's first supported gametype, else "dm".
     /// </summary>
     private void Play(MapInfo info)
     {
@@ -172,7 +146,7 @@ public partial class DialogCreateGameMapInfo : Control, IMenuScreen
             FragLimit = fragLimit > 0 ? (int)fragLimit : 0,
         };
         CreateGameScreen.RaiseStartGame(config);
-        Close();
+        GoBack();
     }
 
     private string ChooseGametype(MapInfo info)
@@ -184,21 +158,12 @@ public partial class DialogCreateGameMapInfo : Control, IMenuScreen
         return string.IsNullOrEmpty(_preferredGametype) ? "dm" : _preferredGametype!;
     }
 
-    /// <summary>Resolve the preview-image base name to a texture, falling back to the nopreview placeholder.</summary>
+    /// <summary>The preview picture for the fallback chain's result ("nopreview_map" is a skin picture).</summary>
     private static Texture2D? ResolvePreview(string previewBase)
     {
-        // "nopreview_map" is a skin image; a "/maps/<bsp>" or "/levelshots/<bsp>" is a content image.
         if (previewBase == "nopreview_map")
             return MenuSkin.SkinImage("nopreview_map");
         string baseName = previewBase.StartsWith('/') ? previewBase[1..] : previewBase;
         return MenuSkin.Image(baseName) ?? MenuSkin.SkinImage("nopreview_map");
-    }
-
-    private static Label ColoredValue(string text, Color color)
-    {
-        var l = Ui.Label(string.IsNullOrEmpty(text) ? "" : text);
-        l.AddThemeColorOverride("font_color", color);
-        l.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        return l;
     }
 }

@@ -254,6 +254,30 @@ public static class BindInput
 
     private static string? NullIfEmpty(string s) => string.IsNullOrEmpty(s) ? null : s;
 
+    /// <summary>The bind-table key a key or mouse-button press encodes to (what <see cref="BindTable"/> is keyed
+    /// by), or null for anything else — for the menu's key binder, which binds the next key pressed.</summary>
+    public static string? EventKey(InputEvent ev) => ev switch
+    {
+        InputEventKey k => KeyString(k),
+        InputEventMouseButton m => MouseString(m.ButtonIndex),
+        _ => null,
+    };
+
+    /// <summary>
+    /// The DarkPlaces name of a bind-table key (keys.c keynames: <c>w</c>, <c>UPARROW</c>, <c>MOUSE1</c>), the
+    /// reverse of <see cref="TranslateEngineKey"/> — what the key binder shows, as Xonotic's menu does with
+    /// keynumtostring. A letter is lower case there, as its key number is the lower-case character.
+    /// </summary>
+    public static string EngineKeyName(string key)
+    {
+        if (key.Length == 1)
+            return char.IsLetter(key[0]) ? char.ToLowerInvariant(key[0]).ToString() : key;
+        foreach (KeyValuePair<string, Key> kv in EngineNameToGodotKey)
+            if (string.Equals(OS.GetKeycodeString(kv.Value), key, StringComparison.OrdinalIgnoreCase))
+                return kv.Key;
+        return key;
+    }
+
     // ---- key encoding (canonical strings shared with KeyBindings; edge-independent) ----------------------
 
     private static string? KeyString(InputEventKey k)

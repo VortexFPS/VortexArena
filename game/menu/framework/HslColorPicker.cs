@@ -23,7 +23,7 @@ namespace VortexArena.Game.Menu;
 /// Degrades gracefully without the content repo (no image → a generated HSL gradient stand-in), rather than
 /// crashing on a null texture.
 /// </summary>
-public partial class HslColorPicker : Control
+public partial class HslColorPicker : Control, IQcDisableable
 {
     private enum PickerMode { StringCvar, NameBox }
 
@@ -103,7 +103,7 @@ public partial class HslColorPicker : Control
             return;
 
         (float R, float G, float B) rgb = MenuPickerMath.HslImageColor(coords, _margin);
-        if (_mode == PickerMode.StringCvar)
+        if (_mode == PickerMode.StringCvar && !_qcDisabled)
         {
             _cursor = coords;
             SaveStringCvar(rgb);
@@ -137,6 +137,20 @@ public partial class HslColorPicker : Control
 
     // ---- draw (QC draw) --------------------------------------------------------------------------------
 
+    /// <summary>XonoticColorpickerString <c>disabled</c>: drawn at its disabledAlpha 0.3, without the marker.</summary>
+    public bool QcDisabled
+    {
+        get => _qcDisabled;
+        set
+        {
+            _qcDisabled = value;
+            SelfModulate = new Color(1f, 1f, 1f, value ? 0.3f : 1f);
+            MouseFilter = value ? MouseFilterEnum.Ignore : MouseFilterEnum.Stop;
+            QueueRedraw();
+        }
+    }
+    private bool _qcDisabled;
+
     public override void _Draw()
     {
         if (_img is not null)
@@ -161,7 +175,8 @@ public partial class HslColorPicker : Control
             Vector2 at = new(_cursor.X * Size.X, _cursor.Y * Size.Y);
             if (_selected is not null)
             {
-                Vector2 sz = _selected.GetSize();
+                // draw_PictureSize: the marker at its own size in menu pixels.
+                Vector2 sz = _selected.GetSize() * MenuMetrics.DesignUnit;
                 DrawTextureRect(_selected, new Rect2(at - sz * 0.5f, sz), false);
             }
             else

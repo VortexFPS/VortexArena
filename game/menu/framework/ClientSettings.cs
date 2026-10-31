@@ -1035,6 +1035,8 @@ public static class ClientSettings
         c.Register("snd_attenuation_exponent", "4", save);
         c.Register("snd_attenuation_decibel", "0", save);
         c.Register("menu_snd_attenuation_method", "1", save);
+        // xonotic-common.cfg: the volume sliders read 0..10 (0 decibels, 1 linear percent, 3 slider percent).
+        c.Register("menu_snd_sliderscale", "2", save);
     }
 
     /// <summary>

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using Godot;
 using VortexArena.Common.Menu;   // CheckBoxValue (the QC value-pair checkbox math)
+using VortexArena.Common.Services;
 using VortexArena.Engine.Simulation;
 
 namespace VortexArena.Game.Menu;
@@ -24,7 +25,7 @@ public static class Widgets
 
     /// <summary>QC <c>makeXonoticCheckBox(0, cvar, label)</c> — a cvar-bound on/off checkbox.</summary>
     public static CvarCheckBox CheckBox(string cvar, string label, string tooltip = "", string on = "1", string off = "0")
-        => new(cvar, Localization.Tr(label), on, off) { TooltipText = Localization.Tr(tooltip) };
+        => new(CvarUi.EnsureEngine(cvar), Localization.Tr(label), on, off) { TooltipText = Localization.Tr(tooltip) };
 
     /// <summary>
     /// QC <c>makeXonoticCheckBoxEx(yesValue, noValue, cvar, label)</c> — a checkbox that stores one of two
@@ -35,29 +36,29 @@ public static class Widgets
     /// </summary>
     public static CvarValueCheckBox ValueCheckBox(string cvar, float yesValue, float noValue, string label,
         string tooltip = "", params string[] multiCvars)
-        => new(cvar, yesValue, noValue, Localization.Tr(label), multiCvars) { TooltipText = Localization.Tr(tooltip) };
+        => new(CvarUi.EnsureEngine(cvar), yesValue, noValue, Localization.Tr(label), multiCvars) { TooltipText = Localization.Tr(tooltip) };
 
     /// <summary>QC <c>makeXonoticSlider(min, max, step, cvar)</c> — a slider with a live value readout.</summary>
     public static CvarSlider Slider(string cvar, float min, float max, float step, string tooltip = "", Func<float, string>? format = null)
-        => new(cvar, min, max, step, format) { TooltipText = Localization.Tr(tooltip) };
+        => new(CvarUi.EnsureEngine(cvar), min, max, step, format) { TooltipText = Localization.Tr(tooltip) };
 
     /// <summary>QC <c>makeXonoticTextSlider/MixedSlider(cvar)</c> — a labeled discrete chooser bound to a cvar.</summary>
     public static CvarTextSlider TextSlider(string cvar, string tooltip = "")
-        => new(cvar) { TooltipText = Localization.Tr(tooltip) };
+        => new(CvarUi.EnsureEngine(cvar)) { TooltipText = Localization.Tr(tooltip) };
 
     /// <summary>QC <c>makeXonoticRadioButton(group, cvar, value, label)</c> — one option of a cvar-valued radio set.</summary>
     public static CvarRadioButton RadioButton(string cvar, string value, string label, ButtonGroup group, string tooltip = "")
-        => new(cvar, value, Localization.Tr(label), group) { TooltipText = Localization.Tr(tooltip) };
+        => new(CvarUi.EnsureEngine(cvar), value, Localization.Tr(label), group) { TooltipText = Localization.Tr(tooltip) };
 
     /// <summary>QC <c>makeXonoticMixedSlider(cvar)</c> — a DISCRETE slider over labeled values ("Default", a
     /// numeric range, "Infinite") with a live text readout. Chain <see cref="CvarMixedSlider.Add"/> /
     /// <see cref="CvarMixedSlider.AddRange"/> then call <see cref="CvarMixedSlider.Finish"/>.</summary>
     public static CvarMixedSlider MixedSlider(string cvar, string tooltip = "")
-        => new(cvar) { TooltipText = Localization.Tr(tooltip) };
+        => new(CvarUi.EnsureEngine(cvar)) { TooltipText = Localization.Tr(tooltip) };
 
     /// <summary>QC <c>makeXonoticInputBox(cvar)</c> — a text field bound to a string cvar.</summary>
     public static CvarLineEdit InputBox(string cvar, string placeholder = "", string tooltip = "")
-        => new(cvar) { PlaceholderText = Localization.Tr(placeholder), TooltipText = Localization.Tr(tooltip) };
+        => new(CvarUi.EnsureEngine(cvar)) { PlaceholderText = Localization.Tr(placeholder), TooltipText = Localization.Tr(tooltip) };
 
     /// <summary>QC <c>makeXonoticCommandButton(label, command)</c> — a button that runs a console command.</summary>
     public static CommandButton CommandButton(string label, string command, string tooltip = "")
@@ -72,17 +73,56 @@ public static class Widgets
         => new(cvar) { TooltipText = tooltip };
 }
 
+/// <summary>A self-drawn QC item (a picker, a preview) that shows its disabled state itself, at its own
+/// <c>disabledAlpha</c>, rather than being faded by <see cref="CvarUi.SetEnabledRecursive"/>.</summary>
+public interface IQcDisableable
+{
+    bool QcDisabled { get; set; }
+}
+
 /// <summary>Shared helpers for the cvar controls (enable/disable, formatting, store access).</summary>
 internal static class CvarUi
 {
     internal static CvarService Cvars => MenuState.Cvars;
+
+    private static Dictionary<string, string>? s_engineDefaults;
+
+    /// <summary>
+    /// A menu widget bound to one of DarkPlaces' own cvars that this client never declared (v_contrast, r_viewscale,
+    /// snd_channel3volume...) would read 0 where Xonotic's menu reads the engine's default, and show an empty slider
+    /// or a wrong checkbox. Declare it here with DarkPlaces' compiled-in default (<c>CsqcEngineCvars</c>) and its
+    /// archive flag, the way the engine has it before any config runs. Only for cvars the menu binds, so nothing else
+    /// that reads an undeclared cvar as 0 changes behaviour.
+    /// </summary>
+    internal static string EnsureEngine(string? cvar)
+    {
+        if (string.IsNullOrEmpty(cvar) || Cvars.Has(cvar)) return cvar ?? "";
+        s_engineDefaults ??= BuildEngineDefaults();
+        if (s_engineDefaults.TryGetValue(cvar, out string? value))
+        {
+            bool archive = (VortexArena.Legacy.Menu.MenuEngineCvarInfo.Flags(cvar) & VortexArena.Legacy.Menu.MenuEngineCvarInfo.Archive) != 0;
+            Cvars.Register(cvar, value, archive ? CvarFlags.Save : CvarFlags.None, VortexArena.Legacy.Menu.MenuEngineCvarInfo.Description(cvar));
+        }
+        return cvar;
+    }
+
+    private static Dictionary<string, string> BuildEngineDefaults()
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach ((string name, string value) in VortexArena.Legacy.Csqc.CsqcEngineCvars.Defaults) map[name] = value;
+        // DarkPlaces' second names for some (cl_curl_maxdownloads is curl_maxdownloads): the same default.
+        foreach ((string alias, string real) in VortexArena.Legacy.Menu.LegacyConsole.VirtualCvars)
+            if (!map.ContainsKey(alias) && map.TryGetValue(real, out string? value))
+                map[alias] = value;
+        return map;
+    }
 
     /// <summary>Recursively enable/disable a control subtree (buttons/sliders/fields) and dim it when off.</summary>
     internal static void SetEnabledRecursive(Control root, bool enabled)
     {
         Apply(root, enabled);
         // A control with the QC look draws its own disabled state, faded to SKINALPHA_DISABLED as Xonotic does.
-        bool qcLook = root.HasMeta(QcLook.MetaKey) || root is QcLabel;
+        bool qcLook = root.HasMeta(QcLook.MetaKey) || root is QcLabel || root is IQcDisableable;
         root.Modulate = enabled || qcLook ? Colors.White : new Color(1, 1, 1, 0.4f);
     }
 
@@ -92,6 +132,7 @@ internal static class CvarUi
         {
             case BaseButton b: b.Disabled = !enabled; break;
             case QcLabel l: l.Disabled = !enabled; break;
+            case IQcDisableable d: d.QcDisabled = !enabled; break;
             case Slider s: s.Editable = enabled; break;
             case LineEdit le: le.Editable = enabled; break;
             case SpinBox sb: sb.Editable = enabled; break;
@@ -229,17 +270,28 @@ public partial class CvarSlider : HBoxContainer, IQcSlider
     private readonly Func<float, string> _format;
     private readonly HSlider _slider;
     private readonly Label _readout;
+    private readonly int _digits;
+    private float _value;
     private bool _updating;
 
     /// <summary>The inner slider (for callers that need to tweak ticks/size).</summary>
     public HSlider Slider => _slider;
     /// <summary>The value readout beside it.</summary>
     public Label Readout => _readout;
+    /// <summary>The cvar this slider edits.</summary>
+    public string Cvar => _cvar;
+    /// <summary>The QC <c>formatString</c> for the default readout ("%sx", "%", "s", ...).</summary>
+    public string FormatString { get; set; } = "";
+    /// <summary>The cvar's own value (QC <c>me.value</c>), unsnapped; null when outside the range, where the QC
+    /// draws no knob and no text.</summary>
+    public double? ShownValue => _value >= _slider.MinValue - 0.0001 && _value <= _slider.MaxValue + 0.0001 ? _value : null;
 
     public CvarSlider(string cvar, float min, float max, float step, Func<float, string>? format = null)
     {
         _cvar = cvar;
-        _format = format ?? CvarUi.Tidy;
+        _digits = QcFormat.Digits(step);
+        // Slider_valueToText: the value to the step's decimals, through the format string.
+        _format = format ?? (v => QcFormat.Special(FormatString, v, _digits));
         SizeFlagsHorizontal = SizeFlags.ExpandFill;
         AddThemeConstantOverride("separation", 8);
 
@@ -267,15 +319,17 @@ public partial class CvarSlider : HBoxContainer, IQcSlider
     {
         if (_updating) return;
         _updating = true;
-        _slider.Value = CvarUi.Cvars.GetFloat(_cvar);
-        _readout.Text = _format((float)_slider.Value);
+        _value = CvarUi.Cvars.GetFloat(_cvar);
+        _slider.Value = _value;
+        _readout.Text = ShownValue is null ? "" : _format(_value);
         _updating = false;
     }
 
     private void OnValueChanged(double v)
     {
-        _readout.Text = _format((float)v);
         if (_updating) return;
+        _value = (float)v;
+        _readout.Text = _format((float)v);
         CvarUi.Cvars.Set(_cvar, ((float)v).ToString(CultureInfo.InvariantCulture));
         CvarUi.Cvars.MarkArchived(_cvar);
     }
@@ -286,6 +340,9 @@ public interface IQcSlider
 {
     HSlider Slider { get; }
     Label Readout { get; }
+    /// <summary>Where the knob is (QC <c>sliderValue</c>), in the slider's units; null = no knob (out of range, or a
+    /// mixed slider's "Custom").</summary>
+    double? ShownValue => Slider.Value;
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -386,9 +443,15 @@ public partial class CvarMixedSlider : HBoxContainer, IQcSlider
     private readonly HSlider _slider;
     private readonly Label _readout;
     private bool _updating;
+    private int _digits;
+    private int _index;
 
     public HSlider Slider => _slider;
     public Label Readout => _readout;
+    /// <summary>The QC <c>formatString</c> for the stops <see cref="AddRange"/> adds ("%sx", "m", ...); set it first.</summary>
+    public string FormatString { get; set; } = "";
+    /// <summary>The selected stop; null when the cvar holds none of them (QC "Custom": no knob).</summary>
+    public double? ShownValue => _index >= 0 ? _index : null;
 
     public CvarMixedSlider(string cvar)
     {
@@ -417,11 +480,16 @@ public partial class CvarMixedSlider : HBoxContainer, IQcSlider
         return this;
     }
 
-    /// <summary>QC <c>e.addRange(min, max, step)</c>: numeric stops labeled by their value.</summary>
+    /// <summary>QC <c>e.addRange(min, max, step)</c>: numeric stops labeled by their value, to the step's decimals
+    /// (MixedSlider_adjustDigitsForStep) and through <see cref="FormatString"/>.</summary>
     public CvarMixedSlider AddRange(float min, float max, float step)
     {
-        for (float v = min; v <= max + 0.001f; v += step)
-            _entries.Add((CvarUi.Tidy(v), v.ToString(CultureInfo.InvariantCulture)));
+        _digits = Math.Max(_digits, QcFormat.Digits(step));
+        for (float v = min; v <= max + step / 2f; v += step)
+        {
+            float id = float.Parse(QcFormat.Decimals(v, _digits), CultureInfo.InvariantCulture);
+            _entries.Add((QcFormat.Special(FormatString, v, _digits), QcFormat.MinDecimals(id)));
+        }
         return this;
     }
 
@@ -442,32 +510,21 @@ public partial class CvarMixedSlider : HBoxContainer, IQcSlider
     {
         if (_updating || _entries.Count == 0) return;
         _updating = true;
-        string cur = CvarUi.Cvars.GetString(_cvar);
-        int idx = _entries.FindIndex(e => e.Value == cur);
-        if (idx < 0)
-        {
-            // nearest numeric entry (the store may hold a value between stops)
-            float target = CvarUi.Cvars.GetFloat(_cvar);
-            float best = float.MaxValue;
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                if (float.TryParse(_entries[i].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out float val))
-                {
-                    float d = Math.Abs(val - target);
-                    if (d < best) { best = d; idx = i; }
-                }
-            }
-            if (idx < 0) idx = 0;
-        }
-        _slider.Value = idx;
-        _readout.Text = _entries[idx].Label;
+        // MixedSlider_setValueFromNumberIdentifier: the stop whose number IS the cvar's, else "Custom".
+        float cur = CvarUi.Cvars.GetFloat(_cvar);
+        _index = _entries.FindIndex(e =>
+            float.TryParse(e.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out float val) && val == cur);
+        if (_index >= 0) _slider.Value = _index;
+        _readout.Text = _index >= 0 ? _entries[_index].Label : Localization.Tr("Custom");
         _updating = false;
+        QueueRedraw();
     }
 
     private void OnValueChanged(double v)
     {
         int idx = Mathf.Clamp((int)v, 0, _entries.Count - 1);
-        if (_entries.Count == 0) return;
+        if (_entries.Count == 0 || _updating) return;
+        _index = idx;
         _readout.Text = _entries[idx].Label;
         if (_updating) return;
         CvarUi.Cvars.Set(_cvar, _entries[idx].Value);
@@ -544,8 +601,13 @@ public partial class CvarLineEdit : LineEdit
     private void Refresh()
     {
         if (_updating) return;
+        string value = CvarUi.Cvars.GetString(_cvar);
+        // The box's own edit coming back through the cvar: leave the text and the caret alone.
+        if (value == Text) return;
         _updating = true;
-        Text = CvarUi.Cvars.GetString(_cvar);
+        Text = value;
+        // InputBox_setText: the cursor goes to the end of the new text.
+        CaretColumn = Text.Length;
         _updating = false;
     }
 

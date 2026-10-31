@@ -123,6 +123,16 @@ public static class QcDraw
         return (box.Position + new Vector2(x, y), condense);
     }
 
+    /// <summary>draw_TextShortenToWidth (common/util.qc textShortenToWidth): as much as fits, with "..." after it.</summary>
+    public static string ShortenToWidth(string text, float width, float menuPx = MenuMetrics.FontNormal, bool bold = false)
+    {
+        if (TextWidth(text, menuPx, bold) <= width) return text;
+        float room = width - TextWidth("...", menuPx, bold);
+        int n = text.Length;
+        while (n > 0 && TextWidth(text[..n], menuPx, bold) > room) n--;
+        return text[..n] + "...";
+    }
+
     /// <summary>A label's text drawn in <paramref name="box"/> the way <see cref="QcLabel"/> draws it.</summary>
     public static void LabelText(CanvasItem ci, Rect2 box, string? text, Color color, float align, float keepLeft = 0f,
         float keepRight = 0f, float menuPx = MenuMetrics.FontNormal, bool bold = false)
@@ -287,14 +297,15 @@ public static class QcLook
     /// slider_s track over the left 1 - SKINWIDTH_SLIDERTEXT of the box, the square knob (n/f/c/d) at the value,
     /// and the value's text centred in the right part. Godot's slider still takes the input; its look is blanked.
     /// </summary>
-    public static T Slider<T>(T host) where T : BoxContainer, IQcSlider
+    public static T Slider<T>(T host, float valueSpace = -1f) where T : BoxContainer, IQcSlider
     {
         HSlider slider = host.Slider;
         Label readout = host.Readout;
         State s = Track(slider);
         host.SetMeta(MetaKey, true);
         host.AddThemeConstantOverride("separation", 0);
-        float valueSpace = Math.Clamp(MenuSkin.SkinNumber("WIDTH_SLIDERTEXT", 1f / 3f), 0f, 1f);
+        // setValueSpace: the share of the width the text takes; SKINWIDTH_SLIDERTEXT unless the dialog changes it.
+        valueSpace = Math.Clamp(valueSpace < 0f ? DefaultValueSpace : valueSpace, 0f, 1f);
         slider.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         slider.SizeFlagsVertical = Control.SizeFlags.Fill;
         slider.SizeFlagsStretchRatio = Math.Max(0.001f, 1f - valueSpace);
@@ -302,6 +313,7 @@ public static class QcLook
         readout.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         readout.SizeFlagsStretchRatio = Math.Max(0.001f, valueSpace);
         readout.CustomMinimumSize = Vector2.Zero;
+        readout.Visible = valueSpace > 0f;
         readout.ClipText = true;
         readout.AddThemeColorOverride("font_color", Colors.Transparent);
         var empty = new StyleBoxEmpty();
@@ -320,18 +332,115 @@ public static class QcLook
             bool disabled = !slider.Editable;
             float a = disabled ? MenuSkin.DisabledAlpha : 1f;
             QcDraw.ButtonPicture(host, new Rect2(0f, 0f, trackW, h), QcDraw.Skin("slider_s"), MenuSkin.Fade(Colors.White, a));
-            if (slider.MaxValue > slider.MinValue)
+            if (slider.MaxValue > slider.MinValue && host.ShownValue is { } shown)
             {
-                float frac = (float)((slider.Value - slider.MinValue) / (slider.MaxValue - slider.MinValue));
+                float frac = (float)((shown - slider.MinValue) / (slider.MaxValue - slider.MinValue));
                 float x = Math.Clamp(frac, 0f, 1f) * (trackW - h);
                 string state = disabled ? "_d" : s.Held ? "_c" : Focused(slider) ? "_f" : "_n";
                 if (QcDraw.Skin("slider" + state) is { } knob)
                     host.DrawTextureRect(knob, new Rect2(x, 0f, h, h), false, MenuSkin.Fade(Colors.White, a));
             }
             Color color = disabled ? MenuSkin.Fade(MenuSkin.Text, MenuSkin.DisabledAlpha) : MenuSkin.Text;
-            QcDraw.LabelText(host, new Rect2(trackW, 0f, w - trackW, h), readout.Text, color, 0.5f);
+            if (valueSpace > 0f)
+                QcDraw.LabelText(host, new Rect2(trackW, 0f, w - trackW, h), readout.Text, color, 0.5f);
         };
         return host;
+    }
+
+    /// <summary>SKINWIDTH_SLIDERTEXT: a slider's text share of its width.</summary>
+    public static float DefaultValueSpace => Math.Clamp(MenuSkin.SkinNumber("WIDTH_SLIDERTEXT", 1f / 3f), 0f, 1f);
+
+    /// <summary>
+    /// InputBox_draw with <c>editColorCodes</c> (the Profile name box): the text one character at a time in the colour
+    /// the codes so far give it, each code drawn as its own characters over a white box (brighter when the cursor
+    /// is inside it), "^^" as a boxed caret, and an unfinished ^x code over a red, green or blue box for the first
+    /// missing component.
+    /// </summary>
+    private static void DrawColorCodes(CanvasItem ci, Vector2 p, string text, int cursor, float alpha)
+    {
+        float fs = MenuMetrics.FontNormalU;
+        Color color = Colors.White;
+        float colorAlpha = 1f;
+        void Box(float w, Color c, float a) => ci.DrawRect(new Rect2(p, new Vector2(w, fs)), new Color(c.R, c.G, c.B, a * alpha));
+        void Draw(Vector2 at, string s, Color c, float a) => QcDraw.Text(ci, at, s, MenuSkin.TextLift(new Color(c.R, c.G, c.B, a * alpha)));
+        static int Hex(char ch) => ch is >= '0' and <= '9' ? ch - '0' : ch is >= 'a' and <= 'f' ? ch - 'a' + 10 : ch is >= 'A' and <= 'F' ? ch - 'A' + 10 : -1;
+
+        for (int i = 0; i < text.Length; ++i)
+        {
+            char ch = text[i];
+            if (ch != '^')
+            {
+                Draw(p, ch.ToString(), color, colorAlpha);
+                p.X += QcDraw.TextWidth(ch.ToString());
+                continue;
+            }
+            string ch2 = i + 1 < text.Length ? text[i + 1].ToString() : "";
+            float w = QcDraw.TextWidth("^" + ch2);
+            float fill = 0.4f;
+            bool cursorIn(int n) => cursor > i && cursor <= i + n;
+            if (ch2 == "^")
+            {
+                if (cursorIn(2)) fill = 0.6f;
+                Box(w, Colors.White, fill);
+                Draw(p + new Vector2(0.25f * w, 0f), "^", color, colorAlpha);
+            }
+            else if (ch2.Length == 1 && char.IsAsciiDigit(ch2[0]))
+            {
+                colorAlpha = 1f;
+                color = (ch2[0] - '0') switch
+                {
+                    0 => new Color(0, 0, 0), 1 => new Color(1, 0, 0), 2 => new Color(0, 1, 0), 3 => new Color(1, 1, 0),
+                    4 => new Color(0, 0, 1), 5 => new Color(0, 1, 1), 6 => new Color(1, 0, 1), 9 => new Color(0.5f, 0.5f, 0.5f),
+                    _ => Colors.White,
+                };
+                if (ch2[0] == '8') colorAlpha = 0.5f;
+                if (cursorIn(2)) fill = 0.6f;
+                Box(w, Colors.White, fill);
+                Draw(p, "^" + ch2, color, colorAlpha);
+            }
+            else if (ch2 == "x")
+            {
+                color = Colors.White;
+                int r = i + 2 < text.Length ? Hex(text[i + 2]) : -1;
+                int g = i + 3 < text.Length ? Hex(text[i + 3]) : -1;
+                int b = i + 4 < text.Length ? Hex(text[i + 4]) : -1;
+                if (r >= 0 && g >= 0 && b >= 0)
+                {
+                    color = new Color(r / 15f, g / 15f, b / 15f);
+                    w = QcDraw.TextWidth(text.Substring(i, 5));
+                    if (cursorIn(5)) fill = 0.8f;
+                    Box(w, Colors.White, fill);
+                    Draw(p, text.Substring(i, 5), color, 1f);
+                    i += 3;
+                }
+                else if (r >= 0 && g >= 0)
+                {
+                    w = QcDraw.TextWidth(text.Substring(i, 4));
+                    Box(w, new Color(0, 0, 1), fill); // blue missing
+                    Draw(p, text.Substring(i, 4), Colors.White, colorAlpha);
+                    i += 2;
+                }
+                else if (r >= 0)
+                {
+                    w = QcDraw.TextWidth(text.Substring(i, 3));
+                    Box(w, new Color(0, 1, 0), fill); // green missing
+                    Draw(p, text.Substring(i, 3), Colors.White, colorAlpha);
+                    ++i;
+                }
+                else
+                {
+                    Box(w, new Color(1, 0, 0), fill); // red missing
+                    Draw(p, "^x", Colors.White, colorAlpha);
+                }
+            }
+            else
+            {
+                Box(w, Colors.White, fill);
+                Draw(p, "^" + ch2, color, colorAlpha);
+            }
+            p.X += w;
+            ++i;
+        }
     }
 
     /// <summary>Set on every control given the QC look: it draws its own disabled state (SKINALPHA_DISABLED), so
@@ -343,7 +452,7 @@ public static class QcLook
     /// clear of the clear button, white, with the <c>_</c> cursor - steady while the box is unfocused, blinking
     /// while it is being typed in (item/inputbox.qc <c>InputBox_draw</c>). Godot still does the editing.
     /// </summary>
-    public static LineEdit InputBox(LineEdit e, bool clearButton = true)
+    public static LineEdit InputBox(LineEdit e, bool clearButton = true, bool editColorCodes = false)
     {
         State s = Track(e);
         s.Image = "inputbox";
@@ -381,7 +490,10 @@ public static class QcLook
             float scroll = Math.Max(0f, Math.Min(cursorX - 0.875f * avail, total - avail));
             float y = 0.5f * (clip.Size.Y - fs);
             Color white = e.Editable ? Colors.White : MenuSkin.Fade(Colors.White, MenuSkin.DisabledAlpha);
-            QcDraw.Text(clip, new Vector2(-scroll, y), text, white);
+            if (editColorCodes)
+                DrawColorCodes(clip, new Vector2(-scroll, y), text, e.CaretColumn, e.Editable ? 1f : MenuSkin.DisabledAlpha);
+            else
+                QcDraw.Text(clip, new Vector2(-scroll, y), text, white);
             double since = Time.GetTicksMsec() / 1000.0 - lastChange;
             if (!focused || since - Math.Floor(since) < 0.5)
                 QcDraw.Text(clip, new Vector2(cursorX - scroll, y), "_", white);

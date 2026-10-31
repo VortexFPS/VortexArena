@@ -112,7 +112,7 @@ public partial class ScreenshotService : Node
     /// </summary>
     public override void _Input(InputEvent @event)
     {
-        if (_interp is null || KeyCaptureButton.Capturing)
+        if (_interp is null || KeyCaptureButton.Capturing || QcKeyBinder.AnyGrabbing)
             return;
         string? cmd = BindInput.ResolvePress(@event);
         if (cmd is null)

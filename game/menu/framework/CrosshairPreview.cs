@@ -14,7 +14,7 @@ namespace VortexArena.Game.Menu;
 /// <c>crosshair_dot_color_custom</c> and the value isn't "0"), at <c>crosshair_dot_size</c> and
 /// <c>alpha × crosshair_dot_alpha</c>. Live-updates as the bound cvars change.
 /// </summary>
-public partial class CrosshairPreview : Control
+public partial class CrosshairPreview : Control, IQcDisableable
 {
     private static CvarService Cvars => MenuState.Cvars;
 
@@ -34,23 +34,31 @@ public partial class CrosshairPreview : Control
             QueueRedraw();
     }
 
+    /// <summary>XonoticCrosshairPreview <c>disabled</c>: drawn at SKINALPHA_DISABLED.</summary>
+    public bool QcDisabled
+    {
+        get => _qcDisabled;
+        set
+        {
+            _qcDisabled = value;
+            SelfModulate = new Color(1f, 1f, 1f, value ? MenuSkin.DisabledAlpha : 1f);
+        }
+    }
+    private bool _qcDisabled;
+
     public override void _Draw()
     {
         string ix = Cvars.GetString("crosshair");
         Texture2D? tex = MenuSkin.Image($"gfx/crosshair{ix}");
-        Color rgb = ParseRgb(Cvars.GetString("crosshair_color"), new Color(0.6f, 0.8f, 1f));
+        Color rgb = ParseRgb(Cvars.GetString("crosshair_color"), new Color(0f, 0f, 0f)); // stov of junk is '0 0 0'
         float a = Cvars.GetFloat("crosshair_alpha");
-        if (a <= 0f) a = 0.8f;
         Vector2 center = Size * 0.5f;
 
         if (tex is not null)
         {
-            float size = Cvars.GetFloat("crosshair_size");
-            if (size <= 0f) size = 0.4f;
-            // QC scales the picture size by crosshair_size; the asset is large, so scale relative to the cell.
-            Vector2 baseSz = tex.GetSize();
-            float fit = baseSz.Y > 0 ? MathF.Min(Size.X, Size.Y) / baseSz.Y : 1f;
-            Vector2 sz = baseSz * fit * size;
+            // globalToBoxSize(draw_PictureSize(src), size) * crosshair_size: the picture at its own size in menu
+            // pixels, scaled by crosshair_size, centred - not fitted to the box.
+            Vector2 sz = tex.GetSize() * MenuMetrics.DesignUnit * Cvars.GetFloat("crosshair_size");
             DrawTextureRect(tex, new Rect2(center - sz * 0.5f, sz), false, new Color(rgb, a));
 
             if (Cvars.GetFloat("crosshair_dot") != 0f && MenuSkin.Image("gfx/crosshairdot") is { } dot)
@@ -58,13 +66,9 @@ public partial class CrosshairPreview : Control
                 Color dotRgb = rgb;
                 if (Cvars.GetFloat("crosshair_dot_color_custom") != 0f
                     && Cvars.GetString("crosshair_dot_color") != "0")
-                    dotRgb = ParseRgb(Cvars.GetString("crosshair_dot_color"), new Color(1f, 0f, 0f));
-                float ds = Cvars.GetFloat("crosshair_dot_size");
-                if (ds <= 0f) ds = 0.6f;
-                float da = Cvars.GetFloat("crosshair_dot_alpha");
-                if (da <= 0f) da = 1f;
-                Vector2 dsz = sz * ds;
-                DrawTextureRect(dot, new Rect2(center - dsz * 0.5f, dsz), false, new Color(dotRgb, a * da));
+                    dotRgb = ParseRgb(Cvars.GetString("crosshair_dot_color"), new Color(0f, 0f, 0f));
+                Vector2 dsz = sz * Cvars.GetFloat("crosshair_dot_size");
+                DrawTextureRect(dot, new Rect2(center - dsz * 0.5f, dsz), false, new Color(dotRgb, a * Cvars.GetFloat("crosshair_dot_alpha")));
             }
         }
         else

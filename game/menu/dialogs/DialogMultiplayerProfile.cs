@@ -56,7 +56,7 @@ public partial class DialogMultiplayerProfile : MenuScreen
 
         tab.GotoRC(2.5f, 0f);
         var nameBox = Widgets.InputBox("_cl_name", "", "Name under which you will appear in the game");
-        QcLook.InputBox(nameBox, clearButton: false); // enableClearButton = false
+        QcLook.InputBox(nameBox, clearButton: false, editColorCodes: true); // makeXonoticInputBox_T(1, ...), no clear button
         nameBox.TextChanged += t => preview.Text = t;  // label.textEntity = box
         preview.Text = nameBox.Text;
         nameBox.TreeEntered += () => preview.Text = nameBox.Text;

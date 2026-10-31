@@ -632,6 +632,13 @@ public sealed class CvarService : ICvarService
             v.Archived = true;
     }
 
+    /// <summary>Undo <see cref="MarkArchived"/>: a plain <c>set</c> cvar that an earlier build saved by mistake.</summary>
+    public void UnmarkArchived(string name)
+    {
+        if (TryGetVar(name, out var v))
+            v.Archived = false;
+    }
+
     /// <summary>True if the cvar is archived (declared <c>seta</c>/<see cref="CvarFlags.Save"/>, or menu-touched).</summary>
     public bool IsArchived(string name)
         => TryGetVar(name, out var v) && (v.Archived || (v.Flags & CvarFlags.Save) != 0);

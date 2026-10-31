@@ -13,7 +13,7 @@ namespace VortexArena.Game.Menu;
 /// mousePress/mouseRelease pressedCell). Keys: arrows move focus (wrapping, skipping invalid cells, QC
 /// moveFocus), Enter/Insert select (QC keyDown).
 /// </summary>
-public abstract partial class PickerGrid : Control
+public abstract partial class PickerGrid : Control, IQcDisableable
 {
     /// <summary>Grid dimensions — subclass sets these in its ctor (QC me.rows / me.columns).</summary>
     protected int Rows { get; init; }
@@ -137,6 +137,20 @@ public abstract partial class PickerGrid : Control
 
     // ---- draw (QC draw) --------------------------------------------------------------------------------
 
+    /// <summary>XonoticPicker <c>disabled</c>: drawn at SKINALPHA_DISABLED and not clickable.</summary>
+    public bool QcDisabled
+    {
+        get => _qcDisabled;
+        set
+        {
+            _qcDisabled = value;
+            SelfModulate = new Color(1f, 1f, 1f, value ? MenuSkin.DisabledAlpha : 1f);
+            MouseFilter = value ? MouseFilterEnum.Ignore : MouseFilterEnum.Stop;
+            QueueRedraw();
+        }
+    }
+    private bool _qcDisabled;
+
     public override void _Draw()
     {
         bool focused = HasFocus();
@@ -148,9 +162,9 @@ public abstract partial class PickerGrid : Control
                 Rect2 rect = CellRect(cell);
 
                 if (cell == _selected)
-                    DrawRect(rect, new Color(MenuSkin.Selection, 0.85f)); // SKINCOLOR_LISTBOX_SELECTED fill
+                    DrawRect(rect, MenuSkin.Fade(MenuSkin.Selection, MenuSkin.SelectionAlpha));
                 else if (cell == _focused && focused)
-                    DrawRect(rect, new Color(MenuSkin.Accent, 0.30f));    // SKINCOLOR_LISTBOX_FOCUSED fill
+                    DrawRect(rect, MenuSkin.Fade(MenuSkin.ListFocused, MenuSkin.ListFocusedAlpha));
 
                 DrawCell(cell, rect);
             }

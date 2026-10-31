@@ -221,6 +221,19 @@ public abstract partial class MenuListBox : Control
     /// </summary>
     protected virtual bool ShowSelection => true;
 
+    /// <summary>A list that fills its own rows' selection and hover (the key binder: not on its headings, and in
+    /// the "waiting for a key" colour while it grabs one).</summary>
+    protected virtual bool DrawsOwnHighlight => false;
+
+    /// <summary>False for a list with no backdrop (QC <c>alphaBG 0</c>: the Game tab's topic list).</summary>
+    protected virtual bool DrawsBackground => true;
+
+    /// <summary>The hover fill's current alpha (getFadedAlpha), for a list that draws its own.</summary>
+    protected float FocusedItemAlpha => _focusedItemAlpha;
+
+    /// <summary>QC <c>me.pressed</c>: a mouse button is down on the list (the selection is being made by mouse).</summary>
+    protected bool MousePressed => _pressed != 0;
+
     /// <summary>QC <c>ListBox_setFocusedItem</c> — including the alpha kick that makes the hover flash.</summary>
     private void SetFocusedItem(int item)
     {
@@ -586,7 +599,7 @@ public abstract partial class MenuListBox : Control
         float contentW = Size.X - barW;
 
         // ListBox_draw: a flat translucent fill behind the rows — no frame. (COLOR_LISTBOX_BACKGROUND.)
-        Color bg = MenuSkin.ListBackground;
+        Color bg = DrawsBackground ? MenuSkin.ListBackground : Colors.Transparent;
         if (bg.A > 0f)
             DrawRect(new Rect2(0f, 0f, contentW, Size.Y), bg);
 
@@ -604,10 +617,13 @@ public abstract partial class MenuListBox : Control
             bool isFocused = i == _focusedItem;
 
             DrawItemBackground(i, rect, isSelected, isFocused);
-            if (isSelected && ShowSelection)
-                DrawRect(HighlightRect(i, rect), MenuSkin.Fade(MenuSkin.Selection, MenuSkin.SelectionAlpha));
-            else if (isFocused)
-                DrawRect(HighlightRect(i, rect), MenuSkin.Fade(MenuSkin.ListFocused, _focusedItemAlpha));
+            if (!DrawsOwnHighlight)
+            {
+                if (isSelected && ShowSelection)
+                    DrawRect(HighlightRect(i, rect), MenuSkin.Fade(MenuSkin.Selection, MenuSkin.SelectionAlpha));
+                else if (isFocused)
+                    DrawRect(HighlightRect(i, rect), MenuSkin.Fade(MenuSkin.ListFocused, _focusedItemAlpha));
+            }
 
             DrawItem(i, rect, isSelected, isFocused);
             y += h;

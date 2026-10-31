@@ -1,45 +1,30 @@
+using System.Collections.Generic;
 using System.Globalization;
 using Godot;
 
 namespace VortexArena.Game.Menu;
 
 /// <summary>
-/// Video settings tab — a faithful C# port of <c>XonoticVideoSettingsTab_fill</c>
-/// (qcsrc/menu/xonotic/dialog_settings_video.qc). Every control binds the same engine cvar the QC binds, with
-/// the same dependencies and the same "Apply immediately" command button (<c>vid_restart</c>).
+/// The Video settings tab — <c>XonoticVideoSettingsTab_fill</c> (qcsrc/menu/xonotic/dialog_settings_video.qc), TD for
+/// TD on its 15.5 x 6.2 grid. Every control binds the cvar the QC binds, with the same dependencies and the same
+/// "Apply immediately" command (<c>vid_restart</c>), live only while something it applies has changed
+/// (<see cref="PendingApply"/>).
 ///
-/// Faithfulness notes / approximations:
-///   * The QC tab is built behind <c>cvar_type("vid_gl20") &amp; CVAR_TYPEFLAG_ENGINE</c> branches; we reproduce
-///     the GL20-present branch (the modern path): antialiasing via the <c>vid_samples</c> mixedslider, the
-///     <c>vid_gl20</c> shaders checkbox, and the GLSL color-control sliders that QC gates on <c>vid_gl20</c>.
-///   * The QC resolution control is a <c>slider_resolution</c> (data-driven from <c>getresolution()</c>) that
-///     stages the menu cvars <c>_menu_vid_width</c> / <c>_menu_vid_height</c> / <c>_menu_vid_pixelheight</c>,
-///     which the apply button then copies into <c>vid_width</c> / <c>vid_height</c> / … before <c>vid_restart</c>.
-///     We approximate with two <see cref="Widgets.TextSlider"/>s over a representative set of common
-///     resolutions — one bound to <c>_menu_vid_width</c>, one to <c>_menu_vid_height</c> — so the SAME staging
-///     cvars feed the SAME apply command. (APPROXIMATE: hard-coded list instead of enumerated display modes.)
-///   * The apply button command string is reproduced verbatim from QC (it stages <c>_menu_vid_*</c> into the
-///     real <c>vid_*</c> cvars and runs <c>vid_restart</c>). <c>menu_cmd update_conwidths_before_vid_restart</c>
-///     and <c>menu_cmd sync</c> have no client backend yet (logged as inert by <see cref="MenuCommand"/>).
+/// <para>The QC branches on <c>cvar_type("vid_gl20") &amp; CVAR_TYPEFLAG_ENGINE</c>; current DarkPlaces has no
+/// <c>vid_gl20</c>, so this is the branch Xonotic shows today: "Resolution scaling" (<c>r_viewscale</c>) where the GL2
+/// build had antialiasing, no GLSL checkbox, and no colour sliders gated on it.</para>
+///
+/// <para>Native additions, placed where the QC grid has room so nothing of Xonotic's moves: the vsync row is a mode
+/// slider (Off / On / Mailbox / Adaptive, <c>vid_vsync</c> 0-3) instead of the QC's on/off checkbox, and "Show ping"
+/// and "Show position" sit in the left column's empty row 13.</para>
 /// </summary>
-public partial class DialogSettingsVideo : SettingsTab
+public partial class DialogSettingsVideo : QcTab
 {
-    // Common 16:9 / 16:10 resolutions for the approximated resolution dropdowns (width list, height list).
-    private static readonly (string Label, string Width, string Height)[] Resolutions =
-    {
-        ("1280x720",  "1280", "720"),
-        ("1366x768",  "1366", "768"),
-        ("1600x900",  "1600", "900"),
-        ("1920x1080", "1920", "1080"),
-        ("2560x1440", "2560", "1440"),
-        ("3840x2160", "3840", "2160"),
-    };
+    public DialogSettingsVideo() : base(rows: 15.5f, columns: 6.2f, intendedWidth: 0.9f) { }
 
-    protected override void Fill(VBoxContainer box)
+    protected override void Fill()
     {
-        // QC: videoApplyButton — makeXonoticCommandButton("Apply immediately", ... vid_restart ...).
-        // Verbatim command string from the QC (stages the menu cvars into the real vid_* cvars, then restarts).
-        var applyButton = Widgets.CommandButton("Apply immediately",
+        var apply = Qc.Command("Apply immediately",
             "vid_width $_menu_vid_width; "
             + "vid_height $_menu_vid_height; "
             + "vid_pixelheight $_menu_vid_pixelheight; "
@@ -47,163 +32,233 @@ public partial class DialogSettingsVideo : SettingsTab
             + "menu_cmd update_conwidths_before_vid_restart; "
             + "vid_restart; "
             + "menu_cmd sync");
+        // Live until resolution / fullscreen / borderless / process priority drift from what is running: those
+        // recreate or resize the window and genuinely need the apply. Vsync, the fps cap and the jitter fix are
+        // re-applied the moment they change (ClientSettings.InstallLiveVideoCvars), so they are not in the set.
+        PendingApply.Bind(apply, ClientSettings.VideoApplyCvars, string.Empty);
 
-        // -- Full screen / borderless ----------------------------------------------------------------------
-        box.AddChild(Widgets.CheckBox("vid_fullscreen", "Full screen"));
-        var borderless = Widgets.CheckBox("vid_borderless", "Borderless window");
-        box.AddChild(borderless);
-        Dependent.Bind(borderless, "vid_fullscreen", 0, 0); // QC setDependent(e,"vid_fullscreen",0,0)
+        TR();
+            TD(1, 1, Qc.Check(0, "vid_fullscreen", "Full screen"));
+            TD(1, 2, Qc.Check(0, "vid_borderless", "Borderless window")).Dep("vid_fullscreen", 0, 0);
+        TR();
+            TD(1, 1, Qc.Label("Resolution:"));
+            TD(1, 2, ResolutionSlider());
+        TR();
+            TD(1, 1, Qc.Label("Font/UI size:"));
+            TD(1, 2, Qc.Mixed("menu_vid_scale")
+                .Add("Unreadable", -1).Add("Tiny", -0.75f).Add("Little", -0.5f).Add("Small", -0.25f).Add("Medium", 0)
+                .Add("Large", 0.25f).Add("Huge", 0.5f).Add("Gigantic", 0.75f).Add("Colossal", 1).Done());
+        TR();
+            TD(1, 3, Qc.Check(0, "r_stereo_redcyan", "Anaglyph 3D (red-cyan)"));
+        TR();
+            TD(1, 3, Qc.CheckEx(2, 0, "r_viewfbo", "High-quality frame buffer"));
 
-        // -- Resolution (APPROXIMATE: two dropdowns staging _menu_vid_width / _menu_vid_height) -------------
-        var resWidth = Widgets.TextSlider("_menu_vid_width", "Screen resolution (width)");
-        var resHeight = Widgets.TextSlider("_menu_vid_height", "Screen resolution (height)");
-        foreach (var (label, w, h) in Resolutions)
-        {
-            resWidth.Add(label, w);
-            resHeight.Add(label, h);
-        }
-        box.AddChild(Ui.Row("Resolution:", resWidth));
-        box.AddChild(Ui.Row("Resolution (height):", resHeight));
+        TR();
+        TR();
+            TD(1, 1.2f, Qc.Label("Resolution scaling:"));
+            TD(1, 1.8f, Qc.Slider(0.5f, 2, 0.25f, "r_viewscale",
+                "Screen or window size multiplier, above 1x does antialiasing, below 1x may help slow GPUs",
+                "%sx", QcLook.DefaultValueSpace * 10f / 9f));
+        TR();
+            TD(1, 1.2f, Qc.Label("Anisotropy:"));
+            TD(1, 1.8f, Qc.Mixed("gl_texture_anisotropy", "Anisotropic filtering quality", "%sx")
+                .Add("Disabled", 1).AddRange(2, 4, 2).AddRange(8, 16, 8).Done(10f / 9f));
 
-        // -- Font/UI size (QC mixedslider menu_vid_scale) --------------------------------------------------
-        var uiScale = Widgets.TextSlider("menu_vid_scale")
-            .Add("Unreadable", -1f).Add("Tiny", -0.75f).Add("Little", -0.5f).Add("Small", -0.25f)
-            .Add("Medium", 0f).Add("Large", 0.25f).Add("Huge", 0.5f).Add("Gigantic", 0.75f)
-            .Add("Colossal", 1f);
-        box.AddChild(Ui.Row("Font/UI size:", uiScale));
-
-        // -- Anaglyph 3D -----------------------------------------------------------------------------------
-        box.AddChild(Widgets.CheckBox("r_stereo_redcyan", "Anaglyph 3D (red-cyan)"));
-
-        // -- High-quality frame buffer (QC makeXonoticCheckBoxEx(2, 0, "r_viewfbo") — checked stores 2
-        //    = RGBA16F fbo, unchecked 0; the 1 = RGBA8 middle mode has no menu row) -------------------------
-        var viewfbo = Widgets.ValueCheckBox("r_viewfbo", 2f, 0f, "High-quality frame buffer");
-        box.AddChild(viewfbo);
-        Dependent.Bind(viewfbo, "vid_samples", 0, 1); // QC setDependent(e,"vid_samples",0,1) (GL20 branch)
-
-        box.AddChild(Ui.Spacer());
-
-        // -- Antialiasing (GL20 branch: QC mixedslider_T vid_samples, "%sx", depends on r_viewfbo==0) ------
-        var aa = Widgets.TextSlider("vid_samples",
-                "Enable antialiasing, which smooths the edges of 3D geometry. Note that it might decrease performance by quite a lot")
-            .Add("Disabled", 1f).Add("2x", 2f).Add("4x", 4f);
-        var aaRow = Ui.Row("Antialiasing:", aa);
-        box.AddChild(aaRow);
-        Dependent.Bind(aaRow, "r_viewfbo", 0, 0); // QC setDependent on both label and slider
-
-        // -- Anisotropy (QC mixedslider_T gl_texture_anisotropy, "%sx") ------------------------------------
-        var aniso = Widgets.TextSlider("gl_texture_anisotropy", "Anisotropic filtering quality")
-            .Add("Disabled", 1f).Add("2x", 2f).Add("4x", 4f).Add("8x", 8f).Add("16x", 16f);
-        box.AddChild(Ui.Row("Anisotropy:", aniso));
-
-        box.AddChild(Ui.Spacer());
-
-        // -- Depth first (QC radiobutton r_depthfirst 0/1/2) -----------------------------------------------
         const string dfTooltip = "Eliminate overdraw by rendering a depth-only version of the scene before the normal rendering starts";
-        var dfGroup = new ButtonGroup();
-        var dfRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        dfRow.AddThemeConstantOverride("separation", 8);
-        dfRow.AddChild(Widgets.RadioButton("r_depthfirst", "0", "Disabled", dfGroup, dfTooltip));
-        dfRow.AddChild(Widgets.RadioButton("r_depthfirst", "1", "World", dfGroup, dfTooltip));
-        dfRow.AddChild(Widgets.RadioButton("r_depthfirst", "2", "All", dfGroup, dfTooltip));
-        box.AddChild(Ui.Row("Depth first:", dfRow));
+        var depthFirst = new QcRadioGroup();
+        TR();
+        TR();
+            TD(1, 1, Qc.Label("Depth first:"));
+            TD(1, 2f / 3f, Qc.Radio(depthFirst, "r_depthfirst", "0", "Disabled", dfTooltip));
+            TD(1, 2f / 3f, Qc.Radio(depthFirst, "r_depthfirst", "1", "World", dfTooltip));
+            TD(1, 2f / 3f, Qc.Radio(depthFirst, "r_depthfirst", "2", "All", dfTooltip));
 
-        box.AddChild(Ui.Spacer());
+        TR();
+        TR();
+            TD(1, 3, Qc.Check(0, "gl_finish", "Wait for GPU to finish each frame",
+                "Make the CPU wait for the GPU to finish each frame, can help with some strange input or video lag on some machines"));
+        TR();
+        // (the vid_gl20 checkbox: not in today's DarkPlaces)
+        TR();
+            TD(1, 1.5f, Qc.Check(0, "showping", "Show ping",
+                "Show your round-trip latency to the server, just above the FPS counter"));
+            TD(1, 1.5f, Qc.Check(0, "showposition", "Show position",
+                "Show your map coordinates (x y z), stacked above the FPS/ping counters"));
 
-        // -- gl_finish -------------------------------------------------------------------------------------
-        box.AddChild(Widgets.CheckBox("gl_finish", "Wait for GPU to finish each frame",
-            "Make the CPU wait for the GPU to finish each frame, can help with some strange input or video lag on some machines"));
+        GotoRC(0, 3.2f); SetFirstColumn(CurrentColumn);
+            TD(1, 1, Qc.Label("Brightness:"));
+            TD(1, 2, Qc.Slider(0.0f, 0.5f, 0.02f, "v_brightness", "Brightness of black"));
+        TR();
+            TD(1, 1, Qc.Label("Contrast:"));
+            TD(1, 2, Qc.Slider(1.0f, 3.0f, 0.05f, "v_contrast", "Brightness of white"));
+        TR();
+            TD(1, 1, Qc.Label("Gamma:"));
+            TD(1, 2, Qc.Slider(0.5f, 2.0f, 0.05f, "v_gamma",
+                "Inverse gamma correction value, a brightness effect that does not affect white or black"));
+        TR();
+            TD(1, 1, Qc.Label("Contrast boost:"));
+            TD(1, 2, Qc.Slider(1.0f, 5.0f, 0.1f, "v_contrastboost", "By how much to multiply the contrast in dark areas"));
+        TR();
+            TD(1, 1, Qc.Label("Saturation:"));
+            TD(1, 2, Qc.Slider(0.5f, 2.0f, 0.05f, "r_glsl_saturation",
+                "Saturation adjustment (0 = grayscale, 1 = normal, 2 = oversaturated), requires GLSL color control"));
+        TR();
+            TD(1, 1, Qc.Label("Ambient:"));
+            TD(1, 2, Qc.Slider(0, 20.0f, 0.25f, "r_ambient",
+                "Ambient lighting, if set too high it tends to make light on maps look dull and flat"));
+        TR();
+            TD(1, 1, Qc.Label("Intensity:"));
+            TD(1, 2, Qc.Slider(0.5f, 2.0f, 0.05f, "r_hdr_scenebrightness", "Global rendering brightness"));
 
-        // -- OpenGL 2.0 shaders (GL20 branch) --------------------------------------------------------------
-        box.AddChild(Widgets.CheckBox("vid_gl20", "Use OpenGL 2.0 shaders (GLSL)"));
+        TR();
+        TR();
+            TD(1, 3, Qc.Header("Framerate"));
+        TR();
+            TD(1, 1, Qc.Label("Maximum:"));
+            TD(1, 2, Qc.Mixed("cl_maxfps", "", "%s fps")
+                .AddRange(128, 256, 128).AddRange(512, 1024, 512).AddRange(2048, 2048, 2048).Add("Unlimited", 0).Done());
+        TR();
+            TD(1, 1, Qc.Label("Target:"));
+            TD(1, 2, Qc.Mixed("cl_minfps", "", "%s fps")
+                .Add("Disabled", 0).AddRange(40, 60, 20).AddRange(100, 150, 25).AddRange(200, 250, 50).AddRange(400, 400, 100)
+                .Done());
+        TR();
+            TD(1, 1, Qc.Label("Idle limit:"));
+            TD(1, 2, Qc.Mixed("cl_maxidlefps", "", "%s fps")
+                .AddRange(16, 32, 16).AddRange(64, 128, 64).Add("Unlimited", 0).Done());
+        TR();
+            // Vsync mode (vid_vsync): Mailbox is the recommended pacing fix on high-refresh displays - it renders
+            // uncapped and presents the latest complete frame each refresh, so there's no tearing AND no fps
+            // beat-doubling. See ClientSettings.ApplyVideo.
+            TD(1, 1, Qc.Label("Vertical Sync:"));
+            TD(1, 2, Qc.Mixed("vid_vsync",
+                    "Off: no sync (tears, lowest latency). On: caps fps to the refresh rate, adds latency. "
+                    + "Mailbox (recommended): uncapped render, latest frame each refresh - no tearing, no fps beat. "
+                    + "Adaptive: vsync when fast enough, tears instead of stuttering when slow.")
+                .Add("Disabled", 0).Add("On", 1).Add("Mailbox", 2).Add("Adaptive", 3).Done());
+        TR();
+            TD(1, 3, Qc.Check(0, "showfps", "Show frames per second", "Show your rendered frames per second"));
 
-        box.AddChild(Ui.Spacer());
-
-        // -- Color control (QC gotoRC second column; the GLSL sliders are gated on vid_gl20) ----------------
-        box.AddChild(Ui.Row("Brightness:",
-            Widgets.Slider("v_brightness", 0.0f, 0.5f, 0.02f, "Brightness of black")));
-        box.AddChild(Ui.Row("Contrast:",
-            Widgets.Slider("v_contrast", 1.0f, 3.0f, 0.05f, "Brightness of white")));
-
-        // The next four QC sliders are gated on vid_gl20==1 (GLSL color control).
-        var gamma = Widgets.Slider("v_gamma", 0.5f, 2.0f, 0.05f,
-            "Inverse gamma correction value, a brightness effect that does not affect white or black");
-        var gammaRow = Ui.Row("Gamma:", gamma);
-        box.AddChild(gammaRow);
-        Dependent.Bind(gammaRow, "vid_gl20", 1, 1); // QC setDependent(e,"vid_gl20",1,1)
-
-        var contrastBoost = Widgets.Slider("v_contrastboost", 1.0f, 5.0f, 0.1f,
-            "By how much to multiply the contrast in dark areas");
-        var contrastBoostRow = Ui.Row("Contrast boost:", contrastBoost);
-        box.AddChild(contrastBoostRow);
-        Dependent.Bind(contrastBoostRow, "vid_gl20", 1, 1);
-
-        var saturation = Widgets.Slider("r_glsl_saturation", 0.5f, 2.0f, 0.05f,
-            "Saturation adjustment (0 = grayscale, 1 = normal, 2 = oversaturated), requires GLSL color control");
-        var saturationRow = Ui.Row("Saturation:", saturation);
-        box.AddChild(saturationRow);
-        Dependent.Bind(saturationRow, "vid_gl20", 1, 1);
-
-        box.AddChild(Ui.Row("Ambient:",
-            Widgets.Slider("r_ambient", 0f, 20.0f, 0.25f,
-                "Ambient lighting, if set too high it tends to make light on maps look dull and flat")));
-        box.AddChild(Ui.Row("Intensity:",
-            Widgets.Slider("r_hdr_scenebrightness", 0.5f, 2.0f, 0.05f, "Global rendering brightness")));
-
-        box.AddChild(Ui.Spacer());
-
-        // -- Framerate (QC makeXonoticHeaderLabel("Framerate")) --------------------------------------------
-        box.AddChild(Ui.Header("Framerate"));
-
-        // QC mixedslider cl_maxfps, "%s fps": addRange 128..256/128, 512..1024/512, 2048, + "Unlimited" = 0.
-        var maxFps = Widgets.TextSlider("cl_maxfps")
-            .Add(Fps(128), 128f).Add(Fps(256), 256f).Add(Fps(512), 512f).Add(Fps(1024), 1024f)
-            .Add(Fps(2048), 2048f).Add("Unlimited", 0f);
-        box.AddChild(Ui.Row("Maximum:", maxFps));
-
-        // QC mixedslider cl_minfps, "%s fps": "Disabled" = 0, then 40..60/20, 100..150/25, 200..250/50, 400.
-        var targetFps = Widgets.TextSlider("cl_minfps")
-            .Add("Disabled", 0f)
-            .Add(Fps(40), 40f).Add(Fps(60), 60f)
-            .Add(Fps(100), 100f).Add(Fps(125), 125f).Add(Fps(150), 150f)
-            .Add(Fps(200), 200f).Add(Fps(250), 250f)
-            .Add(Fps(400), 400f);
-        box.AddChild(Ui.Row("Target:", targetFps));
-
-        // QC mixedslider cl_maxidlefps, "%s fps": 16..32/16, 64..128/64, + "Unlimited" = 0.
-        var idleFps = Widgets.TextSlider("cl_maxidlefps")
-            .Add(Fps(16), 16f).Add(Fps(32), 32f).Add(Fps(64), 64f).Add(Fps(128), 128f)
-            .Add("Unlimited", 0f);
-        box.AddChild(Ui.Row("Idle limit:", idleFps));
-
-        // Vsync mode (vid_vsync): Mailbox is the recommended pacing fix on high-refresh displays — it renders
-        // uncapped and presents the latest complete frame each refresh, so there's no tearing AND no fps
-        // beat-doubling (the "drops to 60 from 160" judder). See ClientSettings.ApplyVideo / PERFORMANCE_REPORT B1.
-        box.AddChild(Ui.Row("Vertical Sync:", Widgets.TextSlider("vid_vsync",
-                "Off: no sync (tears, lowest latency). On: caps fps to the refresh rate, adds latency. "
-                + "Mailbox (recommended): uncapped render, latest frame each refresh — no tearing, no fps beat. "
-                + "Adaptive: vsync when fast enough, tears instead of stuttering when slow.")
-            .Add("Disabled", 0f)
-            .Add("On", 1f)
-            .Add("Mailbox", 2f)
-            .Add("Adaptive", 3f)));
-        box.AddChild(Widgets.CheckBox("showfps", "Show frames per second",
-            "Show your rendered frames per second"));
-        box.AddChild(Widgets.CheckBox("showping", "Show ping",
-            "Show your round-trip latency to the server, just above the FPS counter"));
-        box.AddChild(Widgets.CheckBox("showposition", "Show position",
-            "Show your map coordinates (x y z), stacked above the FPS/ping counters"));
-
-        box.AddChild(Ui.Spacer());
-        box.AddChild(applyButton); // "Apply immediately" — vid_restart
-
-        // Live until resolution / fullscreen / borderless / process priority drift from what is running:
-        // those recreate or resize the window and genuinely need the apply. Vsync, the fps cap and the
-        // jitter fix are re-applied the moment they change (ClientSettings.InstallLiveVideoCvars), so they
-        // are deliberately NOT in the set - listing them would light the button for an already-applied change.
-        PendingApply.Bind(applyButton, ClientSettings.VideoApplyCvars, string.Empty);
+        GotoRC(Rows - 1, 0);
+            TD(1, Columns, apply);
     }
 
-    /// <summary>Render an fps value with the QC "%s fps" suffix.</summary>
-    private static string Fps(int v) => $"{v.ToString(CultureInfo.InvariantCulture)} fps";
+    // -------------------------------------------------------------------------------------------------
+    //  makeXonoticResolutionSlider (xonotic/slider_resolution.qc)
+    // -------------------------------------------------------------------------------------------------
+
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+    // DarkPlaces menu.c video_resolutions_hardcoded[]: what getresolution lists for full screen when the video
+    // system reports no modes of its own (Godot reports none).
+    private static readonly (int W, int H, float Ph)[] FullscreenModes =
+    {
+        (320, 240, 1), (400, 300, 1), (512, 384, 1), (640, 480, 1), (800, 600, 1), (1024, 768, 1), (1152, 864, 1),
+        (1280, 960, 1), (1400, 1050, 1), (1600, 1200, 1), (1792, 1344, 1), (1856, 1392, 1), (1920, 1440, 1),
+        (2048, 1536, 1), (320, 256, 0.9375f), (640, 512, 0.9375f), (1280, 1024, 0.9375f), (320, 200, 1.2f),
+        (640, 400, 1.2f), (840, 525, 1.2f), (960, 600, 1.2f), (1680, 1050, 1.2f), (1920, 1200, 1.2f),
+        (320, 256, 1), (640, 512, 1), (1280, 1024, 1), (640, 384, 1), (1280, 768, 1), (320, 200, 1), (640, 400, 1),
+        (720, 450, 1), (840, 525, 1), (960, 600, 1), (1280, 800, 1), (1440, 900, 1), (1680, 1050, 1), (1920, 1200, 1),
+        (2560, 1600, 1), (3840, 2400, 1), (840, 540, 1), (1680, 1080, 1), (640, 360, 1), (683, 384, 1), (960, 540, 1),
+        (1280, 720, 1), (1360, 768, 1), (1366, 768, 1), (1600, 900, 1), (1920, 1080, 1), (2560, 1440, 1), (3840, 2160, 1),
+        (360, 240, 1.125f), (720, 480, 1.125f), (360, 283, 0.9545f), (720, 566, 0.9545f), (256, 224, 1.1667f),
+        (512, 448, 1.1667f),
+    };
+
+    private static string Id(float w, float h, float ph)
+        => QcFormat.MinDecimals(w) + " " + QcFormat.MinDecimals(h) + " " + QcFormat.MinDecimals(ph);
+
+    private static Vector2I Desktop() => DisplayServer.GetName() == "headless" ? Vector2I.Zero : DisplayServer.ScreenGetSize();
+
+    private static QcTextSlider ResolutionSlider()
+    {
+        var c = MenuState.Cvars;
+        // The staging cvars hold the mode that is running until the slider picks another: menu.qc's updateConwidths
+        // sets them from the live mode when the menu starts (and xonotic-client.cfg's `set _menu_vid_width
+        // "$vid_width"` before that). They are plain `set` cvars, never saved.
+        foreach ((string staged, string live) in new[] { ("_menu_vid_width", "vid_width"), ("_menu_vid_height", "vid_height"),
+                     ("_menu_vid_pixelheight", "vid_pixelheight"), ("_menu_vid_desktopfullscreen", "vid_desktopfullscreen") })
+        {
+            string value = c.GetString(CvarUi.EnsureEngine(live));
+            c.Set(staged, string.IsNullOrEmpty(value) ? (staged == "_menu_vid_pixelheight" ? "1" : "0") : value);
+            c.UnmarkArchived(staged);
+        }
+
+        var slider = new QcTextSlider(
+            () => c.GetString("_menu_vid_width") + " " + c.GetString("_menu_vid_height") + " " + c.GetString("_menu_vid_pixelheight"),
+            id =>
+            {
+                string[] p = id.Split(' ');
+                c.Set("_menu_vid_width", p[0]);
+                c.Set("_menu_vid_height", p[1]);
+                c.Set("_menu_vid_pixelheight", p[2]);
+                Vector2I d = Desktop();
+                bool desktop = float.Parse(p[0], Inv) == d.X && float.Parse(p[1], Inv) == d.Y && System.MathF.Abs(float.Parse(p[2], Inv) - 1f) < 0.01f;
+                c.Set("_menu_vid_desktopfullscreen", desktop ? "1" : "0");
+            }) { TooltipText = Localization.Tr("Screen resolution") };
+
+        // loadResolutions: the modes sorted by width, height and pixel height, each once.
+        var modes = new List<(float W, float H, float Ph)>();
+        float maxW = 0, maxH = 0;
+        void AddResolution(float w, float h, float ph)
+        {
+            if (maxW > 0 && w > maxW || maxH > 0 && h > maxH) return;
+            int i = 0;
+            for (; i < modes.Count; ++i)
+            {
+                (float mw, float mh, float mph) = modes[i];
+                if (w > mw) continue;
+                if (w < mw) break;
+                if (h > mh) continue;
+                if (h < mh) break;
+                if (ph > mph + 0.01f) continue;
+                if (ph < mph - 0.01f) break;
+                return;
+            }
+            modes.Insert(i, (w, h, ph));
+        }
+
+        Vector2I desk = Desktop();
+        if (c.GetFloat("vid_fullscreen") != 0)
+        {
+            foreach ((int w, int h, float ph) in FullscreenModes)
+                if (w >= 640 && h >= 480 && (w <= 2 * h || c.GetFloat("menu_vid_allowdualscreenresolution") > 0))
+                    AddResolution(w, h, ph);
+            if (desk != Vector2I.Zero) AddResolution(desk.X, desk.Y, 1);
+        }
+        if (modes.Count == 0)
+        {
+            if (desk != Vector2I.Zero)
+            {
+                maxW = desk.X;
+                maxH = desk.Y;
+                AddResolution(desk.X, desk.Y, 1);
+            }
+            foreach ((int w, int h) in new[] { (640, 480), (800, 480), (800, 600), (1024, 600), (1024, 768), (1280, 720),
+                         (1280, 960), (1280, 1024), (1920, 1080) })
+                AddResolution(w, h, 1);
+        }
+
+        foreach ((float w, float h, float ph) in modes)
+        {
+            string text = $"{(int)w}x{(int)h}";
+            if (ph != 1f)
+            {
+                // The aspect as the nearest small fraction, as the QC labels a non-square-pixel mode.
+                float aspect = w / (h * ph), bestDenom = Mathf.Round(aspect), bestNum = 1;
+                for (float denom = 2; denom < 10; ++denom)
+                {
+                    float num = Mathf.Round(aspect * denom);
+                    if (System.MathF.Abs(num / denom - aspect) < System.MathF.Abs(bestNum / bestDenom - aspect))
+                    {
+                        bestNum = num;
+                        bestDenom = denom;
+                    }
+                }
+                text += $" ({(int)bestNum}:{(int)bestDenom})";
+            }
+            slider.Add(text, Id(w, h, ph));
+        }
+        return QcLook.Slider(slider);
+    }
 }

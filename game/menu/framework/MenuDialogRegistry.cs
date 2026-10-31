@@ -44,6 +44,11 @@ public static class MenuDialogRegistry
         // separate lowercase "sandbox" key). Registering the QC name restores the Base in-match entry point — the
         // dialog opens regardless (exactly like Base; g_sandbox must be enabled for its buttons to do anything).
         ["SandboxTools"] = () => new DialogSandboxTools(),          // QC dialog_sandboxtools (menu_showsandboxtools)
+        ["MonsterTools"] = () => new DialogMonsterTools(),          // QC dialog_monstertools (menu_showmonstertools)
+        ["Uid2Name"]     = () => new DialogUid2Name(),              // QC dialog_uid2name
+        ["TermsOfService"] = () => new DialogTermsOfService(),      // QC dialog_termsofservice
+        // XonoticWinnerDialog has no QC .name (main.winnerDialog is opened by reference); "Winner" is the port's.
+        ["Winner"]       = () => new DialogWinner(),
         ["BotPolicies"] = () => new DialogBotPolicies(),            // Vortex bot movement laboratory (F11)
         // QC `menu_cmd skinselect`/`languageselect` remap to the skinselector/languageselector dialogs. Those QC
         // dialogs are the skin list / language list; the port folds both into the Settings dialog's User tab

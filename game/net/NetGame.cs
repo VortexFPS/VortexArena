@@ -12130,8 +12130,17 @@ public sealed partial class NetGame : Node3D
         // (v1: phantom persisted), and Api.Cvars threw / broke the whole prediction path (v2: no flash at all). The
         // guidestop-1 config (continuous fire, no guiding) is rare and non-default; treating the Devastator as
         // always release-gated only costs a slightly under-predicted FX cadence in that rare case (cosmetic).
-        return wid >= 0 && wid < VortexArena.Common.Gameplay.Weapons.Count
-            && (VortexArena.Common.Gameplay.Weapons.ById(wid)?.NetName ?? "") == "devastator";
+        if (wid < 0 || wid >= VortexArena.Common.Gameplay.Weapons.Count)
+            return false;
+        VortexArena.Common.Gameplay.Weapon? w = VortexArena.Common.Gameplay.Weapons.ById(wid);
+        // The Crylink primary is the other stock case (playtest #73): Base sets crylink_waitrelease after a
+        // join-enabled volley (joinspread != 0 && shots > 1 — stock primary) and wr_think refuses to refire that
+        // mode until the button is RELEASED (the release is what makes the spikes join). The refire clock alone
+        // predicted a muzzle flash, fire animation and fire sound every refire while held, though no shot left.
+        // Read off the weapon descriptor (cvar-seeded at bootstrap; on a listen host that is the server's balance).
+        if (w is VortexArena.Common.Gameplay.Crylink crylink)
+            return crylink.WaitsForRelease(secondary: false);
+        return (w?.NetName ?? "") == "devastator";
     }
 
     /// <summary>

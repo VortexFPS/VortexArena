@@ -3680,6 +3680,13 @@ public sealed class ServerNet : IDisposable
         // (rocket/grenade/bolt/nade/mine/…). Same test as TurretAI.IsMissile; excludes ownerless map geometry.
         if ((e.Flags & EntFlags.Item) != 0 && e.Owner is not null && IsProjectileMoveType(e.MoveType))
             return NetEntityKind.Projectile;
+        // A placed mine (W_MineLayer_Stick: MOVETYPE_NONE, or FOLLOW on a moving bmodel) and a latched grappling
+        // hook stop moving but stay on screen. Keep them on the projectile path, which draws their real model
+        // (mine.md3 / hook.md3) oriented from their angles as DarkPlaces draws an alias model; as a generic entity
+        // the mine went through EntityNode's yaw/pitch shortcuts and sat flipped off the surface, and the latched
+        // hook head vanished from the snapshot (playtests #85, #88).
+        if ((e.Flags & EntFlags.Item) != 0 && e.Owner is not null && cn is "mine" or "grapplinghook")
+            return NetEntityKind.Projectile;
 
         // [W-nadeclient] the nade_orb effect entity (heal/ammo/entrap/veil/ice/darkness orb) is SOLID_TRIGGER, so the
         // generic Trigger→Item branch below would mis-classify it as an Item AND then drop it for carrying no server

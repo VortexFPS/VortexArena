@@ -153,6 +153,26 @@ public sealed class Hook : Weapon
     /// </summary>
     public static readonly Vector3 HookShotOrigin = new(8f, 8f, -12f);
 
+    /// <summary>
+    /// QC <c>hook_shotorigin[W_GunAlign(...) - 1]</c> for <paramref name="actor"/> (model-local: X fwd, Y +left,
+    /// Z up): what FireGrapplingHook swaps into <c>movedir</c> for W_SetupShot, what GrapplingHookThink reels
+    /// toward and what Draw_GrapplingHook anchors the chain at. GrappleHookInit (server/hook.qc:375): with the
+    /// offhand mutator (<c>g_grappling_hook</c>) every alignment is <c>'8 8 -12'</c>; otherwise it is the Hook
+    /// weapon's own shot tag run through <c>shotorg_adjust</c> for each alignment (shootfromeye/center/fixed
+    /// origin, else the shooter's cl_gunalign).
+    /// </summary>
+    public static Vector3 ShotOriginFor(Entity actor)
+    {
+        if (Api.Services is null || Api.Cvars.GetFloat("g_grappling_hook") != 0f)
+            return HookShotOrigin;
+        Weapon? hookWeapon = null;
+        foreach (Weapon w in Weapons.All)
+            if (w is Hook) { hookWeapon = w; break; }
+        Vector3 vecs = hookWeapon is not null && WeaponFiring.TryGetMuzzleOffset(hookWeapon.RegistryId, out Vector3 tag)
+            ? tag : WeaponFiring.DefaultMuzzleOffset;
+        return WeaponFiring.ShotOrgAdjust(vecs, WeaponFiring.GunAlignFor(actor));
+    }
+
     // QC .hook_length on the chain edict: the current rubber-band rope length (the elastic/tarzan reel
     // shortens this toward minlength each tick). -1 = uninitialised (seeded to the current rope distance).
     // Kept off the chain entity via a per-hook weak table since WeaponSlotState (other file) carries no field.
@@ -280,7 +300,11 @@ public sealed class Hook : Weapon
             return;
 
         Vector3 forward = QMath.Forward(actor.Angles);
-        ShotInfo shot = WeaponFiring.SetupShot(actor, forward);
+        // QC: movedir = hook_shotorigin[s]; W_SetupShot_ProjectileSize(actor, ..., '-3 -3 -3', '3 3 3', ...);
+        // movedir = oldmovedir. The chain leaves from the hook's own aligned shot origin (offhand: '8 8 -12'),
+        // not the held weapon's tag, with the chain's box for the muzzle traces.
+        ShotInfo shot = WeaponFiring.SetupShot(actor, forward, new Vector3(-3, -3, -3), new Vector3(3, 3, 3),
+            movedir: ShotOriginFor(actor));
         // QC FireGrapplingHook: W_MuzzleFlash(WEP_HOOK, actor, weaponentity, w_shotorg, '0 0 0') — the hook's
         // generic muzzle effect (grapple_muzzleflash) at the gun muzzle. (Same effect the secondary emits.)
         EffectEmitter.Emit("HOOK_MUZZLEFLASH", shot.Origin, shot.Dir * 1000f, 1, except: actor);
@@ -333,6 +357,18 @@ public sealed class Hook : Weapon
     private void GrapplingHookTouch(Entity self, Entity other, Entity actor, WeaponSlot slot)
     {
         if (other.MoveType == MoveType.Follow) return;
+        // PROJECTILE_TOUCH → WarpZone_Projectile_Touch_ImpactFilter_Callback (server/weapons/common.qc:166):
+        // SUB_NoImpactCheck — a NOIMPACT face (the sky) is no anchor; Base removes the grapplinghook
+        // (RemoveHook) rather than latching it there (playtest #88: the hook grappled the skybox).
+        if (Projectiles.NoImpactCheck(self, other))
+        {
+            WeaponSlotState st = actor.WeaponState(slot);
+            if (ReferenceEquals(st.Hook, self))
+                RemoveHook(st, actor);
+            else
+                Api.Entities.Remove(self);
+            return;
+        }
         Api.Sound.Play(self, SoundChannel.Body, "weapons/hook_impact.wav");
         // GrapplingHook_Stop: Send_Effect(EFFECT_HOOK_IMPACT) + state=1 + MOVETYPE_NONE + stop.
         EffectEmitter.Emit("HOOK_IMPACT", self.Origin);
@@ -402,7 +438,8 @@ public sealed class Hook : Weapon
         // angles (NadeThrow/NadeProjectile convention) so the latch/length geometry matches Base's gun-hand offset.
         Vector3 viewAngles = actor.ViewAngles == Vector3.Zero ? actor.Angles : actor.ViewAngles;
         QMath.AngleVectors(viewAngles, out Vector3 vf, out Vector3 vr, out Vector3 vu);
-        Vector3 vs = vf * HookShotOrigin.X + vr * -HookShotOrigin.Y + vu * HookShotOrigin.Z;
+        Vector3 so = ShotOriginFor(actor); // QC hook_shotorigin[s]
+        Vector3 vs = vf * so.X + vr * -so.Y + vu * so.Z;
         Vector3 myorg = actor.Origin + actor.ViewOfs + vs;
         Vector3 toHook = hook.Origin - myorg;
         float dist = toHook.Length();

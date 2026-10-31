@@ -104,11 +104,22 @@ public sealed class PhysicsContext
 
         int epoch = SetOriginEpoch();
 
+        // DP VM_SetTraceGlobals before each touch: QC touch code reads trace_dphitq3surfaceflags etc. (e.g. the
+        // SUB_NoImpactCheck sky test); the port's touch delegates read them through TouchTrace.
         if (!e1.IsFreed && !e2.IsFreed && e1.Touch != null && e1.Solid != Solid.Not)
-            e1.Touch(e1, e2);
+        {
+            using (TouchTrace.Begin(trace))
+                e1.Touch(e1, e2);
+        }
 
         if (!e1.IsFreed && !e2.IsFreed && e2.Touch != null && e2.Solid != Solid.Not)
-            e2.Touch(e2, e1); // e2 is self, e1 is other (DP negates the plane for e2's trace globals)
+        {
+            TraceResult flipped = trace;
+            flipped.PlaneNormal = -trace.PlaneNormal;
+            flipped.PlaneDist = -trace.PlaneDist;
+            using (TouchTrace.Begin(flipped))
+                e2.Touch(e2, e1); // e2 is self, e1 is other (DP negates the plane for e2's trace globals)
+        }
 
         // SV_Impact returns false when e1 was teleported by a setorigin inside a touch function: the
         // epoch advanced, so the caller's pre-move origin is stale and the move must abort.

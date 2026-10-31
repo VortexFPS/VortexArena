@@ -224,7 +224,7 @@ public static class WeaponFiring
     /// </summary>
     public static ShotInfo SetupShot(Entity actor, Vector3 forward, Vector3 mins, Vector3 maxs,
         float range = -1f, bool penetrateWalls = false,
-        Weapon? wep = null, float maxDamage = 0f, float recoil = 0f)
+        Weapon? wep = null, float maxDamage = 0f, float recoil = 0f, Vector3? movedir = null)
     {
         // A negative sentinel range means "use the per-map global max_shot_distance" (QC W_SetupShot defaults
         // its range arg to the global max_shot_distance); explicit positive ranges (per-weapon caps) stand.
@@ -297,7 +297,9 @@ public static class WeaponFiring
         // QC CL_WeaponEntity_SetModel runs the raw tag through shotorg_adjust before storing movedir, so the fired
         // origin honours g_shootfromeye / g_shootfromcenter / g_shootfromfixedorigin and otherwise the shooter's
         // replicated cl_gunalign (playtest #62: a centre-aligned gun kept firing from the right-hand muzzle).
-        Vector3 muzzle = ShotOrgAdjust(MuzzleOffsetFor(actor), GunAlignFor(actor));
+        // A caller-supplied movedir (QC FireGrapplingHook swapping hook_shotorigin[s] into movedir around the call)
+        // is already adjusted and used as is.
+        Vector3 muzzle = movedir ?? ShotOrgAdjust(MuzzleOffsetFor(actor), GunAlignFor(actor));
         if (muzzle != Vector3.Zero && (actor.Flags & EntFlags.Client) != 0)
         {
             QMath.AngleVectors(actor.Angles, out _, out Vector3 right, out Vector3 up);

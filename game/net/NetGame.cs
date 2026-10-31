@@ -2907,7 +2907,26 @@ public sealed partial class NetGame : Node3D
         // latch _equippedWeaponId while the placeholder is still up, and this early-out would then freeze it.)
         if (id == _equippedWeaponId && vmOverride == _equippedVmOverride && _pendingEquipModel is null)
         {
-            _switchDropLeft = -1f;        // a staged switch back to the current weapon dissolves
+            // Switching BACK to the held weapon while its drop is staged (A→B→A: a quick double-tap of "last
+            // weapon", or a scroll-wheel spin that wraps round). Base does not cancel a drop: in WS_DROP the new
+            // m_switchweapon is only latched, w_clear still empties the slot when the drop ends, and the WS_CLEAR
+            // branch then raises the weapon again — the port's server does the same (WeaponFireDriver). So finish
+            // the lowering and raise the same gun. Dissolving the staged switch here instead left the gun parked
+            // at the bottom of the screen until the holster auto-recovery gave up on it (playtest #70).
+            if (_switchDropLeft >= 0f && !hidden)
+            {
+                _viewModel.Visible = true;
+                _viewModel.PlayHolster(); // keep lowering (refreshes the recovery grace while we own the slide)
+                _switchDropLeft -= (float)GetProcessDeltaTime();
+                if (_switchDropLeft > 0f)
+                    return;
+                _switchDropLeft = -1f;
+                _viewModel.PlayRaise();
+                VortexArena.Common.Gameplay.Weapon? held = VortexArena.Common.Gameplay.Weapons.ById(id);
+                _switchRaiseLeft = held?.SwitchDelayRaise() ?? 0f; // the server slot is raising: hold fire prediction
+                return;
+            }
+            _switchDropLeft = -1f;
             _viewModel.Visible = !hidden; // no weapon/model change; just track the dead/holstered visibility edge
             return;
         }

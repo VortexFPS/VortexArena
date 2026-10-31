@@ -12094,20 +12094,81 @@ public sealed partial class NetGame : Node3D
         // fire mode). Zoom-style secondaries (Vortex/Vaporizer/Rifle secondary = zoom, not a shot) must NOT flash,
         // so we gate on the weapon having a real secondary attack. Shares the SAME per-weapon ready clock as primary
         // (Base ATTACK_FINISHED is per-slot, not per-mode), so a secondary tap inside the refire window is dropped.
+        //
+        // The Machinegun's secondary is predicted like a primary: it re-fires while HELD (machinegun.qc wr_think
+        // runs the burst / first-shot branch every frame fire&2 is down), and a mode-1 burst is several rounds,
+        // each with its own W_MuzzleFlash (W_MachineGun_Attack_Burst). The press-edge-only flash showed one flash
+        // per held burst stream instead of one per round (playtest #64).
         bool a2 = BindTable.Attack2Held;
         if (a2 && !_attack2Held)
-        {
             _attack2Latch = true;
+        bool mgSecondary = ActiveMachinegun(out VortexArena.Common.Gameplay.Machinegun? mg);
+        if (a2 && (!_attack2Held || mgSecondary))
+        {
             if (SecondaryFiresShot() && !LocalDeadNow()
                 && TryActiveRefire(VortexArena.Common.Gameplay.FireMode.Secondary, out int wid2, out float refire2)
                 && FirePredictReady(wid2))
             {
                 _hud?.PulseFire();
                 _viewModel?.Fire(); // local muzzle flash for the secondary shot (remote copy stays networked)
+                if (mg is not null && mg.Cvars.Mode == 1 && mg.Cvars.Burst > 0f)
+                {
+                    // The remaining burst rounds follow every burst_refire; the next burst can start only after
+                    // the last round's burst_refire2 (W_MachineGun_Attack_Burst parks ATTACK_FINISHED there).
+                    int rounds = (int)mg.Cvars.Burst;
+                    float roundGap = Mathf.Max(mg.Cvars.BurstRefire, 0.01f);
+                    _burstFlashesLeft = rounds - 1;
+                    _burstFlashNext = _fireClock + roundGap;
+                    _burstFlashGap = roundGap;
+                    _burstWeaponId = wid2;
+                    refire2 = roundGap * (rounds - 1) + mg.Cvars.BurstRefire2;
+                }
                 MarkFirePredicted(wid2, refire2, dt);
             }
         }
         _attack2Held = a2;
+        UpdateBurstFlashes();
+    }
+
+    // The predicted Machinegun burst rounds still to flash after the first (see UpdateLocalFireFeedback).
+    private int _burstFlashesLeft;
+    private float _burstFlashNext;
+    private float _burstFlashGap;
+    private int _burstWeaponId = -1;
+
+    /// <summary>Flash the remaining rounds of a predicted Machinegun burst on the burst_refire cadence. A burst cut
+    /// short by a weapon switch or death stops flashing; rounds more than a few frames overdue (input was paused)
+    /// are dropped rather than flashed all at once.</summary>
+    private void UpdateBurstFlashes()
+    {
+        if (_burstFlashesLeft <= 0)
+            return;
+        if (_client is null || _client.ActiveWeaponId != _burstWeaponId || LocalDeadNow())
+        {
+            _burstFlashesLeft = 0;
+            return;
+        }
+        while (_burstFlashesLeft > 0 && _fireClock >= _burstFlashNext)
+        {
+            if (_fireClock - _burstFlashNext < 0.2f)
+            {
+                _hud?.PulseFire();
+                _viewModel?.Fire();
+            }
+            _burstFlashesLeft--;
+            _burstFlashNext += _burstFlashGap;
+        }
+    }
+
+    /// <summary>True (with the weapon) when the active weapon is the Machinegun.</summary>
+    private bool ActiveMachinegun(out VortexArena.Common.Gameplay.Machinegun? mg)
+    {
+        mg = null;
+        int wid = _client?.ActiveWeaponId ?? -1;
+        if (wid < 0 || wid >= VortexArena.Common.Gameplay.Weapons.Count)
+            return false;
+        mg = VortexArena.Common.Gameplay.Weapons.ById(wid) as VortexArena.Common.Gameplay.Machinegun;
+        return mg is not null;
     }
 
     /// <summary>
@@ -12153,6 +12214,8 @@ public sealed partial class NetGame : Node3D
             // popped a phantom flash AND advanced the shared client ready clock, which then swallowed the
             // prediction of the NEXT primary rocket (the fire→detonate→fire combo went silent).
             "devastator" or "minelayer" => false,
+            // Machinegun: a burst (mode 1) or a first-shot snipe (mode 0), unless the balance turns it into zoom.
+            "machinegun" => VortexArena.Common.Gameplay.Weapons.ById(wid) is not VortexArena.Common.Gameplay.Machinegun { ZoomOnSecondary: true },
             "" => false,
             _ => true,
         };

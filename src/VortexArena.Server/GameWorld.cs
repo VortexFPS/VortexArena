@@ -2612,6 +2612,11 @@ public sealed class GameWorld
             && p.MoveType is MoveType.Noclip or MoveType.Fly or MoveType.FlyWorldOnly;
         bool canMove = !p.IsDead && !MatchEnded && !Intermission.Running && !preMatchFreeze
             && (!p.IsObserver || spectatorFly);
+        // QC sys_phys_pregame_hold (ecs/systems/sv_physics.qc): once game_stopped, a player is held with
+        // velocity '0 0 0' (and MOVETYPE_NONE / disableclientprediction 2). Zero it so the scoreboard shows
+        // still bodies (no running animation, no networked speed for the client's view bob) — #92.
+        if (!p.IsObserver && (MatchEnded || Intermission.Running))
+            p.Velocity = Vector3.Zero;
 
         // ---- movement (QC SV_PlayerPhysics → PM_Main, via the installed IPlayerPhysics) ----
         // CONSUME + ACK this tick's queued input EVERY tick the client is sending — even while observing / dead /

@@ -610,6 +610,9 @@ public sealed class Seeker : Weapon
     // QC the Seeker refire/animtime are sub-weapon-specific (missile/tag/flac), and which sub-weapon a mode
     // uses depends on g_balance_seeker_type: type 1 -> primary=missile, secondary=tag; type 0 -> primary=tag,
     // secondary=flac. Mirror that selection here (the default _primary_/_secondary_ cvar convention misses it).
+    // seeker.qc wr_think: missile, tag and flac all use weapon_thinkf(WFRAME_FIRE2, ...), primary included.
+    public override int FireFrameFor(FireMode fire) => WFrameFire2;
+
     public override float RefireFor(FireMode fire)
     {
         bool secondary = fire == FireMode.Secondary;

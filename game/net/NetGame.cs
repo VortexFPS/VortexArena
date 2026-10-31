@@ -275,6 +275,10 @@ public sealed partial class NetGame : Node3D
     private bool _predictFire = true;
     private float _fireClock;
     private readonly Dictionary<int, float> _weaponReadyTime = new();
+    // Pairs each predicted fire sound with the server's copy of the same shot, so exactly one plays. A networked
+    // fire sound from the local player with no predicted partner (every secondary attack, and any shot the refire
+    // clock did not predict) plays normally — playtest #65/#66.
+    private readonly VortexArena.Net.PredictedFireSoundLedger _fireSoundLedger = new();
     private bool _loggedAccept;
     private bool _hostJoinDone;                  // [#44] the listen host's early_join_requested `join` actually spawned it
     private float _hostJoinNextRetryMsec;        // [#44] next allowed `join` attempt (bounded retry — a blocked spawn no-ops)
@@ -3309,7 +3313,7 @@ public sealed partial class NetGame : Node3D
             // during sustained fire; the AttackFinished VALUE change can.
             float af = st.AttackFinished;
             if (!reloading && af > _viewmodelLastAttackFinished && _serverWorld is { } sw && af > (float)sw.Time)
-                _viewModel.PlayFireClip();
+                _viewModel.PlayFireClip(fire2: st.FireAnimFrame == VortexArena.Common.Gameplay.Weapon.WFrameFire2);
             else if (_serverWorld is { } sw2 && af <= (float)sw2.Time)
                 // Attack window closed (refire expired, no new shot): re-assert idle like Base's weapon state
                 // machine does explicitly (w_ready → weapon_thinkf(WFRAME_IDLE)). Needed because SOME fire
@@ -12105,10 +12109,10 @@ public sealed partial class NetGame : Node3D
             // elapsed, so a burst of taps / wheel-fire can't out-run the refire rate. FirePredictReady + the
             // MarkFirePredicted cadence are the client mirror of the server's ATTACK_FINISHED gate.
             if (a1 && !LocalDeadNow() && HasAmmoNow()
-                && TryActivePrimaryFire(out int wid, out string fireSound, out float refire) && FirePredictReady(wid)
+                && TryActivePrimaryFire(out int wid, out string fireSound, out float fireVolume, out float refire) && FirePredictReady(wid)
                 && (!PrimaryRefireRequiresRelease(wid) || _rlReleaseMirror)) // #24: release-gated weapons need the armed latch, not a press edge
             {
-                PredictFireShot(fireSound);
+                PredictFireShot(fireSound, fireVolume);
                 MarkFirePredicted(wid, refire, dt);
                 _rlReleaseMirror = false; // QC: rl_release = 0 on the shot (inert for non-gated weapons)
             }
@@ -12130,20 +12134,81 @@ public sealed partial class NetGame : Node3D
         // fire mode). Zoom-style secondaries (Vortex/Vaporizer/Rifle secondary = zoom, not a shot) must NOT flash,
         // so we gate on the weapon having a real secondary attack. Shares the SAME per-weapon ready clock as primary
         // (Base ATTACK_FINISHED is per-slot, not per-mode), so a secondary tap inside the refire window is dropped.
+        //
+        // The Machinegun's secondary is predicted like a primary: it re-fires while HELD (machinegun.qc wr_think
+        // runs the burst / first-shot branch every frame fire&2 is down), and a mode-1 burst is several rounds,
+        // each with its own W_MuzzleFlash (W_MachineGun_Attack_Burst). The press-edge-only flash showed one flash
+        // per held burst stream instead of one per round (playtest #64).
         bool a2 = BindTable.Attack2Held;
         if (a2 && !_attack2Held)
-        {
             _attack2Latch = true;
+        bool mgSecondary = ActiveMachinegun(out VortexArena.Common.Gameplay.Machinegun? mg);
+        if (a2 && (!_attack2Held || mgSecondary))
+        {
             if (SecondaryFiresShot() && !LocalDeadNow()
                 && TryActiveRefire(VortexArena.Common.Gameplay.FireMode.Secondary, out int wid2, out float refire2)
                 && FirePredictReady(wid2))
             {
                 _hud?.PulseFire();
                 _viewModel?.Fire(); // local muzzle flash for the secondary shot (remote copy stays networked)
+                if (mg is not null && mg.Cvars.Mode == 1 && mg.Cvars.Burst > 0f)
+                {
+                    // The remaining burst rounds follow every burst_refire; the next burst can start only after
+                    // the last round's burst_refire2 (W_MachineGun_Attack_Burst parks ATTACK_FINISHED there).
+                    int rounds = (int)mg.Cvars.Burst;
+                    float roundGap = Mathf.Max(mg.Cvars.BurstRefire, 0.01f);
+                    _burstFlashesLeft = rounds - 1;
+                    _burstFlashNext = _fireClock + roundGap;
+                    _burstFlashGap = roundGap;
+                    _burstWeaponId = wid2;
+                    refire2 = roundGap * (rounds - 1) + mg.Cvars.BurstRefire2;
+                }
                 MarkFirePredicted(wid2, refire2, dt);
             }
         }
         _attack2Held = a2;
+        UpdateBurstFlashes();
+    }
+
+    // The predicted Machinegun burst rounds still to flash after the first (see UpdateLocalFireFeedback).
+    private int _burstFlashesLeft;
+    private float _burstFlashNext;
+    private float _burstFlashGap;
+    private int _burstWeaponId = -1;
+
+    /// <summary>Flash the remaining rounds of a predicted Machinegun burst on the burst_refire cadence. A burst cut
+    /// short by a weapon switch or death stops flashing; rounds more than a few frames overdue (input was paused)
+    /// are dropped rather than flashed all at once.</summary>
+    private void UpdateBurstFlashes()
+    {
+        if (_burstFlashesLeft <= 0)
+            return;
+        if (_client is null || _client.ActiveWeaponId != _burstWeaponId || LocalDeadNow())
+        {
+            _burstFlashesLeft = 0;
+            return;
+        }
+        while (_burstFlashesLeft > 0 && _fireClock >= _burstFlashNext)
+        {
+            if (_fireClock - _burstFlashNext < 0.2f)
+            {
+                _hud?.PulseFire();
+                _viewModel?.Fire();
+            }
+            _burstFlashesLeft--;
+            _burstFlashNext += _burstFlashGap;
+        }
+    }
+
+    /// <summary>True (with the weapon) when the active weapon is the Machinegun.</summary>
+    private bool ActiveMachinegun(out VortexArena.Common.Gameplay.Machinegun? mg)
+    {
+        mg = null;
+        int wid = _client?.ActiveWeaponId ?? -1;
+        if (wid < 0 || wid >= VortexArena.Common.Gameplay.Weapons.Count)
+            return false;
+        mg = VortexArena.Common.Gameplay.Weapons.ById(wid) as VortexArena.Common.Gameplay.Machinegun;
+        return mg is not null;
     }
 
     /// <summary>
@@ -12189,6 +12254,8 @@ public sealed partial class NetGame : Node3D
             // popped a phantom flash AND advanced the shared client ready clock, which then swallowed the
             // prediction of the NEXT primary rocket (the fire→detonate→fire combo went silent).
             "devastator" or "minelayer" => false,
+            // Machinegun: a burst (mode 1) or a first-shot snipe (mode 0), unless the balance turns it into zoom.
+            "machinegun" => VortexArena.Common.Gameplay.Weapons.ById(wid) is not VortexArena.Common.Gameplay.Machinegun { ZoomOnSecondary: true },
             "" => false,
             _ => true,
         };
@@ -12196,23 +12263,36 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>Play one predicted local shot: the view-model muzzle flash + recoil, the HUD crosshair pulse, and
     /// the weapon's primary fire sound at the predicted eye (auto-stack channel so rapid fire doesn't cut off).
-    /// Source net-id = the local player so the matching networked copy is dropped in <see cref="OnSoundReceived"/>.</summary>
-    private void PredictFireShot(string fireSound)
+    /// Source net-id = the local player; the shot is noted in <see cref="_fireSoundLedger"/> so the server's copy
+    /// of it is dropped in <see cref="OnSoundReceived"/> (and skipped here if that copy already arrived).</summary>
+    private void PredictFireShot(string fireSound, float volume)
     {
         _hud?.PulseFire();
         _viewModel?.Fire();
-        if (!string.IsNullOrEmpty(fireSound) && _render is not null && _client is not null)
-            _render.OnSound(fireSound, _client.PredictedOrigin, 1f, 0.5f,
+        if (!string.IsNullOrEmpty(fireSound) && _render is not null && _client is not null
+            && _fireSoundLedger.OnPredicted(fireSound, FireSoundClock()))
+            _render.OnSound(fireSound, _client.PredictedOrigin, volume, 0.5f,
                 (int)VortexArena.Common.Services.SoundChannel.WeaponAuto, _client.LocalNetId, 1f);
+    }
+
+    /// <summary>The wall clock the fire-sound ledger runs on (seconds). Both of its callers, the predicted shot and
+    /// the arriving networked sound, read it, so it must be one clock independent of the input/frame accumulators.
+    /// The echo window follows the measured round trip: a predicted shot waits roughly two pings for its echo.</summary>
+    private float FireSoundClock()
+    {
+        int ping = _client?.PingMs ?? 0;
+        _fireSoundLedger.EchoWindow = Math.Clamp(ping * 0.002f + 0.35f, 0.4f, 2f);
+        return Time.GetTicksMsec() * 0.001f;
     }
 
     /// <summary>The active weapon's id + primary fire sound + refire interval, or false when it can't be predicted
     /// (no active weapon, or a loop/grapple weapon absent from <see cref="WeaponFireSounds"/> → its networked sound
     /// plays normally and is NOT suppressed).</summary>
-    private bool TryActivePrimaryFire(out int weaponId, out string fireSound, out float refire)
+    private bool TryActivePrimaryFire(out int weaponId, out string fireSound, out float volume, out float refire)
     {
         weaponId = -1;
         fireSound = "";
+        volume = 1f;
         refire = 0.1f;
         if (_client is null || _client.ActiveWeaponId < 0)
             return false;
@@ -12220,9 +12300,10 @@ public sealed partial class NetGame : Node3D
         VortexArena.Common.Gameplay.Weapon w = VortexArena.Common.Gameplay.Weapons.ById(weaponId);
         if (w is null)
             return false;
-        fireSound = WeaponFireSounds.PrimaryFor(w.NetName);
+        fireSound = WeaponFireSounds.PrimaryFor(w);
         if (string.IsNullOrEmpty(fireSound))
             return false;
+        volume = WeaponFireSounds.VolumeFor(w.NetName);
         refire = w.RefireFor(VortexArena.Common.Gameplay.FireMode.Primary);
         if (refire <= 0f) refire = 0.1f;
         return true;
@@ -12784,13 +12865,14 @@ public sealed partial class NetGame : Node3D
         if (_render is null || !GodotObject.IsInstanceValid(_render))
             return;
 
-        // Drop the local player's OWN primary fire sound (cl_predictfire): we already played it locally on the
-        // refire clock, so the networked echo would double it. Keyed by source net-id + a predicted fire sample so
-        // it never suppresses footsteps/pain/reload/secondary (other channels/samples), and remote players are
-        // unaffected (they don't match LocalNetId). A non-predicted weapon (loops/grapple) isn't in the set → its
-        // networked fire sound plays normally.
-        if (_predictFire && _client is not null && e.SourceNetId == _client.LocalNetId
-            && WeaponFireSounds.IsPredicted(e.Sample))
+        // Drop the local player's OWN fire sound when it is the echo of a shot already played locally
+        // (cl_predictfire). Only samples a primary press can predict are checked, and only from the local player;
+        // the ledger then drops the sound ONLY if it pairs with a predicted copy still waiting for its echo. A
+        // secondary attack that shares a primary's sample (Machinegun burst, Mortar/Hagar/HLAC secondaries, the
+        // Vaporizer laser) has no predicted partner and plays — the old sample-only match silenced all of those
+        // for the shooter (playtest #65/#66).
+        if (_predictFire && _client is not null && e.SourceNetId == _client.LocalNetId && !e.Stop
+            && WeaponFireSounds.IsPredicted(e.Sample) && _fireSoundLedger.OnNetworked(e.Sample, FireSoundClock()))
             return;
 
         if (e.Stop)

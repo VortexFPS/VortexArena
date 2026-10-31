@@ -148,7 +148,9 @@ public partial class LegacyGame : Node
     // Input.
     private LegacyHeldButtons _scriptHeld;
     // The engine buttons behind _scriptHeld, by name: which keys hold each one (cl_input.c kbutton_t).
-    private readonly Dictionary<string, (KeyButton Button, ButtonSetter Set)> _scriptButtons = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ScriptButton> _scriptButtons = new(StringComparer.Ordinal);
+    // DP's impulse-down bit for the bind-table buttons (BindTable.TapLatch): a tap shorter than one move still counts.
+    private readonly BindTable.TapLatch _tapLatch = new();
     private byte _pendingImpulse;
     private Vector2 _mouseDelta, _mousePosition, _reportedMousePosition = new(-1, -1);
     private bool _showScores;
@@ -923,8 +925,8 @@ public partial class LegacyGame : Node
         // that pressed it is up; a bare "-jump" (typed, or an alias like -fire → -attack) lets go of all of them.
         void Button(string name, ButtonSetter set)
         {
-            if (!_scriptButtons.TryGetValue(name, out var entry))
-                _scriptButtons[name] = entry = (new KeyButton(), set);
+            if (!_scriptButtons.TryGetValue(name, out ScriptButton? entry))
+                _scriptButtons[name] = entry = new ScriptButton(set);
             KeyButton button = entry.Button;
             _commands.Register(interpreter, "+" + name, argv =>
             {
@@ -943,11 +945,28 @@ public partial class LegacyGame : Node
 
     private delegate void ButtonSetter(ref LegacyHeldButtons held, bool down);
 
+    /// <summary>One engine button of the session's console: the keys holding it, where it lands in a move, and the
+    /// last press count a move saw (DP's impulse-down bit, cl_input.c:91 / :2180).</summary>
+    private sealed class ScriptButton(ButtonSetter set)
+    {
+        public KeyButton Button { get; } = new();
+        public ButtonSetter Set { get; } = set;
+        private uint _seen;
+
+        /// <summary>Pressed since the last move asked, whether or not it is still down.</summary>
+        public bool TakeTap()
+        {
+            bool tapped = Button.Presses != _seen;
+            _seen = Button.Presses;
+            return tapped;
+        }
+    }
+
     /// <summary>No held key is carried over: every engine button up, whichever keys held it.</summary>
     private void ReleaseScriptButtons()
     {
         _scriptHeld = default;
-        foreach ((KeyButton button, _) in _scriptButtons.Values) button.Clear();
+        foreach (ScriptButton b in _scriptButtons.Values) b.Button.Clear();
     }
 
     private static string JoinArguments(IReadOnlyList<string> argv)
@@ -1927,6 +1946,9 @@ public partial class LegacyGame : Node
         }
 
         LegacyHeldButtons held = _scriptHeld;
+        // A button pressed and released since the last move (a +jump on the mouse wheel) is in this one.
+        foreach (ScriptButton b in _scriptButtons.Values)
+            if (b.TakeTap()) b.Set(ref held, true);
         if (focus && _shared is not null)
         {
             // Xonotic's own bindings: every held button arrived as a "+command" through the console
@@ -1939,15 +1961,16 @@ public partial class LegacyGame : Node
             held.Back |= BindTable.Forward < 0;
             held.MoveRight |= BindTable.Side > 0;
             held.MoveLeft |= BindTable.Side < 0;
-            held.Attack |= BindTable.AttackHeld;
-            held.Jump |= BindTable.JumpHeld;
-            held.Button3 |= BindTable.Attack2Held;     // +fire2
-            held.Button4 |= BindTable.ZoomHeld;        // +zoom
-            held.Button5 |= BindTable.CrouchHeld;      // +crouch
-            held.Button6 |= BindTable.HookHeld;        // +hook
-            held.Use |= BindTable.UseHeld;
+            held.Attack |= _tapLatch.Sample(BindTable.MoveButton.Attack);
+            held.Jump |= _tapLatch.Sample(BindTable.MoveButton.Jump);
+            held.Button3 |= _tapLatch.Sample(BindTable.MoveButton.Attack2);  // +fire2
+            held.Button4 |= _tapLatch.Sample(BindTable.MoveButton.Zoom);     // +zoom
+            held.Button5 |= _tapLatch.Sample(BindTable.MoveButton.Crouch);   // +crouch
+            held.Button6 |= _tapLatch.Sample(BindTable.MoveButton.Hook);     // +hook
+            held.Use |= _tapLatch.Sample(BindTable.MoveButton.Use);
         }
         else held = default;
+        if (!focus || _shared is not null) _tapLatch.Skip();
 
         // --- the mouse: the program's cursor, or the view ---
         if (session.Host is { Initialized: true } host)

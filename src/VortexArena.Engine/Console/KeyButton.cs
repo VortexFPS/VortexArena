@@ -23,7 +23,7 @@ namespace VortexArena.Engine.Console;
 /// <para><see cref="Presses"/> counts down edges. It stands in for DP's impulse-down bit (<c>state &amp; 2</c>),
 /// which keeps a press that was released before the next move was sent in that move (cl_input.c:1801-1817 read
 /// <c>state &amp; 3</c>; :2180 clears bit 2 after sending). A counter rather than a bit, so each reader keeps its own
-/// "last seen" and no reader can leave a button stuck for another.</para>
+/// "last seen" (<see cref="BindTable.TapLatch"/>) and no reader can leave a button stuck for another.</para>
 /// </summary>
 public sealed class KeyButton
 {

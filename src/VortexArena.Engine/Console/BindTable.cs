@@ -231,6 +231,54 @@ public static class BindTable
         _ => null,
     };
 
+    /// <summary>The held buttons that become bits of a move, the ones DP packs from <c>state &amp; 3</c>
+    /// (cl_input.c:1801-1817): attack, jump, button3 (+fire2), button4 (+zoom), button5 (+crouch), button6 (+hook),
+    /// use. The movement axes are left out, as DP's are (CL_KeyState gives a tap a quarter of a frame's move).</summary>
+    public enum MoveButton { Attack, Attack2, Jump, Crouch, Zoom, Use, Hook }
+
+    private static KeyButton Of(MoveButton b) => b switch
+    {
+        MoveButton.Attack => _attack,
+        MoveButton.Attack2 => _attack2,
+        MoveButton.Jump => _up,
+        MoveButton.Crouch => _down,
+        MoveButton.Zoom => _zoom,
+        MoveButton.Use => _use,
+        _ => _hook,
+    };
+
+    /// <summary>
+    /// DP's impulse-down bit for one reader of the buttons: a button pressed since this latch last sampled it
+    /// counts as held for this sample, even if the key is already back up. DP sets <c>state |= 2</c> in KeyDown,
+    /// packs <c>state &amp; 3</c> into the move and clears bit 2 only after the move is sent (cl_input.c:91, :1801,
+    /// :2180), so a tap shorter than one move still reaches the server. That is what makes a <c>+jump</c> or
+    /// <c>+fire</c> bound to the mouse wheel work at all — the wheel's press and release arrive back to back,
+    /// before any move is built — and it keeps a quick side-button click from vanishing in a long frame.
+    ///
+    /// <para>Owned by whoever builds the move (one per sampler) and asked once per move.</para>
+    /// </summary>
+    public sealed class TapLatch
+    {
+        private readonly uint[] _seen = new uint[Enum.GetValues<MoveButton>().Length];
+
+        /// <summary>Held now, or pressed at least once since the last call for this button.</summary>
+        public bool Sample(MoveButton button)
+        {
+            KeyButton b = Of(button);
+            bool tapped = b.Presses != _seen[(int)button];
+            _seen[(int)button] = b.Presses;
+            return b.Down || tapped;
+        }
+
+        /// <summary>Forget presses made while nobody was sampling (input owned by the menu or console), so
+        /// they do not turn up as a tap when sampling resumes.</summary>
+        public void Skip()
+        {
+            foreach (MoveButton b in Enum.GetValues<MoveButton>())
+                _seen[(int)b] = Of(b).Presses;
+        }
+    }
+
     // =============================================================================================
     //  sampled state (read by NetGame.SampleInput; consumer assembles InputButtons from the *Held bools)
     // =============================================================================================

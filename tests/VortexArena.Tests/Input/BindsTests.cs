@@ -364,6 +364,96 @@ public class BindsTests
         Assert.False(BindTable.ZoomHeld);
     }
 
+    // =====================================================================================================
+    //  Taps shorter than one move (playtest #61): DP's impulse-down bit (cl_input.c:91, :1801, :2180)
+    // =====================================================================================================
+
+    [Fact]
+    public void Wheel_Bound_Jump_Press_And_Release_Before_The_Move_Still_Jumps()
+    {
+        var latch = new BindTable.TapLatch();
+        BindTable.Bind("MWHEELDOWN", "+jump");
+        BindTable.HandleBind("MWHEELDOWN", true, _ => { });   // the wheel's press and release arrive back to back
+        BindTable.HandleBind("MWHEELDOWN", false, _ => { });
+        Assert.False(BindTable.JumpHeld);                      // the level is already up again...
+        Assert.True(latch.Sample(BindTable.MoveButton.Jump));  // ...but this move carries the press
+        Assert.False(latch.Sample(BindTable.MoveButton.Jump)); // and only this one
+    }
+
+    [Fact]
+    public void TapLatch_Reports_A_Held_Button_Every_Move()
+    {
+        var latch = new BindTable.TapLatch();
+        BindTable.Bind("MOUSE5", "+hook");
+        BindTable.HandleBind("MOUSE5", true, _ => { });
+        Assert.True(latch.Sample(BindTable.MoveButton.Hook));
+        Assert.True(latch.Sample(BindTable.MoveButton.Hook));
+        BindTable.HandleBind("MOUSE5", false, _ => { });
+        Assert.False(latch.Sample(BindTable.MoveButton.Hook));
+    }
+
+    [Fact]
+    public void TapLatch_Readers_Are_Independent_And_Skip_Forgets_Taps()
+    {
+        var a = new BindTable.TapLatch();
+        var b = new BindTable.TapLatch();
+        BindTable.Bind("MOUSE1", "+fire");
+        BindTable.HandleBind("MOUSE1", true, _ => { });
+        BindTable.HandleBind("MOUSE1", false, _ => { });
+        Assert.True(a.Sample(BindTable.MoveButton.Attack));
+        Assert.True(b.Sample(BindTable.MoveButton.Attack)); // a's sample didn't consume b's tap
+        BindTable.HandleBind("MOUSE1", true, _ => { });
+        BindTable.HandleBind("MOUSE1", false, _ => { });
+        a.Skip();                                            // the menu/console owned that press
+        Assert.False(a.Sample(BindTable.MoveButton.Attack));
+    }
+
+    [Fact]
+    public void Second_Key_Joining_A_Held_Button_Is_Not_A_New_Tap()
+    {
+        var latch = new BindTable.TapLatch();
+        BindTable.Bind("Space", "+jump");
+        BindTable.Bind("MOUSE5", "+jump");
+        BindTable.HandleBind("Space", true, _ => { });
+        Assert.True(latch.Sample(BindTable.MoveButton.Jump));
+        BindTable.HandleBind("MOUSE5", true, _ => { });       // already down: DP sets no impulse either
+        BindTable.HandleBind("Space", false, _ => { });
+        BindTable.HandleBind("MOUSE5", false, _ => { });
+        Assert.False(latch.Sample(BindTable.MoveButton.Jump));
+    }
+
+    [Fact]
+    public void Wheel_Accumulator_Standard_Wheel_Is_One_Click_Per_Event()
+    {
+        var w = new WheelAccumulator();
+        Assert.Equal(1, w.Clicks(up: true, 1f));
+        Assert.Equal(1, w.Clicks(up: false, 1f));
+        Assert.Equal(1, w.Clicks(up: false, 0f)); // a platform that reports no factor
+    }
+
+    [Fact]
+    public void Wheel_Accumulator_Adds_Fractions_Into_Whole_Notches()
+    {
+        var w = new WheelAccumulator();
+        Assert.Equal(0, w.Clicks(true, 0.25f));
+        Assert.Equal(0, w.Clicks(true, 0.25f));
+        Assert.Equal(0, w.Clicks(true, 0.25f));
+        Assert.Equal(1, w.Clicks(true, 0.25f));
+        int total = 0;
+        for (int i = 0; i < 10; i++) total += w.Clicks(true, 0.1f);
+        Assert.Equal(1, total);                    // float rounding does not lose the notch
+        Assert.Equal(2, w.Clicks(true, 2f));       // a packed fast flick is two clicks
+    }
+
+    [Fact]
+    public void Wheel_Accumulator_Drops_A_Partial_Notch_When_Direction_Flips()
+    {
+        var w = new WheelAccumulator();
+        Assert.Equal(0, w.Clicks(true, 0.75f));
+        Assert.Equal(0, w.Clicks(false, 0.5f));    // up's 0.75 is gone, not cancelled against
+        Assert.Equal(1, w.Clicks(false, 0.5f));
+    }
+
     [Fact]
     public void Console_Plus_And_Minus_Button_Commands_Drive_The_Table()
     {

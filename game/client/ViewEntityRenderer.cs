@@ -107,7 +107,7 @@ public sealed class ViewEntityRenderer
         {
             h.Node.Visible = true;
             h.Node.Position = Coords.ToGodot(e.Origin);
-            h.Node.Rotation = new Vector3(0f, -Mathf.DegToRad(e.Angles.Y), 0f);
+            h.Node.Basis = Coords.YawBasis(e.Angles.Y); // +θ about Godot +Y (playtest-bugs #76)
         }
     }
 

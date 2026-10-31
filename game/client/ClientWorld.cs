@@ -2392,20 +2392,11 @@ public partial class ClientWorld : Node3D
             // Follow the entity transform (Quake → Godot), like EntityNode.
             vis.Position = Coords.ToGodot(e.Origin);
             // The raptor flight controller (Raptor.Frame) writes the full nose-down/up PITCH (Angles.X) +
-            // bank-on-strafe ROLL (Angles.Z) into the entity Angles, not just yaw — so for a pitched/rolled
-            // airframe build the full orientation the SAME way EntityNode does (AngleVectors → Coords.ToGodot
-            // columns basis: X=fwd, Y=up, Z=right). Gated to entities that actually carry pitch/roll so the
-            // long-standing yaw-only path stays byte-identical for every other vehicle (racer/spiderbot/
-            // bumblebee read flat).
-            if (e.Angles.X != 0f || e.Angles.Z != 0f)
-            {
-                VortexArena.Common.Math.QMath.AngleVectors(e.Angles, out NVec3 fwd, out NVec3 right, out NVec3 up);
-                vis.Basis = new Basis(Coords.ToGodot(fwd), Coords.ToGodot(up), Coords.ToGodot(right));
-            }
-            else
-            {
-                vis.Rotation = new Vector3(0f, -Mathf.DegToRad(e.Angles.Y), 0f);
-            }
+            // bank-on-strafe ROLL (Angles.Z) into the entity Angles, not just yaw — so build the full orientation
+            // the SAME way EntityNode does (Coords.EntityBasis: DP's entity matrix, alias-model pitch reversal
+            // included). The old yaw-only branch `Rotation.Y = -yaw` mirrored every flat vehicle's heading
+            // (playtest-bugs #76).
+            vis.Basis = Coords.EntityBasis(e.Angles, e.Model);
 
             float speed01 = Mathf.Clamp(
                 Mathf.Sqrt(e.Velocity.X * e.Velocity.X + e.Velocity.Y * e.Velocity.Y) / speedRef, 0f, 1f);

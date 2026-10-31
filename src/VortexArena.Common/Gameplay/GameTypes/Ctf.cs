@@ -1947,16 +1947,11 @@ public sealed class Ctf : GameType
                 QMath.AngleVectors(new Vector3(0f, anchor.Angles.Y, 0f), out Vector3 cf, out Vector3 cr, out Vector3 cu);
                 Vector3 pos = anchor.Origin + cf * off.X + cr * off.Y + cu * off.Z;
                 GametypeEntities.SetOrigin(cfe, pos);
-                // playtest-bugs #7: the carry POSITION above is Quake-space and orbits +θ about Godot +Y. The
-                // client renders a carried flag from its NETWORKED angles (ClientEntityView copies them onto its
-                // proxy) via EntityNode's yaw-only Euler shortcut, which is handedness-flipped to −θ (a negated-yaw
-                // Euler — see planning/COORDINATE_CONVENTIONS.md); left alone it counter-rotates the flag against
-                // its orbit ("turn left, flag spins right"). A server-side render hint can't reach the client
-                // (self-connecting listen server → snapshot-driven proxies), so pre-NEGATE the networked yaw here:
-                // the −θ render path then lands on +θ, matching the position, and the flag rigidly trails the
-                // carrier. (While carried the flag's angles are render-only — nothing reads them for logic; the
-                // at-base flag keeps its true spawn angles.)
-                cfe.Angles = new Vector3(0f, -anchor.Angles.Y, 0f);
+                // QC setattachment(flag, player, ""): the carried flag takes the carrier's yaw, so it faces the
+                // way the carrier does and its Quake-space carry offset above orbits with it. (playtest-bugs #7 once
+                // pre-negated this yaw to cancel a mirrored yaw-only render path on the client; #76 fixed that path
+                // in EntityNode, so the true yaw is sent again.)
+                cfe.Angles = new Vector3(0f, anchor.Angles.Y, 0f);
             }
             // QC ctf_FlagThink FLAG_PASSING: re-aim / retrieve / give up an in-flight passed flag every tick.
             else if (flag.Status == FlagStatus.Passing)

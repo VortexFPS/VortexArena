@@ -80,6 +80,13 @@ def cited_refs() -> dict[str, set[str]]:
         else:
             continue
         for ref in REF_RE.findall(text):
+            # Evidence packages stage their own script beside production code for a Godot run.
+            # Resolve those fixture paths locally. Registry entries must still resolve at ROOT.
+            filename = pathlib.PurePosixPath(ref).name
+            if (ref.startswith("game/") and filename.endswith("Probe.cs")
+                    and PARITY / "registry" not in path.parents
+                    and any((path.parent / (filename + suffix)).is_file() for suffix in ("", ".txt"))):
+                continue
             out.setdefault(ref, set()).add(name)
     return out
 

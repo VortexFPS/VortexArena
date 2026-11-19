@@ -35,12 +35,15 @@ public sealed class EntityScaleWireTests
         cur.Kind = NetEntityKind.Generic;
         cur.Scale = NetEntityState.EncodeScale(Ctf.FlagScale);
 
+        Assert.Equal(EntityField.None, NetEntityState.Diff(baseline, cur) & EntityField.CountdownIndicator);
         Assert.Equal(EntityField.Scale, NetEntityState.Diff(baseline, cur) & EntityField.Scale);
+        cur.CountdownIndicator = new(3, 0);
         var w = new BitWriter();
         EntityStateCodec.WriteDelta(w, baseline, cur);
         var r = new BitReader(w.WrittenSpan);
         NetEntityState got = EntityStateCodec.ReadDelta(ref r, baseline);
         Assert.False(r.BadRead);
+        Assert.Equal(cur.CountdownIndicator, got.CountdownIndicator);
         Assert.Equal(0.5625f, NetEntityState.DecodeScale(got.Scale));
 
         // Back to scale 1 (a flag boarding a vehicle → VEHICLE_FLAG_SCALE): the bit is sent and decodes to unset.

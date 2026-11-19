@@ -12287,17 +12287,16 @@ public sealed partial class NetGame : Node3D
     private bool QuickMenuOpen
         => _fullHud?.GetPanel<VortexArena.Game.Hud.QuickMenuPanel>() is { IsOpen: true };
 
-    /// <summary>
-    /// Escape for the in-world HUD UIs that take the keyboard, in QC CSQC_InputEvent's order: the quickmenu
-    /// (QuickMenu_InputEvent: "K_ESCAPE && key_pressed → QuickMenu_Close"), the maximized radar
-    /// (HUD_Radar_InputEvent) and the minigame menu (HUD_Minigame_InputEvent). Each closes and claims the key, so
-    /// it never also reaches the game menu. Called from Shell's Escape chain (Shell._UnhandledKeyInput), which owns
-    /// both Escape edges and runs before this node's _UnhandledInput would; returns false when none is open.
-    /// </summary>
+    /// <summary>Close an open radar overview or minigame after the interactive HUD and editor have handled Escape.</summary>
     public bool HandleHudEscape()
     {
         if (ConsoleState.IsOpen || _fullHud is null)
             return false;
+        if (_radar is { Maximized: true })
+        {
+            _radar.SetMaximized(false);
+            return true;
+        }
         if (_fullHud.MinigameMenu is { IsOpen: true } minigameMenu)
         {
             minigameMenu.Close();

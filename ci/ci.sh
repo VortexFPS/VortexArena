@@ -131,7 +131,7 @@ if $do_smoke; then
                 powershell -Command "Get-Process Godot* -ErrorAction SilentlyContinue | Stop-Process -Force" >/dev/null 2>&1 || true
             hard_errors=$(grep -cE '^ERROR:|SCRIPT ERROR|Unhandled exception' "$log" || true)
             echo "hard errors: $hard_errors | warnings: $(grep -c 'WARNING:' "$log" || true)"
-            grep -aE "MapLoader|waypoints for|handshake accepted|dedicated slim" "$log" || true
+            grep -aE "MapLoader|waypoints for|handshake accepted|dedicated slim|listen server on" "$log" || true
             grep -aq "MapLoader"          "$log" || { tail -40 "$log"; fail "host smoke: map never loaded ([MapLoader] missing)"; }
             grep -aq "waypoints for"      "$log" || { tail -40 "$log"; fail "host smoke: bots never filled ([bots] waypoints missing)"; }
             grep -aFq "[NetGame] listen server on 127.0.0.1:" "$log" || fail "host smoke: listen banner missing"
@@ -157,7 +157,7 @@ if $do_smoke; then
                 powershell -Command "Get-Process Godot* -ErrorAction SilentlyContinue | Stop-Process -Force" >/dev/null 2>&1 || true
             d_errors=$(grep -cE '^ERROR:|SCRIPT ERROR|Unhandled exception' "$dlog" || true)
             echo "hard errors: $d_errors | warnings: $(grep -c 'WARNING:' "$dlog" || true)"
-            grep -aE "DEDICATED:|players:|waypoints for" "$dlog" || true
+            grep -aE "DEDICATED:|dedicated server listening on UDP|players:|waypoints for" "$dlog" || true
             grep -aq "DEDICATED: no local client" "$dlog" || { tail -40 "$dlog"; fail "dedicated smoke: client-less mode did not engage"; }
             grep -aFq "[NetGame] dedicated server listening on UDP 26099 " "$dlog" || fail "dedicated smoke: dedicated banner missing"
             grep -aFq "self-connecting" "$dlog" && fail "dedicated smoke: printed a listen-host banner"

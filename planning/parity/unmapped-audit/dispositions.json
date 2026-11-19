@@ -134,7 +134,7 @@
         {
           "path": "game/net/NetGame.cs",
           "lines": [
-            7081
+            7137
           ],
           "contains": "private void UpdateCrosshairGate()"
         }
@@ -392,7 +392,7 @@
         {
           "path": "game/net/ServerNet.cs",
           "lines": [
-            4611
+            4625
           ],
           "contains": "private bool CasingShooterInPvs("
         }
@@ -558,7 +558,7 @@
         {
           "path": "game/net/NetGame.cs",
           "lines": [
-            5238
+            5294
           ],
           "contains": "_joinNoticeOverlay?.ShowNotice(pending)"
         }
@@ -625,7 +625,7 @@
         {
           "path": "game/net/NetGame.cs",
           "lines": [
-            5454
+            5510
           ],
           "contains": "_hud.ViewLocationCursor ="
         },
@@ -683,7 +683,7 @@
         {
           "path": "game/net/NetGame.cs",
           "lines": [
-            777
+            794
           ],
           "contains": "private float ConnectTimeoutSeconds"
         },
@@ -1404,7 +1404,7 @@
         {
           "path": "src/VortexArena.Server/GameWorld.cs",
           "lines": [
-            4221
+            4234
           ],
           "contains": "kh.Tick(KeyHuntGameStartTime, GameStopped)"
         },
@@ -1949,7 +1949,7 @@
         {
           "path": "game/net/NetGame.cs",
           "lines": [
-            2406
+            2424
           ],
           "contains": "script = MapBgmScript.Parse"
         },
@@ -12370,11 +12370,11 @@
             90,
             110,
             119,
-            837,
-            983,
-            1383,
-            1398,
-            3632
+            847,
+            993,
+            1393,
+            1408,
+            3642
           ],
           "contains": "class"
         }
@@ -13593,11 +13593,11 @@
             90,
             110,
             119,
-            837,
-            983,
-            1383,
-            1398,
-            3632
+            847,
+            993,
+            1393,
+            1408,
+            3642
           ],
           "contains": "class"
         },
@@ -13660,11 +13660,11 @@
             90,
             110,
             119,
-            837,
-            983,
-            1383,
-            1398,
-            3632
+            847,
+            993,
+            1393,
+            1408,
+            3642
           ],
           "contains": "class"
         }
@@ -14616,20 +14616,20 @@
             1195,
             1199,
             1459,
-            3490,
-            3898,
-            3908,
-            3994,
-            4013,
-            4091,
-            5143,
-            5144,
-            5145,
-            5147,
-            5215,
-            5216,
-            5910,
-            5940
+            3503,
+            3911,
+            3921,
+            4007,
+            4026,
+            4104,
+            5156,
+            5157,
+            5158,
+            5160,
+            5228,
+            5229,
+            5923,
+            5953
           ],
           "contains": "class"
         },
@@ -14640,15 +14640,15 @@
             14,
             16,
             28,
-            116,
-            117,
             120,
-            122,
-            127,
-            134,
-            136,
+            121,
+            124,
+            126,
+            131,
+            138,
             140,
-            224
+            144,
+            228
           ],
           "contains": "class"
         }
@@ -14812,11 +14812,11 @@
             90,
             110,
             119,
-            837,
-            983,
-            1383,
-            1398,
-            3632
+            847,
+            993,
+            1393,
+            1408,
+            3642
           ],
           "contains": "class"
         },

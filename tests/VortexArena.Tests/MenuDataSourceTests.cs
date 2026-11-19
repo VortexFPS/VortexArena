@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using VortexArena.Common.Menu;
+using VortexArena.Engine.Simulation;
 using Xunit;
 
 namespace VortexArena.Tests;
@@ -331,6 +332,19 @@ public class MenuDataSourceTests
     }
 
     [Fact]
+    public void MapVotePreviewSearchUsesOrderedDirectoriesAndMenuSkin()
+    {
+        Assert.Equal("levelshots/arena", MapVotePictures.Map("arena", "", p => p == "levelshots/arena"));
+        Assert.Equal("my shots/arena", MapVotePictures.Map("arena", "\"my shots\" maps", _ => true));
+        Assert.Equal("one/arena", MapVotePictures.Map("arena", "one two three four five", p => p == "five/arena"));
+        Assert.Equal("", MapVotePictures.Map("", "", _ => true));
+        Assert.Equal("gfx/menu/xaw/gametype_ctf", MapVotePictures.Gametype("cup", "ctf", "xaw",
+            p => p == "gfx/menu/xaw/gametype_ctf"));
+        Assert.Equal("gfx/menu/wickedx/gametype_cup", MapVotePictures.Gametype("cup", "ctf", "xaw",
+            p => p == "gfx/menu/wickedx/gametype_cup" || p == "gfx/menu/xaw/gametype_ctf"));
+    }
+
+    [Fact]
     public void MapInfo_Caches_Parsed_Result()
     {
         int reads = 0;
@@ -347,11 +361,11 @@ public class MenuDataSourceTests
     {
         // QC Duel.m_isForcedSupported (duel.qh:15-28): a map with "gametype dm" but NO "gametype duel"
         // is auto-promoted to also support duel when g_duel_not_dm_maps=0 (default).
-        // MapInfoBackend.ForceDuelOnDmMaps defaults to true (matching the Base default).
+        // MapForcedSupport.DuelOnDmMaps defaults to true (matching the Base default).
         var backend = new MapInfoBackend(
             _ => "title Boil\ngametype dm\ngametype tdm\n",
             _ => false);
-        // default: ForceDuelOnDmMaps = true
+        // default: DuelOnDmMaps = true
         MapInfo info = backend.Get("boil");
         Assert.True(info.Supports("dm"));
         Assert.True(info.Supports("duel"));   // forced-in by m_isForcedSupported
@@ -361,12 +375,12 @@ public class MenuDataSourceTests
     [Fact]
     public void MapInfo_ForcedDuelOnDmMap_Suppressed_By_Flag()
     {
-        // When g_duel_not_dm_maps=1 (ForceDuelOnDmMaps=false), duel must NOT be auto-added for DM maps.
+        // When g_duel_not_dm_maps=1 (DuelOnDmMaps=false), duel must NOT be auto-added for DM maps.
         var backend = new MapInfoBackend(
             _ => "title Boil\ngametype dm\ngametype tdm\n",
             _ => false)
         {
-            ForceDuelOnDmMaps = false, // g_duel_not_dm_maps 1
+            ForcedSupport = MapForcedSupport.Default with { DuelOnDmMaps = false },
         };
         MapInfo info = backend.Get("boil");
         Assert.True(info.Supports("dm"));
@@ -398,12 +412,9 @@ public class MenuDataSourceTests
     }
 
     [Fact]
-    public void MapInfo_ForcedDuelOnDmMap_Suppressed_When_DiameterTooLarge()
+    public void MapInfo_LargeDmMapOffersDuelInCatalogAndDetails()
     {
-        // QC Duel.m_isAlwaysSupported diameter guard (mirrored by MapInfoBackend.ApplyForcedGametypes +
-        // MapInfo.Diameter, MapInfoBackend.cs:51-60): a "size" line whose bounding diameter >= 3250
-        // suppresses forced duel even on a DM map. This mirrors the implosion case — gametype dm, no
-        // gametype duel, size line giving diameter ~8874 (vlen of (6336, 5888, 1984)).
+        // The diameter threshold applies during BSP autogeneration. Declared DM support invokes the fallback.
         var backend = new MapInfoBackend(
             _ => "title Implosion\ngametype dm\nsize -960 -5888 -576 5376 0 1408\n",
             _ => false);
@@ -411,14 +422,18 @@ public class MenuDataSourceTests
         Assert.True(info.Supports("dm"));
         Assert.NotNull(info.Diameter);              // size line was parsed
         Assert.True(info.Diameter!.Value >= 3250f); // well above the duel threshold
-        Assert.False(info.Supports("duel"));        // forced-duel suppressed by the diameter gate
+        Assert.True(info.Supports("duel"));
+        Assert.True(info.SupportsInCatalog("duel", MapForcedSupport.Default));
+        var settings = MapForcedSupport.Default with { DuelOnDmMaps = false };
+        MapInfoBackend.ApplyForcedGametypes(info, settings);
+        Assert.False(info.Supports("duel"));
+        Assert.False(info.SupportsInCatalog("duel", settings));
     }
 
     [Fact]
     public void MapInfo_ForcedDuelOnDmMap_AllowedWhenDiameterSmall()
     {
-        // The other branch of the diameter guard (MapInfoBackend.cs:51-60): a small DM map whose size
-        // line gives a diameter below 3250 still gets forced duel. Bounds (1000, 1000, 600) → ~1536.
+        // A small map with declared DM support also gets the fallback.
         var backend = new MapInfoBackend(
             _ => "title Tiny\ngametype dm\nsize -500 -500 -300 500 500 300\n",
             _ => false);
@@ -427,6 +442,152 @@ public class MenuDataSourceTests
         Assert.NotNull(info.Diameter);              // size line was parsed
         Assert.True(info.Diameter!.Value < 3250f);  // below threshold
         Assert.True(info.Supports("duel"));         // small map → forced duel still allowed
+    }
+
+    [Fact]
+    public void MapInfo_SeparatesListingFlagsFromAutomaticRotation()
+    {
+        var cvars = new CvarService();
+        var parser = new MapInfoBackend(path => path switch
+        {
+            "maps/h.mapinfo" => "hidden",
+            "maps/f.mapinfo" => "forbidden",
+            "maps/hard.mapinfo" => "frustrating",
+            "maps/skip.mapinfo" => "noautomaplist",
+            "maps/new.mapinfo" => "gameversion_min 807",
+            _ => "gametype dm",
+        }, _ => false);
+        var hidden = parser.Parse("h");
+        Assert.False(hidden.CanList(cvars, inMenu: false));
+        cvars.Set("g_maplist_allow_hidden", "1");
+        Assert.True(hidden.CanList(cvars, inMenu: false));
+        Assert.False(hidden.CanList(cvars, inMenu: true));
+        Assert.False(parser.Parse("f").CanList(cvars, inMenu: false));
+        Assert.False(parser.Parse("hard").CanList(cvars, inMenu: true));
+        cvars.Set("g_maplist_allow_frustrating", "2");
+        Assert.True(parser.Parse("hard").CanList(cvars, inMenu: true));
+        Assert.False(parser.Parse("dm").CanList(cvars, inMenu: false));
+        Assert.True(parser.Parse("dm").CanList(cvars, inMenu: true, applyRequiredFlags: false));
+        Assert.False(hidden.CanList(cvars, inMenu: true, applyRequiredFlags: false));
+        cvars.Set("g_maplist_allow_frustrating", "1");
+        Assert.True(parser.Parse("skip").CanList(cvars, inMenu: false));
+        Assert.True(parser.Parse("skip").AvoidInRotation(cvars));
+        var future = parser.Parse("new");
+        cvars.Set("gameversion", "806");
+        Assert.True(future.AvoidInRotation(cvars));
+        cvars.Set("gameversion", "807");
+        Assert.False(future.AvoidInRotation(cvars));
+    }
+
+    [Fact]
+    public void MapInfo_CatalogEvaluatesCurrentFlagsAgainstDeclaredModes()
+    {
+        var backend = new MapInfoBackend(
+            path => path switch
+            {
+                "maps/wide.mapinfo" => "type FFA // old DM name\nsize 0 0 0 4000 1 1\n",
+                "maps/autogenerated/small.mapinfo" => "GAMEtype dm\nsize 0 0 0 500 500 500\n",
+                "maps/explicit.mapinfo" => "gametype dm\ngametype duel\ngametype tdm\nsize 0 0 0 4000 1 1\n",
+                _ => null,
+            },
+            _ => false);
+
+        MapForcedSupport defaults = MapForcedSupport.Default;
+        MapForcedSupport forceTdm = defaults with { TdmOnDmMaps = true };
+        MapForcedSupport noForcedDuel = defaults with { DuelOnDmMaps = false };
+        MapInfo detail = backend.Get("small");
+        Assert.True(detail.Supports("duel"));
+        Assert.False(detail.SupportsInCatalog("duel", noForcedDuel));
+        MapInfoBackend.ApplyForcedGametypes(detail, noForcedDuel);
+        Assert.False(detail.Supports("duel"));
+
+        Assert.Equal("freezetag", MapInfoBackend.ResolveGametype("FT"));
+        MapInfo wide = backend.Parse("wide");
+        Assert.True(wide.Supports("dm"));
+        Assert.True(wide.SupportsInCatalog("duel", defaults));
+        Assert.False(wide.SupportsInCatalog("tdm", defaults));
+        Assert.True(wide.SupportsInCatalog("tdm", forceTdm));
+        Assert.False(wide.SupportsInCatalog("tdm", defaults));
+
+        MapInfo small = backend.Parse("small");
+        Assert.True(small.HasMapInfoFile);
+        Assert.True(small.SupportsInCatalog("duel", defaults));
+        Assert.False(small.SupportsInCatalog("duel", noForcedDuel));
+
+        MapInfo explicitModes = backend.Parse("explicit");
+        Assert.True(explicitModes.SupportsInCatalog("duel", noForcedDuel));
+        Assert.True(explicitModes.SupportsInCatalog("tdm", noForcedDuel));
+        Assert.True(backend.Parse("no-sidecar").SupportsInCatalog("tdm", noForcedDuel));
+    }
+
+    [Theory]
+    [InlineData("FFA", "mayhem")]
+    [InlineData("tdm", "mayhem")]
+    [InlineData("FFA", "tmayhem")]
+    [InlineData("tdm", "tmayhem")]
+    [InlineData("keepaway", "tka")]
+    [InlineData("lms", "surv")]
+    public void MapInfo_CatalogAndDetailsApplyDefaultPromotions(string declared, string forced)
+    {
+        var backend = new MapInfoBackend(path => path switch
+        {
+            "maps/source.mapinfo" => $"gametype {declared}",
+            "maps/unrelated.mapinfo" => "gametype ctf",
+            _ => null,
+        }, _ => false);
+        MapForcedSupport settings = MapForcedSupport.FromCvars(new CvarService());
+
+        Assert.True(backend.Parse("source").SupportsInCatalog(forced, settings));
+        Assert.True(backend.Get("source").Supports(forced));
+        Assert.False(backend.Parse("unrelated").SupportsInCatalog(forced, settings));
+        Assert.False(backend.Get("unrelated").Supports(forced));
+    }
+
+    [Fact]
+    public void MapInfo_CatalogAndDetailsUseCurrentPromotionCvars()
+    {
+        var cvars = new CvarService();
+        MapInfoBackend CreateBackend() => new(path => path switch
+        {
+            "maps/ka.mapinfo" => "gametype ka",
+            "maps/tdm.mapinfo" => "gametype tdm",
+            "maps/dm.mapinfo" => "gametype dm",
+            "maps/lms.mapinfo" => "gametype lms",
+            "maps/explicit.mapinfo" => "gametype tka\ngametype surv",
+            _ => null,
+        }, _ => false) { ForcedSupport = MapForcedSupport.FromCvars(cvars) };
+
+        var backend = CreateBackend();
+        MapInfo ka = backend.Parse("ka");
+        MapInfo tdm = backend.Parse("tdm");
+        MapInfo dm = backend.Parse("dm");
+        MapInfo lms = backend.Parse("lms");
+
+        Assert.True(ka.SupportsInCatalog("tka", MapForcedSupport.FromCvars(cvars)));
+        Assert.False(tdm.SupportsInCatalog("tka", MapForcedSupport.FromCvars(cvars)));
+        Assert.True(lms.SupportsInCatalog("surv", MapForcedSupport.FromCvars(cvars)));
+
+        cvars.Set("g_tka_on_ka_maps", "0");
+        cvars.Set("g_tka_on_tdm_maps", "1");
+        cvars.Set("g_survival_not_lms_maps", "1");
+        MapForcedSupport settings = MapForcedSupport.FromCvars(cvars);
+        backend = CreateBackend();
+
+        Assert.False(ka.SupportsInCatalog("TKA", settings));
+        Assert.False(backend.Get("ka").Supports("tka"));
+        Assert.True(tdm.SupportsInCatalog("TKA", settings));
+        Assert.True(backend.Get("tdm").Supports("tka"));
+        Assert.False(dm.SupportsInCatalog("tka", settings));
+        Assert.False(backend.Get("dm").Supports("tka"));
+        Assert.False(lms.SupportsInCatalog("surv", settings));
+        Assert.False(backend.Get("lms").Supports("surv"));
+        Assert.True(backend.Get("explicit").Supports("tka"));
+        Assert.True(backend.Get("explicit").Supports("surv"));
+
+        cvars.Set("g_tdm_on_dm_maps", "1");
+        Assert.True(dm.SupportsInCatalog("tka", MapForcedSupport.FromCvars(cvars)));
+        Assert.True(CreateBackend().Get("dm").Supports("tka"));
+        Assert.False(dm.Supports("tka")); // catalog evaluates rules without mutating its cached declarations
     }
 
     // -------------------------------------------------------------------------------------------------

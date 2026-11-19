@@ -159,7 +159,7 @@ public static class QcDraw
 
     /// <summary>
     /// getWrappedLine (common/util.qc): takes the next line, at most <paramref name="width"/> wide, off the front of
-    /// <paramref name="remaining"/>, broken after its last space (the space dropped) or mid-word when it has none;
+    /// <paramref name="remaining"/>, broken at a space or CJK boundary, with a mid-word fallback;
     /// <paramref name="remaining"/> becomes null once nothing is left. With <paramref name="colors"/>
     /// (draw_TextWidth_WithColors) colour codes take no room and the next line starts with the colour in force.
     /// </summary>
@@ -172,18 +172,38 @@ public static class QcDraw
         int take = LengthUpToWidth(s, width, w, colors);
         if (take <= 0 || take >= s.Length) { remaining = null; return s; }
 
-        // take_wrapped_line_until: back from the cut to the last ascii space.
-        int i = take, skip = 0;
-        while (i > 0)
+        // take_wrapped_line_until: prefer a space or an East Asian line boundary over a hard cut.
+        int skip = 0;
+        for (int i = take - 1; i >= 0; i--)
         {
-            --i;
-            if (s[i] == ' ') { skip = 1; break; }
+            char c = s[i];
+            if (c == ' ')
+            {
+                if (i > 0) take = i;
+                skip = 1;
+                break;
+            }
+            if (c is '〈' or '《' or '「' or '『' or '【' or '（')
+            {
+                if (i > 0) take = i;
+                break;
+            }
+            if (c is >= '\u3000' and <= '\u9fff' or >= '\uac00' and <= '\ud7af' || BreakAfter(c))
+            {
+                int boundary = i + 1;
+                // Leave a character beside closing punctuation when it would otherwise start the next line.
+                if (BreakAfter(s[boundary])) boundary--;
+                if (boundary > 0) take = boundary;
+                break;
+            }
         }
-        if (i != 0) take = i;
         string rest = s[Math.Min(s.Length, take + skip)..];
         remaining = rest.Length == 0 ? null : colors ? LastColorCode(s[..take]) + rest : rest;
         return s[..take];
     }
+
+    private static bool BreakAfter(char c)
+        => c is '、' or '。' or '〉' or '》' or '」' or '』' or '】' or '！' or '）' or '，' or '：' or '；' or '？';
 
     /// <summary>
     /// draw_TextWidth as a list's resizeNotify measures it (rewrapCampaign, wrapGuideText). m_draw calls
@@ -655,6 +675,7 @@ public static class QcLook
 public partial class QcLabel : Control
 {
     private string _text = "";
+    private bool _disabled;
 
     public QcLabel(string text = "", float align = 0f)
     {
@@ -676,7 +697,16 @@ public partial class QcLabel : Control
     /// <summary>The text colour with its alpha; null = SKINCOLOR_TEXT @ SKINALPHA_TEXT, read when drawn (the skin
     /// and the r_text* lift are not loaded yet when a dialog is built).</summary>
     public Color? Color { get; set; }
-    public bool Disabled { get; set; }
+    public bool Disabled
+    {
+        get => _disabled;
+        set
+        {
+            if (_disabled == value) return;
+            _disabled = value;
+            QueueRedraw();
+        }
+    }
     /// <summary>QC <c>marginLeft</c>/<c>marginRight</c>, in characters.</summary>
     public float MarginLeftChars { get; set; }
     public float MarginRightChars { get; set; }

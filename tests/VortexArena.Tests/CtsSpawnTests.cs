@@ -4,8 +4,7 @@
 // start-touch → stop-touch → fastest-time path.
 //
 // Port of: server/race.qc target_checkpoint_setup + spawnfunc(target_startTimer/target_stopTimer) (lines
-// 1142-1201, gated `if(!g_race && !g_cts) delete`). The port's CTS models a single start→stop course, so
-// target_checkpoint (defrag intermediate) is consumed as a no-op.
+// 1142-1201, gated `if(!g_race && !g_cts) delete`).
 
 using System.Collections.Generic;
 using System.Linq;
@@ -62,21 +61,118 @@ public sealed class CtsSpawnTests
     }
 
     [Fact]
-    public void TargetCheckpoint_IsConsumedAsNoOp()
+    public void DefragCheckpoints_LoadOrder_AndRequireEachSplitBeforeFinish()
     {
-        // The port's CTS has no defrag intermediate checkpoints; target_checkpoint must be consumed (no timer
-        // registered, no "unhandled class" — it has a registered spawnfunc).
+        var first = Dict("target_checkpoint", new Vector3(100, 0, 0));
+        first.Fields["targetname"] = "first";
+        var second = Dict("target_checkpoint", new Vector3(250, 0, 0));
+        second.Fields["targetname"] = "second";
         var world = new GameWorld(new CollisionWorld(), new List<EntityDict>
         {
             Dict("target_startTimer", new Vector3(0, 0, 0)),
-            Dict("target_checkpoint", new Vector3(250, 0, 0)),
+            second,
+            first,
             Dict("target_stopTimer", new Vector3(500, 0, 0)),
-        });
+        })
+        {
+            MapName = "checkpoint-order",
+            ConfigReader = path => path == "maps/checkpoint-order.defragcp" ? "first 1\nsecond 2\n" : null,
+        };
         world.Boot("cts");
-        var cts = (Cts)world.GameType!;
+        var cts = Assert.IsType<Cts>(world.GameType);
+        Entity start = cts.Timers.Single(gate => gate.GtIsStartTimer);
+        Entity stop = cts.Timers.Single(gate => gate.GtIsStopTimer);
+        Entity one = cts.Checkpoints.Single(gate => gate.TargetName == "first");
+        Entity two = cts.Checkpoints.Single(gate => gate.TargetName == "second");
+        Assert.Null(one.Touch);
+        var runner = new Player { Health = 100f, NetName = "Runner" };
+        var state = cts.GetState(runner);
 
-        Assert.Equal(2, cts.Timers.Count); // only start + stop, not the intermediate checkpoint
-        Assert.DoesNotContain("target_checkpoint", world.UnhandledClasses);
+        start.Touch!(start, runner);
+        state.RaceMoveTime = 1f;
+        two.Use!(two, runner);
+        stop.Touch!(stop, runner);
+        Assert.Equal(0, state.Completions);
+        Assert.Empty(state.BestSplits);
+
+        one.Use!(one, runner);
+        state.RaceMoveTime = 2f;
+        one.Use!(one, runner);
+        two.Use!(two, runner);
+        Assert.Equal(1f, state.BestSplits[1].Time);
+        Assert.Equal(2f, cts.BestSplits[2].Time);
+        state.RaceMoveTime = 3f;
+        stop.Touch!(stop, runner);
+        Assert.Equal(1, state.Completions);
+        Assert.Equal(3f, state.FastestTime);
+    }
+
+    [Fact]
+    public void NumberedCheckpoints_UseCnt_AndFinishAtTimedGate()
+    {
+        static EntityDict Gate(int index, int flags)
+        {
+            var gate = Dict("trigger_race_checkpoint", new Vector3(index * 200, 0, 0));
+            gate.Fields["cnt"] = index.ToString();
+            gate.Fields["spawnflags"] = flags.ToString();
+            return gate;
+        }
+
+        var world = new GameWorld(new CollisionWorld(), new List<EntityDict> { Gate(2, 8), Gate(1, 4), Gate(0, 0) });
+        world.Boot("cts");
+        var cts = Assert.IsType<Cts>(world.GameType);
+        Entity start = cts.Checkpoints.Single(gate => gate.GtCheckpointIndex == 0);
+        Entity split = cts.Checkpoints.Single(gate => gate.GtCheckpointIndex == 1);
+        Entity finish = cts.Checkpoints.Single(gate => gate.GtCheckpointIndex == 2);
+        var runner = new Player { Health = 100f };
+        var state = cts.GetState(runner);
+
+        start.Touch!(start, runner);
+        state.RaceMoveTime = 1f;
+        finish.Touch!(finish, runner);
+        Assert.Equal(1, state.NextCheckpoint);
+        split.Touch!(split, runner);
+        split.Touch!(split, runner);
+        Assert.False(runner.IsDead);
+        Assert.Equal(1f, state.BestSplits[1].Time);
+        state.RaceMoveTime = 2f;
+        finish.Touch!(finish, runner);
+        Assert.Equal(2f, state.FastestTime);
+    }
+
+    [Fact]
+    public void SharedStartFinish_RecordsTwoConsecutiveLapsOnSingleContacts()
+    {
+        var startDict = Dict("trigger_race_checkpoint");
+        startDict.Fields["spawnflags"] = "1";
+        var splitDict = Dict("trigger_race_checkpoint", new Vector3(200, 0, 0));
+        splitDict.Fields["cnt"] = "1";
+        var world = new GameWorld(new CollisionWorld(), new List<EntityDict> { startDict, splitDict });
+        world.Boot("cts");
+        Api.Cvars.Set("g_cts_finish_kill_delay", "0");
+        var cts = Assert.IsType<Cts>(world.GameType);
+        Entity start = cts.Checkpoints.Single(gate => gate.GtCheckpointIndex == 0);
+        Entity split = cts.Checkpoints.Single(gate => gate.GtCheckpointIndex == 1);
+        var runner = new Player { Health = 100f };
+        var state = cts.GetState(runner);
+        start.TargetName = "course_start";
+        MapMover.IndexRegister(start);
+        var spawn = Api.Entities.Spawn();
+        spawn.ClassName = "info_player_deathmatch";
+        spawn.Target = start.TargetName;
+        MapMover.UseTargets(spawn, runner, null);
+        Assert.False(state.Running);
+        start.Use!(start, runner);
+        for (int lap = 1; lap <= 2; lap++)
+        {
+            state.RaceMoveTime = 1f;
+            split.Touch!(split, runner);
+            state.RaceMoveTime = 2f;
+            start.Use!(start, runner);
+            Assert.Equal(lap, state.Completions);
+            Assert.True(state.Running);
+            Assert.Equal(1, state.NextCheckpoint);
+        }
     }
 
     // ============================================== Q3DF target_score / target_fragsFilter CTS gate (T52)

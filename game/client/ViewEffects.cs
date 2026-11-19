@@ -30,12 +30,12 @@ namespace VortexArena.Game.Client;
 /// the SUPERCONTENTS at the eye. The overlay then decays/animates itself.
 ///
 /// What is NOT ported: the GLSL blur/sharpen post-process (<c>damage_blurpostprocess</c> /
-/// <c>content_blurpostprocess</c> → <c>r_glsl_postprocess_uservec*</c>) and night-vision — those drive
-/// engine shader cvars that have no Godot analogue here. The essential coloured screen reaction is faithful.
+/// <c>content_blurpostprocess</c> → <c>r_glsl_postprocess_uservec*</c>).
 /// </summary>
 public partial class ViewEffects : CanvasLayer
 {
     // ColorRects stretched across the whole viewport; their alpha is what we animate (the RGB is the tint).
+    private NightVisionOverlay _nightVision = null!;
     private ColorRect _damage = null!;        // gentle-mode solid flash (cl_gentle / cl_gentle_damage) + texture fallback
     private TextureRect _bloodSplat = null!;  // QC drawpic("gfx/blood", ...) — the centred blood splatter
     private ColorRect _contents = null!;
@@ -101,6 +101,9 @@ public partial class ViewEffects : CanvasLayer
         // where HUD_Damage/HUD_Contents run before the HUD panels but the crosshair draws last).
         Layer = -1;
 
+        _nightVision = new NightVisionOverlay();
+        AddChild(_nightVision);
+
         _contents = MakeFullScreenRect("ContentsTint");
         _bloodSplat = MakeBloodSplat();
         _damage = MakeFullScreenRect("DamageFlash");
@@ -137,6 +140,9 @@ public partial class ViewEffects : CanvasLayer
         Modulate = new Color(1f, 1f, 1f, 0f),
         MouseFilter = Control.MouseFilterEnum.Ignore,
     };
+
+    public void UpdateNightVision(float time, float frameTime, int serverFlags)
+        => _nightVision.UpdateOverlay(time, frameTime, serverFlags);
 
     private static ColorRect MakeFullScreenRect(string name) => new()
     {
@@ -178,28 +184,29 @@ public partial class ViewEffects : CanvasLayer
     /// doesn't bleed a growing red tint onto the screen. A player who is genuinely dead DURING a match is NOT
     /// observing, so the death fade still shows for them.
     /// </param>
-    public void UpdateEffects(float dt, float health, int eyeContents, bool observing)
+    /// <param name="suppressDamage">Hide the damage flash while Freeze Tag draws its frozen overlay.</param>
+    public void UpdateEffects(float dt, float health, int eyeContents, bool observing, bool suppressDamage = false)
     {
         if (dt <= 0f)
             dt = 0.0166667f; // assume 60fps before we know the real frametime (QC drawframetime default)
 
-        UpdateDamage(dt, health, observing);
+        UpdateDamage(dt, health, observing, suppressDamage);
         UpdateContents(dt, eyeContents);
     }
 
     // -------------------------------------------------------------------------------------------------
     //  HUD_Damage (view.qc ~1237): myhealth_flash accumulate + decay; alpha = flash - pain_threshold.
     // -------------------------------------------------------------------------------------------------
-    private void UpdateDamage(float dt, float health, bool observing)
+    private void UpdateDamage(float dt, float health, bool observing, bool suppressed)
     {
         // Tint colour through the cvar (QC stov(autocvar_hud_damage_color), _hud_common.cfg:302), like the
         // liquid-tint sibling colours, instead of a hardcoded red.
         Color damageColor = CvarColor("hud_damage_color", DefDamageColor);
 
         float global = Cvar("hud_damage", DefDamageGlobalAlpha);
-        if (global <= 0f)
+        if (suppressed || global <= 0f)
         {
-            // hud_damage 0 disables the effect entirely (QC early-returns); clear and bail.
+            // HUD_Damage skips drawing when disabled or interrupted by Freeze Tag.
             _pendingDamage = 0f;
             _myHealthFlash = 0f;
             SetAlpha(_damage, damageColor, 0f);
@@ -427,11 +434,7 @@ public partial class ViewEffects : CanvasLayer
     }
 
     /// <summary>
-    /// The in-orb 2D colour flash — port of <c>orb_draw2d</c> (mutators/mutator/nades/nades.qc). When the eye
-    /// is inside a nade orb's radius, the screen is painted ADDITIVELY with that orb's colour at
-    /// <c>hud_colorflash_alpha * orb.Alpha</c>, so standing inside e.g. a heal/veil orb tints the view its colour.
-    /// When the eye sits inside several overlapping orbs the STRONGEST one wins (the QC orbs draw in turn but the
-    /// additive layer is dominated by the brightest contribution; we take the max so it reads stably).
+    /// Xonotic orb_draw2d draws the first field whose cube overlaps the eye's two-unit box.
     /// </summary>
     /// <param name="eyeOrigin">The local view origin in world space (QC <c>view_origin</c>), Quake units.</param>
     /// <param name="orbs">The live orbs: each (world Origin, containment Radius, flash Color, per-orb Alpha 0..1).</param>
@@ -441,32 +444,20 @@ public partial class ViewEffects : CanvasLayer
     {
         float flashAlpha = Cvar("hud_colorflash_alpha", DefColorFlashAlpha);
 
-        // Find the strongest orb whose radius contains the eye (QC: each orb tints if vlen(view_origin-org) < radius).
-        bool any = false;
-        Color best = new(0f, 0f, 0f);
-        float bestAlpha = 0f;
         if (orbs is not null)
         {
-            for (int i = 0; i < orbs.Count; i++)
+            foreach (var orb in orbs)
             {
-                var orb = orbs[i];
-                if ((eyeOrigin - orb.Origin).Length() >= orb.Radius)
-                    continue;
-                float a = flashAlpha * orb.Alpha;
-                if (a <= bestAlpha)
-                    continue;
-                bestAlpha = a;
-                best = orb.Color;
-                any = true;
+                var delta = System.Numerics.Vector3.Abs(eyeOrigin - orb.Origin);
+                float extent = orb.Radius * 0.5f + 1f;
+                if (delta.X <= extent && delta.Y <= extent && delta.Z <= extent)
+                {
+                    SetAlpha(_orbFlash, orb.Color, flashAlpha * orb.Alpha * 0.6f);
+                    return;
+                }
             }
         }
-
-        if (!any)
-        {
-            SetAlpha(_orbFlash, new Color(0f, 0f, 0f), 0f);
-            return;
-        }
-        SetAlpha(_orbFlash, best, bestAlpha);
+        SetAlpha(_orbFlash, Colors.Black, 0f);
     }
 
     private static void SetAlpha(ColorRect rect, Color rgb, float alpha)

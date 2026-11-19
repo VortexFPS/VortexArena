@@ -113,8 +113,8 @@ is a **string** cvar (expr_evaluate) so it can hold a ruleset expression (overki
 - **Relocation:** `RelocateNearTeammate` + `TryOffset` + `Place` — ports the per-teammate gates, the 6 offsets,
   the sideways + downward traces and the floor-ahead trace, the pair-wise commit, the closetodeath best-spot
   tracking, and the per-teammate cooldown. `msnt_timer` lives in a `ConditionalWeakTable<Entity,float[]>`.
-- **Replicated client cvar:** the port reads `cl_spawn_near_teammate` directly via `Api.Cvars.GetFloat`
-  (single-process / headless), not a per-player replicated value — see gaps.
+- **Replicated client cvar:** the client sends its archived `cl_spawn_near_teammate` value on connection and polls
+  for edits. In mode 2, both spawn hooks read the spawning player's value from the server's per-client store.
 
 ## Parity assessment
 
@@ -187,9 +187,8 @@ implementation choice with identical semantics — not a behavioral divergence.
    mutator write `player.FixAngle = true; player.FixAngleAngles = <facing>` (both branches).
 2. RESOLVED: the port ships `mutators.cfg` (`_distance 640`) and `ruleset-overkill.cfg` under
    `Base/data/xonotic-data.pk3dir`, so the defaults are present in a normal match. Not a values gap.
-3. Still open: the port reads `cl_spawn_near_teammate` as a host-global cvar, not a per-player REPLICATEd value,
-   so the `ignore_spawnpoint==2` (per-client opt-in) mode is not per-player. Overkill uses mode 1, so this is
-   latent rather than active.
+3. RESOLVED: mode 2 uses the spawning player's replicated preference for scoring and relocation.
+   `CvarReplicationTests` covers opposite settings, a change, and cleanup on disconnect.
 4. Still open: `g_spawn_near_teammate`'s expression form (`"!g_assault !g_freezetag"`) is not parsed by the
    port's `ExprEvaluate` — it always reads enabled. The mutator should run a real `expr_evaluate` (shared across
    all expr-gated port mutators) so it disables under assault/freezetag.

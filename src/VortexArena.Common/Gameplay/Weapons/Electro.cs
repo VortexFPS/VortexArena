@@ -297,7 +297,7 @@ public sealed class Electro : Weapon
         Api.Entities.SetOrigin(proj, shot.Origin);
 
         // W_SetupProjVelocity_PRI: velocity = w_shotdir * speed.
-        proj.Velocity = WeaponFiring.ProjectileVelocity(shot.Dir, Vector3.UnitZ, Primary.Speed);
+        proj.Velocity = WeaponFiring.ProjectileVelocity(actor, shot.Dir, Vector3.UnitZ, Primary.Speed);
         proj.Angles = QMath.VecToAngles(proj.Velocity);
 
         // QC electro.qc:336-337 — flag the bolt as a dodgeable hazard (rating = primary damage).
@@ -429,13 +429,6 @@ public sealed class Electro : Weapon
     // W_Electro_Attack_Orb — gravity-affected bouncing orb that detonates on timer/contact. electro.qc
     private void AttackOrb(Entity actor, WeaponSlot slot)
     {
-        // QC W_Electro_Attack_Orb:569-575 — secondary_limit (default 0 = unlimited): track live orbs per firer in
-        // LimitedElectroBallRubbleList and, once the firer's orb count would exceed the cap, detonate the OLDEST orb
-        // (adaptor_think2use_hittype_splash) before laying the new one. The port has no rubble linked-list, so scan
-        // electro_orb by owner and force the lowest-NextThink (oldest spawned) to explode. Inert while limit == 0.
-        if (Secondary.Limit > 0)
-            EnforceOrbLimit(actor);
-
         actor.TakeResource(AmmoType, Secondary.Ammo);
 
         QMath.AngleVectors(actor.Angles, out Vector3 forward, out _, out Vector3 up);
@@ -466,7 +459,7 @@ public sealed class Electro : Weapon
         orb.DamagedByContents = Secondary.DamagedByContents;
 
         // W_SetupProjVelocity_UP_SEC: velocity = normalize(dir + up*(speed_up/speed)) * speed.
-        orb.Velocity = WeaponFiring.ProjectileVelocity(dir, up, Secondary.Speed, Secondary.SpeedUp);
+        orb.Velocity = WeaponFiring.ProjectileVelocity(actor, dir, up, Secondary.Speed, Secondary.SpeedUp);
         orb.Angles = QMath.VecToAngles(orb.Velocity);
 
         // QC electro.qc:539-540 — flag the secondary orb as a dodgeable hazard (rating = secondary damage).
@@ -479,20 +472,17 @@ public sealed class Electro : Weapon
         bool[] bounced = { false };
 
         orb.Touch = (self, other) => OrbTouch(self, other, bounced);
-        orb.Think = self => ExplodeOrb(self, bounced); // adaptor_think2use_hittype_splash at lifetime
+        orb.Use = (self, _) => ExplodeOrb(self, bounced, timed: true);
+        orb.Think = self => ExplodeOrb(self, bounced, timed: true);
         orb.NextThink = Api.Clock.Time + Secondary.Lifetime;
         // W_Electro_Orb_Damage (electro.qc:478-512): a shot-down orb that drops to <=0 HP detonates. QC branches on
         // is_combo = (inflictor.classname == "electro_orb_chain" || "electro_bolt"): an electro blast converts it to
         // a COMBO (crediting whoever shot it); ANY OTHER inflictor — another weapon, or a NULL inflictor from a
         // lava/slime contents death (CreatureFrame_hotliquids) — bursts it as a plain SECONDARY blast instead.
-        // Projectiles.MakeShootable installs the QC W_CheckProjectileDamage gate + HP-subtract shim (exception 1 so a
-        // combo passes the stock g_projectiles_damage -2; contents deaths pass via the contents branch of the gate),
-        // sets self.DmgInflictor, then fires this ProjectileDamage at hp<=0.
+        // The projectile-damage gate only grants the Electro exception to combo inflictors.
         orb.ProjectileDamage = (self, attacker) =>
         {
-            string? infl = self.DmgInflictor?.ClassName;
-            bool isCombo = infl == "electro_orb_chain" || infl == "electro_bolt";
-            if (isCombo)
+            if (IsComboInflictor(self.DmgInflictor))
             {
                 self.Owner = attacker ?? self.Owner;
                 self.Touch = null; self.Think = null; self.TakeDamage = DamageMode.No;
@@ -507,9 +497,13 @@ public sealed class Electro : Weapon
             // i.e. the orb's normal SECONDARY explode. Reuse the same ExplodeOrb path the lifetime/touch use.
             ExplodeOrb(self, bounced);
         };
-        // Wire the shoot-down-into-combo path live (Wave-1 seam): exception 1 = combo-able regardless of the
-        // stock g_projectiles_damage -2, matching QC W_Electro_Orb_Damage's is_combo branch.
-        Projectiles.MakeShootable(orb, exception: 1f);
+        Projectiles.MakeShootable(orb, exceptionFn: static (_, inflictor) => IsComboInflictor(inflictor) ? 1f : -1f);
+
+        if (Secondary.Limit > 0)
+        {
+            orb.ElectroRubbleOrder = ++_orbSpawnOrder;
+            EnforceOrbLimit(actor);
+        }
 
         // MUTATOR_CALLHOOK(EditProjectile, actor, proj) (electro.qc). invincibleproj zeroes the orb's health
         // here, so a shot-down combo can't be triggered — matching QC.
@@ -519,6 +513,9 @@ public sealed class Electro : Weapon
         Api.Sound.Play(actor, SoundChannel.Weapon, "weapons/electro_fire2.wav");
         EffectEmitter.Emit("ELECTRO_MUZZLEFLASH", shot.Origin, shot.Dir * 1000f, 1, except: actor);
     }
+
+    private static bool IsComboInflictor(Entity? inflictor)
+        => inflictor?.ClassName is "electro_orb_chain" or "electro_bolt";
 
     // W_Electro_Orb_Touch — burst on a player (touchexplode), otherwise bounce. electro.qc
     private void OrbTouch(Entity self, Entity other, bool[] bounced)
@@ -557,7 +554,7 @@ public sealed class Electro : Weapon
     // W_Electro_Orb_Stick (electro.qc:396-455) — glue a landed orb to the surface it touched, facing into the wall
     // (vectoangles(-trace_plane_normal)), MOVETYPE_NONE; if the toucher is a MOVING bmodel, ride it via MOVETYPE_FOLLOW
     // (SetMovetypeFollow, common/util.qc:2129). stick_lifetime >= 0 overrides the orb's remaining death_time; -1 keeps it.
-    // The orb stays shootable/touchable as a contact mine until it detonates. Off-by-default (Secondary.Stick).
+    // The stuck orb stays shootable and no longer re-enters the flying orb's touch handler.
     private void OrbStick(Entity self, Entity other, bool[] bounced)
     {
         // Recover -trace_plane_normal at the impact point (the engine touch callback doesn't carry the collision
@@ -573,21 +570,59 @@ public sealed class Electro : Weapon
         self.Velocity = Vector3.Zero;
         self.MoveType = MoveType.None; // lock in place (disables gravity)
         self.Gravity = 0f;
+        self.Touch = null;
 
         // stick_lifetime: -1 inherits the orb's existing death_time (its lifetime think is left scheduled);
         // a non-negative value re-arms the detonation timer to time + stick_lifetime (electro.qc:443-446).
         if (Secondary.StickLifetime >= 0f)
         {
-            self.Think = s => ExplodeOrb(s, bounced);
+            self.Think = s => ExplodeOrb(s, bounced, timed: true);
             self.NextThink = Api.Clock.Time + Secondary.StickLifetime;
         }
 
         Api.Sound.Play(self, SoundChannel.Body, "weapons/electro_bounce.wav");
 
-        // If the surface is a MOVING bmodel (func_plat/func_door), glue the orb so it rides the platform (QC
-        // SetMovetypeFollow). Static-world hits (worldspawn sentinel / MOVETYPE_NONE) leave it locked in place.
-        if (other.MoveType != MoveType.None && other.ClassName != "worldspawn" && !ReferenceEquals(other, self))
+        if (other.ClassName != "worldspawn" && !ReferenceEquals(other, self))
+        {
+            float deadline = self.NextThink;
+            string targetClass = other.ClassName;
+            DeadFlag targetDeathState = other.DeadState;
             SetMovetypeFollow(self, other);
+            self.Think = orb => FollowOrb(orb, targetClass, targetDeathState, deadline, bounced);
+            self.NextThink = Api.Clock.Time;
+        }
+    }
+
+    private void FollowOrb(Entity orb, string targetClass, DeadFlag targetDeathState, float deadline, bool[] bounced)
+    {
+        float now = Api.Clock.Time;
+        if (now > deadline)
+        {
+            ExplodeOrb(orb, bounced, timed: true);
+            return;
+        }
+
+        Entity? target = orb.Aiment;
+        if (target is null || target.IsFreed)
+        {
+            Api.Entities.Remove(orb);
+            return;
+        }
+        if (target.ClassName != targetClass || target.DeadState != targetDeathState)
+        {
+            orb.Aiment = null;
+            orb.MoveType = MoveType.Toss;
+            orb.Gravity = 1f;
+            orb.Flags &= ~EntFlags.OnGround;
+            orb.GroundEntity = null;
+            Projectiles.MakeTrigger(orb);
+            orb.Think = self => ExplodeOrb(self, bounced, timed: true);
+            orb.NextThink = deadline;
+            return;
+        }
+
+        orb.Angles = target.Angles + orb.VAngle;
+        orb.NextThink = now;
     }
 
     // SetMovetypeFollow(ent, e) (common/util.qc:2129) — make a stuck orb ride a moving bmodel via MOVETYPE_FOLLOW.
@@ -601,37 +636,31 @@ public sealed class Electro : Weapon
         ent.PunchAngle = e.Angles;            // the original angles of the bmodel
         ent.ViewOfs = ent.Origin - e.Origin;  // relative origin
         ent.VAngle = ent.Angles - e.Angles;   // relative angles
+        if ((e.Flags & EntFlags.Client) != 0)
+            ent.ViewOfs = Vector3.Clamp(ent.ViewOfs, e.Mins + new Vector3(4f), e.Maxs - new Vector3(4f));
     }
 
-    // QC W_Electro_Attack_Orb:569-575 LimitedChildrenRubble prune — when secondary_limit > 0, count the firer's live
-    // electro_orb entities and detonate the OLDEST (lowest NextThink = earliest scheduled lifetime) once the cap is
-    // reached, so a new orb can be laid. Detonating an orb is its normal SECONDARY blast (adaptor_think2use_hittype
-    // _splash). Only called when Secondary.Limit > 0, so it never runs at stock defaults (limit 0 = unlimited).
+    private long _orbSpawnOrder;
+
+    // The QC rubble list tracks launch order independently of an orb's rescheduled detonation.
     private void EnforceOrbLimit(Entity actor)
     {
-        if (Api.Services is null) return;
-        var mine = Api.Entities.FindByClass("electro_orb")
-            .Where(e => !e.IsFreed && ReferenceEquals(e.Owner, actor)).ToList();
-        // Account for the orb about to be spawned: prune until strictly fewer than the limit remain.
-        while (mine.Count >= Secondary.Limit)
+        var orbs = Api.Entities.FindByClass("electro_orb")
+            .Where(e => !e.IsFreed && e.ElectroRubbleOrder != 0 && ReferenceEquals(e.Owner, actor))
+            .OrderBy(e => e.ElectroRubbleOrder).ToList();
+
+        while (orbs.Count > Secondary.Limit)
         {
-            Entity oldest = mine[0];
-            for (int i = 1; i < mine.Count; i++)
-                if (mine[i].NextThink < oldest.NextThink) oldest = mine[i];
-            mine.Remove(oldest);
-            // Force the oldest orb to detonate now (its captured bounced flag is gone here, so explode as a plain
-            // secondary blast — QC's adaptor_think2use is the orb's lifetime SECONDARY explode).
-            oldest.Touch = null; oldest.Think = null; oldest.TakeDamage = DamageMode.No;
-            WeaponSplash.RadiusDamage(oldest, oldest.Origin, Secondary.Damage, Secondary.EdgeDamage, Secondary.Radius,
-                oldest.Owner, RegistryId, Secondary.Force, accuracyWeapon: this, deathTag: DeathOrb);
-            EffectEmitter.Emit("ELECTRO_BALLEXPLODE", oldest.Origin);
-            WeaponSplash.ImpactSound(oldest, "weapons/electro_impact.wav");
-            Api.Entities.Remove(oldest);
+            Entity oldest = orbs[0];
+            orbs.RemoveAt(0);
+            oldest.Use?.Invoke(oldest, actor);
+            // The blast can also destroy nearby orbs when projectile damage is enabled.
+            orbs.RemoveAll(e => e.IsFreed || e.ClassName != "electro_orb" || !ReferenceEquals(e.Owner, actor));
         }
     }
 
     // W_Electro_Explode (orb path) — orb blast (secondary balance). electro.qc
-    private void ExplodeOrb(Entity self, bool[] bounced)
+    private void ExplodeOrb(Entity self, bool[] bounced, bool timed = false)
     {
         self.Touch = null;
         self.Think = null;
@@ -641,6 +670,8 @@ public sealed class Electro : Weapon
         // plus HITTYPE_BOUNCE if the orb had already bounced — so the obituary reads MURDER_ORBS (or MURDER_COMBO
         // for a bounced orb) and wr_impacteffect picks the ELECTRO_BALLEXPLODE/secondary branch.
         string death = bounced[0] ? Damage.DeathTypes.WithHitType(DeathOrb, Damage.DeathTypes.Bounce) : DeathOrb;
+        if (timed && (self.Flags & EntFlags.OnGround) == 0)
+            death = Damage.DeathTypes.WithHitType(death, Damage.DeathTypes.Splash);
         WeaponSplash.RadiusDamage(self, self.Origin, Secondary.Damage, Secondary.EdgeDamage, Secondary.Radius,
             self.Owner, RegistryId, Secondary.Force, accuracyWeapon: this, deathTag: death);
 

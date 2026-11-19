@@ -1,0 +1,127 @@
+Stock live two-client Stormkeep visibility run
+
+Cells show the active edict after each trial as model@creationtime. A repeated time is an old casing.
+0-shell             Alpha (no edict dump)                  Beta none
+0-bullet            Alpha none                             Beta none
+1-shell             Alpha casing_shell.mdl@31.2954998      Beta casing_shell.mdl@31.2610378
+1-bullet            Alpha casing_shell.mdl@31.2954998      Beta casing_shell.mdl@31.2610378
+2-bullet            Alpha casing_bronze.iqm@38.6457825     Beta casing_bronze.iqm@38.6373787
+2-shell             Alpha casing_shell.mdl@42.4048119      Beta casing_shell.mdl@42.3934555
+follow-hidden       Alpha casing_shell.mdl@47.9462433      Beta casing_shell.mdl@42.3934555
+follow-disabled     Alpha casing_shell.mdl@53.8401756      Beta casing_shell.mdl@42.3934555
+shooter-hidden      Alpha casing_shell.mdl@53.8401756      Beta casing_shell.mdl@60.4430275
+near-third-person   Alpha casing_shell.mdl@67.87323        Beta casing_shell.mdl@67.8695526
+far-third-person    Alpha casing_shell.mdl@71.9769821      Beta casing_shell.mdl@67.8695526
+
+A separate stock run dumped the shooter after the mode-0 shell trial and found zero casing edicts.
+
+Native before correction, Beta client receive and visual dispatch excerpts
+
+]r_drawviewmodel 0
+AUDIT EVENT frame=242 name=CASING_BULLET
+AUDIT CASING frame=242 slot=0 kind=Bullet
+]r_drawviewmodel 1
+]cl_casings 0
+AUDIT EVENT frame=260 name=CASING_BULLET
+AUDIT CASING frame=260 slot=0 kind=Bullet
+
+Stock lethal shotgun run, Beta edicts in rubble-list order
+
+Last two columns are the next and previous rubble-list links.
+3054:  gib     models/gibs/arm.md3          31.7477894    entity 3055  entity 3019
+3055:  gib     models/gibs/arm.md3          31.7477894    entity 3056  entity 3054
+3056:  gib     models/gibs/chest.md3        31.7477894    entity 3057  entity 3055
+3057:  gib     models/gibs/smallchest.md3   31.7477894    entity 3058  entity 3056
+3058:  gib     models/gibs/leg1.md3         31.7477894    entity 3059  entity 3057
+3059:  gib     models/gibs/leg2.md3         31.7477894    entity 3065  entity 3058
+3065:  casing  models/casing_shell.mdl      31.7477894    -            entity 3059
+
+Native Godot Compatibility probe over two localhost ENet connections
+
+PASS mounted shipped assets
+PASS two accepted ENet clients
+PASS shooter and following observer (Alpha observer=False, Beta observer=True, follows=Alpha)
+PASS automatic client cvar replication
+PASS mode 0 shooter [] Beta [], expected [] []
+PASS mode 1 shooter [CASING_SHELL:view] Beta [CASING_SHELL:view], expected [CASING_SHELL:view] [CASING_SHELL:view]
+PASS mode 2 shooter [CASING_SHELL:view,CASING_BULLET:view] Beta [CASING_SHELL:view,CASING_BULLET:view], expected [CASING_SHELL:view,CASING_BULLET:view] [CASING_SHELL:view,CASING_BULLET:view]
+PASS mode 2 shooter [CASING_SHELL:view] Beta [], expected [CASING_SHELL:view] []
+PASS mode 2 shooter [CASING_SHELL:view] Beta [], expected [CASING_SHELL:view] []
+PASS mode 2 shooter [] Beta [CASING_SHELL:view], expected [] [CASING_SHELL:view]
+PASS observer joined as an independent viewer
+PASS mode 2 shooter [CASING_SHELL:view] Beta [CASING_SHELL:world], expected [CASING_SHELL:view] [CASING_SHELL:world]
+PASS mode 2 shooter [CASING_SHELL:view] Beta [], expected [CASING_SHELL:view] []
+AUDIT CASING frame=700 slot=0 kind=Shell origin=<1216, 248, 30>
+AUDIT GIB frame=700 slot=0 model=models/gibs/eye.md3 origin=<1216, 300, 34>
+AUDIT GIB frame=700 slot=0 model=models/gibs/bloodyskull.md3 origin=<1220.2037, 297.25327, 20.482254>
+AUDIT GIB frame=700 slot=0 model=models/gibs/arm.md3 origin=<1202.4307, 292.0339, 47.427837>
+AUDIT GIB frame=700 slot=0 model=models/gibs/arm.md3 origin=<1205.6581, 297.73016, 31.024246>
+AUDIT GIB frame=700 slot=0 model=models/gibs/chest.md3 origin=<1226.4629, 298.57144, 52.45737>
+AUDIT GIB frame=700 slot=0 model=models/gibs/smallchest.md3 origin=<1227.1674, 307.49094, 37.804195>
+AUDIT GIB frame=700 slot=0 model=models/gibs/leg1.md3 origin=<1223.744, 310.6999, 36.76007>
+AUDIT GIB frame=700 slot=0 model=models/gibs/leg2.md3 origin=<1200.1088, 293.9479, 32.539974>
+AUDIT GIB frame=700 slot=0 model=models/gibs/chunk.mdl origin=<1216.4861, 289.7551, 19.782774>
+AUDIT GIB frame=700 slot=0 model=models/gibs/chunk.mdl origin=<1215.0948, 298.475, 24.583443>
+AUDIT GIB frame=700 slot=0 model=models/gibs/chunk.mdl origin=<1218.1567, 307.86475, 43.45343>
+AUDIT GIB frame=700 slot=0 model=models/gibs/chunk.mdl origin=<1223.5177, 311.63077, 25.977463>
+AUDIT CASING frame=700 slot=0 kind=Bullet origin=<1216, 311, 30>
+PASS shooter received casing, corpse splash, casing in enqueue order
+PASS viewer received casing, corpse splash, casing in enqueue order
+PASS same-frame cap retains the last casing across kinds
+PASS same-frame splash respects the independent gib cap
+AUDIT GIB frame=710 slot=0 model=models/gibs/eye.md3 origin=<1216, 448, -11.96875>
+AUDIT GIB frame=710 slot=0 model=models/gibs/bloodyskull.md3 origin=<1218.7823, 454.43906, -0.14181614>
+AUDIT GIB frame=710 slot=0 model=models/gibs/arm.md3 origin=<1231.4586, 435.06927, 7.944893>
+AUDIT GIB frame=710 slot=0 model=models/gibs/arm.md3 origin=<1219.9578, 436.69073, 5.5291214>
+AUDIT GIB frame=710 slot=0 model=models/gibs/chest.md3 origin=<1208.9817, 435.37213, -1.8617973>
+AUDIT GIB frame=710 slot=0 model=models/gibs/smallchest.md3 origin=<1212.8865, 450.01086, -15.270313>
+AUDIT GIB frame=710 slot=0 model=models/gibs/leg1.md3 origin=<1215.6964, 450.69232, -15.937124>
+AUDIT GIB frame=710 slot=0 model=models/gibs/leg2.md3 origin=<1223.2421, 442.85065, -21.91721>
+AUDIT GIB frame=710 slot=0 model=models/gibs/chunk.mdl origin=<1218.7994, 453.76016, 1.0435677>
+AUDIT GIB frame=710 slot=0 model=models/gibs/chunk.mdl origin=<1207.7804, 439.93085, -16.542263>
+AUDIT GIB frame=710 slot=0 model=models/gibs/chunk.mdl origin=<1200.2405, 456.99796, -7.537995>
+AUDIT GIB frame=710 slot=0 model=models/gibs/chunk.mdl origin=<1218.9744, 459.01538, -16.438026>
+AUDIT CASING frame=710 slot=0 kind=Shell origin=<1216, 260, 19>
+LETHAL Alpha [MODEL_GIB_SPLASH:world,CASING_SHELL:view] Beta [MODEL_GIB_SPLASH:world,CASING_SHELL:world] target dead=True
+PASS lethal shotgun attack sends the model splash before its shell
+
+Focused managed tests
+
+Passed!  - Failed:     0, Passed:    32, Skipped:     0, Total:    32, Duration: 212 ms - VortexArena.Tests.dll (net8.0)
+
+Emission-time follow-up, previous native build
+
+ERROR: System.InvalidOperationException: follower and PVS decisions use emission-time state, received []
+
+Emission-time follow-up, final saved driver
+
+PASS mounted shipped assets
+PASS two accepted ENet clients
+PASS shooter and following observer (Alpha observer=False, Beta observer=True, follows=Alpha)
+PASS automatic client cvar replication
+PASS mode 0 shooter [] Beta [], expected [] []
+PASS mode 1 shooter [CASING_SHELL:view] Beta [CASING_SHELL:view], expected [CASING_SHELL:view] [CASING_SHELL:view]
+PASS mode 2 shooter [CASING_SHELL:view,CASING_BULLET:view] Beta [CASING_SHELL:view,CASING_BULLET:view], expected [CASING_SHELL:view,CASING_BULLET:view] [CASING_SHELL:view,CASING_BULLET:view]
+PASS viewmodel read the nonzero cl_gunoffset
+PASS mode 2 shooter [CASING_SHELL:view] Beta [CASING_SHELL:view], expected [CASING_SHELL:view] [CASING_SHELL:view]
+PASS real client handler applies forward, left and up gun offsets, expected <1212, 255, 33>, rendered [<1211.9559, 254.90353, 33.026936>]
+PASS mode 2 shooter [CASING_SHELL:view] Beta [CASING_SHELL:view], expected [CASING_SHELL:view] [CASING_SHELL:view]
+PASS real client handler suppresses the gun offset in chase mode, expected <1216, 248, 30>, rendered [<1215.961, 247.90749, 30.02511>]
+PASS shooter received all three emissions from the same simulation frame
+PASS follower and PVS decisions use emission-time state, received [CASING_SHELL:view,CASING_BULLET:world]
+PASS observer released follow through normal ENet attack2 input
+PASS last casing before the normal follow release arrived first-person
+PASS mode 2 shooter [CASING_SHELL:view] Beta [], expected [CASING_SHELL:view] []
+PASS mode 2 shooter [CASING_SHELL:view] Beta [], expected [CASING_SHELL:view] []
+PASS mode 2 shooter [] Beta [CASING_SHELL:view], expected [] [CASING_SHELL:view]
+PASS observer joined as an independent viewer
+PASS mode 2 shooter [CASING_SHELL:view] Beta [CASING_SHELL:world], expected [CASING_SHELL:view] [CASING_SHELL:world]
+PASS mode 2 shooter [CASING_SHELL:view] Beta [], expected [CASING_SHELL:view] []
+PASS shooter received casing, corpse splash, casing in enqueue order
+PASS viewer received casing, corpse splash, casing in enqueue order
+PASS same-frame cap retains the last casing across kinds
+PASS same-frame splash respects the independent gib cap
+PASS lethal shotgun attack sends the model splash before its shell
+PASS replacement session accepted with a casing queued
+PASS replacement session does not receive a casing selected for the previous session
+PASS mode 2 shooter [CASING_SHELL:view] Beta [CASING_SHELL:world], expected [CASING_SHELL:view] [CASING_SHELL:world]

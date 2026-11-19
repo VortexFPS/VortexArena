@@ -94,11 +94,13 @@ public partial class LegacyGame : Node
     public LegacyLocalGameRequest? LocalGame { get; set; }
     /// <summary>
     /// Set to play a DarkPlaces recording (a <c>.dem</c> file on disk) instead of joining anything: DarkPlaces'
-    /// <c>playdemo</c>. No server, no socket, no input; the view is the recorded player's. Only the command
-    /// line sets it (<c>--legacy-demo</c>), so nothing a server or a program sends can. With the environment
-    /// variable VORTEX_LEGACY_TIMEDEMO set it is <c>timedemo</c>: one recorded message a frame.
+    /// <c>playdemo</c>. No server, no socket, no input; the view is the recorded player's. Set by the
+    /// native demo browser or the command line.
     /// </summary>
     public string? DemoPath { get; set; }
+    /// <summary>The mounted filesystem of the native demo browser. CLI demos use an OS path.</summary>
+    public VirtualFileSystem? DemoFiles { get; set; }
+    public bool Timedemo { get; set; }
     /// <summary>A level-changing console line ("map x", "changelevel x", "restart") typed during a local game
     /// that has no Xonotic menu to read it. True if it was acted on.</summary>
     public Func<string, bool>? MapCommand { get; set; }
@@ -138,6 +140,8 @@ public partial class LegacyGame : Node
     private Action<string, IReadOnlyList<string>>? _unknownCommandBefore;
     private bool _shutDown, _failed, _inGame, _loadingDismissed;
     private double _startedAt, _inGameAt = -1, _nextStatus, _autoJoinAfter;
+    private double _timedemoStartedAt = -1;
+    private long _timedemoFrames;
     private bool _autoJoined;
     private int _lastStage = -1, _printsLogged;
     private DpClientState _lastState = DpClientState.Disconnected;
@@ -215,11 +219,18 @@ public partial class LegacyGame : Node
         }
         else
         {
-            // --- the session's own filesystem: Xonotic's data and nothing else ---
+            // Native menu demos use a fresh mount of the installed content and user packages.
+            // The browser's VFS is only used to read the recording itself.
             _vfs = new VirtualFileSystem();
-            if (!System.IO.Directory.Exists(DataDirectory) || !_vfs.MountGameDir(DataDirectory))
+            bool mounted = DemoFiles is null
+                ? _vfs.MountGameDir(DataDirectory)
+                : _vfs.MountContentRoot(DataDirectory);
+            if (DemoFiles is not null)
+                mounted |= _vfs.MountContentRoot(UserPaths.GameDir);
+            if (!mounted)
             {
-                Fail($"Nothing could be mounted from the Xonotic data folder \"{DataDirectory}\". " + LegacyData.SetupHint);
+                string hint = DemoFiles is null ? " " + LegacyData.SetupHint : "";
+                Fail($"Nothing could be mounted from the game data folder \"{DataDirectory}\".{hint}");
                 return;
             }
 
@@ -383,11 +394,24 @@ public partial class LegacyGame : Node
         if (DemoPath is { Length: > 0 } demoPath)
         {
             // --- a recording: CL_PlayDemo_f. The messages are read in Frame, where datagrams would be ---
-            System.IO.FileStream demo = new(demoPath, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read, 1 << 16);
-            bool timeDemo = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_TIMEDEMO"));
+            System.IO.Stream demo;
+            if (DemoFiles is { } files)
+            {
+                try { demo = new System.IO.MemoryStream(files.ReadBytes(demoPath), writable: false); }
+                catch (VortexArena.Formats.AssetParseException ex) { Fail(ex.Message); return; }
+            }
+            else
+            {
+                demo = new System.IO.FileStream(demoPath, System.IO.FileMode.Open, System.IO.FileAccess.Read,
+                    System.IO.FileShare.Read, 1 << 16);
+            }
+            bool timeDemo = Timedemo || (DemoFiles is null
+                && !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("VORTEX_LEGACY_TIMEDEMO")));
             _transport = new NoTransport(demoPath);
             _autoJoinAfter = 0;
             Log($"playing the demo {demoPath} ({demo.Length} bytes{(timeDemo ? ", as a timedemo: one message a frame" : "")})");
+            // CheckConnection must observe a transition even if the demo ends during its first frame.
+            _lastState = DpClientState.Connecting;
             _session.PlayDemo(demo, Now, timeDemo);
             LoadingScreen?.UpdateProgress(0.05f, "Reading the demo...");
             _presentation.BeginPreload(null);
@@ -1166,6 +1190,7 @@ public partial class LegacyGame : Node
     private void Frame(LegacyClientSession session, ILegacyTransport transport, GodotLegacyPresentation presentation, double delta)
     {
         double now = Now;
+        double frameStartedAt = now;
         // --- the clock runs on, then the network is read (and may correct the clock) ---
         session.BeginFrame(now);
         if (LegacyPerfLog.Enabled && !_traceInstalled)
@@ -1201,10 +1226,12 @@ public partial class LegacyGame : Node
         foreach (byte[] datagram in session.Frame(now, input))
             transport.Send(datagram);
 
-        if (!CheckConnection(session, now)) return;
+        if (!CheckConnection(session, now, frameStartedAt)) return;
         LegacyPerfLog.Part(LegacyPerfLog.Send);
 
         // --- draw: the engine's view for the frame, CSQC_UpdateView, then what it submitted ---
+        if (_timedemoStartedAt < 0 && _inGame && session.State.IsDemo && session.Clock.TimeDemo)
+            _timedemoStartedAt = Now;
         presentation.BeginFrame(_viewSize, session.State.Time);
         QcProfile? frameProfile = s_profileProgram && _inGame ? session.Host?.Vm.Profile : null;
         long drawBegan = 0, builtinsBefore = 0;
@@ -1223,6 +1250,8 @@ public partial class LegacyGame : Node
         if (_inGame) presentation.DrawChatArea(_chatLines, now);
         if (_inGame && session.State.Paused) presentation.DrawPause();
         presentation.EndFrame();
+        if (_timedemoStartedAt >= 0)
+            _timedemoFrames++;
         // Textures the bank has compressed since they were uploaded take their uncompressed versions' place, a few a frame.
         _textureBank?.Pump();
         if (session.Host is { FaultCount: > 0 } faulted)
@@ -1611,7 +1640,7 @@ public partial class LegacyGame : Node
     }
 
     // Connection state worth acting on. False if the session ended.
-    private bool CheckConnection(LegacyClientSession session, double now)
+    private bool CheckConnection(LegacyClientSession session, double now, double frameStartedAt)
     {
         DpClient client = session.Client;
         if (client.State != _lastState)
@@ -1637,6 +1666,14 @@ public partial class LegacyGame : Node
                         _scriptHeld = default;
                         _pendingImpulse = 0;
                         break;
+                    }
+                    if (_timedemoFrames > 0 && frameStartedAt > _timedemoStartedAt)
+                    {
+                        double seconds = frameStartedAt - _timedemoStartedAt;
+                        string result = string.Create(CultureInfo.InvariantCulture,
+                            $"Timedemo: {_timedemoFrames} frames in {seconds:0.00} seconds ({_timedemoFrames / seconds:0.0} FPS)");
+                        Log(result);
+                        ConsolePrint?.Invoke(result);
                     }
                     Log("the server ended the connection");
                     Callable.From(() => { if (!_shutDown) Disconnected?.Invoke(); }).CallDeferred();

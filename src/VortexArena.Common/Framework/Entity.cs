@@ -73,6 +73,7 @@ public partial class Entity
 
     // --- scheduling / callbacks ---
     public float NextThink;
+    public long ElectroRubbleOrder;   // zero when absent from Electro’s per-owner orb limit
     public float LTime;               // local time for moving brush entities (PUSH)
     public EntityThink? Think;
     public EntityTouch? Touch;

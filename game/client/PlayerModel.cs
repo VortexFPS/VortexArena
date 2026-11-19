@@ -92,6 +92,7 @@ public partial class PlayerModel : Node3D
     private static readonly BoxMesh PlaceholderMesh = new() { Size = new Vector3(24f, 56f, 24f) };
     private static readonly StandardMaterial3D PlaceholderMaterial = new() { AlbedoColor = new Color(0.6f, 0.6f, 0.65f) };
     private MeshInstance3D? _placeholder;
+    private Node3D? _bodyRoot;
 
     /// <summary>Show the streaming placeholder box (no-op if already shown). Cleared by <see cref="Setup"/>.</summary>
     public void ShowPlaceholder()
@@ -133,6 +134,7 @@ public partial class PlayerModel : Node3D
         foreach (Node child in iqmRoot.GetChildren())
             if (child is AnimationPlayer ap) { ap.Stop(); ap.Autoplay = ""; }
 
+        _bodyRoot = iqmRoot;
         AddChild(iqmRoot);
         Skeleton3D? skel = IqmBuilder.FindSkeleton(iqmRoot);
         if (skel is null || iqm.Joints.Length == 0)
@@ -213,11 +215,17 @@ public partial class PlayerModel : Node3D
         LocomotionBlend.DirLocomotion loco =
             LocomotionBlend.SelectLegsDirectional(e.Velocity, e.Angles, e.OnGround, e.IsDucked, dead);
 
+        bool bodyClone = e.ClassName == PlayerBody.ClassName;
         // [freezetag.presentation.frozen_anim] A frozen player holds the standing/idle pose: force the idle
         // locomotion and DO NOT advance _legsTime, so the legs morph is pinned to one frame (Base sets the frozen
         // frame and stops the animation). The body still aims with view pitch via FromFrames below. The upper-body
         // action overlay is skipped further down so a frozen player plays no shoot/pain torso.
-        if (FrozenHold)
+        if (bodyClone)
+        {
+            loco = (L)System.Math.Clamp((int)e.Frame, 0, _legClips.Length - 1);
+            _legsTime = 0f;
+        }
+        else if (FrozenHold)
         {
             loco = L.Idle;
             _lastLoco = loco; // pin: equal-loco path increments _legsTime, so keep it consistent without advancing
@@ -239,9 +247,11 @@ public partial class PlayerModel : Node3D
         // action is active. Initialized up front so the compiler sees `anim` definitely assigned regardless
         // of the action-clip branch (the static Split for an overlaid frame is a rare, brief-window cost).
         SkeletonAnim anim = LocomotionBlend.Split(legs, _legsTime, _torsoClip, 0f);
-        if (!FrozenHold && !float.IsNaN(serverNow) && e.UpperAction != 0)
+        if (e.UpperAction != 0 && (bodyClone || (!FrozenHold && !float.IsNaN(serverNow))))
         {
-            var (active, phase) = LocomotionBlend.SelectTorsoAction(e.UpperAction, e.AnimActionTime, serverNow);
+            var (active, phase) = bodyClone
+                ? (true, e.AnimActionTime)
+                : LocomotionBlend.SelectTorsoAction(e.UpperAction, e.AnimActionTime, serverNow);
             if (active)
             {
                 FrameGroup actionClip = _actionClips[e.UpperAction < _actionClips.Length ? e.UpperAction : 0];
@@ -363,7 +373,11 @@ public partial class PlayerModel : Node3D
         _lastAlphaApplied = transparency;
         foreach (GeometryInstance3D mi in _alphaMeshes)
             if (GodotObject.IsInstanceValid(mi))
+            {
+                // Compatibility rendering ignores Transparency. Hide only body geometry.
+                mi.Visible = clamped > 0f;
                 mi.Transparency = transparency;
+            }
     }
 
     /// <summary>Rebuild the flattened mesh list when the model tree changed (swap / freed mesh / placeholder→real),
@@ -379,7 +393,10 @@ public partial class PlayerModel : Node3D
         if (!stale)
             return;
         _alphaMeshes.Clear();
-        CollectGeometry(this, _alphaMeshes);
+        if (GodotObject.IsInstanceValid(_bodyRoot))
+            CollectGeometry(_bodyRoot!, _alphaMeshes);
+        else if (GodotObject.IsInstanceValid(_placeholder))
+            _alphaMeshes.Add(_placeholder!);
         _alphaMeshesChildGen = gen;
         _lastAlphaApplied = float.NaN; // fresh meshes are opaque — force a re-apply of the current alpha
     }
@@ -395,8 +412,10 @@ public partial class PlayerModel : Node3D
         return n;
     }
 
-    private static void CollectGeometry(Node node, List<GeometryInstance3D> into)
+    private void CollectGeometry(Node node, List<GeometryInstance3D> into)
     {
+        if (node == _tagWeapon)
+            return;
         if (node is GeometryInstance3D gi)
             into.Add(gi);
         foreach (Node child in node.GetChildren())

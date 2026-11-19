@@ -218,7 +218,7 @@ public class BspCollisionTests
     }
 
     [Fact]
-    public void Trace_Reports_HitTextureName_Of_Patch_Slab()
+    public void Trace_Reports_HitTextureName_Of_Patch()
     {
         // A single flat bezier patch (3x3 control grid, all coplanar at z=0) named "mapname/grate" with SOLID
         // contents → the builder tessellates it into walkable floor slabs that must carry the patch shader, so a

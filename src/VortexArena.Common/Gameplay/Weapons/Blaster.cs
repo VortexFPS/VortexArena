@@ -146,7 +146,7 @@ public sealed class Blaster : Weapon
         float shotAngle = Primary.ShotAngle * QMath.Deg2Rad;
         Vector3 sForward = forward * MathF.Cos(shotAngle) + up * MathF.Sin(shotAngle);
 
-        ShotInfo shot = WeaponFiring.SetupShot(actor, sForward, recoil: 3f); // QC blaster.qc W_SetupShot_Dir recoil 3
+        ShotInfo shot = WeaponFiring.SetupShot(actor, sForward, wep: this, recoil: 3f); // QC blaster.qc W_SetupShot_Dir recoil 3
 
         // entity missile = new(blasterbolt);
         Entity missile = Api.Entities.Spawn();
@@ -157,7 +157,7 @@ public sealed class Blaster : Weapon
         Api.Entities.SetSize(missile, Vector3.Zero, Vector3.Zero);
 
         // W_SetupProjVelocity_Explicit(missile, w_shotdir, v_up, speed, 0, 0, spread, false)
-        missile.Velocity = WeaponFiring.ProjectileVelocity(shot.Dir, up, Primary.Speed, 0f, 0f, Primary.Spread);
+        missile.Velocity = WeaponFiring.ProjectileVelocity(actor, shot.Dir, up, Primary.Speed, 0f, 0f, Primary.Spread);
         missile.Angles = QMath.VecToAngles(missile.Velocity);
         missile.MoveType = MoveType.Fly;
         Projectiles.MakeTrigger(missile); // QC PROJECTILE_MAKETRIGGER (SOLID_CORPSE): transparent to the firer's movement

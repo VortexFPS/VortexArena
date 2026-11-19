@@ -17,15 +17,18 @@ features:
     name: "Gametype registration (surv, USEPOINTS, timelimit=20 pointlimit=12)"
     layer: [shared]
     base_refs:
-      - "common/gametypes/gametype/survival/survival.qh:CLASS(Survival)"
+      - "common/gametypes/gametype/survival/survival.qh:CLASS(Survival), m_isForcedSupported, m_isAlwaysSupported"
     port_refs:
+      - "src/VortexArena.Formats/Bsp/MapInfoCatalog.cs:Generate"
       - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:Survival()"
       - "src/VortexArena.Server/GameWorld.cs:ResolveGameType"
       - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (Survival arm timelimit/fraglimit asserts, 2888-2891)"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:MapInfo.AllowsForcedGametype"
     constants:
       - { name: "net_name", base: "surv", port: "surv", match: true }
       - { name: "default_match", base: "timelimit=20 pointlimit=12", port: "asserted at activation: timelimit=20 (GameWorld.cs:2888-2889) + fraglimit=12 (2890-2891) when unconfigured", match: true }
       - { name: "team_game", base: "USEPOINTS only (no teams)", port: "TeamGame=false", match: true }
+      - { name: "g_survival_not_lms_maps", base: "0 enables the LMS fallback", port: "0 enables the LMS fallback", match: true }
     status:
       logic: faithful
       values: faithful
@@ -35,12 +38,13 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "m_isForcedSupported (LMS-map inheritance: g_survival_not_lms_maps gate → any LMS map auto-supports Survival, cl/survival.qh) is not modeled in the gametype class; map-support inheritance is unverified. m_isAlwaysSupported=true is also not modeled."
+    gaps: []
     verification:
+      - { kind: test, ref: "MapInfoGenerationTests.NativeMapThresholdsReachCatalogAndDetails checks generated eligibility through both APIs on nine maps with varied spawn counts and diameters.", result: pass }
       - { kind: code, ref: "[GameType] attr + NetName=surv (Survival.cs:119) resolves; ResolveGameType maps 'surv' to Survival; ActivateGameType asserts timelimit=20/fraglimit=12 when unconfigured (GameWorld.cs:2888-2891)", result: pass }
+      - { kind: test, ref: "MenuDataSourceTests.MapInfo_CatalogAndDetailsApplyDefaultPromotions and MapInfo_CatalogAndDetailsUseCurrentPromotionCvars cover LMS promotion and its opt-out.", result: pass }
     confidence: high
-    notes: "values faithful: the timelimit=20 pointlimit=12 mapinfo defaults are asserted at activation (GameWorld.cs:2888-2891), matching Base's gametype_init default args (survival.qh:12). Only m_isForcedSupported (g_survival_not_lms_maps → LMS-map auto-support, survival.qh:18-27) + m_isAlwaysSupported=true remain unmodeled (a coverage gap, not a value mismatch). Re-verified 2026-06-25 (line refs updated)."
+    notes: "Activation supplies the stock 20-minute and 12-point defaults when unconfigured. Forced LMS eligibility is live in the catalog, map details and hosted rotation. See mapinfo.forced_supported."
 
   - id: survival.round.assign_roles
     name: "Round start secretly assigns hunters (live-only count, bounded, random pick)"

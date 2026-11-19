@@ -90,7 +90,7 @@ public static class GametypeStatusBlock
             case ClanArena ca:
                 WriteHeader(w, Kind.ClanArena, viewer, ca.TeamCount);
                 WriteAliveCounts(w, ca.AliveCount);
-                WriteIdList(w, players, netIdOf, ca.IsEliminatedPlayer); // QC ca_isEliminated → eliminatedPlayers
+                WriteIdList(w, players, netIdOf, ca.IsEliminatedPlayer, includeObservers: true);
                 return true;
 
             case FreezeTag ft:
@@ -296,11 +296,11 @@ public static class GametypeStatusBlock
     /// the wire order roster-stable (deterministic bytes → stable <see cref="Hash"/>).
     /// </summary>
     private static void WriteIdList(BitWriter w, System.Collections.Generic.IReadOnlyList<Player> players,
-        System.Func<Player, int> netIdOf, System.Func<Player, bool> predicate)
+        System.Func<Player, int> netIdOf, System.Func<Player, bool> predicate, bool includeObservers = false)
     {
         int count = 0;
         for (int i = 0; i < players.Count; i++)
-            if (!players[i].IsObserver && predicate(players[i]))
+            if ((includeObservers || !players[i].IsObserver) && predicate(players[i]))
                 count++;
         if (count > 255) count = 255;
         w.WriteByte(count);
@@ -309,7 +309,7 @@ public static class GametypeStatusBlock
         for (int i = 0; i < players.Count && written < count; i++)
         {
             Player p = players[i];
-            if (p.IsObserver || !predicate(p))
+            if ((!includeObservers && p.IsObserver) || !predicate(p))
                 continue;
             w.WriteUShort(netIdOf(p));
             written++;

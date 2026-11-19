@@ -95,6 +95,7 @@ features:
     verification:
       - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Vote_CallAndPass_SinglePlayerAutoMajority", result: pass }
       - { kind: code, ref: "VoteController.cs:162-228 CmdCall full guard chain (voteban, sv_vote_call, game_starttime, already-called, spectator gate, IS_CLIENT, timeout_status, wait cooldown, nasty-char, whitelist parse, caller auto-yes); AnnounceVoteCall fired at CmdCall:226-227 when tmpPlayerCount>1 && Active. src/VortexArena.Server/GameWorld.cs:998 Voting.AnnounceVoteCall = () => NotificationSystem.Send(MSG_ANNCE, VOTE_CALL) (the live announcer channel); :966/971/974/977/981 wires WarmupStage/IsPlayer/TimeoutActive/GameStartTime/IsClient ALL LIVE. Voting.IsClient = p => (p.Flags & EntFlags.Client) != 0 (GameWorld.cs:981) — the FL_CLIENT flag.", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerClientCommandsTests.cs:Vote_ExplicitServerCommandDoesNotUseTheListenPlayer", result: pass }
     confidence: high
     notes: "FIX (drift re-audit 2026-06-25): audio missing→faithful. ANNCE_VOTE_CALL is now emitted via the real NotificationSystem MSG_ANNCE channel (src/VortexArena.Server/GameWorld.cs:998, same path as every other server announcer cue), fired in CmdCall when >1 real player is present and the vote is still open — the baseline recorded this as broadcast-text-only. The earlier (2026-06-25 baseline) IsClient live-wiring fix is retained: Voting.IsClient is wired in GameWorld.cs:981 (p.Flags & FL_CLIENT), so the QC `caller && !IS_CLIENT(caller)` guard genuinely fires. logic fully faithful. Presentation stays partial: only the networked Nagger vote-HUD entity is still unsent. Voteban check, sv_vote_call, already-called, wait cooldown, nasty-char + whitelist parse, caller auto-yes, timeout-active guard, game_starttime guard, spectator gate all present and live; constants match Base (sv_vote_timeout 24 / wait 120 / limit 160)."
 
@@ -164,6 +165,8 @@ features:
     verification:
       - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Vote_Reject_WhenMajorityNo", result: pass }
       - { kind: code, ref: "VoteController.cs:396 real = IsPlayer(it) || InGame(it); :424 spectator-exclusion (!SpectatorsAllowed && realPlayers>0); GameWorld.cs:928 Voting.IsPlayer = p => !p.IsObserver && p.FragsStatus != Player.FragsSpectator (now wired LIVE). InGame stays default-false (the port has no separate .ingame round flag; the real-player set is exactly the non-observers).", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Vote_TwoPlayersSplit_RejectsWithoutApplyingTheVote", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Vote_RecountsAfterAnUnvotedClientLeaves", result: pass }
     confidence: high
     notes: "FIX (since baseline, Wave 5/6): the spectator-exclusion path is now LIVE — Voting.IsPlayer is wired in GameWorld.cs:928 (was default _ => true and unwired), so under sv_vote_nospectators 2 a spectator's ballot is now actually dropped (realPlayers != all clients). logic upgraded partial->faithful, liveness partial->live. Threshold math, 0-player auto-accept, early accept/reject, of-voted timeout, master playerlimit guard all remain faithful. (InGame remains default-false by design: no separate round-INGAME flag exists, so the IS_PLAYER||INGAME union reduces to the non-observer set.)"
 
@@ -196,6 +199,7 @@ features:
     gaps: []
     verification:
       - { kind: code, ref: "GameWorld.cs Voting.Think() pumped per server frame; VotePassed -> Commands.Execute; VoteController.cs Accept:495/Reject:503/Timeout:511 each fire AnnounceVoteAccept/Fail; GameWorld.cs:961/962 Voting.AnnounceVoteAccept/Fail = NotificationSystem.Send(MSG_ANNCE, VOTE_ACCEPT/VOTE_FAIL); VoteController.cs:519 Spam uses 'didn't have to vote' (mincount<0) vs 'didn't vote' per QC VoteSpam", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Vote_CallerNoStopsOnlyWhenChangesAreAllowed", result: pass }
     confidence: high
     notes: "FIX (drift re-audit 2026-06-25): both baseline gaps closed. (1) audio missing→faithful + presentation partial→faithful: ANNCE_VOTE_ACCEPT (Accept) and ANNCE_VOTE_FAIL (Reject + Timeout) are now played through the live NotificationSystem MSG_ANNCE channel (GameWorld.cs:961-962), invoked from VoteController Accept/Reject/Timeout — the baseline recorded these as host-only/not-invoked. (2) VoteSpam now emits the QC 'didn't have to vote' wording variant for an early resolution (mincount<0) vs 'didn't vote' otherwise (VoteController.cs:517-520). On pass, master vote grants master and never runs a command; normal vote runs the parsed command through the bus; caller wait reward/penalty (0 / sv_vote_stop) match QC."
 

@@ -1,0 +1,25 @@
+sv_cmd bot_cmd setbots 2
+sv_cmd bot_cmd reset
+sv_cmd bot_cmd all cc say BOTPROBE_start
+sv_cmd bot_cmd 1 wait 0.65
+sv_cmd bot_cmd 1 cc say BOTPROBE_relative_wait_done
+sv_cmd bot_cmd all barrier
+sv_cmd bot_cmd all cc say BOTPROBE_barrier_one
+sv_cmd bot_cmd all wait_until 0.35
+sv_cmd bot_cmd all cc say BOTPROBE_absolute_wait_done
+sv_cmd bot_cmd all if health>0
+sv_cmd bot_cmd all resetaim
+sv_cmd bot_cmd 1 aim 25 0 0.2
+sv_cmd bot_cmd all presskey crouch
+sv_cmd bot_cmd all wait 0.20
+sv_cmd bot_cmd all releasekey all
+sv_cmd bot_cmd all else
+sv_cmd bot_cmd all cc say BOTPROBE_unexpected_branch
+sv_cmd bot_cmd all fi
+sv_cmd bot_cmd all barrier
+sv_cmd bot_cmd all cc say BOTPROBE_cue_release
+sv_cmd bot_cmd 1 sound botprobe/default.wav
+sv_cmd bot_cmd 2 sound 4 0.5 2 botprobe/explicit.wav
+sv_cmd bot_cmd all wait 0.35
+sv_cmd bot_cmd all cc say BOTPROBE_end
+sv_cmd bot_cmd all pause

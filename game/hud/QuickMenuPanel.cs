@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using Godot;
+using VortexArena.Common.Config;
 using VortexArena.Common.Services;          // CvarFlags
 using VortexArena.Engine.Simulation;        // CvarService
 using VortexArena.Game.Menu;                // MenuState.Cvars (live console/menu store)
+using VortexArena.Net;
 
 namespace VortexArena.Game.Hud;
 
@@ -55,7 +59,9 @@ public partial class QuickMenuPanel : HudPanel
         public readonly Tag Tag;
         public readonly string Text;     // submenu name, or a row title, or a command string
         public readonly bool Special;    // QC "special" command (leading "\n") → ^6 color
-        public Token(Tag tag, string text, bool special = false) { Tag = tag; Text = text; Special = special; }
+        public readonly Action? Action;
+        public Token(Tag tag, string text, bool special = false, Action? action = null)
+        { Tag = tag; Text = text; Special = special; Action = action; }
     }
 
     /// <summary>One drawn page row (QC <c>QuickMenu_Page_*</c> parallel arrays, 1-based in the QC).</summary>
@@ -64,6 +70,7 @@ public partial class QuickMenuPanel : HudPanel
         public string Description = "";  // QC QuickMenu_Page_Description[i]
         public string Command = "";      // QC QuickMenu_Page_Command[i] ("" → it's a submenu row)
         public bool Special;             // ^6 special command
+        public Action? Action;
         public CmdType Type = CmdType.None;
     }
 
@@ -79,6 +86,7 @@ public partial class QuickMenuPanel : HudPanel
 
     // ---- interaction state ----
     private int _hover = -1;                            // hovered row (0-based into _page; -1 = none)
+    private bool _leftPressed, _rightPressed;
     private double _activatedTime;                      // QC QuickMenu_Page_ActivatedEntry_Time (flash window)
     private int _activatedRow = -1;                     // 0-based row that flashed
     private bool _pendingClose;                         // QC QuickMenu_Page_ActivatedEntry_Close (close after flash)
@@ -101,9 +109,10 @@ public partial class QuickMenuPanel : HudPanel
     /// <summary>QC <c>STAT(TIMELIMIT) &gt; 0</c>: a match time limit exists (adds the reduce/extend vote rows).</summary>
     public bool HasTimeLimit { get; set; } = true;
 
-    /// <summary>Names of the other players (QC the entcs player list) so the per-player submenus
-    /// ("Send private message to", "Spectate a player") can be populated. Optional; empty = those rows omitted.</summary>
-    public IReadOnlyList<string> PlayerNames { get; set; } = Array.Empty<string>();
+    internal IReadOnlyList<ScoreRowWire> Players { get; set; } = Array.Empty<ScoreRowWire>();
+    internal int LocalPlayerId { get; set; }
+    internal int LocalTeam { get; set; }
+    internal Action? OpenServerMenu { get; set; }
 
     /// <summary>QC <c>QuickMenu_IsOpened</c> — the panel is showing its list.</summary>
     public bool IsOpen => _isOpen && _page.Count > 0;
@@ -164,6 +173,41 @@ public partial class QuickMenuPanel : HudPanel
     public bool Open(string submenu = "")
     {
         BuildDefault();
+        return OpenPage(submenu);
+    }
+
+    internal bool OpenFile(string text, string submenu, Action? openStandardMenu = null)
+    {
+        const int maxTokens = 512; // QUICKMENU_BUFFER_MAXENTRIES
+        _buffer.Clear();
+        using var reader = new StringReader(text);
+        while (_buffer.Count < maxTokens && reader.ReadLine() is { } line)
+        {
+            // Each non-comment line is one entry. Keep semicolons inside quoted commands intact.
+            var statements = ConfigInterpreter.SplitIntoCommands(line);
+            if (statements.Count != 1) continue;
+            var args = ConfigInterpreter.Tokenize(statements[0]);
+            if (args.Count == 0 || args[0].Length == 0) continue;
+            if (args.Count == 1)
+            {
+                SMenu(args[0]);
+                continue;
+            }
+            if (args[1].Length == 0 || _buffer.Count + 2 > maxTokens) continue;
+            if (args.Count == 2)
+                Entry(args[0], args[1]);
+            else if (args.Count == 3 && args[2] == "KEEP_OPEN")
+                EntryKeep(args[0], args[1]);
+            else if (args.Count == 3 && IsPlayerSelector(args[2]))
+                PlayerSubMenu(args[0], args[1], args[2], maxTokens);
+        }
+        if (openStandardMenu is not null)
+            EntrySpecial("Standard quick menu", openStandardMenu);
+        return OpenPage(submenu);
+    }
+
+    private bool OpenPage(string submenu)
+    {
         if (_buffer.Count == 0) return false;
 
         _isOpen = true;
@@ -193,6 +237,7 @@ public partial class QuickMenuPanel : HudPanel
         _pageIndex = 0;
         _isLastPage = true;
         _hover = -1;
+        _leftPressed = _rightPressed = false;
         _activatedRow = -1;
         _activatedTime = 0;
         _pendingClose = false;
@@ -231,10 +276,10 @@ public partial class QuickMenuPanel : HudPanel
     }
 
     // QC QUICKMENU_ENTRY_SPECIAL: shown with a different (^6) color.
-    private void EntrySpecial(string title, string command)
+    private void EntrySpecial(string title, Action action)
     {
         _buffer.Add(new Token(Tag.Title, title));
-        _buffer.Add(new Token(Tag.Command, command, special: true));
+        _buffer.Add(new Token(Tag.Command, "", special: true, action));
     }
 
     /// <summary>Build the default quick-menu into <see cref="_buffer"/> — a faithful transcription of QC
@@ -333,6 +378,12 @@ public partial class QuickMenuPanel : HudPanel
                 Entry("Shuffle teams", "vcall shuffleteams");
         SMenu("Call a vote");
 
+        if (OpenServerMenu is { } openServerMenu)
+        {
+            EntrySpecial("Server quick menu", openServerMenu);
+            Entry("Server quick menu as default", "toggle hud_panel_quickmenu_server_is_default");
+        }
+
         // QC: spectate-a-player submenu when not actively playing.
         if (SpectateeStatus != 0)
             PlayerSubMenu("Spectate a player", "spectate \"%s^7\"");
@@ -342,13 +393,56 @@ public partial class QuickMenuPanel : HudPanel
     // <paramref name="commandTemplate"/> is a command containing the literal token "%s" (QC's sprintf "%s" arg)
     // which is substituted with the player name. Omitted entirely when no player list has been fed (QC: an empty
     // player list yields an empty submenu, which QuickMenu_Page_Load then drops — matching our self-blank contract).
-    private void PlayerSubMenu(string name, string commandTemplate)
+    private static bool IsPlayerSelector(string selector) => selector is
+        "ALLPLAYERS" or "ALLPLAYERS_BUT_ME" or "OWNTEAMPLAYERS" or "OWNTEAMPLAYERS_BUT_ME" or "ENEMYTEAMPLAYERS";
+
+    private void PlayerSubMenu(string name, string commandTemplate, string selector = "ALLPLAYERS_BUT_ME",
+        int maxTokens = int.MaxValue)
     {
-        if (PlayerNames.Count == 0) return;
-        SMenu(name);
-            foreach (string n in PlayerNames)
-                Entry("^7" + n, commandTemplate.Replace("%s", n, StringComparison.Ordinal));
-        SMenu(name);
+        bool ownTeam = selector.StartsWith("OWNTEAM", StringComparison.Ordinal);
+        bool enemyTeam = selector == "ENEMYTEAMPLAYERS";
+        if ((ownTeam || enemyTeam) && !Teamplay) return;
+
+        int start = _buffer.Count;
+        foreach (var player in Players)
+        {
+            if (_buffer.Count + 4 > maxTokens) break; // leave space for both submenu markers
+            if (player.Name.Length == 0) continue;
+            if (selector.EndsWith("_BUT_ME", StringComparison.Ordinal) && player.NetId == LocalPlayerId) continue;
+            if (ownTeam && (player.IsSpectator || player.Team != LocalTeam)) continue;
+            if (enemyTeam && (player.IsSpectator || player.Team == LocalTeam)) continue;
+
+            if (_buffer.Count == start) SMenu(name);
+            Entry("^7" + player.Name, FormatPlayerCommand(commandTemplate, player.Name));
+        }
+        if (_buffer.Count != start) SMenu(name);
+    }
+
+    private static string FormatPlayerCommand(string template, string playerName)
+    {
+        string name = playerName.Replace("\\", "\\\\").Replace("\"", "\\\"")
+            .Replace("$", "$$").Replace("\r", "").Replace("\n", "");
+        var command = new StringBuilder();
+        bool quoted = false;
+        for (int i = 0; i < template.Length; i++)
+        {
+            char c = template[i];
+            if (c == '%' && i + 1 < template.Length && template[i + 1] == 's')
+            {
+                if (!quoted) command.Append('"');
+                command.Append(name);
+                if (!quoted) command.Append('"');
+                i++;
+                continue;
+            }
+
+            command.Append(c);
+            if (quoted && c == '\\' && i + 1 < template.Length)
+                command.Append(template[++i]);
+            else if (c == '"')
+                quoted = !quoted;
+        }
+        return command.ToString();
     }
 
     // =====================================================================================
@@ -427,6 +521,7 @@ public partial class QuickMenuPanel : HudPanel
                             Description = t.Text,
                             Command = cmdTok.Text,
                             Special = cmdTok.Special,
+                            Action = cmdTok.Action,
                             Type = cmdTok.Tag == Tag.KCommand ? CmdType.Keep : CmdType.None,
                         };
                         // QC: a leading "toggle " command becomes a toggle row (draws a checkbox + keeps open).
@@ -479,7 +574,7 @@ public partial class QuickMenuPanel : HudPanel
 
     /// <summary>QC <c>QuickMenu_ActionForNumber</c> — act on the row chosen by a number key. <paramref name="num"/>
     /// is the QC 1-based row number (0 = "Continue..."/next page). Returns true if the menu should close.</summary>
-    private bool ActionForNumber(int num)
+    private bool ActionForNumber(int num, bool invertClose)
     {
         if (!_isLastPage)
         {
@@ -501,6 +596,12 @@ public partial class QuickMenuPanel : HudPanel
 
         PageEntry pe = _page[num - 1]; // QC entries are 1-based
 
+        if (pe.Action is { } action)
+        {
+            action();
+            return false;
+        }
+
         if (pe.Command != "")
         {
             // QC: special commands carry a leading "\n"; strip it before running.
@@ -515,7 +616,8 @@ public partial class QuickMenuPanel : HudPanel
             catch (Exception ex) { VortexArena.Common.Diagnostics.Log.Warn($"[QuickMenu] command failed: {ex.Message}"); }
             ResetTimeout();
             // Toggle / keep-open rows stay; plain commands close.
-            return pe.Type != CmdType.Toggle && pe.Type != CmdType.Keep;
+            bool close = pe.Type != CmdType.Toggle && pe.Type != CmdType.Keep;
+            return close != invertClose;
         }
 
         // A submenu row: descend.
@@ -526,7 +628,7 @@ public partial class QuickMenuPanel : HudPanel
 
     /// <summary>QC <c>QuickMenu_Page_ActiveEntry</c> — flash the row then run its action; close if the action
     /// requested it. <paramref name="row0"/> is 0-based into the visible page (use -1 for the "Continue..." row).</summary>
-    private void Activate(int row0)
+    private void Activate(int row0, bool invertClose)
     {
         // Map the 0-based page row to the QC 1-based number (Continue... = 0).
         int num = row0 < 0 ? 0 : row0 + 1;
@@ -535,7 +637,7 @@ public partial class QuickMenuPanel : HudPanel
         // QC runs the command immediately (localcmd) but flashes the row green for 0.1s before closing — so the
         // close is DEFERRED to _Process once the flash window elapses (matching HUD_QuickMenu's end-of-draw close).
         // A submenu descent (LoadPage) reloads the page and clears _activatedRow, so it never lingers as a flash.
-        _pendingClose = ActionForNumber(num);
+        _pendingClose = ActionForNumber(num, invertClose);
     }
 
     // =====================================================================================
@@ -553,28 +655,43 @@ public partial class QuickMenuPanel : HudPanel
             return;
         }
 
-        if (@event is InputEventMouseButton mb && mb.Pressed)
+        if (@event is InputEventMouseButton mb && HandleMouseButton(mb, mb.Position))
         {
-            if (mb.ButtonIndex == MouseButton.Right) { Close(); AcceptEvent(); return; }
-            if (mb.ButtonIndex == MouseButton.Left)
-            {
-                int idx = RowAt(mb.Position);
-                if (idx == ContinueRowIndex) { Activate(-1); AcceptEvent(); return; }
-                if (idx >= 0 && idx < _page.Count) { Activate(idx); AcceptEvent(); }
-            }
+            AcceptEvent();
             return;
         }
 
-        if (@event is InputEventKey { Pressed: true } k)
+        if (@event is InputEventKey { Pressed: true, Echo: false } k)
         {
-            if (k.Keycode == Key.Escape) { Close(); AcceptEvent(); return; }
             int digit = DigitOf(k.Keycode);
             if (digit >= 0)
             {
                 // QC: digit selects the QC 1-based row; 0 = Continue/next page.
-                Activate(digit == 0 ? -1 : digit - 1);
+                Activate(digit == 0 ? -1 : digit - 1, k.CtrlPressed);
                 AcceptEvent();
             }
+        }
+    }
+
+    internal bool HandleMouseButton(InputEventMouseButton mouse, Vector2 position)
+    {
+        switch (mouse.ButtonIndex)
+        {
+            case MouseButton.Left:
+                if (!mouse.Pressed && _leftPressed)
+                {
+                    int idx = RowAt(position);
+                    if (idx == ContinueRowIndex) Activate(-1, mouse.CtrlPressed);
+                    else if (idx >= 0 && idx < _page.Count) Activate(idx, mouse.CtrlPressed);
+                }
+                _leftPressed = mouse.Pressed;
+                return true;
+            case MouseButton.Right:
+                if (!mouse.Pressed && _rightPressed) Close();
+                _rightPressed = mouse.Pressed;
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -680,7 +797,7 @@ public partial class QuickMenuPanel : HudPanel
             // Row color: submenu ^4, special ^6, command ^3 (QC HUD_QuickMenu).
             string color;
             string? checkbox = null;
-            if (pe.Command == "")
+            if (pe.Command == "" && pe.Action is null)
                 color = "^4";
             else
             {
@@ -790,6 +907,7 @@ public partial class QuickMenuPanel : HudPanel
         if (c is null) return;
         const CvarFlags save = CvarFlags.Save;
         c.Register("hud_panel_quickmenu_align", "0", save);
+        c.Register("hud_panel_quickmenu_file", "", save);
         c.Register("hud_panel_quickmenu_translatecommands", "0", save);
         c.Register("hud_panel_quickmenu_server_is_default", "0");
         // Base default is 5 (_hud_common.cfg:124: seta hud_panel_quickmenu_time 5) — the page idle-timeout in

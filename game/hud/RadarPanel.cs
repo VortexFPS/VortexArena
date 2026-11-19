@@ -9,37 +9,8 @@ using NVec3 = System.Numerics.Vector3;
 namespace VortexArena.Game.Hud;
 
 /// <summary>
-/// Top-down radar / minimap — the C# successor to QuakeC's <c>hud_panel_radar</c> +
-/// <c>client/teamradar.qc</c> (Base/.../qcsrc/client/hud/panel/radar.qc). In QC the radar walked the
-/// <c>entcs</c> entities — the lightweight position+team+health slice the server replicates for <i>every</i>
-/// player so they show on the map even when out of view (<c>draw_teamradar_player</c>) — and stamped a
-/// team-colored, facing-oriented arrow per player onto a rotated, player-centered minimap, framed by the skin
-/// border and the optional minimap foreground image (<c>draw_teamradar_background</c>).
-///
-/// Here that same data arrives through <see cref="ClientNet"/>: the predicted local origin
-/// (<see cref="ClientNet.PredictedOrigin"/>) is the radar center, and every other networked entity is sampled
-/// by id (<see cref="ClientNet.RemoteIds"/> → <see cref="ClientNet.SampleRemote"/> for the interpolated world
-/// pose, <see cref="ClientNet.TryGetRemoteState"/> for its kind/team/flags). We render the contract faithfully:
-/// the skin border frame, the QC <b>rotation</b> modes (<c>_rotation</c> 0 = player-aligned facing-up, nonzero =
-/// fixed cardinal lock), the <b>zoom/scale</b> (<c>_scale</c> / <c>_zoommode</c>) that the QC blends between a
-/// "fit whole arena" big size and a fixed pixels-per-unit normal size, the team-colored player arrows, and the
-/// foreground alpha (<c>_foreground_alpha</c>). The full minimap texture (<c>minimapname</c>) is heavy and not
-/// loaded here, so we render the framed disc + blips + the same rotation/zoom/team-color behaviour, which is the
-/// parity target the contract sets for phase 1 (HUD_PARITY_CONTRACT §6 radar).
-///
-/// <para>As of the HUD parity refactor this is a real <see cref="HudPanel"/> so it is auto-discovered into the
-/// full HUD (laid out at the luma top-left corner with the <c>border_corner_northwest</c> frame) AND still works
-/// STANDALONE the way <see cref="VortexArena.Game.Net.NetGame"/> uses it — set directly (<see cref="Net"/>,
-/// <see cref="Control.Position"/>/<see cref="Control.Size"/>, <see cref="LocalYawDegrees"/> each frame) without
-/// a manager driving <c>LoadConfig</c>. The draw code keys off the live <see cref="Control.Size"/> so it honours
-/// whichever path placed the panel. The standalone NetGame radar keeps its manual 200×200 at (24,24).</para>
-///
-/// <para><b>Coordinate mapping.</b> Quake's ground plane is X (forward/east) and Y (left/north); a blip's world
-/// delta <c>(d = entity.XY − PredictedOrigin.XY)</c> is rotated by the radar angle into screen space, then mapped
-/// to pixels at the current pixels-per-world scale, with screen-Y negated because Godot screen-Y grows downward
-/// while Quake +Y is north. The radar angle is the QC <c>HUD_Radar_GetAngle</c>: player-aligned (<c>_rotation</c>
-/// 0) counter-rotates the field by the player's yaw so their facing points up; a fixed <c>_rotation</c> locks the
-/// map to a cardinal.</para>
+/// Draws the tactical minimap and networked player, waypoint and link markers.
+/// The maximized Onslaught picker reuses the draw transform for its world-coordinate click.
 /// </summary>
 public partial class RadarPanel : HudPanel
 {
@@ -74,9 +45,8 @@ public partial class RadarPanel : HudPanel
 
     // =================================================================================================
     //  Maximized fullscreen / clickable tactical-overview mode (QC HUD_Radar maximized path +
-    //  HUD_Radar_Mouse / HUD_Radar_Clickable, radar.qc). Toggled by the host (keybind +showscores-like);
-    //  in Onslaught with hud_panel_radar_mouse it becomes a clickable spawn-location selector. None of this
-    //  touches the small-radar path: every maximized override is gated behind _maximized below.
+    //  HUD_Radar_Mouse / HUD_Radar_Clickable, radar.qc). The ordinary maximized view is separate from mouse
+    //  mode, which Onslaught uses as its spawn and teleport location selector.
     // =================================================================================================
 
     /// <summary>True while the radar is shown maximized over the whole screen (QC <c>hud_panel_radar_maximized</c>
@@ -98,31 +68,45 @@ public partial class RadarPanel : HudPanel
     private float _clickFlipX = 1f;   // v_flipped X sign
     private NVec3 _clickSelfOrigin;   // selfOrigin (radar centre in world XY; Z carried for the spawn pick)
     private bool _clickValid;         // true when the cached transform is finite/usable
+    private Rect2 _normalRect;
 
-    /// <summary>Whether the current gametype is Onslaught — gates the clickable spawn-selector (QC
-    /// <c>HUD_Radar_Clickable</c> requires <c>autocvar_g_onslaught</c>). Set by the host.</summary>
-    public bool IsOnslaught { get; set; }
+    /// <summary>The transient mouse mode set by <c>cl_cmd hud clickradar</c>.</summary>
+    public bool MouseMode { get; private set; }
 
-    /// <summary>True when the maximized radar is acting as the Onslaught spawn-location picker — QC
-    /// <c>HUD_Radar_Clickable</c> = maximized AND Onslaught AND <c>hud_panel_radar_mouse</c>. In this mode the
-    /// view is forced to the fit-arena zoom and clicks resolve to a world point (<see cref="HandleClick"/>).</summary>
-    public bool Clickable => _maximized && IsOnslaught && GlobalF("hud_panel_radar_mouse", 0f) != 0f;
+    /// <summary>While dead, holding the scoreboard temporarily hides the click radar.</summary>
+    public bool TemporarilyHidden { get; set; }
 
-    /// <summary>True while maximized (QC <c>hud_panel_radar_maximized</c>). The host reads this to know whether the
-    /// radar is capturing the mouse / full-screen.</summary>
+    public bool Clickable => _maximized && MouseMode && !TemporarilyHidden;
+
+    /// <summary>True while maximized (QC <c>hud_panel_radar_maximized</c>).</summary>
     public bool Maximized => _maximized;
 
-    /// <summary>The console-command sink used to emit the Onslaught spawn pick (<c>cmd ons_spawn x y z</c>) when the
-    /// player clicks the clickable radar — wired by the host to <see cref="ClientNet.SendStringCommand"/>. The
-    /// server's <c>ons_spawn</c> command parses argv 1..3 as the world x/y/z. <c>null</c> standalone (no-op).</summary>
-    public System.Action<string>? SendServerCommand { get; set; }
-
-    /// <summary>Toggle the maximized fullscreen overview (QC opening/closing the maximized radar). Flips the state
-    /// and forces a repaint.</summary>
-    public void SetMaximized(bool on)
+    /// <summary>Set the overview and optionally enter mouse mode. Hiding clears both modes.</summary>
+    public void SetMaximized(bool on, bool clickable = false)
     {
+        if (on != _maximized)
+        {
+            if (on) _normalRect = new Rect2(Position, Size);
+            else
+            {
+                Position = _normalRect.Position;
+                Size = _normalRect.Size;
+            }
+        }
+        if (_maximized != on || clickable && !MouseMode)
+            _clickValid = false;
         _maximized = on;
+        MouseMode = on && (clickable || MouseMode);
+        TemporarilyHidden = false;
+        if (on) LayoutMaximized();
         QueueRedraw();
+    }
+
+    private void LayoutMaximized()
+    {
+        Vector2 screen = GetViewportRect().Size;
+        Size = screen * ParseMaximizedSize();
+        Position = (screen - Size) * 0.5f;
     }
 
     /// <summary>Store the current mouse position in panel-local space (QC feeds the radar <c>mousepos</c>). Only the
@@ -145,16 +129,60 @@ public partial class RadarPanel : HudPanel
     /// real Xonotic minimaps ship inside each map's pk3 as <c>gfx/&lt;map&gt;_mini.jpg</c>.</summary>
     public string? MapName { get; set; }
 
-    /// <summary>Map world XY bounds (QC <c>mi_min</c>/<c>mi_max</c> = the BSP worldspawn model mins/maxs). The
-    /// minimap image covers exactly this rect; the image and the blips share the same world→screen transform so
-    /// they stay aligned as the radar rotates/zooms.</summary>
+    /// <summary>Radar world bounds before the padded square texture projection.</summary>
     public Vector2 MapMinXY { get; set; }
     public Vector2 MapMaxXY { get; set; }
 
     private bool HasMapBounds => MapMaxXY.X > MapMinXY.X && MapMaxXY.Y > MapMinXY.Y;
 
+    // DRAWFLAG_SCREEN uses (ONE_MINUS_DST_COLOR, ONE). RGB carries the radar foreground setting.
+    private const string MinimapShader = """
+        shader_type canvas_item;
+        render_mode blend_disabled, unshaded;
+        uniform sampler2D backdrop : hint_screen_texture, filter_nearest, repeat_disable;
+        void fragment() {
+            vec3 dst = texture(backdrop, SCREEN_UV).rgb;
+            COLOR = vec4(dst + COLOR.rgb * (1.0 - dst), 1.0);
+        }
+        """;
+
+    private Control _minimapBackdrop = null!;
+    private BackBufferCopy _minimapCopy = null!;
+    private Control _minimapLayer = null!;
+    private bool _showBackdrop;
+    private (Texture2D Texture, Vector2[] Points, Vector2[] Uvs, float Shade)? _minimapDraw;
+
+    private Control _pingLayer = null!;
+    private readonly System.Collections.Generic.List<(Rect2 Rect, Color Color)> _pingDraws = new();
+
     public override void _Ready()
-        => ClipContents = true; // QC drawsetcliparea(panel rect): clip the minimap + blips to the radar rectangle
+    {
+        ClipContents = true;
+        _minimapBackdrop = new Control { MouseFilter = MouseFilterEnum.Ignore, ShowBehindParent = true };
+        _minimapBackdrop.Draw += () =>
+        {
+            if (_showBackdrop)
+                DrawBackground(_minimapBackdrop);
+        };
+        AddChild(_minimapBackdrop);
+        _minimapCopy = new BackBufferCopy { ShowBehindParent = true, Visible = false };
+        AddChild(_minimapCopy);
+        _minimapLayer = new Control
+        {
+            MouseFilter = MouseFilterEnum.Ignore,
+            ShowBehindParent = true,
+            Material = new ShaderMaterial { Shader = new Shader { Code = MinimapShader } },
+        };
+        _minimapLayer.Draw += DrawMinimap;
+        AddChild(_minimapLayer);
+        _pingLayer = new Control
+        {
+            MouseFilter = MouseFilterEnum.Ignore,
+            Material = new CanvasItemMaterial { BlendMode = CanvasItemMaterial.BlendModeEnum.Add },
+        };
+        _pingLayer.Draw += DrawPingPulses;
+        AddChild(_pingLayer);
+    }
 
     // ---- visual constants (the modernized stand-ins for the QC hud_panel_radar_* skin cvars) ----
 
@@ -167,7 +195,11 @@ public partial class RadarPanel : HudPanel
     private const float ScaleReferenceDivisor = 4f; // tuned so the code default 4096 ≈ 1024u radius
 
     /// <summary>The radar reads live net state, so it must repaint every frame.</summary>
-    public override void _Process(double delta) => QueueRedraw();
+    public override void _Process(double delta)
+    {
+        if (_maximized) LayoutMaximized();
+        QueueRedraw();
+    }
 
     // =================================================================================================
     //  Identity / layout (luma defaults: radar sits in the top-left corner with a corner frame)
@@ -205,17 +237,23 @@ public partial class RadarPanel : HudPanel
 
     protected override void DrawPanel()
     {
+        _showBackdrop = false;
+        _minimapDraw = null;
+        _minimapCopy.Hide();
+        _minimapBackdrop.QueueRedraw();
+        _minimapLayer.QueueRedraw();
+        _pingDraws.Clear();
+        _pingLayer?.QueueRedraw();
         ClientNet? net = Net;
-        if (net is null)
+        _clickValid = false;
+        if (net is null || TemporarilyHidden)
             return; // self-blank: no data → draw nothing
 
         // ---- panel enable + team gating (QC HUD_Radar, radar.qc:191-194) ----
         // hud_panel_radar: 0 = disabled, 1 = enabled (team modes only), 2 = also enabled in non-team modes.
         // The standalone radar isn't driven by the HUD show-mode machinery, so honour the cvar here directly.
         int enable = Mathf.RoundToInt(GlobalF("hud_panel_radar", 1f));
-        if (enable == 0)
-            return;
-        if (enable != 2 && !VortexArena.Common.Gameplay.Scoring.GameScores.Teamplay)
+        if (!_maximized && (enable == 0 || enable != 2 && !VortexArena.Common.Gameplay.Scoring.GameScores.Teamplay))
             return;
 
         // Draw in the live control size so this works both as a discovered panel (Size == Cfg.SizePx, set by
@@ -223,28 +261,12 @@ public partial class RadarPanel : HudPanel
         Vector2 size = Size;
         Vector2 center = size * 0.5f;
 
-        // ---- maximized fullscreen overview (QC HUD_Radar maximized branch) ----
-        // When maximized the radar is sized as a fraction of the SCREEN (hud_panel_radar_maximized_size, QC bound
-        // 0.2..1 per axis) and centred on it, rather than honouring the small control rect. We keep drawing in this
-        // panel's local space, so the maximized rect's centre is the screen centre expressed local to this control
-        // (screenCentre - GlobalPosition). Everything below (WorldToScreen, blips, arrows) then uses the override
-        // size/center transparently. The small-radar path is untouched when _maximized is false.
-        if (_maximized)
-        {
-            Vector2 vp = GetViewportRect().Size;
-            Vector2 frac = ParseMaximizedSize();
-            Vector2 maxSize = new(vp.X * frac.X, vp.Y * frac.Y);
-            size = maxSize;
-            Vector2 screenCenter = vp * 0.5f;
-            center = screenCenter - GlobalPosition; // panel-local coords of the screen centre
-        }
-
         float radius = Mathf.Min(size.X, size.Y) * 0.5f;
         if (radius <= 0f)
             return;
 
         // ---- skin border frame (QC HUD_Panel_DrawBg → draw_BorderPicture). No-op when the panel's bg is "0". ----
-        DrawBackground();
+        _showBackdrop = !IsConfiguring;
 
         // Foreground alpha (QC hud_panel_radar_foreground_alpha * panel_fg_alpha). When discovered it folds the
         // HUD/scoreboard fade in via LiveFgAlpha; standalone LiveFgAlpha defaults to ~0.9, which is fine.
@@ -253,13 +275,10 @@ public partial class RadarPanel : HudPanel
         float fgCvar = CvarF("foreground_alpha", 1f);
         if (!float.IsFinite(fgCvar) || fgCvar <= 0f)
             fgCvar = 0.8f;
-        float fgAlpha = Mathf.Clamp(fgCvar, 0f, 1f) * Mathf.Clamp(LiveFgAlpha, 0f, 1f);
+        float panelAlpha = Mathf.Clamp(LiveFgAlpha, 0f, 1f);
+        float fgAlpha = Mathf.Clamp(fgCvar, 0f, 1f) * panelAlpha;
         if (fgAlpha <= 0.001f)
             return;
-
-        // Background playfield (rectangular, like the QC radar panel). The minimap image draws over it; areas
-        // outside the map (or before the image loads) stay this dark fill.
-        DrawRect(new Rect2(Vector2.Zero, size), WithAlpha(BackgroundColor, BackgroundColor.A * fgAlpha / 0.9f));
 
         // ---- rotation (QC HUD_Radar_GetAngle) ----
         // _rotation 0  → player-aligned: counter-rotate by the player's yaw so facing points up. QC returns
@@ -289,9 +308,14 @@ public partial class RadarPanel : HudPanel
         // the rotated world delta by `worldToPixels`, which IS Base's `teamradar_size`, so we reproduce the
         // bigsize/normalsize math directly in px-per-unit rather than the old RangeUnits heuristic.
         // QC teamradar_loadcvars maximized overrides: _maximized_scale / _maximized_zoommode replace the small ones.
-        float scale = _maximized ? CvarF("maximized_scale", 8192f) : CvarF("scale", 4096f); // teamradar code defaults
-        float scaleFallback = _maximized ? 8192f : 4096f;
-        if (!float.IsFinite(scale) || scale <= 0f) scale = scaleFallback; // teamradar_loadcvars: 0 → code default
+        float scale = CvarF("scale", 4096f);
+        if (_maximized)
+        {
+            float maximizedScale = CvarF("maximized_scale", 8192f);
+            if (float.IsFinite(maximizedScale) && maximizedScale > 0f)
+                scale = maximizedScale;
+        }
+        if (!float.IsFinite(scale) || scale <= 0f) scale = 4096f;
         float zoomCvar = _maximized ? CvarF("maximized_zoommode", 3f) : CvarF("zoommode", 0f);
         int zoommode = float.IsFinite(zoomCvar) ? (int)zoomCvar : 0;
         float zoomFactor = Mathf.Clamp(GetZoomFactor(zoommode), 0f, 1f);
@@ -300,55 +324,22 @@ public partial class RadarPanel : HudPanel
         if (Clickable)
             zoomFactor = 1f;
 
+        Vector2 mapSpan = MapMaxXY - MapMinXY;
+        // QC mi_picmin/mi_picmax extend the shorter side to a square, then pad both sides by 1/64.
+        float pictureSpan = Mathf.Max(mapSpan.X, mapSpan.Y) * (1f + 2f / 64f);
         float worldToPixels;
         if (HasMapBounds)
         {
-            // Base derives the endpoints from mi_scale (world XY span) and scale2d. The port feeds the radar the
-            // raw BSP worldspawn bounds, i.e. the "non-clever" gfx/<map>_mini texcoord path where mi_picmin=(0,0)
-            // and mi_picmax=(1,1) — so scale2d = vlen_maxnorm2d(mi_picmax-mi_picmin) = 1. teamradar_size2d is the
-            // panel pixel size (mySize). mi_scale = mi_max - mi_min.
-            const float scale2d = 1f;
-            float miScaleX = MapMaxXY.X - MapMinXY.X;
-            float miScaleY = MapMaxXY.Y - MapMinXY.Y;
-            float sizeMin = Mathf.Min(size.X, size.Y); // vlen_minnorm2d of a positive (w,h)
-            float sizeMax = Mathf.Max(size.X, size.Y); // vlen_maxnorm2d of a positive (w,h)
-
-            float bigsize;
-            if (rotation == 0)
-            {
-                // max-min distance must fit the radar in ANY rotation: divide by the world-space diagonal.
-                // bigsize = vlen_minnorm2d(size) * scale2d / (1.05 * vlen(vec2(mi_scale)))
-                float diag = Mathf.Sqrt(miScaleX * miScaleX + miScaleY * miScaleY);
-                bigsize = sizeMin * scale2d / (1.05f * Mathf.Max(diag, 0.0001f));
-            }
-            else
-            {
-                // Fixed rotation: fit the rotated arena bbox in x=x, y=y. Rotate the 4 world corners of
-                // [mi_min, mi_max] by teamradar_angle and take the axis-aligned span (radar.qc:274-287).
-                // teamradar_angle in the port is yawRad (the same -DEG2RAD radar angle fed into cos/sin above).
-                float rc = Mathf.Cos(yawRad), rs = Mathf.Sin(yawRad);
-                Vector2 R(float x, float y) => new(x * rc - y * rs, x * rs + y * rc);
-                Vector2 p0 = R(MapMinXY.X, MapMinXY.Y);
-                Vector2 p1 = R(MapMaxXY.X, MapMaxXY.Y);
-                Vector2 p2 = R(MapMinXY.X, MapMaxXY.Y);
-                Vector2 p3 = R(MapMaxXY.X, MapMinXY.Y);
-                float spanX = Mathf.Max(Mathf.Max(p0.X, p1.X), Mathf.Max(p2.X, p3.X)) -
-                              Mathf.Min(Mathf.Min(p0.X, p1.X), Mathf.Min(p2.X, p3.X));
-                float spanY = Mathf.Max(Mathf.Max(p0.Y, p1.Y), Mathf.Max(p2.Y, p3.Y)) -
-                              Mathf.Min(Mathf.Min(p0.Y, p1.Y), Mathf.Min(p2.Y, p3.Y));
-                bigsize = Mathf.Min(
-                    size.X * scale2d / (1.05f * Mathf.Max(spanX, 0.0001f)),
-                    size.Y * scale2d / (1.05f * Mathf.Max(spanY, 0.0001f)));
-            }
-
-            // normalsize = vlen_maxnorm2d(size) * scale2d / scale, floored to bigsize.
-            float normalsize = sizeMax * scale2d / scale;
-            if (bigsize > normalsize)
-                normalsize = bigsize;
-
-            worldToPixels = zoomFactor * bigsize + (1f - zoomFactor) * normalsize;
-            if (!float.IsFinite(worldToPixels) || worldToPixels <= 0f)
-                worldToPixels = radius / Mathf.Max(RangeUnits, 1f);
+            // QC applies scale2d = pictureSpan in its fit, then divides by that same span in 3D->UV.
+            // The factors cancel for world-to-screen scaling. They still affect pulse size and image UVs.
+            Vector2 rotatedSpan = new(
+                Mathf.Abs(cos) * mapSpan.X + Mathf.Abs(sin) * mapSpan.Y,
+                Mathf.Abs(sin) * mapSpan.X + Mathf.Abs(cos) * mapSpan.Y);
+            float bigsize = rotation == 0
+                ? Mathf.Min(size.X, size.Y) / (1.05f * mapSpan.Length())
+                : Mathf.Min(size.X / rotatedSpan.X, size.Y / rotatedSpan.Y) / 1.05f;
+            float normalsize = Mathf.Max(bigsize, Mathf.Max(size.X, size.Y) / scale);
+            worldToPixels = Mathf.Lerp(normalsize, bigsize, zoomFactor);
         }
         else
         {
@@ -363,9 +354,7 @@ public partial class RadarPanel : HudPanel
         }
         NVec3 viewOrigin = CenterOrigin ?? net.PredictedOrigin;
         // QC HUD_Radar: the radar center blends between the player origin (normal) and the MAP center (big zoom)
-        // by the zoom factor — `teamradar_origin3d_in_texcoord = zoom*mi_center + (1-zoom)*view_origin`. So at
-        // full zoom-out (fit-arena) the view recenters on the whole map, not on the player. mi_center = the BSP
-        // bounds midpoint. Z is irrelevant to the top-down transform; only XY recenter.
+        // by the zoom factor. Retain camera height for the Onslaught click coordinates.
         NVec3 selfOrigin = viewOrigin;
         if (HasMapBounds && zoomFactor > 0f)
         {
@@ -374,8 +363,7 @@ public partial class RadarPanel : HudPanel
             selfOrigin.X = zoomFactor * cx + (1f - zoomFactor) * viewOrigin.X;
             selfOrigin.Y = zoomFactor * cy + (1f - zoomFactor) * viewOrigin.Y;
         }
-        // A non-finite radar center would turn every blip delta into NaN; if it is bad, skip the contacts entirely
-        // and only draw the (origin-independent) center arrow below.
+        // A non-finite radar center would poison the map and marker transforms.
         bool selfFinite = float.IsFinite(selfOrigin.X) && float.IsFinite(selfOrigin.Y);
         float now = net.LatestServerTime;
         if (!float.IsFinite(now))
@@ -392,42 +380,43 @@ public partial class RadarPanel : HudPanel
             return center + new Vector2(rrx * flipX, -rry) * worldToPixels;
         }
 
-        // ---- the real minimap image (QC draw_teamradar_background): a rotated, player-centered textured quad
-        // covering the map's world bounds [mi_min, mi_max]. The corners map through WorldToScreen; the UVs match
-        // QC's yinvert (image Y is top-down, world Y bottom-up). Clipped to the panel rect by ClipContents. ----
-        // QC HUD_Radar (radar.qc:203): the SMALL (non-maximized) radar is hard-gated on minimapname != "" — if no
-        // gfx/<map>_radar / gfx/<map>_mini image resolves, the whole panel early-returns (no playfield, no blips).
-        // The standalone NetGame radar is fed MapName + BSP bounds, so the image usually resolves; this only blanks
-        // the radar on maps that genuinely ship no minimap art, matching Base. (Guarded behind HasMapBounds + MapName
-        // so the degenerate no-bounds fallback path is unaffected.)
-        Texture2D? mini = (selfFinite && HasMapBounds && !string.IsNullOrEmpty(MapName))
-            ? TextureCache.GetFirst($"gfx/{MapName}_radar", $"gfx/{MapName}_mini")
-            : null;
-        if (HasMapBounds && !string.IsNullOrEmpty(MapName) && mini is null)
-            return; // QC minimapname == "" → no radar at all
         if (selfFinite && HasMapBounds && !string.IsNullOrEmpty(MapName))
         {
-            if (mini is not null)
+            Texture2D? mini = TextureCache.GetFirst($"gfx/{MapName}_radar", $"gfx/{MapName}_mini");
+            if (mini is null)
             {
-                // QC get_mi_min_max_texcoords (util.qc:770-790): the shipped minimap image is a SQUARE that
-                // letterboxes the (usually non-square) map — it covers [mi_picmin, mi_picmax] = the raw map bounds
-                // extended on the SHORTER axis to a centered square, then padded 1/64 on each side. The image maps
-                // [0,1] onto THAT square (radarmap.qc:227, image.mins = mi_picmin), so draw the full-[0,1] quad over
-                // the square PIC bounds — not the raw map bounds. Drawing the whole image over the raw (non-square)
-                // bounds stretched the art on the short axis and drifted it off the blips (playtest-bugs #18). The
-                // blips keep using the raw bounds (their world→pixel scale is already correct), so the two now agree.
-                float exX = MapMaxXY.X - MapMinXY.X, exY = MapMaxXY.Y - MapMinXY.Y;
-                float sqHalf = Mathf.Max(exX, exY) * (0.5f + 1f / 64f); // square half-span + QC's 1/64 padding
-                float mcx = (MapMinXY.X + MapMaxXY.X) * 0.5f, mcy = (MapMinXY.Y + MapMaxXY.Y) * 0.5f;
-                float x0 = mcx - sqHalf, y0 = mcy - sqHalf, x1 = mcx + sqHalf, y1 = mcy + sqHalf;
-                var pts = new[] { WorldToScreen(x0, y0), WorldToScreen(x1, y0), WorldToScreen(x1, y1), WorldToScreen(x0, y1) };
-                if (AllFinite(pts))
-                {
-                    var uvs = new[] { new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(1f, 0f), new Vector2(0f, 0f) };
-                    Color mc = new(1f, 1f, 1f, fgAlpha);
-                    DrawPolygon(pts, new[] { mc, mc, mc, mc }, uvs, mini);
-                }
+                DrawRadarFallback(size, fgAlpha);
+                return;
             }
+
+            // Draw just the raw map rectangle using its cropped UVs in the padded square image.
+            Vector2 margin = (Vector2.One - mapSpan / pictureSpan) * 0.5f;
+            var pts = new[]
+            {
+                WorldToScreen(MapMinXY.X, MapMinXY.Y), WorldToScreen(MapMaxXY.X, MapMinXY.Y),
+                WorldToScreen(MapMaxXY.X, MapMaxXY.Y), WorldToScreen(MapMinXY.X, MapMaxXY.Y),
+            };
+            var uvs = new[]
+            {
+                new Vector2(margin.X, 1f - margin.Y), Vector2.One - margin,
+                new Vector2(1f - margin.X, margin.Y), margin,
+            };
+            if (vFlipped)
+            {
+                System.Array.Reverse(pts);
+                System.Array.Reverse(uvs);
+            }
+            if (AllFinite(pts))
+            {
+                _minimapDraw = (mini, pts, uvs, fgAlpha);
+                _minimapCopy.Rect = new Rect2(Vector2.Zero, size);
+                _minimapCopy.Show();
+            }
+        }
+
+        else
+        {
+            DrawRadarFallback(size, fgAlpha);
         }
 
         // ---- Onslaught radar links (QC draw_teamradar_link over g_radarlinks, radar.qc:301): the control-point /
@@ -460,7 +449,7 @@ public partial class RadarPanel : HudPanel
             int[] ids = System.Linq.Enumerable.ToArray(net.RemoteIds);
             foreach (int netId in ids)
             {
-                if (netId == localId)
+                if (netId == localId || netId == net.SpectatingNetId)
                     continue;
                 if (!net.SampleRemote(netId, now, out NVec3 origin, out NVec3 angles))
                     continue;
@@ -489,6 +478,7 @@ public partial class RadarPanel : HudPanel
             // Every core REGISTER_RADARICON resolves m_radaricon to 0/1, so the only sprite Base ever draws is
             // gfx/teamradar_icon_1 — there is no id-2 sprite. Size is NOT radius-relative.
             const float iconPx = 8f;
+            float pulseSize = HasMapBounds ? worldToPixels * pictureSpan : iconPx;
             Texture2D? icon = TextureCache.Get("gfx/teamradar_icon_1");
             foreach (VortexArena.Common.Gameplay.Waypoints.WaypointNet wp in net.Waypoints)
             {
@@ -506,18 +496,20 @@ public partial class RadarPanel : HudPanel
                 else
                     DrawRect(orect, oc); // fallback marker if the teamradar sprite is missing
 
-                // ---- ping pulse rings (QC draw_teamradar_icon ping loop over teamradar_times) ----
-                // A ping stamps a timestamp; for ~1s after, draw gfx/teamradar_ping as an expanding additive ring
-                // of size '2 2 0'*teamradar_size*dt, alpha (1-dt)*a. We model teamradar_size by the icon size
-                // (8px) so the ring grows from the icon to ~8px radius over its lifetime, matching the QC feel.
-                DrawPingPulse(wp.Id, op, iconPx, fgAlpha * Mathf.Clamp(wp.Fade, 0f, 1f), now);
+                foreach (float stamp in net.RadarPingTimes(wp.Id))
+                {
+                    float age = now - stamp;
+                    if (age <= 0f || age >= 1f)
+                        continue;
+                    Vector2 extent = Vector2.One * (2f * pulseSize * age);
+                    _pingDraws.Add((new Rect2(op - extent * 0.5f, extent), new Color(1f, 1f, 1f, (1f - age) * panelAlpha)));
+                }
             }
         }
 
         // ---- maximized clickable spawn-selector overlay (QC HUD_Radar_Mouse, radar.qc): a hover-glow on the
         // nearest waypoint under the cursor + the "Click to select spawn location" prompt. Only in the clickable
-        // (maximized + Onslaught + hud_panel_radar_mouse) state; the small radar and the non-clickable maximized
-        // view skip it entirely. ----
+        // mouse mode. ----
         if (Clickable && selfFinite)
         {
             Texture2D? glow = TextureCache.Get("gfx/teamradar_icon_glow");
@@ -546,8 +538,8 @@ public partial class RadarPanel : HudPanel
             }
 
             // QC HUD_Radar: the centred call-to-action prompt across the radar rect.
-            DrawTextCentered(new Vector2(center.X - size.X * 0.5f, center.Y - radius - FontSize - 4f),
-                size.X, "Click to select spawn location", new Color(1f, 1f, 1f, fgAlpha));
+            string prompt = net.Health <= 0 ? "Click to select spawn location" : "Click to select teleport destination";
+            DrawTextCentered(new Vector2(0, 4f), size.X, prompt, new Color(1f, 1f, 1f, fgAlpha));
         }
 
         // Cache the live WorldToScreen parameters so HandleClick can invert the exact transform the user sees.
@@ -570,10 +562,13 @@ public partial class RadarPanel : HudPanel
         // player's WORLD origin through the same transform, so once the big-zoom recentres on the map center the
         // own arrow drifts off the panel center too. WorldToScreen(viewOrigin) reproduces that; with no
         // recentering it lands exactly on center. Fall back to the panel center if the origin is non-finite.
+        NVec3 playerOrigin = net.PredictedOrigin;
+        if (net.SpectatingNetId != 0 && net.SampleRemote(net.SpectatingNetId, now, out NVec3 spectated, out _))
+            playerOrigin = spectated;
         Vector2 localPos = center;
-        if (selfFinite && float.IsFinite(viewOrigin.X) && float.IsFinite(viewOrigin.Y))
+        if (selfFinite && float.IsFinite(playerOrigin.X) && float.IsFinite(playerOrigin.Y))
         {
-            Vector2 lp = WorldToScreen(viewOrigin.X, viewOrigin.Y);
+            Vector2 lp = WorldToScreen(playerOrigin.X, playerOrigin.Y);
             if (float.IsFinite(lp.X) && float.IsFinite(lp.Y))
                 localPos = lp;
         }
@@ -584,29 +579,25 @@ public partial class RadarPanel : HudPanel
             WithAlpha(BorderColor, BorderColor.A * fgAlpha / 0.9f), filled: false, width: 1.5f);
     }
 
-    /// <summary>QC draw_teamradar_icon ping loop: for ~1s after a ping, draw gfx/teamradar_ping as an expanding
-    /// additive ring of size '2 2 0'*teamradar_size*dt, alpha (1-dt)*a (teamradar.qc:126-138). dt = time - stamp.
-    /// teamradar_size is the QC 2D scale factor; here we use the icon size (<paramref name="iconPx"/>) so the ring
-    /// grows from a point to ~2·iconPx over its lifetime, the same visual the QC produces around an 8px icon.</summary>
-    private void DrawPingPulse(int waypointId, Vector2 op, float iconPx, float a, float now)
+    private void DrawRadarFallback(Vector2 size, float alpha)
     {
-        ClientNet? net = Net;
-        if (net is null || a <= 0.001f)
+        DrawRect(new Rect2(Vector2.Zero, size), WithAlpha(BackgroundColor, BackgroundColor.A * alpha / 0.9f));
+    }
+
+    private void DrawMinimap()
+    {
+        if (_minimapDraw is not { } draw)
             return;
-        float stamp = net.RadarPingTime(waypointId);
-        if (stamp <= 0f)
+        Color shade = new(draw.Shade, draw.Shade, draw.Shade);
+        _minimapLayer.DrawPolygon(draw.Points, new[] { shade, shade, shade, shade }, draw.Uvs, draw.Texture);
+    }
+
+    private void DrawPingPulses()
+    {
+        if (_pingDraws.Count == 0 || TextureCache.Get("gfx/teamradar_ping") is not { } texture)
             return;
-        float dt = now - stamp;
-        if (dt <= 0f || dt >= 1f)
-            return;
-        Texture2D? ping = TextureCache.Get("gfx/teamradar_ping");
-        float sz = 2f * iconPx * dt;            // '2 2 0' * teamradar_size * dt
-        float alpha = (1f - dt) * a;             // (1 - dt) * a
-        var rect = new Rect2(op - new Vector2(sz, sz) * 0.5f, new Vector2(sz, sz));
-        // QC DRAWFLAG_ADDITIVE: additive blend so the ring brightens the map underneath.
-        if (ping is not null)
-            DrawTextureRect(ping, rect, false,
-                new Color(1f, 1f, 1f, Mathf.Clamp(alpha, 0f, 1f)));
+        foreach (var (rect, color) in _pingDraws)
+            _pingLayer.DrawTextureRect(texture, rect, false, color);
     }
 
     /// <summary>QC draw_teamradar_link: a connection line between two radar points as a thin 4-vertex quad, each
@@ -777,7 +768,7 @@ public partial class RadarPanel : HudPanel
     public bool HandleClick(Vector2 panelLocalPos, out NVec3 worldPoint)
     {
         worldPoint = default;
-        if (!_maximized || !_clickValid)
+        if (!Clickable || !_clickValid)
             return false;
 
         // In-rect hit test: the maximized rect is centred on _clickCenter with _clickSize extent (QC ignores clicks

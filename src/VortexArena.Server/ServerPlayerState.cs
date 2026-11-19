@@ -48,10 +48,13 @@ public sealed class ServerPlayerState
     // ---- `kill` / team-change countdown (QC server/clientkill.qc killindicator.cnt / KillIndicator_Think) ----
     // KillCntdownActive mirrors the presence of QC .killindicator; KillCntdownCnt is the indicator's `cnt`
     // (whole seconds remaining); KillCntdownNextThink is the absolute sim time of the next per-second think
-    // (QC .nextthink). The port models the presentation-relevant subset of the kill indicator (announcer
-    // NUM_KILL + the CENTER_TEAMCHANGE countdown print) — the floating digit entity is not networked.
+    // (QC .nextthink). VisibleCountdown carries the digit assigned on the previous think.
     public bool KillCntdownActive;
     public int KillCntdownCnt;
+    public byte KillCntdownDigit;
+    public VortexArena.Net.CountdownIndicatorState VisibleCountdown =>
+        KillCntdownActive && !KillCntdownSilent && KillCntdownDigit != 0
+            ? new(KillCntdownDigit, KillCntdownTeamChange) : default;
     public float KillCntdownNextThink;
     // QC .float clientkill_nexttime — the anti-spam carry-forward floor: a repeat `kill` raises killtime by
     // (clientkill_nexttime - time) so mashing the command extends the countdown rather than restarting it.
@@ -75,6 +78,7 @@ public sealed class ServerPlayerState
         OldVelocity = System.Numerics.Vector3.Zero;
         KillCntdownActive = false;
         KillCntdownCnt = 0;
+        KillCntdownDigit = 0;
         KillCntdownNextThink = 0f;
         KillCntdownSilent = false;
         KillCntdownTeamChange = 0;

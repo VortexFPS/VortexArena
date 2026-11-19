@@ -178,6 +178,8 @@ public static class BindInput
     /// </summary>
     public static void WriteBindings(StringBuilder sb)
     {
+        // DarkPlaces clears the default table first so an explicitly unbound key stays unbound on reload.
+        sb.Append("unbindall\n");
         foreach (KeyValuePair<string, string> kv in BindTable.List())
             sb.Append($"bind \"{Escape(kv.Key)}\" \"{Escape(kv.Value)}\"\n");
     }

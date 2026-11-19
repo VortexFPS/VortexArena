@@ -437,6 +437,35 @@ public class DpClientTests
     }
 
     [Fact]
+    public void Signon_Uses_The_Demo_Program_Already_Delivered_Before_Stage_One()
+    {
+        byte[] file = FileBytes(500);
+        int crc = Crc16.Block(file);
+        var (signon, download, _) = NewSignon();
+        signon.OnServerInfo();
+        signon.HandleCommand($"csqc_progsize {file.Length}");
+        signon.HandleCommand($"csqc_progcrc {crc}");
+        signon.HandleCommand("cl_serverextension_download 1");
+        signon.HandleCommand($"cl_downloadbegin {file.Length} csprogs.dat");
+        download.OnData(0, file);
+        signon.HandleCommand($"cl_downloadfinished {file.Length} {crc}");
+
+        signon.HandleCommand($"cl_downloadbegin {file.Length} other.dat");
+        download.OnData(0, file);
+        signon.HandleCommand($"cl_downloadfinished {file.Length} {crc}");
+        Assert.Equal("other.dat", signon.LastDownload!.Name);
+        Assert.False(signon.LoadFinished);
+
+        Assert.True(signon.OnSignonNum(1));
+        signon.EndOfMessage();
+
+        Assert.DoesNotContain("download csprogs.dat", signon.Commands);
+        Assert.Contains("prespawn", signon.Commands);
+        Assert.True(signon.LoadFinished);
+        Assert.True(signon.CsprogsVerified);
+    }
+
+    [Fact]
     public void Signon_Csprogs_That_Does_Not_Match_The_Announced_Crc_Is_Not_Verified()
     {
         byte[] file = FileBytes(5000);
@@ -980,7 +1009,7 @@ public class DpClientTests
     [Fact]
     public void Client_Sends_Keepalive_Nops_While_Signing_On_And_Times_Out_On_Silence()
     {
-        var wire = new Wire(c => { c.Timeout = 20; c.KeepAliveInterval = 5; });
+        var wire = new Wire(c => { c.ConnectTimeout = 20; c.KeepAliveInterval = 5; });
         wire.ConnectAndSettle();
         int nops = 0;
         double start = wire.Now;

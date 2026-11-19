@@ -5,7 +5,7 @@ last_audited: "2026-06-28"
 summary:
   feature_count: 24
   worst_gaps:
-    - "Coverage fold 2026-07-02 (CSQCProjectile + lib/net wire contracts): projectile fade-out (fade_time/fade_rate, sf 0x20) is NOT networked or rendered (port_refs empty); the projectile no-trail/teleport bit (sf 0x08, UpdateCSQCProjectileAfterTeleport) has no analog so a warpzone-jumped projectile's faithful trail draws a straight segment across the discontinuity; STAT(FRAGLIMIT) (stats.qh magic slot 235) has no networked client consumer (TIMELIMIT/MOVEVARS/etc. all have live typed channels); WriteApproxPastTime is ported in Quantize/BitWriter but DEAD (no caller — times ride raw floats)."
+    - "Coverage fold 2026-07-02 (CSQCProjectile + lib/net wire contracts): the projectile no-trail/teleport bit (sf 0x08, UpdateCSQCProjectileAfterTeleport) has no analog so a warpzone-jumped projectile's faithful trail draws a straight segment across the discontinuity; STAT(FRAGLIMIT) (stats.qh magic slot 235) has no networked client consumer (TIMELIMIT/MOVEVARS/etc. all have live typed channels); WriteApproxPastTime is ported in Quantize/BitWriter but DEAD (no caller — times ride raw floats)."
     - "FIX since baseline (Wave-14a): wepent switch/alpha is now NETWORKED + LIVE — EntityField.Wepent (BIT19) carries m_switchweapon/m_switchingweapon + a derived WS_RAISE/WS_DROP phase + the exterior-weapon m_alpha; ServerNet (1970-1983) produces them from the live slot-0 weapon state machine, ClientEntityView (148-153) decodes them, ViewEntityRenderer renders the remote weapon raise/lower dip + per-instance gun transparency on the live Player snapshot path (ClientEntityView.cs:213). Residual missing wepent fields: m_gunalign (field exists, NO producer -> default 0), skin/ViewmodelSkin (NO producer), porto_v_angle_held, tuba_instrument. Tracked in net-entity-state.wepent.switch_alpha_misc."
     - "csqcmodel m_alpha (per-entity render transparency, BIT17) is NETWORKED + LIVE (NetEntityState.Alpha; ServerNet QuantizeAlpha at 1931/2264; ClientEntityView.cs:135 maps 0->opaque/255->hidden/else byte/255) — drives Cloaked/Running Guns/Invisibility/death-fade. Wire coding x255 vs Base x254 (intended divergence). Tracked in net-entity-state.csqcmodel.alpha."
     - "ent_cs enemy-privacy mask LIVE (Wave-6c ba3ae47): ServerNet.RelevantEntitiesFor strips enemy HEALTH/ARMOR per-recipient via the radar_showenemies/SAME_TEAM gate — the anti-cheat HP/armor leak is CLOSED. Residual: origin/angles privacy is handled by whole-entity PVS culling rather than a coarse stripped-GPS send (intended divergence)"
@@ -529,7 +529,7 @@ features:
       - { name: "velocity_networked", base: "only when clientanimate (sf 0x80 & 0x01)", port: "always (NetEntityState.Velocity, delta-gated)", match: true }
       - { name: "gravity_networked", base: "WriteCoord gravity when sf 0x10", port: "none — straight-line extrapolation; per-snapshot velocity refresh bounds the error to the second-order gravity term (ProjectilePredictor doc)", match: false }
       - { name: "clientanimate_split", base: "per-projectile flag: 0x80 = client-moved (Movetype_Physics_MatchServer), else two-snapshot interpolated (iorigin1/2)", port: "ALL projectiles predicted (snap+extrapolate); no interpolated projectile class", match: false }
-      - { name: "cl_projectiles_sloppy", base: "false (bare default; exact sub-tick trace continuation in Movetype_Physics_MatchServer, projectile.qc:104)", port: "none — predictor advances by raw render dt with a world-only trace for collide/bounce catalog types", match: false }
+      - { name: "cl_projectiles_sloppy", base: "1 in shipped xonotic-client.cfg, unchecked residual for MatchServer; 0 enables trace", port: "none — predictor advances by raw render dt with a world-only trace for collide/bounce catalog types", match: false }
       - { name: "bounce_reflect", base: "_Movetype_ClipVelocity v -= (1+bounce)(v.n)n", port: "identical formula (ProjectilePredictor.cs:122)", match: true }
     status:
       logic: faithful
@@ -539,7 +539,7 @@ features:
       audio: na
       liveness: live
     intended_divergence: true
-    divergence_rationale: "The port promotes EVERY projectile to the client-animated contract (snap to each authoritative origin, extrapolate locally by the held velocity, world-trace stop/bounce) instead of Base's two-class split — the unified snapshot networks velocity for all entities anyway, and the CSQC behaviour this reproduces (instant full-speed muzzle exit, no interp delay) is the reason the predictor was built (ProjectilePredictor header documents the QC path it ports). Gravity is deliberately NOT networked: the per-snapshot velocity refresh captures the trajectory's first order, bounding the between-snapshot sag to ~1u at normal rates. cl_projectiles_sloppy has no analog because the port has no MatchTicrate sub-tick mover (that whole layer is tracked in physics-movetypes.matchticrate.interp)."
+    divergence_rationale: "The port promotes EVERY projectile to the client-animated contract (snap to each authoritative origin, extrapolate locally by the held velocity, world-trace stop/bounce) instead of Base's two-class split — the unified snapshot networks velocity for all entities anyway, and the CSQC behaviour this reproduces (instant full-speed muzzle exit, no interp delay) is the reason the predictor was built (ProjectilePredictor header documents the QC path it ports). Gravity is deliberately NOT networked: the per-snapshot velocity refresh captures the trajectory's first order, bounding the between-snapshot sag to ~1u at normal rates. The projectile predictor has its own collision policy by projectile type. The local debris support for MatchTicrate in physics-movetypes.matchticrate.interp is a separate path."
     gaps:
       - "Ballistic arc between snapshots is straight-line (gravity not networked/applied client-side): a grenade/mortar shell renders as a chord of its true parabola between snapshots (~1u error at normal snapshot rates, larger under packet loss)."
       - "No interpolated (non-clientanimate) projectile class: Base renders a server-moved projectile via iorigin1/iorigin2 two-snapshot interp; the port predicts everything, so a projectile whose server motion is NOT ballistic/linear (scripted movers) can wobble between snap corrections."
@@ -550,30 +550,36 @@ features:
     notes: "added 2026-07-02 (coverage fold). CSQCProjectile_Check (server re-send when an onground client-animated projectile moves) is subsumed by the per-tick delta diff — the origin re-sends whenever it changes, onground or not."
 
   - id: net-entity-state.projectile.fade
-    name: "Projectile fade-out networking (fade_time/fade_rate bytes, sf 0x20) + client alpha ramp"
+    name: "Crylink projectile visual fade"
     layer: [authority, presentation]
     base_refs:
-      - "server/weapons/csqcprojectile.qc:CSQCProjectile_SendEntity (ft/fr bytes in sys_frametime units when sf 0x20)"
-      - "client/weapons/projectile.qh (Projectile.fade_time/fade_rate/alphamod)"
-    port_refs: []
+      - "common/weapons/weapon/crylink.qc: W_Crylink_Attack and W_Crylink_Attack2 (center and outer spike lifetime/duration)"
+      - "server/weapons/csqcprojectile.qc: CSQCProjectile_SendEntity (start offset and duration bytes in server ticks)"
+      - "client/weapons/projectile.qc: Projectile_Draw and Projectile_DrawTrail (body alpha and trail density/alpha)"
+      - "bal-wep-xonotic.cfg and xonotic-common.cfg (5 s, 64 Hz); bal-wep-nexuiz25.cfg (0.25 s primary, 2 s secondary for outer spikes)"
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/Weapons/Crylink.cs: ProjectileRenderAlpha (existing mode-specific fade state and upstream duration gate)"
+      - "game/net/ServerNet.cs and game/net/ClientEntityView.cs (existing NetEntityState.Alpha snapshot channel)"
+      - "game/client/ProjectileRenderer.cs: ApplyCrylinkAlpha (body, light, modern trail); game/client/EffectSystem.cs: SpawnTrailSegment (faithful trail)"
     constants:
-      - { name: "fade_coding", base: "ft=(fade_time-time)/sys_frametime byte, fr=(1/fade_rate)/sys_frametime byte (sent only when both fit 1..255)", port: "none", match: false }
-      - { name: "client_alpha", base: "a = 1 - (time - fade_time) * fade_rate (projectile.qc:158), also scales trail particle alpha", port: "none", match: false }
+      - { name: "fade_duration", base: "Duration in server ticks must be in 1..255; default 5 s at 64 Hz exceeds the limit", port: "Same duration gate and integer tick resolution", match: true }
+      - { name: "client_alpha", base: "Linear body alpha ramp; square root of alpha scales trail count and per-particle alpha", port: "Same ramp and faithful trail scaling, sampled through native snapshot alpha", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
+      logic: faithful
+      values: faithful
+      timing: partial
+      presentation: partial
       audio: na
-      liveness: na
-    intended_divergence: false
-    divergence_rationale: null
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: "Native snapshots carry current opacity in the existing Alpha field. Upstream sends a relative start offset and duration to drive the ramp client-side."
     gaps:
-      - "Projectile fade-out is not networked and not rendered: a Base projectile with fade_time/fade_rate set alpha-fades (body + trail) before expiring; the port's NetEntityState carries a per-entity Alpha channel (csqcmodel.alpha) but no projectile producer sets a fade ramp, and ProjectileRenderer has no fade path (grep: no fade symbol) — such projectiles pop out at removal instead of fading."
+      - "The initial delay and duration must fit the original tick fields. The native shared snapshot uses spawn time, so a late observer or a later upstream resend can have a different start offset. Snapshot-driven alpha updates step at the snapshot cadence. The modern GPU trail also fades already-emitted particles as a group."
     verification:
-      - { kind: grep, ref: "no fade_time/fade_rate/alphamod analog in game/client/ProjectileRenderer.cs or ServerNet projectile branch (only the electro-orb shrink pulse exists, DeathTime)", result: pass }
-    confidence: medium
-    notes: "added 2026-07-02 (coverage fold). Could be closed cheaply by driving the EXISTING NetEntityState.Alpha channel from a server-side fade ramp — no new wire field needed. Confidence medium: which live port weapons set a Base fade (seeker flares, hook gravity bomb, ...) was not enumerated."
+      - { kind: code_read, ref: "Crylink is the sole upstream producer of projectile fade timing. The stock 5 s duration is 320 ticks and skips the visual fade. Shorter profile durations fit the byte and fade.", result: pass }
+      - { kind: test, ref: "CrylinkLinkJoinTests visual fade regression cases cover the short and stock durations, disabled fade, and unrelated projectiles.", result: pass }
+      - { kind: test, ref: "SnapshotDeltaTests.EntityCodec_ProjectileAlpha_RoundTrips covers opaque, faded, and hidden snapshot alpha.", result: pass }
+    confidence: high
 
   - id: net-entity-state.projectile.team_color
     name: "Projectile owner team/clientcolors byte (team-tinted bolt body/trail)"

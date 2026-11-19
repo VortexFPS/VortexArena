@@ -1,0 +1,12 @@
+--- seeded profile
++++ after rotation and restart
+@@ -1,7 +1,5 @@
+-R	darkzone/ctf100record/time1	7.25
+-R	darkzone/ctf100record/uid1	first
+-R	darkzone/ctf100record/time2	12.50
+-R	darkzone/ctf100record/uid2	second
++R	darkzone/ctf100record/time1	12.5
++R	darkzone/ctf100record/uid1	second
+ R	darkzone/captimerecord/time	7.25
+ R	darkzone/captimerecord/netname	First
+ R	stormkeep/race100record/time1	45

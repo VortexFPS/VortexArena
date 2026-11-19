@@ -101,6 +101,9 @@ public sealed class LegacyClientSession : IDisposable
         if (!_options.AlwaysDownloadProgram)
             _options.Client.Signon.HaveFile = (name, size, crc) => LocalProgram(name, size, crc) is not null;
         Client = new DpClient(Handler, _options.Client);
+        UpdateNetworkTimeout("net_connecttimeout");
+        UpdateNetworkTimeout("net_messagetimeout");
+        services.CvarChanged += UpdateNetworkTimeout;
         Client.MessageStarting += Handler.BeginMessage;
         Client.MessageFinished += OnMessageFinished;
         Client.Signon.Note += text =>
@@ -223,8 +226,8 @@ public sealed class LegacyClientSession : IDisposable
     }
 
     /// <summary>
-    /// CL_ReadDemoMessage: every message until the client is in the game; after that the messages whose
-    /// time has come (one a frame for a timedemo). The recorded view angles are interpolated between the last
+    /// CL_ReadDemoMessage: a timedemo reads one message per frame, including signon. Normal playback reads
+    /// through signon and then reads messages whose time has come. Recorded view angles interpolate between the last
     /// two messages, as cl_main.c does "if playing a demo". Returns false once the recording has ended.
     /// </summary>
     public bool ReadDemo()
@@ -239,10 +242,7 @@ public sealed class LegacyClientSession : IDisposable
             {
                 Note(demo.Error is { } error ? "the demo stopped: " + error : $"the demo ended after {DemoMessages} messages");
                 Client.EndDemo();
-                _demoStream?.Dispose();
-                _demoStream = null;
-                _demo = null;
-                return false;
+                break;
             }
             DemoMessages++;
             _demoAngles1 = _demoAngles0;
@@ -255,7 +255,12 @@ public sealed class LegacyClientSession : IDisposable
                 Clock.HoldAtServerTime();
                 break;
             }
-            if (signedOn && Clock.TimeDemo) break;
+            if (Clock.TimeDemo) break;
+        }
+        if (Client.State != DpClientState.Connected)
+        {
+            CloseDemo();
+            return false;
         }
         // CL_LerpPoint, then "interpolate the angles if playing a demo".
         double span = Math.Min(Clock.ServerTime - Clock.ServerPrevTime, 0.1);
@@ -389,17 +394,31 @@ public sealed class LegacyClientSession : IDisposable
         return outgoing;
     }
 
+    private void UpdateNetworkTimeout(string name)
+    {
+        if (name.Equals("net_connecttimeout", StringComparison.OrdinalIgnoreCase) && _services.TryCvarFloat(name, out float connect))
+            _options.Client.ConnectTimeout = connect;
+        else if (name.Equals("net_messagetimeout", StringComparison.OrdinalIgnoreCase) && _services.TryCvarFloat(name, out float message))
+            _options.Client.Timeout = message;
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        _demoStream?.Dispose();
-        _demoStream = null;
-        _demo = null;
+        _services.CvarChanged -= UpdateNetworkTimeout;
+        CloseDemo();
         UnloadProgram();
         Console.Detach();
         _options.Packages?.Dispose();
         _options.Host?.UriRequests?.Dispose();
+    }
+
+    private void CloseDemo()
+    {
+        _demoStream?.Dispose();
+        _demoStream = null;
+        _demo = null;
     }
 
     // CL_UpdateMoveVars: Xonotic publishes its physics settings as stats; the two that matter to the

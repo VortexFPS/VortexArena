@@ -35,6 +35,8 @@ public sealed class FirstPersonView
     /// the <c>cl_eventchase_death == 2</c> settle gate reads it), whether the player is dead
     /// (<c>STAT(HEALTH) &lt;= 0</c>), and the view angles (deg, Quake pitch/yaw/roll).
     /// </summary>
+    public VortexArena.Common.Gameplay.WarpzoneManager? MapWarpzones { get; set; }
+
     public struct ViewState
     {
         /// <summary>RAW player origin in Quake space (the eye = origin + (0,0,EyeHeight); the chase pivot is
@@ -46,6 +48,9 @@ public sealed class FirstPersonView
 
         /// <summary>View angles in DEGREES, Quake convention (X = pitch down-positive, Y = yaw, Z = roll).</summary>
         public NVec3 ViewAnglesQuake;
+
+        public (NVec3 Origin, NVec3 Angles)? MapCamera;
+        public VortexArena.Common.Gameplay.OnslaughtDestruction? GeneratorCamera;
 
         /// <summary>True while the local player is dead (drives the death fade + the event-chase cam, QC
         /// STAT(HEALTH) &lt;= 0). The host decides the predicate: GameDemo uses Health&lt;=0 &amp;&amp; MaxHealth&gt;0
@@ -91,6 +96,9 @@ public sealed class FirstPersonView
 
     /// <summary>The host-requested chase mode (QC user <c>chase_active</c> / spectator cam). Default first-person eye.</summary>
     public ChaseMode CameraMode { get; set; } = ChaseMode.None;
+
+    // Threaded listen hosts keep server cvars in a private store.
+    internal ICvarService? ClientCvars { get; set; }
 
     /// <summary>True while the local client is spectating/following another player (QC <c>spectatee_status &gt; 0</c>).
     /// Gates the <c>chase_front</c> frontal selfie cam, which Base allows ONLY while spectating
@@ -143,13 +151,6 @@ public sealed class FirstPersonView
     /// first-person viewmodel while chase is active — view.qc viewmodel_draw masks the gun when chase_active).</summary>
     public bool ChaseActive { get; private set; }
 
-    /// <summary>True when the eye straddles a warpzone seam this frame (QC <c>WarpZone_FixView</c> rotated the view).
-    /// The host uses it to hide the LOCAL exterior player model (so the player doesn't see the back of their own
-    /// head poking through the seam) and the matching near-clip push-out (<see cref="WarpzoneFixView.NearClipMultiplier"/>)
-    /// is applied to the camera. Listen-host / demo only — IDLE on a pure remote client where the zone transforms
-    /// aren't networked (no <c>WarpzoneTrace.AmbientManager</c>).</summary>
-    public bool InsideWarpzone { get; private set; }
-
     // --- the FINAL rendered view this frame (QC view_origin / view_forward) — the authoritative eye/forward the
     // Phase-2 crosshair-chase consumer reads to trace true-aim from exactly where the camera ended up (post chase
     // pull-back, post view-lock). Stashed at the tail of UpdateCamera once camQuake + viewAngles are resolved. ---
@@ -185,6 +186,10 @@ public sealed class FirstPersonView
     // The smoothed pull-back distance + the run latch now live in a ChaseCamera.EventState that ApplyEvent
     // owns and mutates (replacing the old _eventChaseDistance/_eventChaseRunning fields).
     private ChaseCamera.EventState _eventChase;
+    private ChaseCamera.EventState _generatorChase;
+    private string? _generatorViewOffsetSetting;
+    private NVec3 _generatorViewOffset = new(0, 0, 80);
+    private VortexArena.Common.Gameplay.OnslaughtDestruction? _lastGeneratorCamera;
 
     // --- view-effect clock (QC `time`): accumulated from dt so the sin-cycle bob / idle-wave advance in real time
     // even though FirstPersonView is a plain helper with no engine clock of its own. ---
@@ -419,7 +424,27 @@ public sealed class FirstPersonView
         // camera basis from them so the orientation matches the chosen perspective.
         NVec3 viewAngles = st.ViewAnglesQuake;
         NVec3 camQuake;
-        if (vehicleChase)
+        if (st.GeneratorCamera != _lastGeneratorCamera)
+        {
+            _generatorChase = default;
+            _lastGeneratorCamera = st.GeneratorCamera;
+        }
+        if (st.GeneratorCamera is { } generator)
+        {
+            ChaseActive = true;
+            viewAngles = new NVec3(0, generator.Yaw, 0);
+            QMath.AngleVectors(viewAngles, out NVec3 forward, out _, out _);
+            string? offsetSetting = Api.Services is not null ? Api.Cvars.GetString("cl_eventchase_generator_viewoffset") : null;
+            if (offsetSetting != _generatorViewOffsetSetting)
+            {
+                _generatorViewOffsetSetting = offsetSetting;
+                _generatorViewOffset = VortexArena.Common.Framework.VecParse.TryParseFloats(offsetSetting, 3, out float[] values)
+                    ? new NVec3(values[0], values[1], values[2]) : new NVec3(0, 0, 80);
+            }
+            camQuake = ChaseCamera.ApplyEvent(generator.Origin, forward, _lastDt, ref _generatorChase,
+                _generatorViewOffset, Cvar("cl_eventchase_generator_distance", 400f));
+        }
+        else if (vehicleChase)
         {
             ChaseActive = true;
             // Pull the camera back from the seated pivot along the view forward; ApplyVehicle owns the pivot lift +
@@ -477,27 +502,16 @@ public sealed class FirstPersonView
         // (hud_configure / clickable radar / minigame menu / quickmenu) are not on the net play path, so only the
         // cl_lockview cvar is honored here. Applied to the final Quake values before they build the camera basis.
         ApplyViewLock(ref camQuake, ref viewAngles);
-
-        // QC WarpZone_FixView (warpzonelib/client.qc): when the eye straddles a warpzone seam, rotate the eye origin
-        // and the view angles through the seam transform (and roll-kill) so the rendered view continues seamlessly
-        // out the far side. First-person only — a chase pull-back origin already sits outside the body, so the seam
-        // straddle test doesn't apply to it. No-op when there's no ambient zone manager (a pure remote client / a
-        // non-warpzone map), exactly like the already-live LaserRenderer / PortalRenderer ambient consumers.
-        bool insideZone = false;
-        if (!ChaseActive)
-            WarpzoneFixView.Apply(
-                VortexArena.Common.Gameplay.WarpzoneTrace.AmbientManager,
-                ref camQuake, ref viewAngles, _lastDt, out insideZone);
-        InsideWarpzone = insideZone;
-
-        // QC WarpZone_FixNearClip: while straddling a seam, push the near-clip plane out so the geometry on the
-        // near side of the portal doesn't poke through. Capture the authored near once so it restores cleanly.
-        if (!_baseNearCaptured)
+        if (st.MapCamera is { } mapCamera)
         {
-            _baseNear = camera.Near;
-            _baseNearCaptured = true;
+            (camQuake, viewAngles) = mapCamera;
+            ChaseActive = true;
         }
-        camera.Near = _baseNear * (insideZone ? WarpzoneFixView.NearClipMultiplier : 1f);
+
+        // QC WarpZone_FixView runs after chase and view-lock.
+        var zones = MapWarpzones ?? VortexArena.Common.Gameplay.WarpzoneTrace.AmbientManager;
+        if (zones is not null)
+            WarpzoneFixView.TransformView(zones, ref camQuake, ref viewAngles, _lastDt, st.IsDead);
 
         // Orientation: derive the camera basis from the SAME Quake view vectors the sim and aiming use
         // (QMath.AngleVectors), converted axis-by-axis into Godot space. This guarantees the camera looks
@@ -513,6 +527,23 @@ public sealed class FirstPersonView
 
         camera.GlobalPosition = Coords.ToGodot(camQuake);
 
+        // Apply the live zoom to the rendered fov (QC GetCurrentFov). See ComputeVerticalFov for the *0.75 note.
+        // The velocity-zoom frustum multiplier (off by default, cl_velocityzoom_enabled 0) folds into the zoom.
+        float baseFov = Cvar("fov", BaseFov);
+        if (baseFov < 1f) baseFov = BaseFov;
+        float velocityZoom = ComputeVelocityZoom(st, dtFor: _lastDt);
+        camera.Fov = ComputeVerticalFov(baseFov, _currentViewZoom * velocityZoom);
+
+        if (zones is { Zones.Count: > 0 })
+        {
+            NVec3 shift = WarpzoneFixView.FixNearClip(zones, camera, camQuake);
+            if (shift != NVec3.Zero)
+            {
+                camQuake += shift;
+                camera.GlobalPosition = Coords.ToGodot(camQuake);
+            }
+        }
+
         // Stash the FINAL rendered view (QC view_origin / view_forward): camQuake is the authoritative render origin
         // (post chase pull-back + view-lock), fq the forward built from the resolved view angles, and the Godot eye
         // is exactly where the camera was placed. The Phase-2 crosshair-chase consumer reads these to trace true-aim.
@@ -523,13 +554,6 @@ public sealed class FirstPersonView
         // QC HUD_Contents samples pointcontents(view_origin) at the FINAL render origin (view.qc:1176) — the
         // pulled-back cam during a chase, the eye otherwise — so the liquid tint reflects where the camera is.
         EyeContents = Api.Services is not null ? Api.Trace.PointContents(camQuake) : 0;
-
-        // Apply the live zoom to the rendered fov (QC GetCurrentFov). See ComputeVerticalFov for the *0.75 note.
-        // The velocity-zoom frustum multiplier (off by default, cl_velocityzoom_enabled 0) folds into the zoom.
-        float baseFov = Cvar("fov", BaseFov);
-        if (baseFov < 1f) baseFov = BaseFov;
-        float velocityZoom = ComputeVelocityZoom(st, dtFor: _lastDt);
-        camera.Fov = ComputeVerticalFov(baseFov, _currentViewZoom * velocityZoom);
     }
 
     /// <summary>
@@ -783,15 +807,10 @@ public sealed class FirstPersonView
     /// the caller's basis matches. Operates on the eye position <paramref name="v"/> (= QC vieworg post-smoothing).
     /// </summary>
     private NVec3 ApplyClassicChase(NVec3 v, ref NVec3 viewAngles)
-        => ChaseCamera.ApplyClassic(v, ref viewAngles, Spectating);
+        => ChaseCamera.ApplyClassic(v, ref viewAngles, Spectating, ClientCvars);
 
     // The dt of the latest UpdateView, so ApplyEventChase advances the smoothed distance against the same step.
     private float _lastDt;
-
-    // QC r_nearclip baseline (WarpZone_FixNearClip): the camera's authored near-clip plane, captured once on the
-    // first UpdateCamera so the warpzone near-clip push-out (* NearClipMultiplier) restores cleanly to it.
-    private float _baseNear;
-    private bool _baseNearCaptured;
 
     // QC View_Lock freeze_org / freeze_ang (view.qc:641): the captured render origin/angles cl_lockview pins the
     // view to. Continuously refreshed while the lock is off so it engages from the live view; held while on.
@@ -806,7 +825,7 @@ public sealed class FirstPersonView
     /// </summary>
     private void ApplyViewLock(ref NVec3 camQuake, ref NVec3 viewAngles)
     {
-        int lockType = (int)Cvar("cl_lockview", 0f);
+        int lockType = (int)Cvar("cl_lockview", 0f, ClientCvars);
 
         if (lockType >= 1)
             camQuake = _freezeOrg;
@@ -824,11 +843,9 @@ public sealed class FirstPersonView
     /// (its string value is empty). An explicit <c>0</c> is honored — important for toggle cvars like
     /// <c>cl_eventchase_death 0</c> where 0 must not be reinterpreted as "use the default".
     /// </summary>
-    internal static float Cvar(string name, float fallback)
+    internal static float Cvar(string name, float fallback, ICvarService? cvars = null)
     {
-        if (Api.Services is null)
-            return fallback;
-        string s = Api.Cvars.GetString(name);
-        return string.IsNullOrWhiteSpace(s) ? fallback : Api.Cvars.GetFloat(name);
+        cvars ??= Api.Services?.Cvars;
+        return string.IsNullOrWhiteSpace(cvars?.GetString(name)) ? fallback : cvars!.GetFloat(name);
     }
 }

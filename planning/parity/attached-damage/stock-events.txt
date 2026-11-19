@@ -1,0 +1,18 @@
+server.log
+Xonotic Linux 03:14:05 Jun 20 2023 - release
+Loaded maps/stormkeep.ent
+shooter connected
+victim connected
+players:  2 active (16 max)
+#1   shooter             0   0:00:48
+#2   victim              0   0:00:29
+shooter.log
+Xonotic Linux 03:14:03 Jun 20 2023 - release
+shooter connected
+shooter is now playing
+victim connected
+victim is now playing
+victim.log
+Xonotic Linux 03:14:03 Jun 20 2023 - release
+victim connected
+victim is now playing

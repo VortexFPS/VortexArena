@@ -266,6 +266,9 @@ public sealed partial class BotBrain
     // last input emitted (useful for the host/tests); repeated between throttled thinks (QC's persisted CS movement)
     public MovementInput LastInput { get; private set; }
 
+    internal BotCommandQueue? Script;
+    internal bool ScriptBarrierReleased;
+
     /// <summary>The bot's current target (QC <c>.enemy</c>).</summary>
     public Entity? Enemy => Bot.Enemy;
 
@@ -507,6 +510,11 @@ public sealed partial class BotBrain
         {
             if (StrategyTokenHeld) OnStrategyTokenUsed?.Invoke();
             return Emit(bot, default, jump: false, crouch: false, attack: false, attack2: false, dt);
+        }
+        if (MovementHold?.Invoke() != true && Script is not null && Script.TryThink(now, dt, out MovementInput scripted))
+        {
+            if (StrategyTokenHeld) OnStrategyTokenUsed?.Invoke();
+            return EmitInput(bot, scripted, dt);
         }
         // FROZEN (Freeze Tag / the Frozen status effect): QC gates the whole havocbot role call on
         // `!STAT(FROZEN, this) && !StatusEffects_active(STATUSEFFECT_Frozen, this)` (havocbot.qc:52-64) and
@@ -1008,17 +1016,21 @@ public sealed partial class BotBrain
     /// <summary>Stamp the bot's view onto the entity and record + return the assembled command.</summary>
     private MovementInput Emit(Player bot, Vector3 move, bool jump, bool crouch, bool attack, bool attack2, float dt, bool jetpack = false)
     {
-        var input = new MovementInput
+        return EmitInput(bot, new MovementInput
         {
-            ViewAngles = Aim.ViewAngles,
             MoveValues = move,
-            FrameTime = dt,
             ButtonJump = jump,
             ButtonCrouch = crouch,
             ButtonAttack1 = attack,
             ButtonAttack2 = attack2,
             ButtonJetpack = jetpack,
-        };
+        }, dt);
+    }
+
+    private MovementInput EmitInput(Player bot, MovementInput input, float dt)
+    {
+        input.ViewAngles = Aim.ViewAngles;
+        input.FrameTime = dt;
         LastInput = input;
 
         // bots steer by writing their OWN angles (GameWorld's input path deliberately skips bots).
@@ -1478,7 +1490,8 @@ public sealed partial class BotBrain
         // faster, "simulating rocket guide" — devastator.qc:351-355). A weapon that fires at a different speed on
         // secondary (Fireball: 900 vs 1200) reads ctx.SecondaryToggle to pick the right lead. Default falls through
         // to the 1-arg overload (no ctx) so existing weapons need not change.
-        return w.BotAimShotSpeed(s > 0f ? s : DefaultShotSpeed, ref _botAimState);
+        return w.BotAimShotSpeed(s > 0f ? s : DefaultShotSpeed, ref _botAimState)
+            * WeaponFiring.WeaponSpeedFactor(Bot);
     }
 
     /// <summary>True if the chosen weapon lobs under gravity (mortar/nade), so the aim should arc the shot.</summary>

@@ -1,0 +1,31 @@
+{"seconds": 29.112, "client": "owner", "command": "cmd join", "key": "F1"}
+{"seconds": 29.117, "client": "guest", "command": "cmd join", "key": "F1"}
+{"seconds": 31.883, "server": "status"}
+{"seconds": 32.064, "server": "sv_cheats 2"}
+{"seconds": 32.545, "client": "owner", "command": "cmd teleporttotarget parity_owner", "key": "F2"}
+{"seconds": 32.546, "client": "guest", "command": "cmd teleporttotarget parity_guest", "key": "F3"}
+{"seconds": 35.312, "server": "sv_cheats 0"}
+{"seconds": 35.743, "client": "owner", "command": "cmd g_sandbox object_spawn models/items/g_h100.md3", "key": "F7"}
+{"seconds": 37.199, "client": "owner", "frame": "01-spawn-owner.webp"}
+{"seconds": 37.261, "client": "guest", "frame": "01-spawn-guest.webp"}
+{"seconds": 37.265, "phase": "01-spawn", "objects": [{"origin": "1696.000000000 -534.077000000 -44.343750000", "angles": "0.000000000 270.000000000 0.000000000", "model": "models/items/g_h100.md3", "movetype": 6, "has_owner_id": true, "owner": "ParityOwner"}]}
+{"seconds": 37.271, "client": "owner", "command": "cmd g_sandbox object_info object", "key": "F8"}
+{"seconds": 37.273, "client": "guest", "command": "cmd g_sandbox object_info object", "key": "F8"}
+{"seconds": 38.044, "client": "guest", "command": "cmd g_sandbox object_edit skin 0", "key": "F9"}
+{"seconds": 38.813, "client": "guest", "key": "v", "action": "down"}
+{"seconds": 39.296, "client": "guest", "mouse_relative": [155, 0]}
+{"seconds": 40.813, "client": "owner", "frame": "02-nonowner-held-owner.webp"}
+{"seconds": 40.899, "client": "guest", "frame": "02-nonowner-held-guest.webp"}
+{"seconds": 40.902, "phase": "02-nonowner-held", "objects": [{"origin": "1696.000000000 -534.077000000 -44.343750000", "angles": "0.000000000 270.000000000 0.000000000", "model": "models/items/g_h100.md3", "movetype": 6, "has_owner_id": true, "owner": "ParityOwner"}]}
+{"seconds": 40.902, "client": "guest", "mouse_relative": [-155, 0]}
+{"seconds": 42.353, "client": "guest", "key": "v", "action": "up"}
+{"seconds": 47.264, "client": "owner", "frame": "02-nonowner-released-owner.webp"}
+{"seconds": 47.688, "client": "guest", "frame": "02-nonowner-released-guest.webp"}
+{"seconds": 47.696, "phase": "02-nonowner-released", "objects": [{"origin": "1696.000000000 -534.077000000 -44.343750000", "angles": "0.000000000 270.000000000 0.000000000", "model": "models/items/g_h100.md3", "movetype": 6, "has_owner_id": true, "owner": "ParityOwner"}]}
+{"seconds": 47.696, "client": "owner", "key": "v", "action": "down"}
+{"seconds": 48.226, "client": "owner", "mouse_relative": [155, 0]}
+{"seconds": 49.983, "client": "owner", "frame": "03-owner-held-owner.webp"}
+{"seconds": 50.298, "client": "guest", "frame": "03-owner-held-guest.webp"}
+{"seconds": 50.304, "phase": "03-owner-held", "objects": [{"origin": "1675.658000000 -531.644500000 -44.343770000", "angles": "0.000000000 256.360100000 0.000000000", "model": "models/items/g_h100.md3", "movetype": 3, "has_owner_id": true, "owner": "ParityOwner"}]}
+{"seconds": 50.304, "client": "owner", "mouse_relative": [-155, 0]}
+{"seconds": 51.756, "client": "owner", "key": "v", "action": "up"}

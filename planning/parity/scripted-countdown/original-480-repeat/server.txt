@@ -1,0 +1,163 @@
+DarkPlaces Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+Game is Xonotic using gamedir [0;1mdata[m
+gamename for server filtering: Xonotic
+Package /tmp/va-countdown-original8/original/data/shared.pk3 contains the file models/xonotic_jumppad01/xonotic_jumppads01_readme.txt several times
+Package /tmp/va-countdown-original8/original/data/shared.pk3 contains the file textures/phillipk1x/_GPL.txt several times
+Package /tmp/va-countdown-original8/original/data/shared.pk3 contains the file textures/phillipk1x/_readme.txt several times
+Package /tmp/va-countdown-original8/original/data/shared.pk3 contains the file textures/phillipk2x/_GPL.txt several times
+Package /tmp/va-countdown-original8/original/data/shared.pk3 contains the file textures/phillipk2x/_readme.txt several times
+Current nice level is below the soft limit - cannot use niceness
+-ip option used, setting net_address to "127.0.0.1"
+-port option used, setting port cvar to 26909
+Loaded library "libcurl.so.4"
+Skeletal animation uses SSE code path
+execing quake.rc
+execing default.cfg
+execing xonotic-common.cfg
+[1;33mUnknown command "r_textbrightness"[m
+[1;33mUnknown command "r_textcontrast"[m
+execing commands.cfg
+execing help.cfg
+execing xonotic-server.cfg
+"maxplayers" set to "16"
+execing testing.cfg
+execing balance-xonotic.cfg
+execing bal-wep-xonotic.cfg
+execing physicsX.cfg
+execing turrets.cfg
+execing vehicles.cfg
+execing gametypes-server.cfg
+execing ctfscoring-samual.cfg
+execing mutators.cfg
+execing randomitems-xonotic.cfg
+execing monsters.cfg
+execing minigames.cfg
+execing physics.cfg
+execing help-xonotic.cfg
+[1;33mcouldn't exec cdtracks.cfg[m
+execing notifications.cfg
+execing data/campaign.cfg
+execing autoexec/empty.cfg
+execing autoexec.cfg
+SpawnServer: runningmanctf
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+Server listening on address 127.0.0.1:26909
+Server listening on address [0:0:0:0:0:0:0:0]:26909
+server: program loaded (crc 51381, size 6720K)
+[0;1m[::[mSVQC[0;1m::[1;33mWARNING[0;1m] [mEngine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+:gamestart:dm_runningmanctf:0.1795065675.625836
+:gameinfo:mutators:LIST:norecoil
+:gameinfo:end
+Server spawned.
+[1;33mUnknown command "crypto_keygen"[m
+execing post-config.cfg
+RedProbe is connecting...
+RedProbe[1;34m connected[m
+:join:1:1:127.0.0.1:RedProbe
+RedProbe connected
+:team:1:-1:4
+BlueProbe is connecting...
+BlueProbe[1;34m connected[m
+:join:2:2:127.0.0.1:BlueProbe
+BlueProbe connected
+:team:2:-1:4
+BlueProbe[1;34m is now playing[m
+host:     Xonotic git Server
+version:  Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+protocol: 3504 (DP7)
+map:      runningmanctf
+timing:   2.4% CPU, 0.00% lost, offset avg 0.1ms, max 2.6ms, sdev 0.2ms
+players:  2 active (16 max)
+
+#1   RedProbe         -666   0:00:18
+   127.0.0.1:41351
+#2   BlueProbe           0   0:00:10
+   127.0.0.1:57065
+[1;33mg_balance_kill_delay[m is "4" ["2"] timer before death when using the kill command
+[1;33mg_balance_kill_antispam[m is "0" ["5"] additional time added to the kill delay if used repeatedly
+[1;33msv_clones[m is "2" ["0"] number of clones a player may make (reset by the "kill" command)
+BlueProbe at probe_clone 
+-157 -230 24.03125
+0 -180 0
+BlueProbe at probe_player 
+-157 -185 24.03125
+0 -180 0
+BlueProbe[1;31m couldn't take it anymore[m
+:kill:suicide:2:2:type=KILL:items=2-1
+host:     Xonotic git Server
+version:  Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+protocol: 3504 (DP7)
+map:      runningmanctf
+timing:   3.5% CPU, 0.00% lost, offset avg 0.1ms, max 2.4ms, sdev 0.3ms
+players:  2 active (16 max)
+
+#1   RedProbe         -666   0:00:31
+   127.0.0.1:41351
+#2   BlueProbe          -1   0:00:24
+   127.0.0.1:57065
+Client "BlueProbe" dropped (Disconnect by user)
+:part:2
+BlueProbe[1;34m disconnected[m
+:anticheat:_time:2:30.899803
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+[1;33mBlueProbe left the game (Disconnect by user)[m
+Client "RedProbe" dropped (Disconnect by user)
+:part:1
+RedProbe[1;34m disconnected[m
+:anticheat:_time:1:31.166468
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+[1;33mRedProbe left the game (Disconnect by user)[m
+
+Received Termination signal, exiting...

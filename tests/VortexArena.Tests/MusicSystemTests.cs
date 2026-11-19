@@ -232,6 +232,57 @@ public class MusicSystemTests
         Assert.Equal(3f, e.ParticleCount);           // per-emission count multiplier
     }
 
+    [Fact]
+    public void LivePath_PointParticlesRearmWhenTheNextRoundBegins()
+    {
+        var world = new GameWorld(new CollisionWorld(), new List<EntityDict>
+        {
+            Dict("func_pointparticles", new Vector3(64, 0, 0), ("mdl", "sparks"),
+                ("targetname", "on"), ("spawnflags", "1"), ("noise", "sound/machines/spark.ogg"),
+                ("volume", "0.4"), ("atten", "2")),
+            Dict("func_sparks", default, ("targetname", "off")),
+            Dict("func_pointparticles", new Vector3(0, 32, 0), ("mdl", "sparks"), ("atten", "-1")),
+        });
+        world.Boot("ca");
+        world.GameStartTime = 0f;
+        bool endRound = false;
+        var rounds = world.EnableRounds(canStart: () => true, canEnd: () => endRound,
+            endDelay: 0, countdown: 0, roundTimeLimit: 0);
+
+        Entity[] emitters = Api.Entities.FindByClass("func_pointparticles").ToArray();
+        Entity startsOn = Assert.Single(emitters, e => e.TargetName == "on");
+        Entity untargeted = Assert.Single(emitters, e => string.IsNullOrEmpty(e.TargetName));
+        Entity startsOff = Assert.Single(Api.Entities.FindByClass("func_sparks"));
+        Assert.Equal("sound/machines/spark.ogg", startsOn.Noise);
+        Assert.Equal(0.4f, startsOn.Volume);
+        Assert.Equal(2f, startsOn.Atten);
+        Assert.Equal(0.5f, startsOff.Atten);
+        Assert.Equal(0f, untargeted.Atten);
+        Assert.Equal(MapMover.ActiveActive, startsOn.Active);
+        Assert.Equal(MapMover.ActiveActive, untargeted.Active);
+        Assert.Equal(MapMover.ActiveNot, startsOff.Active);
+
+        for (int frame = 0; frame < 8 && !rounds.IsRoundStarted; frame++)
+            world.Frame(0.1f);
+        Assert.True(rounds.IsRoundStarted);
+
+        // Use the registered legacy callbacks to toggle the targeted entities and the ordinary
+        // active setter to disable the untargeted one during the live round.
+        startsOn.Use!(startsOn, startsOn);
+        startsOff.Use!(startsOff, startsOff);
+        untargeted.SetActive!(untargeted, MapMover.ActiveNot);
+        Assert.Equal(MapMover.ActiveNot, startsOn.Active);
+        Assert.Equal(MapMover.ActiveNot, untargeted.Active);
+        Assert.Equal(MapMover.ActiveActive, startsOff.Active);
+
+        endRound = true;
+        for (int frame = 0; frame < 8 && startsOn.Active != MapMover.ActiveActive; frame++)
+            world.Frame(0.1f);
+        Assert.Equal(MapMover.ActiveActive, startsOn.Active);
+        Assert.Equal(MapMover.ActiveActive, untargeted.Active);
+        Assert.Equal(MapMover.ActiveNot, startsOff.Active);
+    }
+
     /// <summary>
     /// target_music on the live path must carry its fade window (<c>lifetime</c>/<c>fade_time</c>/<c>fade_rate</c>
     /// → MusicLifetime/MusicFadeIn/MusicFadeOut). Without them the client TargetMusic_Advance can't ramp.

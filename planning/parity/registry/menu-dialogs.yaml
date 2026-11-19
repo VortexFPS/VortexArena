@@ -15,9 +15,8 @@ last_audited: "2026-07-02"
 summary:
   feature_count: 21
   worst_gaps:
-    - "Effects tab is a facade: the 5 quality-preset buttons are DEAD ('exec effects-*.cfg' has no MenuCommand handler) and nearly every graphics cvar the tab binds (picmip, texture compression, lightmaps, offset mapping, reflections, decals master/fade/distance, damage effects, all r_shadow_* lights/shadows, coronas, bloom, motion blur, sky) has no reader — MSAA 4x/aniso 8x/glow/ambient 0.6 are hardcoded in project.godot/NetGame.AddLight."
-    - "Misc tab's two escalation buttons are broken: 'Advanced settings...' issues menu_showcvarsdialog which no handler/registry entry resolves (DialogCvarList is reachable ONLY via the dev --menu-screen flag), and 'Factory reset' skips the QC confirm dialog + backup ('saveconfig backup.cfg; exec default.cfg') and instead resets EVERY store cvar in memory with no backup."
-    - "QC makeMulti sibling cvars are silently dropped by nearly every port checkbox — and several dropped siblings ARE read live, so the toggle half-works: 'View bobbing' writes cl_bob but not cl_bob2 (FirstPersonView reads both), 'Gun model swaying' writes cl_followmodel but not cl_leanmodel (ViewModel reads both, default ON — unchecking leaves the lean), waypoint edge-offset writes 1 of the 4 edges WaypointSpriteLayer reads, 'Powerup notifications' writes 1 of 14 notification_* cvars, 'Just the gore' drops cl_gentle_damage; the 17-cvar start-weapon override is the one faithful multi."
+    - "Effects presets apply their configs. Render-side coverage still varies by cvar."
+    - "The Advanced settings cvar list lacks stock engine/private/read-only metadata."
     - "Audio output half is dead: snd_speed/snd_channels/snd_swapstereo/snd_spatialization_control are cosmetic (Godot mixer unconfigured), the Items (snd_channel3volume) and Pain (snd_channel6volume) sliders route to NO audio bus, snd_staticvolume is registered but never applied, and the volume sliders silently swap the QC decibel scale for linear percent."
     - "Profile 'Apply immediately' is inert: its verbatim QC command ('color -1 -1; name \"$_cl_name\"; playermodel ...; playerskin ...') hits MenuCommand's unknown-command log, so name/model/color edits only take effect through cvar replication on the NEXT connect instead of live mid-match."
 features:
@@ -88,8 +87,9 @@ features:
       - "menu/xonotic/dialog_settings_effects.qc:someShadowCvarIsEnabled"
     port_refs:
       - "game/menu/dialogs/DialogSettingsEffects.cs:Fill"
+      - "game/menu/framework/MenuState.cs:ExecuteMenuConfig"
     constants:
-      - { name: "preset commands", base: "exec effects-low|med|normal|high|ultra.cfg", port: "same strings — but MenuCommand has NO 'exec' handler (falls to the inert default)", match: false }
+      - { name: "preset commands", base: "exec effects-low|med|normal|high|ultra.cfg", port: "same strings through the native config interpreter", match: true }
       - { name: "picmip cvar", base: "gl_picmip via slider_picmip (VRAM auto-clamp)", port: "gl_picmip plain TextSlider, no reader", match: false }
       - { name: "particle quality range", base: "0..3 step 0.25", port: "same, live (faithful backend)", match: true }
     status:
@@ -102,15 +102,14 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "The 5 quality-preset buttons are DEAD: 'exec effects-*.cfg' reaches MenuCommand.Run's default case and only logs — no preset ever applies (and most of what the cfgs would set has no reader anyway)."
       - "DEAD rows: r_subdivisions_tolerance (patches fixed at 8 subdivisions), cl_playerdetailreduction (LOD computed then discarded), gl_picmip, gl_texturecompression, r_sky, mod_q3bsp_nolightmaps, r_glsl_deluxemapping, r_shadow_gloss, r_glsl_offsetmapping(+relief), r_water(+resolutionmultiplier), cl_decals master + cl_decals_models + r_drawdecals_drawdistance + cl_decals_fadetime (fade hardcoded 2s), cl_damageeffect, all r_shadow_realtime_* + r_shadow_usenormalmap + r_shadow_shadowmapping, r_coronas(+occlusionquery), r_bloom (glow hardcoded ON 0.8), hud_postprocessing_maxbluralpha, r_motionblur."
       - "LIVE rows: cl_particles, cl_particles_quality, r_drawparticles_drawdistance, cl_spawn_point_particles (+cl_spawn_event_particles registered); port ADDS the dual-particle rows cl_particles_modern + cl_particles_sdf_generate (port-only feature, honest addition)."
       - "QC setDependentWeird(someShadowCvarIsEnabled) on Soft shadows and the makeMulti '!gl_flashblend' inverse write are not reproduced (cosmetic given the rows are dead); the hud_powerup makeMulti sibling (dialog_settings_effects.qc:216) is likewise dropped and has no reader."
     verification:
-      - { kind: code, ref: "MenuCommand.Dispatch has no 'exec' case (MenuCommand.cs:112-283); ParticleCvars.Decals ('cl_decals') has zero readers; ParticleSim reads only the blood-stain/smear sub-cvars", result: fail }
+      - { kind: ingame, ref: "planning/parity/deferred-audit/menu-config-evidence.md#effects-presets", result: pass }
       - { kind: doc, ref: "planning/graphics-settings-audit-2026-06-14.md Tables 2-4 + Table 7 items 1-3", result: pass }
     confidence: high
-    notes: "This is the port's weakest settings surface: the dialog is a faithful facade over an almost entirely unwired renderer. Table 7 of the audit is the wiring plan."
+    notes: "Preset cvar changes and visible widgets were checked. The renderer's consumption of every affected cvar is a separate check."
 
   - id: menu-dialogs.settings.audio
     name: "Audio tab: channel volumes, output format, hitsound, menu sounds, announcer"
@@ -421,7 +420,7 @@ features:
       - "game/menu/dialogs/DialogLanguageWarning.cs (DEAD — no caller)"
     constants:
       - { name: "set-language command", base: "prvm_language \"$_menu_prvm_language\"; menu_restart; menu_cmd languageselect", port: "verbatim; all three verbs handled (MenuCommand:260-273)", match: true }
-      - { name: "gentle cvars", base: "cl_gentle master; cl_gentle_gibs+cl_gentle_damage (makeMulti); cl_gentle_messages", port: "same cvars; the gibs checkbox drops the cl_gentle_damage multi-write", match: false }
+      - { name: "gentle cvars", base: "cl_gentle master; cl_gentle_gibs+cl_gentle_damage (makeMulti); cl_gentle_messages", port: "the gore checkbox propagates cl_gentle_gibs to cl_gentle_damage through QcMulti", match: true }
     status:
       logic: partial
       values: faithful
@@ -433,7 +432,7 @@ features:
     divergence_rationale: null
     gaps:
       - "The in-match language-warning dialog is dead (DialogLanguageWarning.cs, zero callers): switching language while connected applies silently instead of warning + offering disconnect."
-      - "cl_gentle is only partially consumed (ViewEffects.cs:272 reads cl_gentle/cl_gentle_damage for the damage flash); gib/blood content gating and cl_gentle_messages text-replacement are unverified — and 'Just the gore' drops its cl_gentle_damage sibling write."
+      - "DialogSettingsUser wires the gore checkbox to both cvars. Paired lethal hits exercised the hit and dissolve variants. Original-mode gentle 2 and particle-only have aligned viewport checks. Other gentle variants and message replacement still lack comparable visual checks."
     verification:
       - { kind: code, ref: "QcSkinList scans gfx/menu/*/skinvalues.txt + menu_skin + MenuSkin.Reload (menu-core.lists.skins verifies); Localization.SetLanguage + menu_restart live; grep DialogLanguageWarning -> definition only", result: pass }
     confidence: high
@@ -448,10 +447,11 @@ features:
       - "menu/xonotic/dialog_settings_misc_reset.qc:XonoticResetDialog_fill"
     port_refs:
       - "game/menu/dialogs/DialogSettingsMisc.cs:Fill (21-110)"
-      - "game/menu/dialogs/DialogCvarList.cs (reachable ONLY via dev --menu-screen cvarlist)"
-      - "game/menu/framework/MenuCommand.cs:170-175 (cvar_resettodefaults_all)"
+      - "game/menu/dialogs/DialogCvarList.cs"
+      - "game/menu/dialogs/DialogSettingsReset.cs"
+      - "game/menu/framework/MenuState.cs:FactoryReset"
     constants:
-      - { name: "factory reset command", base: "saveconfig backup.cfg; exec default.cfg (behind a Yes/No dialog)", port: "cvar_resettodefaults_all direct (no dialog, no backup)", match: false }
+      - { name: "factory reset command", base: "saveconfig backup.cfg; exec default.cfg (behind a Yes/No dialog)", port: "Yes snapshots live settings to backup.cfg under the writable gamedir and then executes default.cfg with the Vortex defaults layer", match: true }
       - { name: "menu_tooltips domain", base: "0/1/2 (advanced shows cvar+command)", port: "same values bound; tooltip system ignores the cvar (menu-core.vm.tooltips)", match: false }
     status:
       logic: partial
@@ -463,14 +463,13 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "'Advanced settings...' is DEAD: it issues menu_showcvarsdialog, which MenuCommand does not handle and MenuDialogRegistry does not know — DialogCvarList (the ported cvar editor) is unreachable from the UI (dev --menu-screen cvarlist only)."
-      - "'Factory reset' diverges dangerously: no confirm dialog (dialog_settings_misc_reset.qc unported — the QC Yes/No + 'creates a backup config' promise), no backup.cfg, and cvar_resettodefaults_all resets EVERY cvar in the store (QC's exec default.cfg re-applies defaults through the cfg tree)."
+      - "Advanced settings opens the cvar list. Stock engine/private/read-only metadata is still missing."
       - "DEAD rows: shownetgraph (no netgraph), cl_netrepeatinput, crypto_aeslevel, cl_curl_maxdownloads/maxspeed (no HTTP download system), menu_tooltips (not consulted), menu_animations (fan animation uses fixed AnimSpeed), r_textshadow, showtime/showdate (no clock overlay; the showdate multi IS hand-reproduced via a Toggled handler)."
       - "cl_movement_errorcompensation is read (NetGame.cs:5772) but FORCED OFF whenever cl_movement_smoothing_faithful=1 — the port DEFAULT — so with stock config the checkbox has no effect (it only tunes the non-faithful smoothing path); port cvar default 0 = Base-faithful."
     verification:
-      - { kind: code, ref: "MenuCommand.Dispatch: no menu_showcvarsdialog/exec case; Shell.cs:187 is DialogCvarList's only constructor site (dev flag); cvar_resettodefaults_all loops ResetToDefault over all names (MenuCommand.cs:170-175)", result: fail }
+      - { kind: ingame, ref: "planning/parity/deferred-audit/menu-config-evidence.md#factory-reset", result: pass }
     confidence: high
-    notes: "The cvar-list WIDGET internals (search/edit/revert fidelity) are menu-core.misc.cvarlist's row — but note its liveness claim predates this finding: the hosting button is dead, so the editor is dev-only."
+    notes: "The cvar-list internals are covered by menu-core.misc.cvarlist. Factory reset stops if the backup cannot be written."
 
   - id: menu-dialogs.mp.container
     name: "Multiplayer dialog: Servers/Create/Profile tab container"
@@ -595,7 +594,7 @@ features:
     port_refs:
       - "game/menu/dialogs/DialogCreateGameMapInfo.cs"
     constants:
-      - { name: "preview fallback chain", base: "maps/<bsp> -> levelshots/<bsp> -> nopreview_map", port: "maps/<bsp> -> nopreview (levelshots step unverified)", match: false }
+      - { name: "preview fallback chain", base: "maps/<bsp> -> levelshots/<bsp> -> nopreview_map", port: "MapInfoBackend.PreviewImage checks maps, levelshots, then nopreview_map", match: true }
     status:
       logic: partial
       values: unknown
@@ -606,7 +605,7 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Supported-gametype tag row (one label per registered gametype, dimmed when the map's .mapinfo lacks the mode) not verified in the port dialog; Base derives it from MapInfo_Map_supportedGametypes."
+      - "The map details dialog uses the effective mode support query for its labels. Visual styling across custom menu skins remains unmeasured."
       - "QC 'Play' starts the map directly via MapList_LoadMap (disabled under g_campaign); the port's equivalent start plumbing exists but its parity with the Create tab's start path is unverified."
     verification:
       - { kind: code, ref: "pushed live from CreateGameScreen.cs:472 (map row double-click / info affordance)", result: pass }

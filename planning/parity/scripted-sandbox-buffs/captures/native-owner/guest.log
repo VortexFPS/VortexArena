@@ -1,0 +1,108 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver.
+     at: set_use_vsync (platform/linuxbsd/x11/gl_manager_x11.cpp:364)
+OpenGL API 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 20.1.2, 256 bits)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Disabled maxfps=0 refresh=NaNHz cpu=6c gpu=llvmpipe (LLVM 20.1.2, 256 bits)[0m
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag][0m
+=== VortexArena boot ===[0m
+Weapons:   27[0m
+Items:     21[0m
+Mutators:  46[0m
+GameTypes: 21[0m
+Sounds:    223[0m
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).[0m
+[lb]MenuState] user gamedir mounted: /tmp/va-sandbox-native-keys3/session-native/guest-user/data (drop .pk3 packs in its maps/ subfolder).[0m
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"[0m
+"maxplayers" set to "32"[0m
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).[0m
+[lb]MenuState] cvar help: 1386 engine descriptions.[0m
+[lb]shell] --cvar cl_autopause = "0"[0m
+[lb]shell] --cvar cl_maxfps = "40"[0m
+[lb]shell] --cvar _cl_name = "ParityGuest"[0m
+[lb]shell] --cvar gl_texturecompression = "0"[0m
+[lb]shell] --cvar sensitivity = "4"[0m
+[lb]shell] --cvar showposition = "1"[0m
+[lb]shell] --cvar cl_frameprofiler = "0"[0m
+[lb]shell] --cvar sv_warpzone_trace = "1"[0m
+[lb]video] vid_vsync 0 → requested Disabled, actual Disabled (off — uncapped, may tear)[0m
+[lb]video] cl_maxfps 40 -> Engine.MaxFps 40 (your setting; refresh NaNHz)[0m
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)[0m
+[lb]video] process priority boost unavailable: Permission denied[0m
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] connecting to 127.0.0.1:26717.[0m
+[NetTransport.Client] connecting to 127.0.0.1:26717 …
+[EffectInfo] parsed 'vortex/original/effectinfo.txt': 301 effects (process-lifetime, shared by every match).
+[EffectSystem] effectinfo: 301 effects, particlefont atlas: loaded, style overlay: 0 effects
+[Particles] backend=original (cl_particles_modern=0)
+[AssetLoader] model 'models/items/buff.md3' read failed: Asset not found in any mount: "models/items/buff.md3".
+[lb]LightGrid] this map ships no light grid (BSP lump 15) — models use the PBR + sun fallback.[0m
+[lb]WorldLights] realtime world lighting OFF — back to baked lightmaps.[0m
+[NetGame] precached 24 weapon models, skipped 0 (lazy), 24 muzzle tags.
+[AssetLoader] skeletal parse MISS 'models/player/erebus.iqm' (loader#f52027 cache n=1: [models/player/erebus.iqm])
+[NetGame] precached 36 combat sounds, 1 player models (rendered for pipeline warm).
+[NetGame] roster warm set: [models/player/erebus.iqm] → loader#f52027 cache n=1: [models/player/erebus.iqm]
+[NetGame] connecting to 127.0.0.1:26717.
+[LoadTimeline] connect 127.0.0.1 — load begin → ready, 10369 ms total
+    textures.compress: off (gl_texturecompression 0)
+  client.boot                       48.9 ms    0.5 %
+    fx.warmup                      170.8 ms    1.6 %
+    fx.trails                      981.1 ms    9.5 %
+    gpu.warm-items(build)          798.3 ms    7.7 %
+    world.attach                     0.4 ms    0.0 %
+    editor.nodes                    15.9 ms    0.2 %
+    light                            9.8 ms    0.1 %
+  render.setup                    2077.2 ms   20.0 %
+  camera.hud                       185.0 ms    1.8 %
+  music                              3.1 ms    0.0 %
+  precache.weapons                5704.7 ms   55.0 %
+    precache.weapons.pso-warm     1230.9 ms   11.9 %
+  precache.sounds+models           919.9 ms    8.9 %
+  (unaccounted: yields, present, unmeasured)     1430.3 ms
+[ClientNet] handshake accepted by 'Vortex 1.0.0 Server': netId 2, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0 Server': netId 2.
+[MapLoader] occluder: 52008 verts / 43612 tris (r_occlusion_cull A/B)
+[MapLoader] 'stormkeep' materials: lightmapped=34 vertexLit=3 plain=8 glow=5 normalMapped=34 (deluxe=True, internalPages=0, atlas=1p, cellSize=1024, cells=31, surfaces=380)
+[MapLoader] 'stormkeep' portal surfaces: 2 (from 2 faces), pocket decor: 5 (from 5 faces)
+[DecalSplats] geometry: 106027 render triangles, 502 grid cells
+[Skybox] loaded 'env/extragalactic/asteroids'.
+[lb]LightGrid] GPU lightgrid 54x61x39 (501 KB) bound — per-pixel model lighting active.[0m
+[NetGame] client loaded map 'stormkeep' (dm) for render + prediction collision.
+[wzview] authoritative snap -> <0, 0, 0>
+[lb]md3morph] 'models/players/model/model.md3' frames=30 gpu=True mats: morphable[0m
+[lb]md3morph] 'models/player/relic.md3elic.md3' frames=101 gpu=True mats: std std std std std std std std[0m
+[LoadTimeline] (late) precache.models.pso-warm: 1286.4 ms — finished after the table printed; not included in the total above.
+joined the game[0m
+[wzview] authoritative snap -> <0, 45, 0>
+[wzview] authoritative snap -> <12, 90, 0>
+[lb]md3morph] 'models/player/relic.md3elic.md3' frames=101 gpu=True mats: std std std std std std std std[0m
+[lb]hitch MIXED] 810.1ms (med 190.0, ×4.3) — 780.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 29.4 rcpu 0.0 gpu 0.0 rest 780.6 late 880.7 | alloc 3.4MB | remote.ents 31 | watchdog: 770/803 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 308, pipeline compiles +0, vram 1778MB[0m
+[lb]hitch]   events: [lb]-5f] net: PREDICTION DESYNC 1702qu (predicted vs acked-replay origin); net: PREDICTION DESYNC 3435qu (predicted vs acked-replay origin); anim cache HIT models/player/erebus.iqm[0m
+[lb]hitch]   prev: 190.0 163.3 189.6 289.7 227.4 195.0 199.4 205.8[0m
+[AssetLoader] skeletal parse MISS 'models/player/megaerebus.iqm' (loader#f52027 cache n=2: [models/player/erebus.iqm, models/player/megaerebus.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/nyx.iqm' (loader#f52027 cache n=3: [models/player/erebus.iqm, models/player/megaerebus.iqm, models/player/nyx.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/pyria.iqm' (loader#f52027 cache n=4: [models/player/erebus.iqm, models/player/megaerebus.iqm, models/player/nyx.iqm, models/player/pyria.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/seraphina.iqm' (loader#f52027 cache n=5: [models/player/erebus.iqm, models/player/megaerebus.iqm, models/player/nyx.iqm, models/player/pyria.iqm, models/player/seraphina.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/umbra.iqm' (loader#f52027 cache n=6: [models/player/erebus.iqm, models/player/megaerebus.iqm, models/player/nyx.iqm, models/player/pyria.iqm, models/player/seraphina.iqm, models/player/umbra.iqm])
+[lb]hitch MIXED ×4] 366.4–810.1ms over 2.0s (med 205.8) — 780.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[38;2;0;255;0mSANDBOX - INFO: [39mObject is owned by "ParityOwner", created "[38;2;255;255;0m19-11-2026 04:50:54[39m", last edited "[38;2;255;255;0m19-11-2026 04:50:54[39m"[0m
+[38;2;255;0;0mSANDBOX - WARNING: [39mObject could not be edited. Make sure you are facing an object that you have edit rights over[0m
+[lb]hitch GC-PAUSE] 438.6ms (med 218.1, ×2.0) — GC g0+0 g1+0 g2+0, pause 0.0ms, 7.9MB allocated (gen2 in the present tail) | proc 16.0 rcpu 0.0 gpu 0.0 rest 422.5 late 422.7 | alloc 7.9MB | remote.ents 36 | watchdog: 370/378 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 320, pipeline compiles +0, vram 1788MB[0m
+[lb]hitch]   events: stream: idle-warm models/player/megaerebus.iqm (parse) built (0.6ms); stream: idle-warm models/player/nyx.iqm (parse) built (0.0ms); stream: idle-warm models/player/pyria.iqm (parse) built (0.0ms); stream: idle-warm models/player/seraphina.iqm (parse) built (0.0ms); stream: idle-warm models/player/umbra.iqm (parse) built (0.0ms)[0m
+[lb]hitch]   prev: 246.3 210.6 218.1 210.7 203.3 199.9 177.1 212.0[0m
+[lb]hitch GC-PAUSE ×2] 438.6–745.0ms over 0.6s (med 220.1) — GC g0+0 g1+0 g2+0, pause 0.0ms, 7.9MB allocated (gen2 in the present tail)[0m
+[lb]hitch GC-PAUSE] 417.8ms (med 220.1, ×1.9) — gen2/GC-pause tail (prior frame paused 17.2ms; this frame rest-dominated) | proc 92.3 rcpu 0.0 gpu 0.0 rest 325.4 late 315.0 | alloc 161KB | remote.ents 36 | watchdog: 256/344 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 320, pipeline compiles +0, vram 1788MB[0m
+[lb]hitch]   events: [lb]-4f] stream: idle-warm models/player/megaerebus.iqm (parse) built (0.6ms); [lb]-4f] stream: idle-warm models/player/nyx.iqm (parse) built (0.0ms); [lb]-4f] stream: idle-warm models/player/pyria.iqm (parse) built (0.0ms); [lb]-4f] stream: idle-warm models/player/seraphina.iqm (parse) built (0.0ms); [lb]-4f] stream: idle-warm models/player/umbra.iqm (parse) built (0.0ms); [lb]-3f] stream: idle-warm models/player/megaerebus.iqm tex textures/megaerebus built (27.0ms)[0m
+[lb]hitch]   prev: 203.3 199.9 177.1 212.0 438.6 745.0 367.1 366.0[0m
+[lb]hitch GC-PAUSE ×5] 415.1–581.1ms over 1.9s (med 231.9) — gen2/GC-pause tail (prior frame paused 17.2ms; this frame rest-dominated)[0m
+[lb]hitch MIXED] 438.5ms (med 231.9, ×1.9) — 379.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 59.0 rcpu 0.0 gpu 0.0 rest 379.5 late 374.0 | alloc 136KB | remote.ents 36 | watchdog: 313/366 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 320, pipeline compiles +0, vram 1788MB[0m
+[lb]hitch]   prev: 367.1 366.0 417.8 581.1 474.9 415.1 453.6 340.2[0m
+X connection to :154 broken (explicit kill or server shutdown).
+[Main] received SIGTERM again; letting the runtime terminate.
+[Main] received SIGTERM; shutting down gracefully (signal again to force).

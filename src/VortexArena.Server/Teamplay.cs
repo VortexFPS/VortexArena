@@ -65,7 +65,9 @@ public sealed class Teamplay
     public bool IsTeamGame { get; }
 
     /// <summary>Number of teams in play (2..4). 0 for a non-team game.</summary>
-    public int TeamCount { get; private set; }
+    private int[] _activeTeams = Array.Empty<int>();
+    public IReadOnlyList<int> ActiveTeams => _activeTeams;
+    public int TeamCount => _activeTeams.Length;
 
     /// <summary>The running per-team score, mirrored from <see cref="Scores"/> so balance can read it without a back-reference.</summary>
     private readonly Scores? _scores;
@@ -187,7 +189,7 @@ public sealed class Teamplay
     public Teamplay(bool isTeamGame, int teamCount = 2, Scores? scores = null)
     {
         IsTeamGame = isTeamGame;
-        TeamCount = isTeamGame ? System.Math.Clamp(teamCount, 2, 4) : 0;
+        _activeTeams = isTeamGame ? Teams.Active(System.Math.Clamp(teamCount, 2, 4)).ToArray() : Array.Empty<int>();
         _scores = scores;
         if (isTeamGame)
             _scores?.SeedTeams(TeamCount);
@@ -198,8 +200,14 @@ public sealed class Teamplay
     {
         if (!IsTeamGame)
             return;
-        TeamCount = System.Math.Clamp(teamCount, 2, 4);
+        _activeTeams = Teams.Active(System.Math.Clamp(teamCount, 2, 4)).ToArray();
         _scores?.SeedTeams(TeamCount);
+    }
+
+    internal void SetActiveTeams(int[] teams)
+    {
+        _activeTeams = teams;
+        _scores?.SetActiveTeams(teams);
     }
 
     // ----- forced teams (QC Player_DetermineForcedTeam / Player_HasRealForcedTeam / bot_forced_team) -----
@@ -489,7 +497,8 @@ public sealed class Teamplay
         if (HasRealForcedTeam(joiner))
         {
             int idx = GetForcedTeam(joiner);
-            if (idx >= 1 && idx <= TeamCount && allowed[idx - 1])
+            int slot = Array.IndexOf(_activeTeams, IndexToTeam(idx));
+            if (slot >= 0 && allowed[slot])
             {
                 int forcedColor = IndexToTeam(idx);
                 SetPlayerColors(joiner, forcedColor); // color code, not QC .team — no -1 (see AssignBestTeam note)
@@ -524,7 +533,7 @@ public sealed class Teamplay
         bool joinerOnBest = false;   // QC: is the joiner already sitting on one of the best teams?
 
         int ti = 0;
-        foreach (int team in Teams.Active(TeamCount))
+        foreach (int team in _activeTeams)
         {
             if (!allowed[ti++])
                 continue; // QC: a banned team is never a candidate (bot_vs_human partition).
@@ -943,7 +952,7 @@ public sealed class Teamplay
         if (!IsTeamGame)
             return false;
         int min = int.MaxValue, max = int.MinValue;
-        foreach (int team in Teams.Active(TeamCount))
+        foreach (int team in _activeTeams)
         {
             int c = TeamBalance.CountTeam(team, roster);
             if (c < min) min = c;
@@ -1023,7 +1032,7 @@ public sealed class Teamplay
 
     /// <summary>
     /// QC <c>TeamBalance_CheckAllowedTeams</c> (the bot_vs_human branch): which of the active teams (in
-    /// <see cref="Teams.Active"/> order, indexed 0..TeamCount-1) <paramref name="forWhom"/> may join. Normally all
+    /// <see cref="ActiveTeams"/> order, indexed 0..TeamCount-1) <paramref name="forWhom"/> may join. Normally all
     /// teams are allowed; with <c>bot_vs_human</c> set on a 2-team match, bots are banned to one side and humans
     /// to the other (positive ratio → bots take the LAST team / humans the first; negative → bots the FIRST team
     /// / humans the last), so the join only ever offers the "correct" side. <paramref name="forWhom"/> null (a
@@ -1062,7 +1071,7 @@ public sealed class Teamplay
         if (!IsTeamGame)
             return 0;
         int min = int.MaxValue, max = int.MinValue;
-        foreach (int team in Teams.Active(TeamCount))
+        foreach (int team in _activeTeams)
         {
             int c = TeamBalance.CountTeam(team, roster);
             if (c < min) min = c;
@@ -1150,7 +1159,7 @@ public sealed class Teamplay
         bool haveTarget = false;
 
         int ti = 0;
-        foreach (int team in Teams.Active(TeamCount))
+        foreach (int team in _activeTeams)
         {
             bool isAllowed = allowed[ti++];
             if (!isAllowed)
@@ -1180,7 +1189,7 @@ public sealed class Teamplay
     private int SmallestTeam(IReadOnlyList<Player> roster, out int count)
     {
         int best = Teams.None, bestCount = int.MaxValue;
-        foreach (int team in Teams.Active(TeamCount))
+        foreach (int team in _activeTeams)
         {
             int c = TeamBalance.CountTeam(team, roster);
             if (c < bestCount) { bestCount = c; best = team; }
@@ -1192,7 +1201,7 @@ public sealed class Teamplay
     private int LargestTeamExcluding(IReadOnlyList<Player> roster, HashSet<int> exclude, out int count)
     {
         int best = Teams.None, bestCount = int.MinValue;
-        foreach (int team in Teams.Active(TeamCount))
+        foreach (int team in _activeTeams)
         {
             if (exclude.Contains(team)) continue;
             int c = TeamBalance.CountTeam(team, roster);
@@ -1242,7 +1251,7 @@ public sealed class Teamplay
 
         // QC: min = the smallest team's m_num_players.
         int min = int.MaxValue;
-        foreach (int team in Teams.Active(TeamCount))
+        foreach (int team in _activeTeams)
         {
             int cur = TeamBalance.CountTeam(team, roster);
             if (cur < min) min = cur;
@@ -1251,7 +1260,7 @@ public sealed class Teamplay
             return;
 
         // QC: for each team with excess (cur > 0 && cur > min), pick the newest joiner and move it to spec.
-        foreach (int team in Teams.Active(TeamCount))
+        foreach (int team in _activeTeams)
         {
             int cur = TeamBalance.CountTeam(team, roster);
             if (cur <= 0 || cur <= min)

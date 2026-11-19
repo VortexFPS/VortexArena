@@ -268,7 +268,7 @@ public sealed class Hlac : Weapon
         Api.Entities.SetOrigin(missile, origin);
 
         // W_SetupProjVelocity_Basic(missile, speed, spread) — random per-bolt spread (deterministic PRNG).
-        missile.Velocity = WeaponFiring.ProjectileVelocity(dir, Vector3.UnitZ, speed, 0f, 0f, spread);
+        missile.Velocity = WeaponFiring.ProjectileVelocity(actor, dir, Vector3.UnitZ, speed, 0f, 0f, spread);
         missile.Angles = QMath.VecToAngles(missile.Velocity);
 
         // QC hlac.qc:46-48,91-93 — flag the bolt as a dodgeable hazard (rating = this mode's damage).

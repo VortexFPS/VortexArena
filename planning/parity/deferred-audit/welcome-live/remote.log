@@ -1,0 +1,14 @@
+Dedicated server excerpt
+[lb]shell] --cvar hostname = "Separate Loopback Server"
+[lb]shell] --cvar sv_motd = "Remote-only greeting\nJoin from the observer view."
+[lb]shell] --cvar sv_spectate = "1"
+[NetTransport.Server] listening on UDP 27985 (max 32).
+
+Separate client excerpt
+[lb]shell] --cvar cl_welcome = "1"
+[lb]Shell] connecting to 127.0.0.1:27985.
+[NetTransport.Client] connecting to 127.0.0.1:27985 …
+[NetGame] connecting to 127.0.0.1:27985.
+[ClientNet] handshake accepted by '^2Separate Loopback Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by '^2Separate Loopback Server': netId 1.
+[NetGame] client loaded map 'boil' (dm) for render + prediction collision.

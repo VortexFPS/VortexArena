@@ -18,6 +18,9 @@ public partial class Entity
     // status effects (frozen/burning/buffs)
     public readonly List<ActiveStatusEffect> StatusEffects = new();
 
+    /// <summary>QC keeps the server status store after its last effect expires.</summary>
+    public bool HasStatusEffectStore { get; internal set; }
+
     /// <summary>The status-effect blob reference last decoded into <see cref="StatusEffects"/> (client render-only).
     /// The server delta-resends the blob only on change, so its reference is stable while unchanged — the decode
     /// (which allocates a dictionary) is skipped when the incoming blob is the same reference (ClientEntityView).</summary>

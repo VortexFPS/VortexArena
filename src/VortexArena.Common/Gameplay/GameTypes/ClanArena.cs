@@ -72,10 +72,8 @@ public sealed class ClanArena : GameType
     /// QC <c>INGAME_STATUS_JOINING</c> (sv_clanarena.qc PutClientInServer / ForbidSpawn): the set of players
     /// who connected/joined WHILE a round was live (<c>!allowed_to_spawn</c>). They are force-observed until the
     /// next round reset, are greyed on the scoreboard (<see cref="IsEliminatedPlayer"/>), and are flipped to
-    /// INGAME_JOINED on their first live spawn (<see cref="OnPlayerSpawn"/>) or the round reset
-    /// (<see cref="ResetMapPlayers"/>). The port has no separate INGAME enum, so this set models QC's
-    /// INGAME_STATUS_JOINING bit. A player NOT in this set and tracked as a live <see cref="Player"/> is the
-    /// INGAME_JOINED case.
+    /// INGAME_JOINED on a successful spawn (<see cref="OnPlayerSpawn"/>). The observer
+    /// uses FragsOutOfGame until that spawn; this set distinguishes waiting joiners at match end.
     /// </summary>
     private readonly HashSet<Player> _joiningMidRound = new();
 
@@ -92,26 +90,22 @@ public sealed class ClanArena : GameType
     /// </summary>
     public bool IsJoiningMidRound(Player p) => _joiningMidRound.Contains(p);
 
-    /// <summary>
-    /// QC <c>MUTATOR_HOOKFUNCTION(ca, ForbidSpawn)</c> + <c>PutClientInServer</c> (sv_clanarena.qc): while a round
-    /// is live (<c>!allowed_to_spawn</c>) no client may become a live player — ForbidSpawn forbids an in-game
-    /// player's respawn and PutClientInServer force-observes a fresh joiner, so the combined net outcome is "nobody
-    /// spawns mid-round". The port models that single outcome by refusing the join while the round is started; the
-    /// refused client stays an observer until the next round reset. Mirrors Survival.CanJoin (sv_survival.qc).
-    /// <paramref name="roundStarted"/> stands in for QC's <c>!allowed_to_spawn</c> (a non-warmup round is live).
-    /// Returns true to allow the join (pre-round / warmup), false to force-observe.
-    /// </summary>
-    public bool CanJoin(Player p, bool roundStarted) => !roundStarted;
+    public static bool IsParticipant(Player p) => !p.IsObserver || p.FragsStatus == Player.FragsOutOfGame;
+
+    public Func<bool>? RoundSpawnsBlocked { private get; set; }
+    public bool SpawnBlocked => RoundSpawnsBlocked?.Invoke() ?? Handler?.IsRoundStarted == true;
+    public int SpectateEnemies { get; private set; }
 
     /// <summary>
     /// QC <c>MUTATOR_HOOKFUNCTION(ca, PutClientInServer)</c> (sv_clanarena.qc): a client who tries to join while a
     /// round is live is marked INGAME_STATUS_JOINING and told they enter next round (INFO_CA_JOIN_LATE). The host
-    /// calls this whenever a client's join is refused by <see cref="CanJoin"/> mid-round. Idempotent.
+    /// calls this whenever a client's join is refused by <see cref="SpawnBlocked"/> mid-round. Idempotent.
     /// </summary>
     public void OnJoinLate(Player p)
     {
-        if (p is null || !_joiningMidRound.Add(p))
+        if (IsParticipant(p) || !_joiningMidRound.Add(p))
             return;
+        p.FragsStatus = Player.FragsOutOfGame;
         // QC Send_Notification(NOTIF_ONE_ONLY, player, MSG_INFO, INFO_CA_JOIN_LATE): personal "you'll play next round".
         NotificationSystem.Send(NotifBroadcast.OneOnly, p, MsgType.Info, "CA_JOIN_LATE");
     }
@@ -207,13 +201,13 @@ public sealed class ClanArena : GameType
     private HookHandler<MutatorHooks.ForbidThrowCurrentWeaponArgs>? _forbidThrowHandler;
     private HookHandler<MutatorHooks.PlayerRegenArgs>? _regenHandler;
     private HookHandler<GameHooks.PlayerDamageArgs>? _splitHandler;
-    private HookHandler<MutatorHooks.MakePlayerObserverArgs>? _makeObserverHandler;
     private HookHandler<MutatorHooks.ClientDisconnectArgs>? _disconnectHandler;
     private HookHandler<MutatorHooks.PlayerSpawnArgs>? _spawnHandler;
     private HookHandler<MutatorHooks.MatchEndBeforeScoresArgs>? _matchEndHandler;
 
     public void Activate()
     {
+        SpectateEnemies = (int)Cvar("g_ca_spectate_enemies", 0f);
         if (_deathHandler is not null)
             return;
         MatchEnded = false;
@@ -276,11 +270,6 @@ public sealed class ClanArena : GameType
         _splitHandler = OnSplitHealthArmor;
         GameHooks.PlayerDamageSplitHealthArmor.Add(_splitHandler);
 
-        // QC MUTATOR_HOOKFUNCTION(ca, MakePlayerObserver) (sv_clanarena.qc:397): when a live player is force-
-        // spectated mid-round, notify the last remaining teammate "You are now alone!" exactly as on death.
-        _makeObserverHandler = OnMakePlayerObserver;
-        MutatorHooks.MakePlayerObserver.Add(_makeObserverHandler);
-
         // QC MUTATOR_HOOKFUNCTION(ca, ClientDisconnect) (sv_clanarena.qc:388): when a live player disconnects
         // mid-round, notify the last remaining teammate "You are now alone!" exactly as on death.
         _disconnectHandler = OnClientDisconnect;
@@ -326,7 +315,7 @@ public sealed class ClanArena : GameType
     /// <summary>
     /// QC <c>round_handler_Think</c> at cnt==0: <c>FOREACH_CLIENT((IS_PLAYER(it) || INGAME(it)),
     /// GameRules_scoring_add(it, ROUNDS_PL, 1))</c> — credit every present player one ROUNDS_PL point as the
-    /// round begins. The port has no INGAME_JOINING state, so the playing roster (IS_PLAYER) is the present set.
+    /// round begins. Include in-game observers in the present set.
     /// Wired to the live <see cref="RoundHandler.OnRoundCounted"/> by the host (GameWorld CA branch).
     /// </summary>
     public void AwardRoundStartScore()
@@ -335,7 +324,8 @@ public sealed class ClanArena : GameType
         if (roundsPl is null)
             return;
         for (int i = 0; i < _roster.Count; i++)
-            Scoring.GameScores.AddToPlayer(_roster[i], roundsPl, 1);
+            if (IsParticipant(_roster[i]))
+                Scoring.GameScores.AddToPlayer(_roster[i], roundsPl, 1);
     }
 
     /// <summary>
@@ -357,21 +347,21 @@ public sealed class ClanArena : GameType
         if (_forbidThrowHandler is not null){ MutatorHooks.ForbidThrowCurrentWeapon.Remove(_forbidThrowHandler); _forbidThrowHandler = null; }
         if (_regenHandler is not null)          { MutatorHooks.PlayerRegen.Remove(_regenHandler);                  _regenHandler = null; }
         if (_splitHandler is not null)          { GameHooks.PlayerDamageSplitHealthArmor.Remove(_splitHandler);    _splitHandler = null; }
-        if (_makeObserverHandler is not null)   { MutatorHooks.MakePlayerObserver.Remove(_makeObserverHandler);    _makeObserverHandler = null; }
         if (_disconnectHandler is not null)     { MutatorHooks.ClientDisconnect.Remove(_disconnectHandler);        _disconnectHandler = null; }
         if (_spawnHandler is not null)          { MutatorHooks.PlayerSpawn.Remove(_spawnHandler);                  _spawnHandler = null; }
         if (_matchEndHandler is not null)       { MutatorHooks.MatchEndBeforeScores.Remove(_matchEndHandler);       _matchEndHandler = null; }
         _scoreDecimal.Clear();
         _joiningMidRound.Clear();
         _prevTeam.Clear();
+        RoundSpawnsBlocked = null;
     }
 
     public int AssignTeam(Player joiner, IReadOnlyList<Player> roster)
         => TeamBalance.JoinSmallestTeam(joiner, roster, TeamCount);
 
     /// <summary>
-    /// QC CA PlayerDies: the kill gives no frags (GiveFragsForKill → 0). The victim is NOT scheduled to
-    /// respawn — in CA the dead stay out until the round resets. We just leave the death to the round check.
+    /// QC CA PlayerDies forces a respawn when spawning is open and a silent observer transition
+    /// two seconds after an in-round death.
     /// </summary>
     private bool OnDeath(ref DeathEvent ev)
     {
@@ -380,8 +370,16 @@ public sealed class ClanArena : GameType
         // last survivor. The Death bus fires here BEFORE the victim is flagged dead (DamageSystem.Killed sets
         // DeadState only after Combat.Death.Call), so we pass the victim as `leaving` and NotifyLastPlayerForTeam
         // excludes it explicitly (matching QC ca_LastPlayerForTeam's `it != this`).
-        if (ev.Victim is Player victim)
+        if (ev.Victim is Player { IsObserver: false } victim)
+        {
             NotifyLastPlayerForTeam(victim, _roster);
+            victim.RespawnFlags |= RespawnFlag.Force;
+            if (SpawnBlocked)
+            {
+                victim.RespawnFlags |= RespawnFlag.Silent;
+                victim.RespawnTime = Api.Clock.Time + 2f;
+            }
+        }
 
         // No per-kill scoring in CA: round wins are the only score that affects the limit (GiveFragsForKill → 0).
         // Damage-to-score accrual happens continuously in the damage pipeline (see AddDamageScore), not here.
@@ -526,16 +524,18 @@ public sealed class ClanArena : GameType
     /// <summary>
     /// QC <c>MUTATOR_HOOKFUNCTION(ca, MakePlayerObserver)</c> (sv_clanarena.qc:397): when a live (non-dead)
     /// player is force-spectated mid-round, trigger the "You are now alone!" center-print to the last surviving
-    /// teammate — the same notification path as the death case (<see cref="OnDeath"/>). Fires from
-    /// <c>PutObserverInServer</c> after <c>p.IsObserver = true</c> is set but before <c>DeadState</c> is
-    /// cleared, so <c>!p.IsDead</c> correctly identifies a formerly-live player. QC guard:
-    /// <c>IS_PLAYER(player) &amp;&amp; !IS_DEAD(player)</c>.
+    /// teammate — the same notification path as the death case (<see cref="OnDeath"/>). The host calls this
+    /// before changing the observer and death flags.
     /// </summary>
-    private bool OnMakePlayerObserver(ref MutatorHooks.MakePlayerObserverArgs args)
+    public void PrepareObserverTransition(Player p, bool eliminated)
     {
-        if (args.Player is Player leaving && !leaving.IsDead)
-            NotifyLastPlayerForTeam(leaving, _roster);
-        return false;
+        if (!p.IsObserver && !p.IsDead)
+            NotifyLastPlayerForTeam(p, _roster);
+        if (!eliminated)
+        {
+            _joiningMidRound.Remove(p);
+            _prevTeam.Remove(p);
+        }
     }
 
     /// <summary>
@@ -547,8 +547,11 @@ public sealed class ClanArena : GameType
     /// </summary>
     private bool OnClientDisconnect(ref MutatorHooks.ClientDisconnectArgs args)
     {
-        if (args.Player is Player leaving && !leaving.IsObserver && !leaving.IsDead)
-            NotifyLastPlayerForTeam(leaving, _roster);
+        if (args.Player is Player leaving)
+        {
+            PrepareObserverTransition(leaving, eliminated: false);
+            _scoreDecimal.Remove(leaving);
+        }
         return false;
     }
 
@@ -583,22 +586,7 @@ public sealed class ClanArena : GameType
     /// </summary>
     public bool CheckTeams()
     {
-        int totalPlayers = 0;
-        Round.AliveByTeam.Clear();
-        foreach (int team in Teams.Active(TeamCount))
-            Round.AliveByTeam[team] = 0;
-        for (int i = 0; i < _roster.Count; i++)
-        {
-            Player p = _roster[i];
-            int t = (int)p.Team;
-            if (!Round.AliveByTeam.ContainsKey(t))
-                continue;
-            totalPlayers++;
-            if (!p.IsDead)
-                Round.AliveByTeam[t] += 1;
-        }
-        if (totalPlayers == 0)
-            return false;
+        CountAliveByTeam();
         foreach (var kv in Round.AliveByTeam)
             if (kv.Value == 0)
                 return false; // a team has no living players → can't start yet
@@ -616,24 +604,28 @@ public sealed class ClanArena : GameType
         if (MatchEnded)
             return -2;
 
-        // Recount alive teams over the roster.
+        CountAliveByTeam();
+        return ResolveWinner();
+    }
+
+    private void CountAliveByTeam()
+    {
         Round.AliveByTeam.Clear();
-        int totalPlayers = 0;
         foreach (int team in Teams.Active(TeamCount))
             Round.AliveByTeam[team] = 0;
         for (int i = 0; i < _roster.Count; i++)
         {
             Player p = _roster[i];
             int t = (int)p.Team;
-            if (!Round.AliveByTeam.ContainsKey(t))
+            if (p.IsObserver || !Round.AliveByTeam.ContainsKey(t))
                 continue;
-            totalPlayers++;
             if (!p.IsDead)
                 Round.AliveByTeam[t] += 1;
         }
-        if (totalPlayers == 0)
-            return 0;
+    }
 
+    private int ResolveWinner()
+    {
         int aliveTeams = 0, soleTeam = Teams.None;
         foreach (var kv in Round.AliveByTeam)
             if (kv.Value > 0) { aliveTeams++; soleTeam = kv.Key; }
@@ -681,20 +673,23 @@ public sealed class ClanArena : GameType
 
     /// <summary>
     /// QC <c>MUTATOR_HOOKFUNCTION(ca, reset_map_players)</c> + <c>reset_map_global</c> (sv_clanarena.qc): on a round
-    /// reset, every in-game-or-joining client is cleared and re-transmuted to a live Player — clear killcount,
-    /// flip INGAME_STATUS_JOINING → JOINED, and snapshot prev_team (CA_RoundStart). reset_map_global sets
-    /// allowed_to_spawn = true; in the port the round-phase gate already re-allows spawning, so this only needs to
-    /// flush the per-round bookkeeping. Called by the host (GameWorld.ResetMap) on each map/round reset.
+    /// reset, clear kill counts and refresh the spectator rule. The host then spawns participants and bots.
+    /// Join intent survives until a successful PlayerSpawn.
     /// </summary>
     public void ResetMapPlayers(IReadOnlyList<Player> roster)
     {
-        _joiningMidRound.Clear();   // QC: INGAME_STATUS_SET(it, INGAME_STATUS_JOINED) for the whole joining set
+        SpectateEnemies = (int)Cvar("g_ca_spectate_enemies", 0f);
+        _prevTeam.Clear();
         for (int i = 0; i < roster.Count; i++)
-        {
-            Player p = roster[i];
-            p.GtKillCount = 0;      // QC reset_map_players: it.killcount = 0
-            _prevTeam[p] = (int)p.Team; // QC CA_RoundStart: prev_team snapshot for MatchEnd restore
-        }
+            roster[i].GtKillCount = 0;
+    }
+
+    public void SnapshotRoundTeams()
+    {
+        _prevTeam.Clear();
+        foreach (Player p in _roster)
+            if (!p.IsObserver)
+                _prevTeam[p] = (int)p.Team;
     }
 
     /// <summary>
@@ -706,7 +701,12 @@ public sealed class ClanArena : GameType
     /// </summary>
     private bool OnMatchEndBeforeScores(ref MutatorHooks.MatchEndBeforeScoresArgs args)
     {
+        foreach (Player p in _joiningMidRound)
+            p.FragsStatus = Player.FragsSpectator;
         _joiningMidRound.Clear();
+        foreach (var (p, team) in _prevTeam)
+            if (team != Teams.None && IsParticipant(p))
+                p.Team = team;
         _prevTeam.Clear();
         return false;
     }
@@ -714,19 +714,17 @@ public sealed class ClanArena : GameType
     /// <summary>
     /// QC <c>MUTATOR_HOOKFUNCTION(ca, ClientCommand_Spectate)</c> (sv_clanarena.qc): when an in-game CA player runs
     /// the <c>spectate</c> command, force them to spectate (MUT_SPECCMD_FORCE) and, when sv_spectate allows it,
-    /// send INFO_CA_LEAVE ("you'll spectate next round"). The host calls this from the spectate-command path; it
-    /// records the leaver as a mid-round joiner-equivalent (so they re-enter next round) and emits the notice.
-    /// Returns true if CA consumed the command (the leaver was a live player), matching QC's force result.
+    /// send INFO_CA_LEAVE to an observer withdrawing their existing participation. Return true for the
+    /// force result so the host also demotes a participant who is already an observer.
     /// </summary>
     public bool OnSpectateCommand(Player p)
     {
-        if (p is null || p.IsObserver)
-            return false; // already spectating/observer → CA does not force again (QC: only IS_PLAYER is forced)
+        if (!IsParticipant(p))
+            return false;
         // QC: Send_Notification(NOTIF_ONE_ONLY, player, MSG_INFO, INFO_CA_LEAVE) when sv_spectate is on.
-        if (Cvar("sv_spectate", 1f) != 0f)
+        if (p.IsObserver && Cvar("sv_spectate", 1f) != 0f)
             NotificationSystem.Send(NotifBroadcast.OneOnly, p, MsgType.Info, "CA_LEAVE");
-        _prevTeam.Remove(p);
-        return true; // MUT_SPECCMD_FORCE: the live player is forced to spectate
+        return true;
     }
 
     /// <summary>
@@ -742,7 +740,7 @@ public sealed class ClanArena : GameType
         for (int i = 0; i < roster.Count; i++)
         {
             Player p = roster[i];
-            if (ReferenceEquals(p, leaving) || p.IsDead || !Teams.SameTeam(leaving, p))
+            if (ReferenceEquals(p, leaving) || p.IsObserver || p.IsDead || !Teams.SameTeam(leaving, p))
                 continue;
             if (last is null) last = p;
             else return; // more than one teammate alive → not alone
@@ -780,7 +778,7 @@ public sealed class ClanArena : GameType
             {
                 Player p = _roster[i];
                 int t = (int)p.Team;
-                if (p.IsDead || !health.ContainsKey(t))
+                if (p.IsObserver || p.IsDead || !health.ContainsKey(t))
                     continue;
                 health[t] += (int)p.GetResource(ResourceType.Health) + (int)p.GetResource(ResourceType.Armor);
             }
@@ -822,9 +820,11 @@ public sealed class ClanArena : GameType
     /// QC <c>ca_isEliminated</c> (sv_clanarena.qc:243-250): (INGAME_JOINED &amp;&amp;
     /// (IS_DEAD || frags == FRAGS_PLAYER_OUT_OF_GAME)) || INGAME_JOINING. A live joined player greys when dead; a
     /// mid-round late joiner greys while they wait out the round (INGAME_STATUS_JOINING, tracked in
-    /// <see cref="_joiningMidRound"/>). FRAGS_PLAYER_OUT_OF_GAME is N/A to CA (no per-life elimination column).
+    /// <see cref="_joiningMidRound"/>). A dead participant remains grey after transitioning to observer.
     /// </summary>
-    public bool IsEliminatedPlayer(Player p) => p.IsDead || _joiningMidRound.Contains(p);
+    public bool IsEliminatedPlayer(Player p) => p.IsObserver
+        ? p.FragsStatus == Player.FragsOutOfGame
+        : p.IsDead;
 
     public void UpdateLeaderAndCheckLimit()
     {

@@ -1,0 +1,33 @@
+Pinned DarkPlaces dedicated, prvm_edict server 0 (selected world-edict lines)
+server EDICT 0:
+model          maps/darkzone.bsp
+fog            .31 .27 .41 .63 .79 32 4096
+
+server EDICT 0:
+model          maps/stormkeep.bsp
+[The stormkeep world-edict block had no fog field.]
+
+Native listen, darkzone to stormkeep (headless Environment diagnostics)
+[MapLoader] fog: density 0.31 alpha 0.79 start 32 -> maxFog 0.78 @ 4096u, godotDensity 0.000375 color (0.27 0.41 0.63)
+PASS listen authored fog and both visual defaults
+PASS listen map transition restored sky/bloom defaults and cleared fog
+
+Native listen with explicit local preferences (headless Environment diagnostics)
+[shell] --cvar r_sky = "1"
+[shell] --cvar r_drawfog = "0"
+[MapLoader] fog: density 0.31 alpha 0.79 start 32 -> maxFog 0.78 @ 4096u, godotDensity 0.000375 color (0.27 0.41 0.63)
+PASS listen explicit sky/fog preferences override map values
+
+Native remote with sv_foginterval 0, darkzone (headless Environment diagnostics)
+[MapLoader] fog: density 0.31 alpha 0.79 start 32 -> maxFog 0.78 @ 4096u, godotDensity 0.000375 color (0.27 0.41 0.63)
+PASS remote consumed server-only authored fog
+
+Native remote with sv_foginterval 0, stormkeep (headless Environment diagnostics)
+[MapLoader] fog: density 0.41 alpha 0.74 start 0 -> maxFog 0.74 @ 4096u, godotDensity 0.000328 color (0.61 0.39 0.13)
+PASS explicit server none cleared remote's local authored fog
+
+Native remote reconnect, darkzone server to stormkeep server (headless Environment diagnostics)
+[MapLoader] fog: density 0.31 alpha 0.79 start 32 -> maxFog 0.78 @ 4096u, godotDensity 0.000375 color (0.27 0.41 0.63)
+PASS remote used mounted visual defaults with server-only fog
+[MapLoader] fog: density 0.41 alpha 0.74 start 0 -> maxFog 0.74 @ 4096u, godotDensity 0.000328 color (0.61 0.39 0.13)
+PASS remote reconnect discarded previous visual defaults and applied authoritative none

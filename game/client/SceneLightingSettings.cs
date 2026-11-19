@@ -1,6 +1,7 @@
 using System;
 using Godot;
 using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Menu;
 using VortexArena.Game.Menu;
 
 namespace VortexArena.Game.Client;
@@ -39,18 +40,27 @@ public static class SceneLightingSettings
 
     /// <summary>The map's real sky, captured at <see cref="Attach"/> so <c>r_sky 0</c> can be undone.</summary>
     private static Sky? _sky;
+    private static MapClientVisualSettings _mapSettings;
+    private static MapClientVisualSettings _serverMapSuggestions;
+    private static MapClientVisualSettings _filteredServerMapSuggestions;
+    private static string? _serverMapSuggestionsAcl;
+    private static bool _hasMapFog;
 
     // Last-applied values, so the per-frame poll only touches the Environment when something moved.
-    private static bool _fogOn, _giOn, _bloomOn, _skyOn;
+    private static bool _fogOn, _giOn, _bloomOn, _skyOn, _depthFogOn;
     private static float _fogDensity, _fogShafts, _giEnergy;
     private static int _giCascades, _giBounces;
     private static bool _seeded;
 
     /// <summary>Bind the live scene environment and push the current cvar values. Call once per map.</summary>
-    public static void Attach(Godot.Environment? env)
+    public static void Attach(Godot.Environment? env, MapClientVisualSettings mapSettings)
     {
         _env = env;
         _sky = env?.Sky;
+        _mapSettings = mapSettings;
+        _serverMapSuggestions = default;
+        _serverMapSuggestionsAcl = null;
+        _hasMapFog = env?.FogEnabled == true;
         _seeded = false;
         // The 3D buffer holds display values when the native game is on DarkPlaces' colour arithmetic.
         NativeColour.ApplyEnvironment(env);
@@ -66,11 +76,68 @@ public static class SceneLightingSettings
             ApplySky(false);
     }
 
+    public static void NoteMapSettingsChanged(MapClientVisualSettings settings)
+    {
+        _mapSettings = settings;
+        Poll();
+    }
+
+    public static void NoteServerMapSuggestionsChanged(MapClientVisualSettings suggestions)
+    {
+        _serverMapSuggestions = suggestions;
+        _serverMapSuggestionsAcl = null;
+        Poll();
+    }
+
+    public static bool AcceptServerMapSuggestions()
+    {
+        const string cvar = MapClientVisualSettings.ServerSuggestionsCvar;
+        var cvars = MenuState.Cvars;
+        return cvars.WasSetByUser(cvar) && CheckBoxValue.LoadChecked(cvars.GetFloat(cvar), 1f, 0f);
+    }
+
+    private static MapClientVisualSettings ResolveVisualDefaults()
+    {
+        if (_serverMapSuggestions == default || !AcceptServerMapSuggestions())
+            return _mapSettings;
+
+        const string aclCvar = MapClientVisualSettings.AclCvar;
+        var cvars = MenuState.Cvars;
+        string acl = cvars.Has(aclCvar) ? cvars.GetString(aclCvar) : "+*";
+        if (acl != _serverMapSuggestionsAcl)
+        {
+            _filteredServerMapSuggestions = _serverMapSuggestions.Filter(acl);
+            _serverMapSuggestionsAcl = acl;
+        }
+        return _mapSettings.WithServerSuggestions(_filteredServerMapSuggestions, accept: true);
+    }
+
+    public static void NoteMapFogChanged()
+    {
+        if (_env is null || !GodotObject.IsInstanceValid(_env))
+            return;
+        _hasMapFog = _env.FogEnabled;
+        if (_hasMapFog && DisplayFramebuffer.Active)
+            _env.FogLightColor = DisplayFramebuffer.ForEngine(_env.FogLightColor);
+        // The renderer has just written FogEnabled, so re-assert the preference even when it did not change.
+        _env.FogEnabled = _depthFogOn = _hasMapFog && MapSwitch("r_drawfog", ResolveVisualDefaults().Fog);
+    }
+
     /// <summary>Drop the binding (map teardown).</summary>
-    public static void Detach() => _env = null;
+    public static void Detach(Godot.Environment env)
+    {
+        if (_env != env)
+            return;
+        _env = null;
+        _sky = null;
+        _hasMapFog = false;
+        _mapSettings = default;
+        _serverMapSuggestions = default;
+        _serverMapSuggestionsAcl = null;
+    }
 
     /// <summary>
-    /// Read the cvars and apply anything that changed. Cheap: six cvar reads and an early-out, so it is safe
+    /// Read the cvars and apply anything that changed. An early-out keeps this cheap
     /// on the per-frame client path next to <see cref="WorldTint.PollCvars"/>.
     /// </summary>
     public static void Poll()
@@ -85,15 +152,17 @@ public static class SceneLightingSettings
         // r_bloom -> the Environment glow pass. The port's glow IS its r_bloom equivalent (hand-tuned
         // threshold-1.0 bloom on genuinely bright pixels, see NetGame.AddLight), so the cvar now actually
         // owns it. Unset reads as ON to preserve the shipped look; the presets set it explicitly.
-        bool bloomOn = Cvar("r_bloom", 1f) != 0f;
+        MapClientVisualSettings visuals = ResolveVisualDefaults();
+        bool bloomOn = MapSwitch("r_bloom", visuals.Bloom);
         // r_sky 0 (DP: disable sky rendering for performance/visibility) -> flat black background. The sky
         // object is kept so 1 restores the map's real skybox without a reload.
-        bool skyOn = Cvar("r_sky", 1f) != 0f;
+        bool skyOn = MapSwitch("r_sky", visuals.Sky);
+        bool depthFogOn = _hasMapFog && MapSwitch("r_drawfog", visuals.Fog);
         int giCascades = Math.Clamp((int)Cvar("r_gi_cascades", 4f), 1, 8);
         float giEnergy = MathF.Max(0f, Cvar("r_gi_energy", 1f));
         int giBounces = Math.Clamp((int)Cvar("r_gi_bounces", 1f), 0, 4);
 
-        if (_seeded && fogOn == _fogOn && giOn == _giOn && bloomOn == _bloomOn && skyOn == _skyOn
+        if (_seeded && fogOn == _fogOn && giOn == _giOn && bloomOn == _bloomOn && skyOn == _skyOn && depthFogOn == _depthFogOn
             && Mathf.IsEqualApprox(fogDensity, _fogDensity)
             && Mathf.IsEqualApprox(fogShafts, _fogShafts)
             && Mathf.IsEqualApprox(giEnergy, _giEnergy)
@@ -107,9 +176,11 @@ public static class SceneLightingSettings
         _fogOn = fogOn; _fogDensity = fogDensity; _fogShafts = fogShafts;
         _giOn = giOn; _giCascades = giCascades; _giEnergy = giEnergy; _giBounces = giBounces;
         _bloomOn = bloomOn; _skyOn = skyOn;
+        _depthFogOn = depthFogOn;
 
         // ---- r_bloom / r_sky (the two Environment toggles the Effects tab always bound) --------------
         _env.GlowEnabled = bloomOn;
+        _env.FogEnabled = depthFogOn;
         ApplySky(skyOn);
 
         // ---- N3: volumetric fog + light shafts ----------------------------------------------------
@@ -169,4 +240,7 @@ public static class SceneLightingSettings
         string s = MenuState.Cvars.GetString(name);
         return string.IsNullOrWhiteSpace(s) ? fallback : MenuState.Cvars.GetFloat(name);
     }
+
+    private static bool MapSwitch(string name, bool? mapDefault) => MapClientVisualSettings.EffectiveValue(
+        mapDefault, Cvar(name, 1f) != 0f, mapDefault.HasValue && MenuState.Cvars.WasSetByUser(name));
 }

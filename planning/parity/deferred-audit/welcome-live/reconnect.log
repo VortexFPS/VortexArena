@@ -1,0 +1,15 @@
+[lb]shell] --cvar cl_welcome = "1"
+[lb]Shell] connecting to 127.0.0.1:27985.
+[NetTransport.Client] connecting to 127.0.0.1:27985 …
+[NetGame] connecting to 127.0.0.1:27985.
+[ClientNet] handshake accepted by '^2Separate Loopback Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by '^2Separate Loopback Server': netId 1.
+[NetGame] client loaded map 'boil' (dm) for render + prediction collision.
+]disconnect; connect 127.0.0.1:27985
+[lb]Shell] connecting to 127.0.0.1:27985.
+[NetTransport.Client] connecting to 127.0.0.1:27985 …
+[NetGame] connecting to 127.0.0.1:27985.
+[ClientNet] handshake accepted by '^2Separate Loopback Server': netId 2, tickrate 64 Hz.
+[NetGame] handshake accepted by '^2Separate Loopback Server': netId 2.
+[NetGame] client loaded map 'boil' (dm) for render + prediction collision.
+ERROR: Required virtual method AudioStreamPlayback::_mix must be overridden before calling.

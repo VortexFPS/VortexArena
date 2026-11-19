@@ -1,0 +1,11 @@
+]cmd teleporttotarget parity_guest
+]cmd g_sandbox object_info object
+SANDBOX - INFO: Object is owned by "ParityOwner", created "19-11-2026 02:08:14", last edited "19-11-2026 02:08:14"
+]cmd g_sandbox object_edit skin 0
+SANDBOX - WARNING: Object could not be edited. Make sure you are facing an object that you have edit rights over
+]cmd teleporttotarget parity_guest
+Player ParityOwner tried to use cheat 'teleporttotarget'
+Player ParityGuest tried to use cheat 'teleporttotarget'
+]cmd teleporttotarget parity_buff_view
+ParityOwner got the Vampire buff!
+ParityOwner lost the Vampire buff!

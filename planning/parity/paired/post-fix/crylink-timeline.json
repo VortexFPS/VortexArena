@@ -1,0 +1,42 @@
+[
+  {
+    "elapsed": 3.066,
+    "command": "cmd join"
+  },
+  {
+    "elapsed": 12.062,
+    "server_query": "status and scenario cvars"
+  },
+  {
+    "elapsed": 18.001,
+    "command": "cmd teleporttotarget misc_teleporter_dest1"
+  },
+  {
+    "elapsed": 23.038,
+    "button": "attack down"
+  },
+  {
+    "elapsed": 24.026,
+    "button": "attack up"
+  },
+  {
+    "frame": "0171.webp",
+    "captured_at": 24.157
+  },
+  {
+    "frame": "0183.webp",
+    "captured_at": 25.74
+  },
+  {
+    "elapsed": 29.019,
+    "button": "attack down"
+  },
+  {
+    "elapsed": 30.011,
+    "button": "attack up"
+  },
+  {
+    "frame": "0217.webp",
+    "captured_at": 30.269
+  }
+]

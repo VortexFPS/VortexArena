@@ -353,6 +353,10 @@ void fragment() {
     // mod_q3bsp_nolightmaps: collapse the whole lighting term to 1 -> the surface displays its raw albedo.
     lm = mix(lm, vec3(1.0), world_nolightmaps);
     if (dp_exact) { spec_accum *= 1.0 - world_nolightmaps; }   // DarkPlaces' fullbright has no specular term
+    if (native_debug_lighting.x > 0.5) {
+        lm = vec3(native_debug_light(rn));
+        spec_accum = vec3(0.0);
+    }
     // Self-illumination (DP shader_glsl.h: color.rgb += Texture_Glow * Color_Glow): added on top of the lit
     // diffuse and NOT modulated by the lightmap, so light fixtures glow at full intensity regardless of how
     // lit their own luxels are. Without this, lightmapped lights render as a dim diffuse×lightmap and look dark.
@@ -385,7 +389,7 @@ void fragment() {
 // whose lighting is already fully baked, flattening every map.
 void light() {
     // Guarded rather than early-returned: Godot rejects `return` inside light().
-    if (!LIGHT_IS_DIRECTIONAL) {
+    if (native_debug_lighting.x < 0.5 && !LIGHT_IS_DIRECTIONAL) {
         float ndotl = clamp(dot(normalize(NORMAL), normalize(LIGHT)), 0.0, 1.0);
         if (dp_framebuffer > 0.5) {
             // DarkPlaces' dynamic light pass (shader_glsl.h MODE_LIGHTSOURCE, drawn GL_ONE GL_ONE):
@@ -409,7 +413,7 @@ void light() {
         } else {
             DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndotl * world_dlight;
         }
-    } else if (dp_framebuffer > 0.5 && dp_model_shadow > 0.0) {
+    } else if (native_debug_lighting.x < 0.5 && dp_framebuffer > 0.5 && dp_model_shadow > 0.0) {
         // r_shadows: the directional light is only a shadow map of the models. ATTENUATION is the fraction
         // of unshadowed samples; a shadowed pixel keeps (1 - r_shadows_darken) of its lit colour.
         SPECULAR_LIGHT -= v_shadowable * (dp_model_shadow * (1.0 - clamp(ATTENUATION, 0.0, 1.0)));
@@ -481,7 +485,8 @@ void light() {
 
     /// <summary>The source as compiled: <see cref="Code"/> with the DarkPlaces light helpers
     /// (<c>DpLightModel.ShaderFunctions</c>) in place of their marker.</summary>
-    internal static string Final(string code) => code.Replace("@@DPLIGHT@@", VortexArena.Formats.Lighting.DpLightModel.ShaderFunctions);
+    internal static string Final(string code) => code.Replace("@@DPLIGHT@@", VortexArena.Formats.Lighting.DpLightModel.ShaderFunctions
+        + VortexArena.Formats.Materials.DpColour.DebugLightingShader);
 
     /// <summary>The line of <see cref="Code"/> after which the translucent variant writes ALPHA. A constant, and
     /// checked: the replacement used to name a line that a later edit had rewritten, so the variant silently

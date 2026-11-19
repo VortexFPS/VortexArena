@@ -324,6 +324,9 @@ public abstract class NetTransport : IDisposable
             finally { ExitTransport(); }
         }
 
+        /// <summary>The connected peer's IP as seen by ENet. Call on the transport thread.</summary>
+        public string RemoteAddress(int peerId) => Peer.GetPeer(peerId)?.GetRemoteAddress() ?? "";
+
         /// <summary>QC <c>CS(e).ping</c> (server/sv_main.qc bot_think / scoreboard.qc SP_PING): a connected
         /// peer's round-trip time in milliseconds — ENet's own smoothed mean RTT estimate for the peer
         /// (<see cref="ENetPacketPeer.PeerStatistic.RoundTripTime"/>, in ms), the "ping" the scoreboard shows.

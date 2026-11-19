@@ -1,0 +1,17 @@
+{"seconds": 30.109, "server": "status"}
+{"seconds": 30.29, "server": "sv_cheats 2"}
+{"seconds": 30.771, "client": "owner", "command": "cmd teleporttotarget parity_buff_start", "input": "console", "attempt": 1}
+{"seconds": 30.772, "client": "guest", "command": "cmd teleporttotarget parity_buff_view", "input": "console", "attempt": 1}
+{"seconds": 33.229, "client": "guest", "camera_ack": "cmd teleporttotarget parity_buff_view"}
+{"seconds": 33.248, "client": "owner", "camera_ack": "cmd teleporttotarget parity_buff_start"}
+{"seconds": 35.348, "client": "owner", "frame": "06-buff-before-owner.webp"}
+{"seconds": 35.404, "client": "guest", "frame": "06-buff-before-guest.webp"}
+{"seconds": 35.404, "client": "owner", "command": "cmd teleporttotarget parity_buff_touch", "input": "console", "attempt": 1}
+{"seconds": 37.858, "client": "owner", "camera_ack": "cmd teleporttotarget parity_buff_touch"}
+{"seconds": 40.082, "client": "owner", "frame": "07-buff-after-owner.webp"}
+{"seconds": 40.193, "client": "guest", "frame": "07-buff-after-guest.webp"}
+{"seconds": 40.193, "server": "sv_cheats 0"}
+{"seconds": 40.373, "server": "status"}
+{"seconds": 40.554, "client": "owner", "command": "quit", "key": "F10"}
+{"seconds": 41.776, "client": "guest", "command": "quit", "key": "F10"}
+{"seconds": 42.994, "server": "quit"}

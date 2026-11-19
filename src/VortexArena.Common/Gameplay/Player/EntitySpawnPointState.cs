@@ -22,5 +22,8 @@ namespace VortexArena.Common.Framework
         /// clients only (bots rejected). Spawn_Score filters on it against IS_REAL_CLIENT(this).
         /// </summary>
         public int SpawnRestriction;
+
+        /// <summary>Authored Race grid place. Zero is the default checkpoint respawn place.</summary>
+        public float RaceSpawnPlace;
     }
 }

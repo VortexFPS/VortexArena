@@ -205,8 +205,8 @@ public static class StatusEffectsCatalog
         });
         // STATUSEFFECT_Superweapon (superweapons.qh): superweapon ammo window (QC netname "superweapons";
         // VortexArena consumers use the singular "superweapon"). m_persistent = IT_UNLIMITED_SUPERWEAPONS
-        // (so the networked PERSISTENT bit is now set instead of faking it with a 999s timer);
-        // m_sound_rm = POWEROFF on the countdown lapse (server/client.qc play_countdown).
+        // (the networked PERSISTENT bit preserves the original timer).
+        // m_sound_rm = POWEROFF on normal removal. The player countdown is a separate CH_INFO cue.
         R(new StatusEffectDef("superweapon")
         {
             DisplayName = "Superweapons",   // QC m_name _("Superweapons") (superweapons.qh)
@@ -571,7 +571,8 @@ public static class StatusEffectsCatalog
     /// reset_map_global / PutClientInServer so stale burning/stunned/superweapon timers don't survive
     /// death/respawn/map reset (see cross-file todos for the dispatch sites).
     /// </summary>
-    public static void RemoveAll(Entity e, StatusEffectRemoval removal = StatusEffectRemoval.Normal)
+    public static void RemoveAll(Entity e, StatusEffectRemoval removal = StatusEffectRemoval.Normal,
+        StatusEffectDef? except = null)
     {
         if (e is null || e.StatusEffects.Count == 0) return;
         // Snapshot the present def ids (Remove mutates the list as it goes).
@@ -580,7 +581,7 @@ public static class StatusEffectsCatalog
         foreach (int id in ids)
         {
             var def = ByIndexInRegistry(id);
-            if (def != null) Remove(e, def, removal);
+            if (def != null && def != except) Remove(e, def, removal);
         }
     }
 
@@ -589,9 +590,14 @@ public static class StatusEffectsCatalog
     /// CLEAR path — used on a spectatee-effect store and on map reset after the NORMAL pass got the sounds).
     /// Marks the entity dirty so the cleared state networks.
     /// </summary>
-    public static void ClearAll(Entity e)
+    public static void ClearAll(Entity e) => ClearAll(e, releaseStore: false);
+
+    /// <summary>Clear the effects and release the status store when the player leaves active play.</summary>
+    public static void ClearAll(Entity e, bool releaseStore)
     {
-        if (e is null || e.StatusEffects.Count == 0) return;
+        if (e is null) return;
+        if (releaseStore) e.HasStatusEffectStore = false;
+        if (e.StatusEffects.Count == 0) return;
         e.StatusEffects.Clear();
         Update(e);
     }
@@ -667,7 +673,10 @@ public static class StatusEffectsCatalog
                 && !string.IsNullOrEmpty(def.RemovalSound)
                 && Api.Services != null)
             {
-                SoundSystem.PlayOn(e, Sounds.ByName(def.RemovalSound!), SoundChannel.Item, SoundLevels.VolBase, SoundLevels.AttenNorm);
+                // Superweapon loss stacks on CH_TRIGGER alongside the independent CH_INFO countdown.
+                var sound = Sounds.ByName(def.RemovalSound!);
+                var channel = def == Superweapon ? SoundChannel.TriggerAuto : SoundChannel.Item;
+                SoundSystem.PlayOn(e, sound, channel, SoundLevels.VolBase, SoundLevels.AttenNorm);
             }
             e.StatusEffects.RemoveAt(i);
             Update(e);   // QC m_remove -> StatusEffects_update(actor)
@@ -686,6 +695,10 @@ public static class StatusEffectsCatalog
     /// </summary>
     public static void Tick(Entity e, float now)
     {
+        // A checkpoint can also populate the status list directly.
+        if (e.StatusEffects.Count > 0)
+            e.HasStatusEffectStore = true;
+
         // Iterate by id (the active list can be mutated by m_tick/removal). Snapshot the present def ids.
         for (int i = e.StatusEffects.Count - 1; i >= 0; i--)
         {
@@ -718,7 +731,8 @@ public static class StatusEffectsCatalog
             // `if(!this.m_active(this, actor)) return;`, so the timeout removal happens BEFORE the per-effect
             // body. The port previously ran the body first, which gave an expiring effect one extra tick on the
             // frame it lapsed — a bonus burn tick, and a re-set of the EF_ flags that m_remove had just cleared.
-            if (s.ExpireTime > 0f && now >= s.ExpireTime)
+            // Keep the superweapon deadline available to player_powerups through the exact expiry tick.
+            if (s.ExpireTime > 0f && (now > s.ExpireTime || (now == s.ExpireTime && def != Superweapon)))
             {
                 Remove(e, def, StatusEffectRemoval.Timeout);
                 continue;   // QC: !m_active -> the per-effect body is skipped
@@ -793,8 +807,10 @@ public static class StatusEffectsCatalog
     /// </summary>
     public static void Update(Entity e)
     {
-        if (e is not null)
-            _dirty.Add(e);
+        if (e is null) return;
+        if (e.StatusEffects.Count > 0)
+            e.HasStatusEffectStore = true;
+        _dirty.Add(e);
     }
 
     /// <summary>True if <paramref name="e"/> has a pending status-effect update to network (QC SendFlags != 0).</summary>

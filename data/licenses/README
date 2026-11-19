@@ -39,6 +39,9 @@ Attribution for the contributors who authored this content is carried in the gam
 credits screen (game/menu/CreditsScreen.cs), a verbatim port of upstream's
 qcsrc/menu/xonotic/credits.qc.
 
+The recordings in core.pk3dir/demos are the original Xonotic data repository demos
+from revision 863cd3e84. They use the same upstream content notice in COPYING.xonotic.
+
 The licence for Vortex Arena's own source code is a separate matter — see COPYING at
 the repository root.
 

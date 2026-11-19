@@ -207,7 +207,7 @@ public sealed class Mortar : Weapon
         gren.DamageForceScale = bal.DamageForceScale;
 
         // W_SetupProjVelocity_UP: velocity = dir*speed + up*speed_up (no per-shot spread for grenades).
-        gren.Velocity = WeaponFiring.ProjectileVelocity(dir, up, bal.Speed, bal.SpeedUp);
+        gren.Velocity = WeaponFiring.ProjectileVelocity(actor, dir, up, bal.Speed, bal.SpeedUp);
         gren.Angles = QMath.VecToAngles(gren.Velocity);
 
         // QC mortar.qc:172-173,223-224 — flag the grenade as a dodgeable hazard (bot_dodge/bot_dodgerating =

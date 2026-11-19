@@ -61,7 +61,7 @@ public static class SpectatorRules
     /// next allowed player, or null if none qualifies. <paramref name="forward"/> chooses next vs previous.
     /// </summary>
     public static Player? CycleSpectatee(Player spectator, IReadOnlyList<Player> players, Player? current,
-        bool spectatorInGame, int mode, bool teamGame, bool forward = true)
+        bool spectatorInGame, int mode, bool teamGame, bool forward = true, bool skipObservers = false)
     {
         int n = players.Count;
         if (n == 0) return null;
@@ -72,7 +72,7 @@ public static class SpectatorRules
             int idx = start + (forward ? step : -step);
             idx = ((idx % n) + n) % n; // wrap
             Player cand = players[idx];
-            if (cand.DeadState != VortexArena.Common.Framework.DeadFlag.No) continue; // only living players are spectatable
+            if ((skipObservers && cand.IsObserver) || cand.IsDead) continue;
             if (CanSpectate(spectator, cand, spectatorInGame, mode, teamGame))
                 return cand;
         }

@@ -1,0 +1,50 @@
+[
+  {
+    "seconds": 11.001,
+    "frame": "RedProbe/0003.webp",
+    "sample": 10.935,
+    "label": "shielded"
+  },
+  {
+    "seconds": 11.722,
+    "frame": "RedProbe/0007.webp",
+    "sample": 11.657,
+    "label": "shielded-hit"
+  },
+  {
+    "seconds": 15.56,
+    "frame": "BlueProbe/0028.webp",
+    "sample": 15.445,
+    "label": "building"
+  },
+  {
+    "seconds": 21.333,
+    "frame": "RedProbe/0060.webp",
+    "sample": 21.214,
+    "label": "exposed"
+  },
+  {
+    "seconds": 23.449,
+    "frame": "RedProbe/0072.webp",
+    "sample": 23.375,
+    "label": "damaged-one"
+  },
+  {
+    "seconds": 25.065,
+    "frame": "RedProbe/0081.webp",
+    "sample": 25.001,
+    "label": "damaged-two"
+  },
+  {
+    "seconds": 27.229,
+    "frame": "RedProbe/0093.webp",
+    "sample": 27.165,
+    "label": "dead-camera"
+  },
+  {
+    "seconds": 29.567,
+    "frame": "BlueProbe/0106.webp",
+    "sample": 29.503,
+    "label": "other-view"
+  }
+]

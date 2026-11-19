@@ -121,6 +121,35 @@ public class ServerClientsTests
     }
 
     [Fact]
+    public void A_silent_peer_uses_the_signon_deadline_until_begin_then_the_message_deadline()
+    {
+        if (!ServerTestRig.HaveData) return;
+        using ServerTestRig rig = new(2, ("bot_number", "0"), ("net_connecttimeout", "12"), ("net_messagetimeout", "3"));
+        Assert.True(rig.Server.Start("stormkeep"));
+
+        SvLoopbackClient joining = rig.AddClient("joining");
+        Assert.True(rig.Until(() => joining.ServerSlot is { Active: true, Begun: false }, 10), ServerTestRig.Summary(joining));
+        SvClient signonSlot = joining.ServerSlot!;
+        joining.Frozen = true;
+        double silentAt = rig.Now;
+        Assert.True(rig.Until(() => !signonSlot.Active, 14), "the server kept the silent signon slot");
+        double signonSilence = rig.Now - silentAt;
+        Assert.InRange(signonSilence, 11.9, 12.2);
+
+        SvLoopbackClient playing = rig.AddClient("playing");
+        Assert.True(rig.Until(() => playing.InGame && playing.ServerSlot is { Begun: true }, 90), ServerTestRig.Summary(playing));
+        // Let the server receive ordinary movement under the post-begin deadline.
+        rig.Run(0.5);
+        SvClient playingSlot = playing.ServerSlot!;
+        playing.Frozen = true;
+        silentAt = rig.Now;
+        Assert.True(rig.Until(() => !playingSlot.Active, 5), "the server kept the silent player slot");
+        double playingSilence = rig.Now - silentAt;
+        Assert.InRange(playingSilence, 2.8, 3.2);
+        _output.WriteLine($"Silence to release on server clock: signon {signonSilence:F3}s, playing {playingSilence:F3}s");
+    }
+
+    [Fact]
     public void A_full_server_rejects_and_a_slot_is_freed_by_leaving_by_silence_and_by_garbage()
     {
         if (!ServerTestRig.HaveData) return;

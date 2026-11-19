@@ -1,0 +1,30 @@
+Native server
+[NetGame] listen server on 127.0.0.1:27689 (map 'runningmanctf', ons, 0 bots) — self-connecting.
+[ServerNet] peer 1904057638 accepted as 'OnsCamera'.
+players: 4 (2 bots)
+players: 4 (2 bots)
+gametype: ons  time: 515.6
+players: 4 (2 bots)
+  ApproachB        score    0  k/d 0/0
+  ApproachA        score    0  k/d 0/0
+
+Native client
+[lb]observe] camera pinned at (-288 -208 112) pitch 11 yaw 0
+[NetGame] client loaded map 'runningmanctf' (ons) for render + prediction collision.
+
+Original server
+Server listening on address 127.0.0.1:27691
+server: program loaded (crc 51381, size 6720K)
+:gamestart:ons_runningmanctf:0.1795051698.507148
+OnsCamera connected
+OnsCamera connected
+[BOT]Toxic captured Big Blue room control point
+
+Original client
+client: program loaded (crc 54264, size 4002K) EXT_CSQC
+[BOT]Toxic captured Big Blue room control point
+
+Native client after fix (r_dumpmaterials)
+r_dumpmaterials: 27 kinds of material on visible geometry
+  x   4 ShaderMaterial[// VortexArena DarkPlaces-rule surface shader (full-bright, Add). Generated in C#. | render_mode unshaded, cull_back, shadows_disabled, blend_add, depth_draw_never;] ons_shield/dp on MeshInstance3D   e.g. /NetClient/Render/ent#16712_item/models_onslaught_controlpoint_shield_md3
+  x   2 ShaderMaterial[// VortexArena DarkPlaces-rule surface shader (full-bright, Opaque). Generated in C#. | render_mode unshaded, cull_back, shadows_disabled;] ons_shield/dp on MeshInstance3D   e.g. /NetClient/Render/ent#16710_item/models_onslaught_generator_shield_md3

@@ -36,6 +36,9 @@ namespace VortexArena.Common.Gameplay.Damage
 /// </summary>
 public sealed class DamageSystem : IDamageSystem
 {
+    /// <summary>Optional server sink for weaponstats hits and kills at their PlayerDamage call sites.</summary>
+    public IWeaponStatsSink? WeaponStatsSink { get; set; }
+
     // ----- cvar names (Xonotic balance/server cfgs; OPEN Q5 — names kept identical) -----
     private const string CvarArmorBlockPercent   = "g_balance_armor_blockpercent";   // balance-xonotic.cfg: 0.7
     private const string CvarWeaponDamageFactor  = "g_weapondamagefactor";           // balance-xonotic.cfg: 1
@@ -380,6 +383,10 @@ public sealed class DamageSystem : IDamageSystem
             }
         }
 
+        // Capture the hit in trace space before a death callback can replace the victim's model.
+        if (AttachedDamageHit.Create(targ, deathType, info.HitLocation, damage) is { } attachedDamage)
+            EffectEmitter.Sink.Emit(attachedDamage);
+
         // ----- apply knockback (QC damage.qc "apply push" ~671) -----
         ApplyKnockback(targ, attacker, info.HitLocation, force);
 
@@ -442,7 +449,7 @@ public sealed class DamageSystem : IDamageSystem
         }
 
         if (targ.IsCorpse || IsDead(targ))
-            PlayerCorpseDamage(targ, inflictor, attacker, deathType, damage);
+            PlayerCorpseDamage(targ, inflictor, deathType, damage, hitLoc, force);
         else
             PlayerDamage(targ, inflictor, attacker, deathType, damage, hitLoc, force);
     }
@@ -451,12 +458,20 @@ public sealed class DamageSystem : IDamageSystem
     /// Port of <c>PlayerCorpseDamage</c> (server/player.qc ~183): a dead body still takes (armor-split)
     /// damage and gibs when its health drops below <c>-sv_gibhealth</c>. No death re-fires (already dead).
     /// </summary>
-    private void PlayerCorpseDamage(Entity targ, Entity? inflictor, Entity? attacker, string deathType, float damage)
+    private void PlayerCorpseDamage(Entity targ, Entity? inflictor, string deathType, float damage,
+        Vector3 hitLoc, Vector3 force)
     {
+        bool playerBody = IsPlayerBody(targ);
+        if (playerBody)
+            EffectEmitter.GibHit(hitLoc, force, QClamp(damage, 0f, 200f) / 16f, targ.Species);
+
         // QC passes INFINITY for health here: a corpse has no health ceiling, so `take` stays bounded by the
         // incoming damage exactly as it was before upstream a7664932 added the bound.
         (float take, float save) = HealthArmorApplyDamage(float.PositiveInfinity,
             MathF.Max(targ.GetResource(ResourceType.Armor), 0f), ArmorBlockPercent(deathType), damage);
+
+        if (playerBody)
+            EmitImpactChunks(targ, take, hitLoc, force);
 
         targ.TakeResource(ResourceType.Armor, save);
         targ.TakeResource(ResourceType.Health, take);
@@ -466,7 +481,7 @@ public sealed class DamageSystem : IDamageSystem
         targ.DmgTake += take;
         targ.DmgInflictor = inflictor;
 
-        if (targ.GetResource(ResourceType.Health) <= -Cvar(CvarGibHealth, DefGibHealth) && targ.Alpha >= 0f)
+        if (targ.GetResource(ResourceType.Health) <= -GibHealth && targ.Alpha >= 0f)
             GibCorpse(targ);
     }
 
@@ -481,6 +496,7 @@ public sealed class DamageSystem : IDamageSystem
         float initialHealth = MathF.Max(targ.GetResource(ResourceType.Health), 0f);
         float initialArmor  = MathF.Max(targ.GetResource(ResourceType.Armor), 0f);
         float take = 0f, save = 0f;
+        bool playerBody = IsPlayerBody(targ);
 
         if (damage != 0f)
         {
@@ -499,6 +515,14 @@ public sealed class DamageSystem : IDamageSystem
             float shieldBlock = Cvar(CvarSpawnShieldBlock, DefSpawnShieldBlock);
             if (HasSpawnShield(targ) && shieldBlock < 1f)
                 damage *= 1f - QClamp(shieldBlock, 0f, 1f);
+
+            if (playerBody)
+            {
+                if (DeathTypes.HasHitType(deathType, DeathTypes.Sound))
+                    EmitSoundAttackGibs(targ, inflictor, damage, ref hitLoc, ref force);
+                else
+                    EffectEmitter.GibHit(hitLoc, force, QClamp(damage, 0f, 200f) / 16f, targ.Species);
+            }
 
             (take, save) = HealthArmorApplyDamage(initialHealth, initialArmor, ArmorBlockPercent(deathType), damage);
         }
@@ -570,6 +594,9 @@ public sealed class DamageSystem : IDamageSystem
                 SoundSystem.PlayOn(targ, Sounds.ByName("BODYIMPACT1"), SoundChannel.Weapon, SoundLevels.VolBase, SoundLevels.AttenNorm);
         }
 
+        if (playerBody)
+            EmitImpactChunks(targ, take, hitLoc, force);
+
         // --- subtract (QC player.qc ~342): unless spawn-shielded-fully or godmode ---
         bool shieldedFully = HasSpawnShield(targ) && Cvar(CvarSpawnShieldBlock, DefSpawnShieldBlock) >= 1f;
         if (!shieldedFully)
@@ -592,7 +619,7 @@ public sealed class DamageSystem : IDamageSystem
                     // SAME roll QC uses, with restart = true (a fresh hit restarts the pain window). A late pain on a
                     // dead/dying corpse is excluded here, and even if one slipped through GetUpperAnim keeps DIE above
                     // PAIN, so the death overlay is never stomped.
-                    if (SvGentle() < 1f && !targ.IsCorpse)
+                    if (SvGentle() < 1f && !targ.IsCorpse && targ.ClassName != PlayerBody.ClassName)
                     {
                         var painAct = Prandom.Float() > 0.5f
                             ? AnimDecide.AnimUpperAction.Pain1
@@ -605,9 +632,6 @@ public sealed class DamageSystem : IDamageSystem
 
                     EmitPainSound(targ, attacker, deathType, take);
                 }
-                if (take > 0f)
-                    EffectEmitter.TeBlood(hitLoc, force.LengthSquared() > 0f ? Vector3.Normalize(-force) * 400f : Vector3.Zero, (int)(take * 0.2f + 1f));
-
                 // Bot aim shake (QC player.qc:388-395): throw off bot aim temporarily when damaged.
                 // QC: if(IS_BOT_CLIENT(this) && GetResource(this, RES_HEALTH) >= 1)
                 //   shake = damage * 5 / (bound(0, skill, 100) + 1)
@@ -644,6 +668,24 @@ public sealed class DamageSystem : IDamageSystem
         // back as forbid_logging_damage, gating the accuracy/score block below.
         float dhRemoved = initialHealth - MathF.Max(targ.GetResource(ResourceType.Health), 0f);
         float daRemoved = initialArmor - MathF.Max(targ.GetResource(ResourceType.Armor), 0f);
+        // Capture the credited attack weapon before PlayerDamaged. A lethal hit uses the same attack
+        // weapon but reads the victim's weapon again after that hook, just like the two QC calls.
+        var weaponStats = WeaponStatsSink;
+        string? statsWeapon = null;
+        Player? statsAttacker = attacker as Player;
+        Player? statsVictim = targ as Player;
+        if (weaponStats is not null && statsAttacker is not null && statsVictim is not null
+            && (statsAttacker.Flags & EntFlags.Client) != 0 && (statsVictim.Flags & EntFlags.Client) != 0
+            && !statsAttacker.IsFreed && !statsVictim.IsFreed
+            && !WeaponAccuracyEvents.SameTeam(statsAttacker, statsVictim) && weaponStats.CanRecord(statsVictim))
+        {
+            statsWeapon = DeathTypes.IsWeapon(deathType)
+                ? DeathTypes.WeaponNetNameOf(deathType)
+                : Inventory.CurrentWeapon(statsAttacker)?.NetName;
+            if (statsWeapon is not null)
+                weaponStats.Record(statsAttacker, statsVictim, statsWeapon, dhRemoved + daRemoved, killed: false);
+        }
+
         bool forbidLoggingDamage;
         {
             var pd = new MutatorHooks.PlayerDamagedArgs(attacker, targ, dhRemoved, daRemoved, hitLoc, deathType, damage);
@@ -686,7 +728,11 @@ public sealed class DamageSystem : IDamageSystem
 
         // --- death check (QC player.qc ~450): health < 1 ---
         if (targ.GetResource(ResourceType.Health) < 1f)
+        {
+            if (statsWeapon is not null && targ.DeadState == DeadFlag.No)
+                weaponStats!.Record(statsAttacker!, statsVictim!, statsWeapon, 0f, killed: true);
             Killed(targ, inflictor, attacker, deathType, damage, take, save, hitLoc, force);
+        }
 
         _ = initialHealth; // (parity: QC uses it for the armor-impact "don't play if fatal" sound)
     }
@@ -702,6 +748,21 @@ public sealed class DamageSystem : IDamageSystem
     {
         if (victim.DeadState != DeadFlag.No)
             return; // already dying/dead (e.g. re-entrant corpse damage)
+
+        if (victim.ClassName == PlayerBody.ClassName)
+        {
+            // QC gibs body copies on death since their original animation is baked in.
+            victim.IsCorpse = true;
+            victim.DeadState = DeadFlag.Dead;
+            victim.MoveType = victim.MoveType == MoveType.Noclip ? MoveType.Noclip : MoveType.Toss;
+            victim.Flags &= ~EntFlags.OnGround;
+            PlayerCorpseDamage(victim, inflictor, deathType, MathF.Max(0f, damage - take - save), hitLoc, force);
+            PlayerCorpseDamage(victim, inflictor, deathType, GibHealth + 1f, hitLoc, force);
+            victim.DamagedByContents = false;
+            victim.Think = static body => Api.Entities.Remove(body);
+            victim.NextThink = Now() + 6f + Prandom.Float();
+            return;
+        }
 
         // Diagnostic: who/what/where of every kill, so an unexpected death (fell into lava off a patch grate,
         // a void/trigger_hurt off a platform, a telefrag) can be correlated with a location. Developer-gated.
@@ -771,7 +832,8 @@ public sealed class DamageSystem : IDamageSystem
         // on death so a victim's burning/stunned/superweapon timers don't survive into the corpse/respawn
         // (NORMAL removal — plays each effect's removal sound). Status effects are always-on (not a gated
         // mutator in the port), so this is wired on the unconditional death path rather than the hook bus.
-        StatusEffectsCatalog.RemoveAll(victim, StatusEffectRemoval.Normal);
+        StatusEffectsCatalog.RemoveAll(victim, StatusEffectRemoval.Normal,
+            except: victim.GetResource(ResourceType.Health) >= 1f ? death.StatusEffectToKeep : null);
         float excess = MathF.Max(0f, damage - take - save);
 
         // A gametype hook (e.g. Freeze Tag) may have resuscitated the player to HP>=1 — then don't die.
@@ -814,6 +876,8 @@ public sealed class DamageSystem : IDamageSystem
         victim.Flags &= ~EntFlags.OnGround;   // don't stick to the floor
         victim.DeadState = DeadFlag.Dying;    // dying animation (commits to DEAD across frames)
         victim.IsCorpse = true;               // route further hits to PlayerCorpseDamage
+        if (victim is Player player)
+            player.CorpseHullPending = true;
 
         // [W14b Stage 4] animdecide DIE set-site (QC player.qc:571-575): on death, select DIE1 vs DIE2 by
         // random()<0.5 — the SAME roll QC uses (animdecide_setstate ANIMSTATE_DEAD1/DEAD2). These are NEVER windowed:
@@ -831,9 +895,35 @@ public sealed class DamageSystem : IDamageSystem
         victim.NextThink = 0f;
 
         // QC: run the corpse damage with the leftover damage so an overkill hit gibs immediately.
-        PlayerCorpseDamage(victim, inflictor, attacker, deathType, excess);
+        PlayerCorpseDamage(victim, inflictor, deathType, excess, hitLoc, force);
+        if (SvGentle() > 0f || CvarBool("ekg"))
+            PlayerCorpseDamage(victim, inflictor, deathType, GibHealth + 1f, hitLoc, force);
+    }
 
-        _ = hitLoc; _ = force; // (parity: QC passes these to the gib splash, which is host-side VFX)
+    private static bool IsPlayerBody(Entity targ)
+        => targ is Player || (targ.Flags & EntFlags.Client) != 0 || targ.ClassName == PlayerBody.ClassName;
+
+    private static void EmitImpactChunks(Entity targ, float take, Vector3 hitLoc, Vector3 force)
+    {
+        if (take > 50f)
+            EffectEmitter.GibChunk(hitLoc, force * -0.1f, targ.Species);
+        if (take > 100f)
+            EffectEmitter.GibChunk(hitLoc, force * -0.2f, targ.Species);
+    }
+
+    private static void EmitSoundAttackGibs(Entity targ, Entity? inflictor, float damage, ref Vector3 hitLoc, ref Vector3 force)
+    {
+        QMath.AngleVectors(targ.Angles, out _, out Vector3 right, out _);
+        Vector3 center = targ.Origin + Vector3.UnitZ * (0.125f * targ.ViewOfs.Z + 0.875f * targ.Maxs.Z);
+        Vector3 leftEar = center - right * 10f;
+        Vector3 rightEar = center + right * 10f;
+        float bias = Vector3.Dot(QNormalize((inflictor?.Origin ?? Vector3.Zero) - targ.Origin), right);
+        Vector3 earForce = right * force.Length();
+        float amount = QClamp(damage, 0f, 25f) * 0.25f;
+        EffectEmitter.GibHit(leftEar, -earForce, amount * (1f - bias), targ.Species);
+        EffectEmitter.GibHit(rightEar, earForce, amount * (1f + bias), targ.Species);
+        hitLoc = bias > 0f ? leftEar : rightEar;
+        force = bias > 0f ? -earForce : earForce;
     }
 
     /// <summary>
@@ -847,7 +937,8 @@ public sealed class DamageSystem : IDamageSystem
         targ.Alpha = -1f;                 // fully gibbed marker
         targ.Solid = Solid.Not;
         targ.TakeDamage = DamageMode.No;
-        // VFX (Violence_GibSplash) is host-side.
+        if (IsPlayerBody(targ))
+            EffectEmitter.GibSplash(targ.Origin + targ.ViewOfs, targ.Velocity, targ.Species);
     }
 
     /// <summary>Default post-death respawn delay when no gametype hook sets one (QC calculate_player_respawn_time floor).</summary>
@@ -1098,6 +1189,9 @@ public sealed class DamageSystem : IDamageSystem
     /// </summary>
     private static float SvGentle() => Api.Services is null ? 0f : Api.Cvars.GetFloat(CvarGentle);
 
+    private static float GibHealth => Api.Services is not null && Api.Cvars.Has(CvarGibHealth)
+        ? Api.Cvars.GetFloat(CvarGibHealth) : DefGibHealth;
+
     /// <summary>
     /// QC <c>sound_allowed(MSG_BROADCAST, attacker)</c> (server/g_damage.qc): whether a hit sound may be
     /// broadcast. The full QC check suppresses sounds when the attacker is a non-networked/internal entity; the
@@ -1129,7 +1223,7 @@ public sealed class DamageSystem : IDamageSystem
     private void EmitPainSound(Entity targ, Entity? attacker, string deathType, float take)
     {
         if (SvGentle() >= 1f) return;
-        if (targ.IsCorpse) return;                 // QC: classname != "body"
+        if (targ.IsCorpse || targ.ClassName == PlayerBody.ClassName) return;
         if (!SoundAllowedBroadcast(attacker)) return;
 
         float myhp = targ.GetResource(ResourceType.Health); // QC reads it AFTER the subtract

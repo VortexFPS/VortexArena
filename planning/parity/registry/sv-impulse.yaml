@@ -303,8 +303,8 @@ features:
       - "server/impulse.qc:409 (IMPULSE(use) -> PlayerUseKey)"
       - "server/client.qc:2620 (PlayerUseKey + trailing MUTATOR_CALLHOOK(PlayerUseKey))"
       - "server/client.qc:2691 (PlayerPreThink +use rising edge)"
-      - "server/mutators/mutator/gamemode_ctf.qc:2452 (ctf PlayerUseKey hook)"
-      - "server/mutators/mutator/gamemode_onslaught.qc:1990 (ons PlayerUseKey hook)"
+      - "common/gametypes/gametype/ctf/sv_ctf.qc:PlayerUseKey"
+      - "common/gametypes/gametype/onslaught/sv_onslaught.qc:PlayerUseKey"
     port_refs:
       - "src/VortexArena.Server/Commands.cs:2191 (imp==21 -> VehicleBoarding.UseKey + Ctf.HandleUseKey / Onslaught.HandleUseKey)"
       - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:74 (UseKey)"

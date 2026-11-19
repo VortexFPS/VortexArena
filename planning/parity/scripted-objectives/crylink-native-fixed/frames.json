@@ -1,0 +1,50 @@
+[
+  {
+    "seconds": 15.657,
+    "frame": "RedProbe/0083.webp",
+    "sample": 15.592,
+    "label": "before"
+  },
+  {
+    "seconds": 16.017,
+    "frame": "RedProbe/0089.webp",
+    "sample": 15.985,
+    "label": "flight-a"
+  },
+  {
+    "seconds": 16.248,
+    "frame": "RedProbe/0092.webp",
+    "sample": 16.18,
+    "label": "flight-b"
+  },
+  {
+    "seconds": 16.411,
+    "frame": "RedProbe/0095.webp",
+    "sample": 16.378,
+    "label": "fade-a"
+  },
+  {
+    "seconds": 16.606,
+    "frame": "RedProbe/0098.webp",
+    "sample": 16.574,
+    "label": "fade-b"
+  },
+  {
+    "seconds": 17.458,
+    "frame": "RedProbe/0111.webp",
+    "sample": 17.425,
+    "label": "expired"
+  },
+  {
+    "seconds": 16.43,
+    "frame": "BlueProbe/0053.webp",
+    "sample": 16.393,
+    "label": "shooter-full"
+  },
+  {
+    "seconds": 16.719,
+    "frame": "BlueProbe/0055.webp",
+    "sample": 16.653,
+    "label": "shooter-fade"
+  }
+]

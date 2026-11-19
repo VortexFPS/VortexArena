@@ -190,27 +190,13 @@ public static class SpawnSystem
     public static System.Func<Entity, bool>? SpotEvalReject;
 
     /// <summary>
-    /// Port of <c>race_spawns</c> (server/race.qh:16): when true, the Race gametype has registered at least one
-    /// <c>trigger_race_checkpoint</c> that was linked with <c>spawn_evalfunc = trigger_race_checkpoint_spawn_evalfunc</c>
-    /// (server/race.qc:1241 <c>++race_spawns</c>; spawnpoints.qc:246 <c>if(race_spawns) if(!spot.target) return '-1 0 0'</c>).
-    /// A spawnpoint without a target is always rejected on the target-checking path when this is true — only spots
-    /// targeting a checkpoint entity (and passing the checkpoint's spawn_evalfunc) are valid race spawns. Set by
-    /// <see cref="Race.Activate"/> when the map has at least one checkpoint; cleared by
-    /// <see cref="ResetTeamSpawns"/> on map/mode change and by <see cref="Race.Deactivate"/>. Non-race maps leave
-    /// this false, so the gate is a no-op in DM/CTF/etc.
+    /// Set when the map spawns a Race start or checkpoint spot. Such maps require a target even on
+    /// the emergency pass without target evaluation (server/spawnpoints.qc:246).
     /// </summary>
     public static bool RaceSpawnsActive;
 
-    /// <summary>
-    /// Port of the score-rewriting branch of <c>spawn_evalfunc</c> (server/spawnpoints.qc:285:
-    /// <c>spawn_score = targ.spawn_evalfunc(targ, player, spot, spawn_score)</c>): unlike the REJECT path
-    /// (<see cref="SpotEvalReject"/>), this delegate ADDS a priority delta to the spot's score. Race uses it to
-    /// apply <c>SPAWN_PRIO_RACE_PREVIOUS_SPAWN = 50</c> when the spot is the player's last passed checkpoint
-    /// (<c>trigger_race_checkpoint_spawn_evalfunc</c>, server/race.qc:1071). The delegate receives the spot and
-    /// the spawning player; it returns a prio delta (0 = no change, positive = boost). Null = no score adjustment.
-    /// Only consulted on the target-checking spawn path. The active gametype installs this in Activate and clears
-    /// it in Deactivate; <see cref="ResetTeamSpawns"/> also clears it on map/mode change.
-    /// </summary>
+    /// <summary>Race target evaluation for a particular racer. Return a priority bonus or a negative
+    /// value to reject the spot. Only used on the target-checking pass.</summary>
     public static System.Func<Entity, Player, float>? SpotEvalScore;
 
     /// <summary>
@@ -575,17 +561,8 @@ public static class SpawnSystem
         // spawn-control lever Base doesn't have. NoMonsters restores Base's intent (players can't displace spots)
         // while STILL rejecting a spot covered by a closed func_door/plat (Solid.Bsp clips under NoMonsters —
         // WorldOnly would skip those and spawn the player inside the door). Occupied spots are policy (R5), not here.
-        if (Api.Services is not null)
-        {
-            Vector3 place = spot.Origin + new Vector3(0f, 0f, 1f - PlayerMins.Z - 24f);
-            TraceResult bad = Api.Trace.Trace(place, PlayerMins, PlayerMaxs, place, MoveFilter.NoMonsters, forPlayer);
-            if (bad.StartSolid)
-            {
-                if (!CvarBool("g_spawnpoints_auto_move_out_of_solid", true)
-                    || !RelocateSpawnOutOfSolid(spot, forPlayer))
-                    return (-1f, 0f); // couldn't get out of solid (or relocation disabled) — drop the spot
-            }
-        }
+        if (!CanPlaceSpawn(spot, forPlayer))
+            return (-1f, 0f);
 
         // QC seeds 'shortest' with vlen(world.maxs - world.mins); without world bounds here we use a large
         // constant so a spot with no nearby players still gets a high (good) weight.
@@ -624,13 +601,13 @@ public static class SpawnSystem
         // into the same fight" loop and the killer's re-aim camp. Off by default (a pure divergence from Base).
         prio = MathF.Max(0f, prio - DeathAvoidPenalty(forPlayer, spot));
 
-        // QC Spawn_Score spawn_evalfunc score-rewriting branch (server/spawnpoints.qc:285): after computing the base
-        // (prio, weight), pass the score through any installed spawn_evalfunc that can ADD to the priority (rather than
-        // just veto the spot). Race installs trigger_race_checkpoint_spawn_evalfunc (server/race.qc:1055/1071) which
-        // adds SPAWN_PRIO_RACE_PREVIOUS_SPAWN=50 when the spot is the player's last passed checkpoint, biasing the
-        // scorer toward respawning the racer at the checkpoint they most recently crossed. Only on the target-check path.
         if (targetCheck && SpotEvalScore is not null)
-            prio += SpotEvalScore(spot, forPlayer);
+        {
+            float adjustment = SpotEvalScore(spot, forPlayer);
+            if (adjustment < 0f)
+                return (-1f, 0f);
+            prio += adjustment;
+        }
 
         // MUTATOR_CALLHOOK(Spawn_Score, player, spawn_spot, spawn_score) — server/spawnpoints.qc Spawn_Score.
         // Mutators bias a spot's priority here: spawn_unique demotes a repeat spot, spawn_near_teammate
@@ -642,6 +619,17 @@ public static class SpawnSystem
         shortest = ss.Weight;
 
         return (prio, shortest);
+    }
+
+    internal static bool CanPlaceSpawn(Entity spot, Entity? ignore = null)
+    {
+        if (Api.Services is null)
+            return true;
+
+        Vector3 place = spot.Origin + new Vector3(0f, 0f, 1f - PlayerMins.Z - 24f);
+        TraceResult trace = Api.Trace.Trace(place, PlayerMins, PlayerMaxs, place, MoveFilter.NoMonsters, ignore);
+        return !trace.StartSolid || (CvarBool("g_spawnpoints_auto_move_out_of_solid", true)
+            && RelocateSpawnOutOfSolid(spot, ignore));
     }
 
     /// <summary>
@@ -942,7 +930,7 @@ public static class SpawnSystem
     /// The trace is the PutPlayerInServer placement box (player hull at spot.origin + the z-nudge), so a success
     /// here guarantees the player lands clear.
     /// </summary>
-    private static bool RelocateSpawnOutOfSolid(Entity spot, Player forPlayer)
+    private static bool RelocateSpawnOutOfSolid(Entity spot, Entity? forPlayer)
     {
         if (Api.Services is null)
             return false;
@@ -984,7 +972,7 @@ public static class SpawnSystem
     /// state, give the starting loadout, clear the dead state, and place it at <paramref name="sp"/>.
     /// Faithfully mirrors the QC field assignments in order; deferred mechanics flagged inline.
     /// </summary>
-    public static void PutPlayerInServer(Player p, SpawnPoint sp, bool warmup = false)
+    public static void PutPlayerInServer(Player p, SpawnPoint sp, bool warmup = false, bool? restartAfterCountdown = null)
     {
         // --- physics / solidity (QC: set_movetype WALK; solid SLIDEBOX; takedamage AIM; flags FL_CLIENT) ---
         p.MoveType = MoveType.Walk;
@@ -999,6 +987,7 @@ public static class SpawnSystem
         // reset. Without this, after the first death+respawn the player stayed flagged a corpse forever: it could
         // never re-enter PlayerDamage (so it couldn't die again or award a frag) and was bullet-penetrable.
         p.IsCorpse = false;
+        p.CorpseHullPending = false;
         // [W14b Stage 4] QC PutPlayerInServer: animdecide_setstate(this, 0, false) (player.qc:150) clears the death
         // anim state on (re)spawn. The port's upper-action latch carries the DIE1/DIE2 overlay (set on death, never
         // windowed), so it MUST be cleared here or GetUpperAnim would keep returning DEAD priority on the live
@@ -1132,6 +1121,7 @@ public static class SpawnSystem
         // QC client.qc:690 `this.spawn_time = time;` — stamp the player's most-recent spawn time for the CTS
         // trigger_multiple per-client wait buffer ("haven't respawned since triggering" check in multi_trigger).
         p.SpawnTime = now;
+        p.SpawnParity = !p.SpawnParity;
         // Honor an explicit g_spawnshieldtime 0 (disable the shield) — CvarOr distinguishes unset from 0 (SPAWN5).
         p.SpawnShieldExpire = now + CvarOr(CvarSpawnShieldTime, DefSpawnShieldTime);
 
@@ -1149,11 +1139,11 @@ public static class SpawnSystem
         // the pre-match countdown is running and the player is frozen. Without this a player who spawns at the
         // start of a countdown has already burned through their rot-pause by the time the match goes live.
         // StartItem.GameStartTimeProvider is the same host-wired seam DamageSystem/CampcheckMutator etc. use
-        // for game_starttime; sv_ready_restart_after_countdown is read via the cvar facade (default 0).
+        // for game_starttime. The server supplies the effective level restart rule.
         float gameStartTime = StartItem.GameStartTimeProvider?.Invoke() ?? 0f;
         if (gameStartTime > now)
         {
-            bool afterCountdown = CvarOr("sv_ready_restart_after_countdown", 0f) != 0f;
+            bool afterCountdown = restartAfterCountdown ?? (CvarOr("sv_ready_restart_after_countdown", 0f) != 0f);
             if (!afterCountdown)
             {
                 float countdownRemaining = gameStartTime - now;
@@ -1253,9 +1243,7 @@ public static class SpawnSystem
         // QC world.qc:2004-2006: s = cvar_string("g_weaponarena"); MUTATOR_CALLHOOK(SetWeaponArena, s);
         // The arena string defaults to the g_weaponarena cvar; a gametype/mutator overrides it in its hook
         // (CA/LMS force "most", Mayhem "most_available"; instagib/overkill/melee force "off").
-        var arenaArgs = new MutatorHooks.SetWeaponArenaArgs(CvarStr("g_weaponarena"));
-        MutatorHooks.SetWeaponArena.Call(ref arenaArgs);
-        WepSet arena = ExpandWeaponArena(arenaArgs.Arena, out bool arenaActive);
+        WepSet arena = ExpandWeaponArena(ResolveWeaponArena(), out bool arenaActive);
 
         if (arenaActive)
         {
@@ -1292,6 +1280,12 @@ public static class SpawnSystem
         return args.Loadout;
     }
 
+    private static string ResolveWeaponArena() => MutatorHooks.FireSetWeaponArena(CvarStr("g_weaponarena"));
+
+    internal static bool WeaponArenaActive() => IsWeaponArena(ResolveWeaponArena());
+
+    private static bool IsWeaponArena(string arena) => !string.IsNullOrEmpty(arena) && arena is not ("0" or "off");
+
     /// <summary>
     /// Port of the <c>g_weaponarena</c> string → weapon-set expansion in <c>readplayerstartcvars()</c>
     /// (server/world.qc:2009-2083). Resolves the arena keyword (or a space-separated weapon-name list) to the
@@ -1315,12 +1309,11 @@ public static class SpawnSystem
     /// </summary>
     public static WepSet ExpandWeaponArena(string arena, out bool active)
     {
-        active = false;
+        active = IsWeaponArena(arena);
         var set = new WepSet();
-        if (string.IsNullOrEmpty(arena) || arena == "0" || arena == "off")
+        if (!active)
             return set; // no arena — caller keeps the stock start weapons
 
-        active = true;
         switch (arena)
         {
             case "all":
@@ -1477,9 +1470,7 @@ public static class SpawnSystem
         // QC world.qc:2130: with an active weapon arena, warmup_start_weapons = start_weapons — warmup mirrors
         // the live arena set (CA/LMS/Mayhem keep their full arsenal in warmup). Run the SetWeaponArena seam to
         // see if an arena is in force before the allguns/normal split below.
-        var warmArenaArgs = new MutatorHooks.SetWeaponArenaArgs(CvarStr("g_weaponarena"));
-        MutatorHooks.SetWeaponArena.Call(ref warmArenaArgs);
-        WepSet warmArena = ExpandWeaponArena(warmArenaArgs.Arena, out bool warmArenaActive);
+        WepSet warmArena = ExpandWeaponArena(ResolveWeaponArena(), out bool warmArenaActive);
         var warmFlags = new StartLoadout();
         var warmupLoadout = new StartLoadout();
 

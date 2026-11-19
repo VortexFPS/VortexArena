@@ -1,0 +1,12 @@
+[S1Probe] Alpha slot=-1 net=1 team=13 spectatee=1 region=-1 pref=False origin=<1040, 240, 0> serverTime=10.53
+[S1Probe] Alpha slot=-1 net=1 team=13 spectatee=0 region=-1 pref=False origin=<-1040, -448, 9> serverTime=11.52
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=False origin=<464, 528, 0> serverTime=22.05
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=True origin=<464, 528, 0> serverTime=22.98
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=True origin=<-1184, 1248, 1> serverTime=23.03
+[S1Probe] Alpha slot=-1 net=1 team=4 spectatee=0 region=-1 pref=False origin=<-1040, -448, -7.9687505> serverTime=23.11
+[S1Probe] Alpha slot=-1 net=1 team=4 spectatee=0 region=282 pref=False origin=<-224, -88, -45> serverTime=26.52
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=1 region=282 pref=True origin=<-224, -88, -45> serverTime=26.95
+[S1Probe] Alpha slot=-1 net=1 team=4 spectatee=0 region=-1 pref=False origin=<-1190, 949, 116> serverTime=27.36
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=1 region=-1 pref=True origin=<-1190, 949, 116> serverTime=27.36
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=True origin=<-1090.1079, 949, 152> serverTime=27.78
+[S1Probe] Alpha slot=-1 net=1 team=4 spectatee=0 region=282 pref=False origin=<-224, -88, -45> serverTime=28.20

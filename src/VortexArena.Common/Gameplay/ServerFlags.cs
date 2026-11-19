@@ -1,6 +1,6 @@
 // Port of the QC `serverflags` global + its SERVERFLAG_* bit table (qcsrc/common/constants.qh:14-20),
-// set by readlevelcvars (qcsrc/server/world.qc:2189-2195) and read by the client to gate fullbright player
-// rendering (client/view.qc:1115) and the item-pickup timer (client/hud/panel/pickup.qc:91).
+// set by readlevelcvars (qcsrc/server/world.qc:2189-2195) and read by the client to gate the night-vision
+// overlay (client/view.qc:1115) and the item-pickup timer (client/hud/panel/pickup.qc:91).
 //
 // In QC `serverflags` is an engine-networked server global (the engine does NOT clear it on gotomap). The
 // port has no engine `serverflags`, so the world-rules layer publishes the computed value here AND mirrors it
@@ -16,11 +16,11 @@ namespace VortexArena.Common.Gameplay;
 /// QC <c>serverflags</c> (server/world.qc) + the <c>SERVERFLAG_*</c> bit table (common/constants.qh). The
 /// world-rules <c>readlevelcvars</c> port (GameWorld.ReadLevelCvars) sets <see cref="Value"/> from the
 /// <c>sv_allow_fullbright</c> / <c>sv_forbid_pickuptimer</c> cvars and mirrors it into the <c>serverflags</c>
-/// cvar so the client (sharing the store on a listen server) can gate fullbright rendering and the pickup timer.
+/// cvar for the shared-store pickup timer. ClientInit carries the flags over the wire.
 /// </summary>
 public static class ServerFlags
 {
-    /// <summary>QC <c>SERVERFLAG_ALLOW_FULLBRIGHT = BIT(0)</c>: the server permits client-side fullbright player rendering.</summary>
+    /// <summary>QC <c>SERVERFLAG_ALLOW_FULLBRIGHT = BIT(0)</c>: the server permits fullbright and fakelight without the night-vision overlay.</summary>
     public const int AllowFullbright = 1 << 0;
 
     /// <summary>QC <c>SERVERFLAG_TEAMPLAY = BIT(1)</c>.</summary>
@@ -37,8 +37,7 @@ public static class ServerFlags
 
     /// <summary>
     /// The live server-flags bitfield (QC <c>serverflags</c>). Published by the world-rules layer at map init
-    /// (and re-published on a level-cvar change). Client render/HUD code reads it via the cvar mirror; server
-    /// code can read this directly.
+    /// (and re-published on a level-cvar change). ServerNet sends it to native clients in ClientInit.
     /// </summary>
     public static int Value { get; set; }
 }

@@ -1,0 +1,288 @@
+DarkPlaces Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+Game is Xonotic using gamedir data
+gamename for server filtering: Xonotic
+Package /tmp/va-paired-20261119/published-freeze-original/original/data/shared.pk3 contains the file models/xonotic_jumppad01/xonotic_jumppads01_readme.txt several times
+Package /tmp/va-paired-20261119/published-freeze-original/original/data/shared.pk3 contains the file textures/phillipk1x/_GPL.txt several times
+Package /tmp/va-paired-20261119/published-freeze-original/original/data/shared.pk3 contains the file textures/phillipk1x/_readme.txt several times
+Package /tmp/va-paired-20261119/published-freeze-original/original/data/shared.pk3 contains the file textures/phillipk2x/_GPL.txt several times
+Package /tmp/va-paired-20261119/published-freeze-original/original/data/shared.pk3 contains the file textures/phillipk2x/_readme.txt several times
+Current nice level is below the soft limit - cannot use niceness
+-ip option used, setting net_address to "127.0.0.1"
+-port option used, setting port cvar to 28090
+Loaded library "libcurl.so.4"
+Skeletal animation uses SSE code path
+execing quake.rc
+execing default.cfg
+execing xonotic-common.cfg
+Unknown command "r_textbrightness"
+Unknown command "r_textcontrast"
+execing commands.cfg
+execing help.cfg
+execing xonotic-server.cfg
+"maxplayers" set to "16"
+execing testing.cfg
+execing balance-xonotic.cfg
+execing bal-wep-xonotic.cfg
+execing physicsX.cfg
+execing turrets.cfg
+execing vehicles.cfg
+execing gametypes-server.cfg
+execing ctfscoring-samual.cfg
+execing mutators.cfg
+execing randomitems-xonotic.cfg
+execing monsters.cfg
+execing minigames.cfg
+execing physics.cfg
+execing help-xonotic.cfg
+couldn't exec cdtracks.cfg
+execing notifications.cfg
+execing data/campaign.cfg
+execing autoexec/empty.cfg
+execing autoexec.cfg
+SpawnServer: stormkeep
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Server listening on address 127.0.0.1:28090
+Server listening on address [0:0:0:0:0:0:0:0]:28090
+server: program loaded (crc 51381, size 6720K)
+[::SVQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+:gamestart:ft_stormkeep:0.1795052074.442220
+:gameinfo:mutators:LIST:Buffs:vortex arena:norecoil
+:gameinfo:end
+Server spawned.
+Unknown command "crypto_keygen"
+execing post-config.cfg
+ParityProbe is connecting...
+ParityProbe connected
+:join:1:1:127.0.0.1:ParityProbe
+ParityProbe connected
+:team:1:-1:4
+[BOT]Toxic connected
+:join:2:2:bot:[BOT]Toxic
+:team:2:-1:4
+:team:2:14:2
+[BOT]Toxic is now playing on the BLUE team
+[BOT]Discovery connected
+:join:3:3:bot:[BOT]Discovery
+:team:3:-1:4
+:team:3:5:2
+[BOT]Discovery is now playing on the RED team
+[BOT]Shadow connected
+:join:4:4:bot:[BOT]Shadow
+:team:4:-1:4
+:team:4:5:2
+[BOT]Shadow is now playing on the RED team
+Server lag report: 27.8% CPU, 22.01% lost, offset avg 2.4ms, max 100.0ms, sdev 6.6ms
+saved 847 waypoint links to maps/stormkeep.waypoints.cache
+:team:1:14:2
+ParityProbe is now playing on the BLUE team
+:startdelay_ended
+host:     Xonotic git Server
+version:  Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+protocol: 3504 (DP7)
+map:      stormkeep
+timing:   10.1% CPU, 0.00% lost, offset avg 5.6ms, max 78.0ms, sdev 6.5ms
+players:  4 active (16 max)
+
+#1   ParityProbe         0   0:00:21
+   127.0.0.1:51615
+#2   [BOT]Toxic          0   0:00:14
+   botclient
+#3   [BOT]Discovery      0   0:00:13
+   botclient
+#4   [BOT]Shadow         0   0:00:13
+   botclient
+ParityProbe couldn't take it anymore
+:kill:suicide:1:1:type=KILL:items=8-1
+ParityProbe froze themselves
+g_buffs is "1" ["-1"] enable buffs; \"-1\" = enabled but no auto location or replacing powerups, \"1\" = enabled and can replace them
+g_buffs_random_location is "0" ["0"] randomize buff location on start and when reset
+g_buffs_randomize is "0" ["0"] randomize buff type when a player drops the buff and when initially spawning it; "1" = randomize in non-team gametypes, "2" = randomize in team gametypes, "3" = randomize in both
+g_buffs_replace_powerups is "1" ["0"] replace powerups on the map with random buffs
+g_freezetag_frozen_maxtime is "12" ["60"] frozen players will be automatically unfrozen after this time in seconds
+g_freezetag_revive_auto is "1" ["1"] automatically revive frozen players after some time (g_freezetag_frozen_maxtime)
+g_freezetag_revive_auto_progress is "1" ["1"] start the automatic reviving progress as soon as the player gets frozen
+g_freezetag_warmup is "5" ["10"] time players get to run around before the round starts
+g_freezetag_weaponarena is "vortex" ["most_available"] starting weapons. takes the same options as g_weaponarena
+g_spawnshieldtime is "0" ["1"] number of seconds players are invincible after they spawn. this shield is lost after they fire
+g_warmup is "0" ["0"] splits the game into warmup and match stages; "1" = the match starts when g_warmup_majority_factor of players are ready OR g_warmup_limit is hit; >1 also requires at least g_warmup players (including bots) to join; "-1" = that minimum player requrement is set by the map (lower bound of 2 or 2 per team)
+g_weaponarena is "vortex" ["0"] put in a list of weapons to enable a weapon arena mode, or try "all", "most", "all_available", or "most_available" (available only gives the weapon if the map normally has it as a pickup item)
+skill is "5" ["8"] difficulty level of game, affects monster layouts in levels, 0 = easy, 1 = normal, 2 = hard, 3 = nightmare (same layout as hard but monsters fire twice)
+sv_cheats is "1" ["0"] enables cheat commands in any game, and cheat impulses in dpmod
+sv_eventlog is "1" ["0"] enable event logging
+sv_public is "0" ["1"] 1: advertises this server on the master server (so that players can find it in the server browser); 0: allow direct queries only; -1: do not respond to direct queries; -2: do not allow anyone to connect; -3: already block at getchallenge level
+host:     Xonotic git Server
+version:  Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+protocol: 3504 (DP7)
+map:      stormkeep
+timing:   9.1% CPU, 0.00% lost, offset avg 5.8ms, max 30.6ms, sdev 4.3ms
+players:  4 active (16 max)
+
+#1   ParityProbe        -1   0:00:35
+   127.0.0.1:51615
+#2   [BOT]Toxic          0   0:00:28
+   botclient
+#3   [BOT]Discovery      0   0:00:26
+   botclient
+#4   [BOT]Shadow         0   0:00:26
+   botclient
+ParityProbe was revived by [BOT]Toxic
+:ft:revival:1:2
+g_buffs is "1" ["-1"] enable buffs; \"-1\" = enabled but no auto location or replacing powerups, \"1\" = enabled and can replace them
+g_buffs_random_location is "0" ["0"] randomize buff location on start and when reset
+g_buffs_randomize is "0" ["0"] randomize buff type when a player drops the buff and when initially spawning it; "1" = randomize in non-team gametypes, "2" = randomize in team gametypes, "3" = randomize in both
+g_buffs_replace_powerups is "1" ["0"] replace powerups on the map with random buffs
+g_freezetag_frozen_maxtime is "12" ["60"] frozen players will be automatically unfrozen after this time in seconds
+g_freezetag_revive_auto is "1" ["1"] automatically revive frozen players after some time (g_freezetag_frozen_maxtime)
+g_freezetag_revive_auto_progress is "1" ["1"] start the automatic reviving progress as soon as the player gets frozen
+g_freezetag_warmup is "5" ["10"] time players get to run around before the round starts
+g_freezetag_weaponarena is "vortex" ["most_available"] starting weapons. takes the same options as g_weaponarena
+g_spawnshieldtime is "0" ["1"] number of seconds players are invincible after they spawn. this shield is lost after they fire
+g_warmup is "0" ["0"] splits the game into warmup and match stages; "1" = the match starts when g_warmup_majority_factor of players are ready OR g_warmup_limit is hit; >1 also requires at least g_warmup players (including bots) to join; "-1" = that minimum player requrement is set by the map (lower bound of 2 or 2 per team)
+g_weaponarena is "vortex" ["0"] put in a list of weapons to enable a weapon arena mode, or try "all", "most", "all_available", or "most_available" (available only gives the weapon if the map normally has it as a pickup item)
+skill is "5" ["8"] difficulty level of game, affects monster layouts in levels, 0 = easy, 1 = normal, 2 = hard, 3 = nightmare (same layout as hard but monsters fire twice)
+sv_cheats is "1" ["0"] enables cheat commands in any game, and cheat impulses in dpmod
+sv_eventlog is "1" ["0"] enable event logging
+sv_public is "0" ["1"] 1: advertises this server on the master server (so that players can find it in the server browser); 0: allow direct queries only; -1: do not respond to direct queries; -2: do not allow anyone to connect; -3: already block at getchallenge level
+host:     Xonotic git Server
+version:  Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+protocol: 3504 (DP7)
+map:      stormkeep
+timing:   8.6% CPU, 0.00% lost, offset avg 4.6ms, max 20.1ms, sdev 4.0ms
+players:  4 active (16 max)
+
+#1   ParityProbe        -1   0:00:53
+   127.0.0.1:51615
+#2   [BOT]Toxic          1   0:00:46
+   botclient
+#3   [BOT]Discovery      0   0:00:45
+   botclient
+#4   [BOT]Shadow         0   0:00:45
+   botclient
+:kill:frag:2:3:type=8:items=8-1:victimitems=8-1
+[BOT]Toxic drew first blood! 
+[BOT]Discovery has been vaporized by [BOT]Toxic's Vortex
+[BOT]Discovery was frozen by [BOT]Toxic
+Client "ParityProbe" dropped (Disconnect by user)
+:part:1
+ParityProbe disconnected
+:anticheat:_time:1:63.950100
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+ParityProbe left the game (Disconnect by user)
+Client "[BOT]Shadow" dropped (Client dropped)
+:part:4
+[BOT]Shadow disconnected
+:anticheat:_time:4:63.965725
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+Client "[BOT]Discovery" dropped (Client dropped)
+:part:3
+[BOT]Discovery disconnected
+:anticheat:_time:3:63.965725
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+Client "[BOT]Toxic" dropped (Client dropped)
+:part:2
+[BOT]Toxic disconnected
+:anticheat:_time:2:63.965725
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+Round tied
+g_buffs is "1" ["-1"] enable buffs; \"-1\" = enabled but no auto location or replacing powerups, \"1\" = enabled and can replace them
+g_buffs_random_location is "0" ["0"] randomize buff location on start and when reset
+g_buffs_randomize is "0" ["0"] randomize buff type when a player drops the buff and when initially spawning it; "1" = randomize in non-team gametypes, "2" = randomize in team gametypes, "3" = randomize in both
+g_buffs_replace_powerups is "1" ["0"] replace powerups on the map with random buffs
+g_freezetag_frozen_maxtime is "12" ["60"] frozen players will be automatically unfrozen after this time in seconds
+g_freezetag_revive_auto is "1" ["1"] automatically revive frozen players after some time (g_freezetag_frozen_maxtime)
+g_freezetag_revive_auto_progress is "1" ["1"] start the automatic reviving progress as soon as the player gets frozen
+g_freezetag_warmup is "5" ["10"] time players get to run around before the round starts
+g_freezetag_weaponarena is "vortex" ["most_available"] starting weapons. takes the same options as g_weaponarena
+g_spawnshieldtime is "0" ["1"] number of seconds players are invincible after they spawn. this shield is lost after they fire
+g_warmup is "0" ["0"] splits the game into warmup and match stages; "1" = the match starts when g_warmup_majority_factor of players are ready OR g_warmup_limit is hit; >1 also requires at least g_warmup players (including bots) to join; "-1" = that minimum player requrement is set by the map (lower bound of 2 or 2 per team)
+g_weaponarena is "vortex" ["0"] put in a list of weapons to enable a weapon arena mode, or try "all", "most", "all_available", or "most_available" (available only gives the weapon if the map normally has it as a pickup item)
+skill is "5" ["8"] difficulty level of game, affects monster layouts in levels, 0 = easy, 1 = normal, 2 = hard, 3 = nightmare (same layout as hard but monsters fire twice)
+sv_cheats is "1" ["0"] enables cheat commands in any game, and cheat impulses in dpmod
+sv_eventlog is "1" ["0"] enable event logging
+sv_public is "0" ["1"] 1: advertises this server on the master server (so that players can find it in the server browser); 0: allow direct queries only; -1: do not respond to direct queries; -2: do not allow anyone to connect; -3: already block at getchallenge level

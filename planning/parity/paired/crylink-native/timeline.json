@@ -1,0 +1,76 @@
+[
+  {
+    "elapsed": 3.129,
+    "command": "cmd join"
+  },
+  {
+    "elapsed": 12.01,
+    "server_query": "status and scenario cvars"
+  },
+  {
+    "elapsed": 18.123,
+    "command": "cmd teleporttotarget misc_teleporter_dest1"
+  },
+  {
+    "elapsed": 23.168,
+    "button": "attack down"
+  },
+  {
+    "elapsed": 23.461,
+    "frame": "0094.webp",
+    "captured_at": 23.297
+  },
+  {
+    "elapsed": 24.194,
+    "button": "attack up"
+  },
+  {
+    "elapsed": 24.57,
+    "frame": "0098.webp",
+    "captured_at": 24.194
+  },
+  {
+    "elapsed": 25.616,
+    "frame": "0102.webp",
+    "captured_at": 25.343
+  },
+  {
+    "elapsed": 28.842,
+    "frame": "0121.webp",
+    "captured_at": 28.725
+  },
+  {
+    "elapsed": 29.12,
+    "button": "attack down"
+  },
+  {
+    "elapsed": 30.011,
+    "button": "attack up"
+  },
+  {
+    "elapsed": 31.323,
+    "frame": "0140.webp",
+    "captured_at": 31.208
+  },
+  {
+    "elapsed": 35.087,
+    "button": "attack down"
+  },
+  {
+    "elapsed": 35.255,
+    "frame": "0168.webp",
+    "captured_at": 35.087
+  },
+  {
+    "elapsed": 36.165,
+    "button": "attack up"
+  },
+  {
+    "elapsed": 40.118,
+    "server_query": "status and scenario cvars"
+  },
+  {
+    "elapsed": 42.073,
+    "command": "quit"
+  }
+]

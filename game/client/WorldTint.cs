@@ -70,6 +70,12 @@ public static class WorldTint
     private const string ModelLightGammaCvar = "r_model_light_gamma";
 
     private static bool _registered;
+    private static bool _unlitMap;
+    private static readonly StringName DebugLightingUniform = "native_debug_lighting";
+    private static Vector2 _debugLighting;
+
+    internal static bool FullbrightRequested => MenuState.Cvars.GetFloat("r_fullbright") != 0;
+    internal static int FakelightMode => (int)MenuState.Cvars.GetFloat("r_fakelight");
 
     // Baseline (map/code-driven) effective multipliers, and the value last actually pushed to each global (so a
     // per-frame poll that computes the same value doesn't spam RenderingServer). A separate "cvar active" flag per
@@ -127,6 +133,8 @@ public static class WorldTint
             "deluxe_enabled", RenderingServer.GlobalShaderParameterType.Float, 1.0f);
         RenderingServer.GlobalShaderParameterAdd(
             "world_nolightmaps", RenderingServer.GlobalShaderParameterType.Float, 0.0f);
+        RenderingServer.GlobalShaderParameterAdd(
+            DebugLightingUniform, RenderingServer.GlobalShaderParameterType.Vec2, Vector2.Zero);
         // A legacy session's frame buffer convention (DisplayFramebuffer); 0 everywhere else.
         RenderingServer.GlobalShaderParameterAdd(
             Client.DisplayFramebuffer.Uniform, RenderingServer.GlobalShaderParameterType.Float, 0.0f);
@@ -218,6 +226,10 @@ public static class WorldTint
     public static void ApplyWorldspawn(BspData? bsp)
     {
         EnsureRegistered();
+        // DP marks Q3 maps lit from assigned lightmaps (including external pages) or non-white vertex RGB.
+        _unlitMap = bsp is not null
+            && !System.Array.Exists(bsp.Faces, face => face.LightmapIndex >= 0)
+            && !System.Array.Exists(bsp.Vertices, vertex => vertex.Color.R != 255 || vertex.Color.G != 255 || vertex.Color.B != 255);
         if (bsp is null || bsp.Entities.Count == 0)
         {
             Reset();
@@ -302,6 +314,14 @@ public static class WorldTint
             RenderingServer.GlobalShaderParameterSet("world_nolightmaps", nolm);
         }
 
+        int fakelight = FakelightMode;
+        if (FullbrightRequested)
+            SetDebugLighting(new Vector2(1f, 0f));
+        else if (fakelight >= 2 || (fakelight != 0 && _unlitMap))
+            SetDebugLighting(new Vector2(2f, CvarF("r_fakelight_intensity", 0.75f)));
+        else
+            SetDebugLighting(Vector2.Zero);
+
         // r_shadow_usenormalmap (the Effects tab's "Use normal maps"): a realtime light's N.L and specular.
         float usenormal = CvarF("r_shadow_usenormalmap", 1f) != 0f ? 1f : 0f;
         if (usenormal != _useNormalApplied)
@@ -329,6 +349,16 @@ public static class WorldTint
             _gammaApplied = gamma;
             RenderingServer.GlobalShaderParameterSet(Loaders.PlayerSkinShader.ModelLightGammaUniform, gamma);
         }
+    }
+
+    internal static void ResetDebugLighting() => SetDebugLighting(Vector2.Zero);
+
+    private static void SetDebugLighting(Vector2 state)
+    {
+        if (state == _debugLighting)
+            return;
+        _debugLighting = state;
+        RenderingServer.GlobalShaderParameterSet(DebugLightingUniform, state);
     }
 
     private static float _gammaApplied;

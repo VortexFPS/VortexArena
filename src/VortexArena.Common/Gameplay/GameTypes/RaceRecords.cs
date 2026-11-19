@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 
 namespace VortexArena.Common.Gameplay;
 
@@ -29,10 +30,10 @@ public readonly struct RaceRecordResult
 }
 
 /// <summary>
-/// The persistent race/CTS record database — the C# successor to QuakeC's <c>ServerProgsDB</c> race ranking
+/// The persistent Race, CTS and CTF record database — the C# successor to QuakeC's <c>ServerProgsDB</c> race ranking
 /// store (server/race.qc <c>race_readTime</c>/<c>race_writeTime</c>/<c>race_readPos</c>/<c>race_setTime</c>).
 /// Keys mirror QC's <c>strcat(map, record_type, field, ftos(pos))</c> scheme, so a top-<see cref="RankingsCnt"/>
-/// table of (time, owner-UID) is kept per map per record type (race vs CTS). Static + global like ServerProgsDB;
+/// table of (time, owner-UID) is kept per map per record type (Race, CTS or CTF). Static + global like ServerProgsDB;
 /// the host persists it across matches via <see cref="Export"/>/<see cref="Import"/> (e.g. to a server file).
 ///
 /// Times are stored in seconds (lower is better). A record can only be stored for a player with a persistent
@@ -40,12 +41,14 @@ public readonly struct RaceRecordResult
 /// </summary>
 public static class RaceRecords
 {
+    private static readonly UTF8Encoding FieldEncoding = new(false, true);
     /// <summary>QC RANKINGS_CNT (common/constants.qh): the number of ranked positions kept per map.</summary>
     public const int RankingsCnt = 99;
 
     /// <summary>QC RACE_RECORD / CTS_RECORD (common/util.qh): the record-type key segment.</summary>
     public const string RaceRecord = "/race100record/";
     public const string CtsRecord = "/cts100record/";
+    public const string CtfRecord = "/ctf100record/";
 
     private static readonly Dictionary<string, string> _db = new(StringComparer.Ordinal);
     // uid -> display name (QC the /uid2name/ sub-db), for naming record holders.
@@ -55,7 +58,7 @@ public static class RaceRecords
         => map + type + field + pos.ToString(CultureInfo.InvariantCulture);
 
     private static float ParseTime(string? s)
-        => string.IsNullOrEmpty(s) ? 0f : float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v : 0f;
+        => string.IsNullOrEmpty(s) ? 0f : float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) && float.IsFinite(v) && v > 0f ? v : 0f;
 
     /// <summary>QC <c>race_readTime(map, pos)</c>: the ranked time at a position (0 = none / out of range).</summary>
     public static float ReadTime(string map, string type, int pos)
@@ -72,8 +75,13 @@ public static class RaceRecords
     public static string ReadName(string map, string type, int pos)
     {
         string uid = ReadUid(map, type, pos);
-        return uid.Length == 0 ? "" : (_names.TryGetValue(uid, out string? n) ? n : uid);
+        return ReadDisplayName(uid);
     }
+
+    public static string ReadDisplayName(string uid) =>
+        uid.Length == 0 ? "" : (_names.TryGetValue(uid, out string? name) ? name : "^1Unregistered Player");
+
+    public static bool HasDisplayName(string uid) => _names.ContainsKey(uid);
 
     /// <summary>QC <c>race_readPos(map, t)</c>: the 1-based rank a time of <paramref name="t"/> would take (0 = unranked).</summary>
     public static int ReadPos(string map, string type, float t)
@@ -206,24 +214,33 @@ public static class RaceRecords
     public static void SetName(string uid, string name) { if (uid.Length != 0 && name.Length != 0) _names[uid] = name; }
 
     /// <summary>
-    /// QC <c>race_deleteTime(rank, map)</c>: delete all records up to and including a given rank (1-based),
-    /// shifting higher ranks down to fill the gap. Used by the <c>sv_cmd delrec</c> command.
+    /// QC <c>race_deleteTime(rank, map)</c>: delete one rank (1-based) and shift the remaining tail. Used by the <c>sv_cmd delrec</c> command.
     /// </summary>
     public static void DeleteTime(string map, string type, int rank)
     {
         if (rank < 1 || rank > RankingsCnt) return;
-        // Shift all records from rank+1 down to rank, pushing out the record at RankingsCnt.
-        for (int i = rank; i < RankingsCnt; i++)
+        for (int i = rank; i <= RankingsCnt; i++)
         {
-            float t = ReadTime(map, type, i + 1);
+            float time = ReadTime(map, type, i + 1);
             string uid = ReadUid(map, type, i + 1);
-            if (t > 0f)
-                WriteSlot(map, type, i, t, uid);
+            if (time > 0f && uid.Length != 0)
+                WriteSlot(map, type, i, time, uid);
             else
-                WriteSlot(map, type, i, 0f, "");
+            {
+                _db.Remove(Key(map, type, "time", i));
+                _db.Remove(Key(map, type, "uid", i));
+            }
         }
-        // Clear the last slot.
-        WriteSlot(map, type, RankingsCnt, 0f, "");
+    }
+
+    public static (float Time, string Holder) ReadCaptureBest(string map) =>
+        (_db.TryGetValue(map + "/captimerecord/time", out string? time) ? ParseTime(time) : 0f,
+         _db.TryGetValue(map + "/captimerecord/netname", out string? holder) ? holder : "");
+
+    public static void WriteCaptureBest(string map, float time, string holder)
+    {
+        _db[map + "/captimerecord/time"] = time.ToString(CultureInfo.InvariantCulture);
+        _db[map + "/captimerecord/netname"] = holder;
     }
 
     // ---- all-time best speed award (QC server/race.qc race_SpeedAwardFrame / race_SendAll) ----
@@ -239,10 +256,10 @@ public static class RaceRecords
     /// <summary>QC <c>uid2name(db_get(..., "speed/crypto_idfp"))</c>: the display name of the all-time best-speed
     /// holder for a map + record type ("" if none).</summary>
     public static string ReadSpeedAwardBestHolder(string map, string type)
-    {
-        string uid = _db.TryGetValue(map + type + "speed/crypto_idfp", out string? s) ? s : "";
-        return uid.Length == 0 ? "" : (_names.TryGetValue(uid, out string? n) ? n : uid);
-    }
+        => ReadDisplayName(ReadSpeedAwardBestUid(map, type));
+
+    public static string ReadSpeedAwardBestUid(string map, string type)
+        => _db.TryGetValue(map + type + "speed/crypto_idfp", out string? uid) ? uid : "";
 
     /// <summary>QC <c>db_put(ServerProgsDB, strcat(map, record_type, "speed/..."), ...)</c>: persist a new
     /// all-time best planar speed for a map + record type, keyed by the holder's UID.</summary>
@@ -258,23 +275,53 @@ public static class RaceRecords
     public static string Export()
     {
         var sb = new System.Text.StringBuilder();
-        foreach (var kv in _db) sb.Append("R\t").Append(kv.Key).Append('\t').Append(kv.Value).Append('\n');
-        foreach (var kv in _names) sb.Append("N\t").Append(kv.Key).Append('\t').Append(kv.Value).Append('\n');
+        foreach (var kv in _db) Append("R", kv.Key, kv.Value);
+        foreach (var kv in _names) Append("N", kv.Key, kv.Value);
         return sb.ToString();
+
+        void Append(string kind, string key, string value)
+        {
+            // Keep the existing plain TSV rows readable. Encode only fields that could split a row.
+            if (key.IndexOfAny(['\t', '\r', '\n']) >= 0 || value.IndexOfAny(['\t', '\r', '\n']) >= 0)
+            {
+                kind += "2";
+                key = Convert.ToBase64String(FieldEncoding.GetBytes(key));
+                value = Convert.ToBase64String(FieldEncoding.GetBytes(value));
+            }
+            sb.Append(kind).Append('\t').Append(key).Append('\t').Append(value).Append('\n');
+        }
     }
 
-    /// <summary>Load a DB previously produced by <see cref="Export"/> (replaces the current contents).</summary>
+    /// <summary>Load a native snapshot, preserving the current database if the file cannot be parsed.</summary>
     public static void Import(string data)
     {
-        Clear();
-        foreach (string line in data.Split('\n'))
+        var records = new Dictionary<string, string>(StringComparer.Ordinal);
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        using var reader = new System.IO.StringReader(data);
+        while (reader.ReadLine() is { } line)
         {
             if (line.Length == 0) continue;
             string[] parts = line.Split('\t');
-            if (parts.Length != 3) continue;
-            if (parts[0] == "R") _db[parts[1]] = parts[2];
-            else if (parts[0] == "N") _names[parts[1]] = parts[2];
+            if (parts.Length != 3 || parts[0] is not ("R" or "N" or "R2" or "N2"))
+                throw new FormatException("Invalid native race record row.");
+            string key = parts[1], value = parts[2];
+            if (parts[0].Length == 2)
+            {
+                try
+                {
+                    key = FieldEncoding.GetString(Convert.FromBase64String(key));
+                    value = FieldEncoding.GetString(Convert.FromBase64String(value));
+                }
+                catch (DecoderFallbackException ex)
+                {
+                    throw new FormatException("Invalid UTF-8 in encoded native race record.", ex);
+                }
+            }
+            (parts[0][0] == 'R' ? records : names)[key] = value;
         }
+        Clear();
+        foreach (var kv in records) _db.Add(kv.Key, kv.Value);
+        foreach (var kv in names) _names.Add(kv.Key, kv.Value);
     }
 
     public static void Clear() { _db.Clear(); _names.Clear(); }

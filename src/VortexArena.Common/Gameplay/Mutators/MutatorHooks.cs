@@ -164,9 +164,18 @@ public static class MutatorHooks
     public struct PlayerUseKeyArgs
     {
         public readonly Entity Player;   // MUTATOR_ARGV_0_entity
+        public bool Handled;             // MUTATOR_RETURNVALUE
         public PlayerUseKeyArgs(Entity player) { Player = player; }
     }
     public static readonly HookChain<PlayerUseKeyArgs> PlayerUseKey = new();
+
+    public static readonly HookChain<PlayerUseKeyArgs> DropSpecialItems = new();
+
+    public static void FireDropSpecialItems(Entity player)
+    {
+        var args = new PlayerUseKeyArgs(player);
+        DropSpecialItems.Call(ref args);
+    }
 
     /// <summary>
     /// Fire <see cref="PlayerUseKey"/> for a player whose +use press fell through the vehicle path (QC
@@ -176,7 +185,7 @@ public static class MutatorHooks
     public static bool FirePlayerUseKey(Entity player)
     {
         var a = new PlayerUseKeyArgs(player);
-        return PlayerUseKey.Call(ref a);
+        return PlayerUseKey.Call(ref a, ref a.Handled);
     }
 
     /// <summary>
@@ -270,6 +279,14 @@ public static class MutatorHooks
         public WeaponRateFactorArgs(float factor, Entity player) { Factor = factor; Player = player; }
     }
     public static readonly HookChain<WeaponRateFactorArgs> WeaponRateFactor = new();
+
+    public struct WeaponSpeedFactorArgs
+    {
+        public float Factor;
+        public Entity Actor;
+        public WeaponSpeedFactorArgs(float factor, Entity actor) { Factor = factor; Actor = actor; }
+    }
+    public static readonly HookChain<WeaponSpeedFactorArgs> WeaponSpeedFactor = new();
 
     /// <summary>
     /// EV_W_PlayStrengthSound (server/mutators/events.qh) — a weapon just fired its shot sound (QC

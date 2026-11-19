@@ -58,8 +58,8 @@ public partial class CenterPrintPanel : HudPanel
     private string _titleLeft = "";
     private string _titleRight = "";
 
-    /// <summary>Add a message shown for <see cref="DefaultDuration"/> seconds (QC centerprint_AddStandard).</summary>
-    public void Add(string text) => AddTimed(text, DefaultDuration);
+    /// <summary>Show a standard message for the configured hud_panel_centerprint_time.</summary>
+    public void Add(string text) => AddTimed(text, TimeCvar);
 
     /// <summary>
     /// Push a fully-formed centerprint line — the entry point the notification/net layer calls for a

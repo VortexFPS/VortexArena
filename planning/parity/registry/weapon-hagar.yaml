@@ -269,7 +269,7 @@ features:
     name: "Crosshair Hagar load ring"
     layer: [presentation]
     base_refs:
-      - "qcsrc/client/hud/panel/crosshair.qc (hagar_load ring)"
+      - "qcsrc/client/hud/crosshair.qc (hagar_load ring)"
     port_refs:
       - "game/hud/CrosshairPanel.cs:HagarLoad"
     constants:

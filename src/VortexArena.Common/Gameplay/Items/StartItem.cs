@@ -430,18 +430,13 @@ public static class StartItem
             int pickupItems = PickupItemsCvar();
             if (pickupItems > 0) return true;
             if (pickupItems == 0) return false;
-            // QC weaponarena gate: no weapon/ammo pickups in an arena (the port reads g_weaponarena as a bool).
-            if (Api.Services is not null && Api.Cvars.GetFloat("g_weaponarena") != 0f)
-            {
-                if (def.IsWeaponPickup || def.IsAmmo)
-                    return false;
-            }
+            if ((def.IsWeaponPickup || def.IsAmmo) && SpawnSystem.WeaponArenaActive())
+                return false;
         }
         return true;
     }
 
-    // QC autocvar_g_pickup_items: shipped default -1 (gametype default). In a bare port with no gametype-default
-    // computation, an UNSET cvar is treated as -1 (proceed), and the seeded default (Cvars.cs sets 1) forces spawn.
+    // QC autocvar_g_pickup_items: -1 uses the gametype default, including when the cvar is unset.
     private static int PickupItemsCvar()
     {
         if (Api.Services is null) return -1;

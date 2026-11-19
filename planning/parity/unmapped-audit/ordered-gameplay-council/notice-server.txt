@@ -1,0 +1,9 @@
+[S1Probe] Alpha slot=-1 net=1 team=13 spectatee=1 region=-1 pref=False origin=<1040, 240, 0> serverTime=13.36
+[S1Probe] Alpha slot=-1 net=1 team=13 spectatee=0 region=-1 pref=False origin=<-1040, -448, 9> serverTime=14.34
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=False origin=<464, 528, 0> serverTime=59.09
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=False origin=<-1184, 1248, 1> serverTime=60.08
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=True origin=<-1184, 1248, -7.96875> serverTime=60.64
+moved Alpha to Red
+moved Beta to Red
+gametype: tdm  time: 66.0
+[S1Probe] Alpha slot=-1 net=1 team=4 spectatee=0 region=-1 pref=False origin=<-1040, -448, -7.96875> serverTime=65.98

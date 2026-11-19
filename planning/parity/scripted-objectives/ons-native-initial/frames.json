@@ -1,0 +1,20 @@
+[
+  {
+    "seconds": 13.027,
+    "frame": "BlueProbe/0002.webp",
+    "sample": 12.911,
+    "label": "neutral"
+  },
+  {
+    "seconds": 13.106,
+    "frame": "RedProbe/0003.webp",
+    "sample": 13.041,
+    "label": "shielded"
+  },
+  {
+    "seconds": 13.879,
+    "frame": "RedProbe/0007.webp",
+    "sample": 13.761,
+    "label": "shield-shot"
+  }
+]

@@ -64,13 +64,10 @@ public static class TargetUtilities
             return;
         if (actor.TakeDamage == DamageMode.No)
             return;
-        // QC: if(!actor.iscreature && !actor.damagedbytriggers) return; — the port has no damagedbytriggers
-        // field; IsPushable covers projectiles/loot/bodies (what damagedbytriggers tags), matching the intent.
-        if (!MapMover.IsCreature(actor) && !MapMover.IsPushable(actor))
+        if (!MapMover.IsCreature(actor) && !actor.DamagedByTriggers)
             return;
 
-        // QC DEATH_HURTTRIGGER (used as the void/hurt-trigger death). trigger is dropped at the .use boundary.
-        Combat.Damage(actor, self, null, 1000f, DeathTypes.Void, actor.Origin, Vector3.Zero);
+        Combat.Damage(actor, self, MapMover.CurrentUseTrigger, 1000f, DeathTypes.Void, actor.Origin, Vector3.Zero);
     }
 
     // ===================================================================

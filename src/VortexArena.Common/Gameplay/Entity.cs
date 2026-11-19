@@ -16,6 +16,8 @@ namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
+        public VortexArena.Net.CountdownIndicatorState CountdownIndicator;
+
         // =====================================================================================
         //  [wepent] per-weapon / per-player entity-state render proxy
         // =====================================================================================

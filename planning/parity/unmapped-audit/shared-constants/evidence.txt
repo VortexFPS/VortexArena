@@ -1,0 +1,49 @@
+Original runtime · dedicated Stormkeep, private temporary userdir, local bot
+Xonotic data revision 863cd3e8456e18f577f7fe5fef857ff55ae62cc0
+SDL executable SHA-256 79e38b239b8dc5d5ee1ac8ada8245a51381ce27277dc165645fea0e69fed4312
+Pinned progs.dat SHA-256 c4a5a9e85598333568183779c06446b2d03f056d2da71636b6f86150ed1202f7
+bot_join_empty 1; bot_number 1; sv_autopause 0; sv_defaultcharacter 1
+sv_defaultplayermodel models/player/gak.iqm; g_balance_kill_delay 0
+g_respawn_delay_small 10; g_respawn_delay_large 10
+
+BEFORE (prvm_edict server 1)
+model          models/player/gak.iqm
+mins           '-16 -16 -24'
+maxs           '16 16 45'
+size           '32 32 69'
+health         100
+species        2
+
+sv_cmd bot_cmd * cc kill
+Command 'cc kill' sent to all bots (1)
+
+AFTER (prvm_edict server 1, one second after the command)
+model          models/player/gak.iqm
+mins           '-16 -16 -24'
+maxs           '16 16 5'
+size           '32 32 29'
+health         -99900
+deadflag       4
+species        2
+
+Native Godot 4.6.3 Mono, Compatibility, Xvfb, private temporary profile
+Temporary copy of the rubble-limits probe, with the same effect dispatch and asset loader.
+The extension called EffectEmitter.GibSplash and EffectSystem.Spawn on the recorded request,
+captured the real asset loader's (model, skin, nonnull) results and counted visible instances after a tick.
+PASS alien splash loads shipped skull skin 2
+PASS shiny robot splash loads shipped robo skull skin 1
+PASS species gib events populate visible MultiMesh instances
+PASS corpse damage emits a registered model splash
+PASS normal model splash obeys live gib cap and leaves fragments
+
+Native headless normal host smoke · Stormkeep DM, two bots, private temporary profile
+[GameWorld] tick rate: sys_ticrate=0.015625 -> 64 Hz
+[NetGame] listen server on 127.0.0.1:29821 (map 'stormkeep', dm, 2 bots) — self-connecting.
+[LoadTimeline] host stormkeep — load begin → ready, 1025 ms total
+[bots] waypoints for 'stormkeep': nodes=109 (file=loaded, cache=yes)
+The host returned exit 0. The dummy audio driver logged AudioStreamPlayback::_mix at shutdown.
+
+Native .NET verification
+DOTNET_ROLL_FORWARD=Major dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj --no-restore --filter 'FullyQualifiedName~SharedConstantsGameplayTests|FullyQualifiedName~AttachedDamageTests|FullyQualifiedName~MapObjectLongTailTests|FullyQualifiedName~BotLiveLoopTests|FullyQualifiedName~ServerInfraTests' -v q
+Passed: 150. Failed: 0. Skipped: 0.
+dotnet build VortexArena.csproj --no-restore -v q succeeded.

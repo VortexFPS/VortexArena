@@ -22,7 +22,8 @@ namespace VortexArena.Tests.Legacy;
 /// are the things that must hold whatever the remaining gaps: the program loads (or the refusal is
 /// exact), CSQC_Init completes, nothing but a recorded program fault ever escapes, and the engine
 /// protocol itself never mis-parses before the program first loses its place.
-/// Needs the upstream reference checkout (../Base); returns early without it.
+/// The startup check uses the bundled recordings and mounted native data. The full reference
+/// replays use the optional upstream checkout (../Base).
 /// </summary>
 public class CsqcDemoReplayTests
 {
@@ -71,6 +72,23 @@ public class CsqcDemoReplayTests
         {
             if (Directory.Exists(writeRoot)) Directory.Delete(writeRoot, recursive: true);
         }
+    }
+
+    [Theory]
+    [InlineData("little-bot-orchestra.dem")]
+    [InlineData("the-big-keybench.dem")]
+    public void Bundled_Demo_Starts_Its_Embedded_Client_With_Native_Data(string name)
+    {
+        string path = Path.Combine(TestPaths.RepoRoot, "data", "core.pk3dir", "demos", name);
+        var replay = Replay(path, callUpdateView: true, maxMessages: 1024);
+
+        Assert.Null(replay.Unexpected);
+        Assert.Null(replay.ReaderError);
+        Assert.True(replay.ProgramLoaded, replay.ProgramRefusal);
+        Assert.True(replay.InitCompleted);
+        Assert.True(replay.EntityUpdates > 0 && replay.Frames > 0);
+        Assert.Equal(1024, replay.FullyDecoded);
+        Assert.Equal(0, replay.Faults);
     }
 
     [Theory]

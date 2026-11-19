@@ -5,10 +5,10 @@ last_audited: "2026-06-27"
 summary:
   feature_count: 60
   worst_gaps:
-    - "Powerups bar colors diverge: Base feeds addPowerupItem the hud_progressbar_strength/shield/superweapons_color cvars (1 0.39 0 / 0.36 1 0.07 / 0.77 0.67 0) but PowerupsPanel hardcodes the QC m_color colormods (strength blue '0 0 1', shield magenta '1 0 1', superweapons white) — the registered cvars are dead. (2026-07-02 coverage fold.)"
+    - "Powerups bar colors diverge: Base feeds addPowerupItem the hud_progressbar_strength/shield_color cvars, but PowerupsPanel still hardcodes the strength and shield entity colors. The timed Superweapons row now reads its skin color cvar. (2026-07-02 coverage fold.)"
     - "drawpic_tiled has no port primitive (scoreboard table's tiled scoreboard_bg backing is absent; configure-mode's tiled highlight border is a flat 2px frame); hud_panel_weapons_orderbyimpulse defaults 0 (Base ships 1) and is unconsumed; the per-panel hud_panel_*_dynamichud gate is unconsumed (whole-CanvasLayer shake/sway applies to every panel, incl. infomessages which Base ships with dynamichud 0). (2026-07-02 coverage fold.)"
-    - "Radar maximized clickable mode (ons spawn / teleport select) is still unported; the discovered radar panel stays force-hidden and the live one is the standalone _radar. (Onslaught radar links + the minimapname=='' gate were added by Wave 17; the BSP _mini minimap + bigsize/normalsize math by Wave 8c.)"
-    - "Pure --connect (remote) clients still have no vote / mapvote net channel; those panels stay blank there (listen-server only). (Map-vote casting now rides the C2S impulse byte on a remote client — Wave 16 — but the candidate-grid feed is still listen-server only.)"
+    - "Maximized radar and Onslaught selection work on the live standalone panel. The discovered radar stays hidden to avoid drawing two radars; skin frame fidelity remains partial."
+    - "The ordinary yes/no call-vote panel is listen-server only. End-of-match map and gametype ballots use a separate native network channel."
     - "Race timer / checkpoints fed from host-side Race state, not the TE_CSQC_RACE wire — no splits on a pure --connect client."
     - "Scoreboard still ignores hud_panel_scoreboard_pos/_size (manual Configure rect, intended divergence); the accuracy show-DELAY timer is unwired (only the binary warmup gate is). Per-row ping IS now networked (Wave 17)."
     - "HUD dock still punts on the hud_dock_color shirt/pants colormap literals (the 'team' literal + rgb + team-factor ARE wired; Wave 17 added the 'team' literal). The panels' bg_color shirt/pants/team literals ARE now resolved (Wave 17)."
@@ -249,10 +249,13 @@ features:
     layer: [presentation]
     base_refs:
       - "client/hud/panel/powerups.qc:HUD_Powerups"
+      - "common/mutators/mutator/status_effects/status_effect/superweapons.qc"
     port_refs:
       - "game/hud/PowerupsPanel.cs"
+      - "tests/fixtures/superweapons-hud/Probe.cs"
     constants:
       - { name: "expandingbox_sizefactor_from_fadelerp", base: "1.2 / (1.2 - fadelerp) (client/draw.qc:50)", port: "1.2 / (1.2 - fadelerp), centered via boxsize*0.5*(1-sz)", match: true }
+      - { name: "Superweapons row item-bit gate", base: "IT_SUPERWEAPON set and IT_UNLIMITED_SUPERWEAPONS clear", port: "ordinary bit set and unlimited bit clear", match: true }
     status: { logic: faithful, values: faithful, timing: unknown, presentation: faithful, audio: na, liveness: live }
     intended_divergence: false
     divergence_rationale: null
@@ -260,6 +263,7 @@ features:
       - "Countdown expanding-flash (<=5s) timing not runtime-verified."
     verification:
       - { kind: code, ref: "PowerupsPanel fed via Hud.SetPlayer; Wave 8c (0d649bb) routed the per-powerup bar through the shared HudPanel.DrawProgressBar (full baralign 0/1/2/3 + 3-slice cap render) AND replaced the gentle 1->1.5x Expand pulse with the faithful expandingbox_sizefactor (1.2/(1.2-fadelerp)) + the QC theAlpha*(1-fadelerp) ExpandAlpha fade", result: pass }
+      - { kind: test, ref: "planning/parity/review/superweapons-hud-verification.md compares the native Powerups panel with pinned CSQC for NIX, InstaGib, a timed Fireball pickup, and both bits with active status.", result: pass }
     confidence: medium
     notes: "Active-powerup grid with timers; fed live on listen server. Improved since baseline (Wave 8c): the bar uses the shared faithful progressbar primitive and the expanding-flash now matches the QC expandingbox sizefactor + alpha fade."
 
@@ -337,15 +341,16 @@ features:
       - { name: "_foreground_alpha", base: "0.8 (teamradar_loadcvars 0->0.8)", port: "0.8", match: true }
       - { name: "rotation / zoommode", base: "0/1/2/3/4 rotation; 0..3 zoommode", port: "ported (rotation 0=player-aligned/1-4 fixed; zoommode 0=current_zoomfraction,1 inverse,2 normal,3 big)", match: true }
       - { name: "bigsize/normalsize (radar.qc:260-294)", base: "bigsize fits arena bbox (rotation 0 = world diagonal / 1.05; fixed = rotated-corner span); normalsize = vlen_maxnorm2d(size)*scale2d/scale floored to bigsize; teamradar_size = zoom*bigsize+(1-zoom)*normalsize", port: "ported from real BSP world bounds (mi_min/mi_max from bsp.Models[0]); scale2d=1 (non-clever texcoord path)", match: true }
-    status: { logic: faithful, values: faithful, timing: na, presentation: partial, audio: na, liveness: partial }
+    status: { logic: faithful, values: faithful, timing: na, presentation: partial, audio: na, liveness: live }
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Maximized clickable mode (ons spawn / teleport select) is still unported; the discovered radar panel is force-hidden (StartHiddenIds) to avoid a double radar and the live radar is the standalone _radar."
+      - "The standalone radar retains simplified maximized framing. See cl-teamradar.maximized.map and cl-teamradar.maximized.click."
     verification:
       - { kind: code, ref: "standalone _radar fed MapName + MapMinXY/MapMaxXY (BSP worldspawn bounds) from NetGame ~line 1481; _fullHud radar in StartHiddenIds; Wave 8c (0d649bb) ported the real gfx/<map>_mini minimap texture render (rotated player-centered textured quad via DrawPolygon) + the faithful bigsize/normalsize teamradar_size math + the v_flipped X-mirror; Wave 6e added the zoommode/rotation modes; Wave 17 (2f0bfdb) added the QC minimapname=='' early-return (no minimap art → blank radar) and the Onslaught draw_teamradar_link control-point/generator connection lines (DrawLinkQuad over ClientNet.RadarLinks, fed end-to-end by Onslaught.CollectRadarLinks → ServerNet.SendRadarLinks → ClientNet.HandleRadarLinks)", result: pass }
-    confidence: medium
-    notes: "Improved since baseline. Wave 8c (0d649bb): the BSP _mini minimap texture is rendered + the faithful bigsize/normalsize (teamradar_size) zoom math. Wave 17 (2f0bfdb): the QC minimapname=='' gate (maps with no minimap art blank the radar, matching Base) AND the Onslaught radar links (per-end team-colored connection quads, fully wired S2C). Remaining gap (UNCLOSED): no maximized clickable mode (ons spawn / teleport select); still the standalone _radar only — presentation + liveness stay partial."
+      - { kind: manual, ref: "planning/parity/quickmenu-radar/README.md — real held overview and Onslaught click selection", result: pass }
+    confidence: high
+    notes: "The standalone radar draws map artwork and Onslaught links, supports the stock held overview, and unprojects clicks in the separate selection mode."
 
   - id: cl-hud.panel.score
     name: "Score overlay panel (#7)"
@@ -551,7 +556,7 @@ features:
     name: "Items-time panel (#17)"
     layer: [presentation]
     base_refs:
-      - "client/hud/panel/itemstime.qc:HUD_ItemsTime"
+      - "common/mutators/mutator/itemstime/itemstime.qc:HUD_ItemsTime"
     port_refs:
       - "game/hud/ItemsTimePanel.cs"
     constants:
@@ -578,11 +583,11 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Nested quick-chat tree from a quickmenu file + translatecommands/server_is_default parity not verified."
+      - "Translated command strings and the stock waypoint-editor special menu remain outside the native QuickMenu implementation."
     verification:
-      - { kind: code, ref: "QuickMenuPanel.Toggle wired in NetGame; IsOpen gates cursor", result: pass }
-    confidence: low
-    notes: "Open/close + key/click nav present; entry-source fidelity unverified."
+      - { kind: manual, ref: "planning/parity/quickmenu-radar/README.md — stock bindings, command forms, mounted file, fallback, selection and KEEP_OPEN", result: pass }
+    confidence: high
+    notes: "The native HUD opens nested local menus and offers a server-suggested mounted file from the built-in menu."
 
   - id: cl-hud.panel.scoreboard
     name: "Scoreboard panel"
@@ -677,12 +682,11 @@ features:
     status: { logic: faithful, values: faithful, timing: faithful, presentation: faithful, audio: na, liveness: live }
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Cell click-to-vote (cursor) isn't wired; votes are cast via impulses (Commands.cs MapVote.CastVote), so the panel shows the grid + counts + own-vote highlight + countdown + selection/top2 fades but a mouse click on a cell doesn't cast. Pure --connect clients have no in-process MapVoting feed."
+    gaps: []
     verification:
-      - { kind: code, ref: "NetGame.UpdateMapVotePanel builds the candidate grid from GameWorld.MapVote, feeds live counts/own-vote/winner each frame; MapVoting.SelectionOf for the own-vote highlight; the panel does the MV_FADETIME selection fade + mv_top2_alpha reduce + suggester cache", result: pass }
+      - { kind: runtime, ref: "Godot ENet ballot probe verified listen and remote clocks, fixed and extended deadlines with movement snapshots filtered, selection across periodic updates, and reset after a same-count candidate change.", result: pass }
     confidence: high
-    notes: "WIRED: the intermission map ballot shows on a listen server when g_maplist_votable runs the vote. The selection-highlight fade (MV_FADETIME), the mid-vote top-2 reduce fade (mv_top2_alpha) and the suggester-name cache are ported. Click-to-vote + --connect feed remain open."
+    notes: "Listen hosts read GameWorld.MapVote and remote clients read the native MapVote message. Both feeds retain selection and fades across countdown and tally updates. An actual ballot change resets presentation and input state."
 
   - id: cl-hud.panel.minigame
     name: "Minigame HUD panels (BOARD/STATUS/HELP/MENU)"
@@ -863,17 +867,23 @@ features:
     layer: [presentation]
     base_refs:
       - "client/mapvoting.qh"
+      - "client/mapvoting.qc:MapVote_DrawMapPicture"
+      - "client/mapvoting.qc:GameTypeVote_ReadOption"
+      - "server/mapvoting.qc:MapVote_AddVotable"
     port_refs:
       - "game/hud/MapVotePanel.cs:HighlightBorder"
+      - "src/VortexArena.Common/Menu/MapVotePictures.cs"
+      - "game/net/NetGame.cs:HandleMapVoteInput"
     constants:
       - { name: "hud_panel_mapvote_highlight_border", base: "1", port: "1 (registered MapVotePanel.cs:208, consumed :214)", match: true }
-    status: { logic: partial, values: faithful, timing: na, presentation: faithful, audio: na, liveness: partial }
+    status: { logic: partial, values: faithful, timing: na, presentation: partial, audio: na, liveness: partial }
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "MapVote_InputEvent (mouse/keyboard cell selection casting the vote) is not wired — votes ride impulses only (already tracked in cl-hud.panel.mapvote)."
+      - "Local resolution supports four configured map preview directories and gametype fallback through the active menu skin, wickedx and the alias base type. Remote ballot metadata for custom preview directories and server-defined aliases requires separate transport."
       - "Net_MapVote_Picture + cl_readpicture_force (the server-pushed ballot level-shot download protocol) is unported (no port hits); the port reads local levelshots via the VFS only, so a client without the map's pk3 sees the nopreview fallback where Base would stream the picture."
     verification:
+      - { kind: test, ref: "tests/VortexArena.Tests/MenuDataSourceTests.cs:MapVotePreviewSearchUsesOrderedDirectoriesAndMenuSkin", result: pass }
       - { kind: code, ref: "highlight border registered+consumed+drawn (DrawBorderLines callers); grep game/+src/ for readpicture/MapVote_Picture = no hits", result: pass }
     confidence: high
     notes: "added 2026-07-02 (coverage fold). Panel behavior itself is cl-hud.panel.mapvote; server ballot logic is sv-mapvoting."
@@ -977,17 +987,22 @@ features:
     base_refs:
       - "client/hud/panel/quickmenu.qh"
     port_refs:
-      - "game/hud/QuickMenuPanel.cs:797-802"
+      - "game/hud/QuickMenuPanel.cs:RegisterBehaviourCvars / OpenFile"
+      - "game/net/NetGame.cs:OpenQuickMenu"
+      - "game/net/ServerNet.cs:SendQuickMenuFile; game/net/ClientNet.cs:QuickMenuFile"
     constants:
       - { name: "align / time / translatecommands / server_is_default", base: "0 / 5 / 0 / 0 (shipped cfg)", port: "0 / 5 / 0 / 0", match: true }
-      - { name: "hud_panel_quickmenu_file + _hud_panel_quickmenu_file_from_server", base: "custom quickmenu tree loaded from file / pushed by server", port: "not registered, not consumed", match: false }
-    status: { logic: partial, values: partial, timing: na, presentation: faithful, audio: na, liveness: partial }
+      - { name: "hud_panel_quickmenu_file", base: "local mounted filename", port: "same, with explicit file and missing-file fallback", match: true }
+      - { name: "_hud_panel_quickmenu_file_from_server", base: "server-selected mounted filename via settemp", port: "session-scoped typed filename offer; client VFS supplies the contents", match: partial }
+    status: { logic: partial, values: partial, timing: na, presentation: faithful, audio: na, liveness: live }
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "The file-sourced quickmenu tree is unported: hud_panel_quickmenu_file and the server-pushed _hud_panel_quickmenu_file_from_server have no port reader, so only the built-in default tree exists (sharpens the existing cl-hud.panel.quickmenu 'entry-source fidelity' gap into a confirmed missing)."
+      - "Server offers select files already available in the client VFS. Native delivery of a missing QuickMenu pack is outside this path under ADR-0013; command translation remains partial."
     verification:
-      - { kind: code, ref: "QuickMenuPanel.RegisterDefaults registers 4 of the 6 header cvars; grep for quickmenu_file = doc comment only", result: fail }
+      - { kind: manual, ref: "planning/parity/quickmenu-radar/README.md — command arguments and live mounted PK3 loading", result: pass }
+      - { kind: code, ref: "ServerNet.SendQuickMenuFile sends a validated relative path from the operator cvar; ClientNet keeps the offer per connection", result: pass }
+      - { kind: manual, ref: "planning/parity/quickmenu-radar/README.md — remote offer, separate client/server archive bytes, player preference and standard return", result: pass }
     confidence: high
     notes: "added 2026-07-02 (coverage fold)."
 
@@ -1064,16 +1079,15 @@ features:
       - { name: "baralign / iconalign / progressbar / text", base: "3 / 3 / 1 / 1 (luma)", port: "3 / 3 / 1 / 1", match: true }
       - { name: "strength bar color", base: "hud_progressbar_strength_color '1 0.39 0' (strength.qc:48 passes the CVAR to addPowerupItem)", port: "hardcoded m_color '0 0 1' (blue)", match: false }
       - { name: "shield bar color", base: "hud_progressbar_shield_color '0.36 1 0.07'", port: "hardcoded m_color '1 0 1' (magenta)", match: false }
-      - { name: "superweapons bar color", base: "hud_progressbar_superweapons_color '0.77 0.67 0'", port: "hardcoded '1 1 1'", match: false }
+      - { name: "timed Superweapons bar color", base: "hud_progressbar_superweapons_color '0.77 0.67 0'", port: "uses live skin cvar with luma fallback", match: true }
     status: { logic: faithful, values: partial, timing: na, presentation: partial, audio: na, liveness: live }
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Powerup colors are WRONG vs Base: Base's strength/shield/superweapons addPowerupItem calls pass the hud_progressbar_*_color cvars (orange/green/yellow-ish), but PowerupsPanel hardcodes the QC entity m_color colormods (blue/magenta/white) on the mistaken premise (its own :141-144 comment) that Base uses m_color — HudConfig registers the correct cvar values (HudConfig.cs:53-54) yet the panel never reads them (superweapons color isn't registered at all). Speed/invisibility buffs DO use m_color in Base and match."
+      - "Strength and Shield still display hardcoded entity tint instead of the corresponding HUD colors."
     verification:
-      - { kind: code, ref: "Base common/mutators/mutator/powerups/powerup/strength.qc:48 + shield.qc:48 + status_effect/superweapons.qc:32 vs port TryPowerupMeta (PowerupsPanel.cs:106-114)", result: fail }
+      - { kind: test, ref: "tests/fixtures/superweapons-hud/Probe.cs compares the configured timed Superweapons tint and nominal 30-second bar lifetime with pinned CSQC.", result: pass }
     confidence: high
-    notes: "added 2026-07-02 (coverage fold). Easy fix: TryPowerupMeta should resolve strength/shield/superweapon colors from the registered hud_progressbar_*_color cvars."
 
   - id: cl-hud.header.pickup
     name: "Pickup panel header defaults (pickup.qh)"
@@ -1141,13 +1155,15 @@ features:
     constants:
       - { name: "alreadyvoted_alpha", base: "0.7 (luma)", port: "0.7", match: true }
       - { name: "cl_allow_uid2name", base: "Yes/No/Undecided (1/0/-1)", port: "DialogFirstRun radio on the same values", match: true }
-    status: { logic: faithful, values: faithful, timing: na, presentation: faithful, audio: na, liveness: live }
-    intended_divergence: false
-    divergence_rationale: null
+    status: { logic: partial, values: faithful, timing: partial, presentation: partial, audio: na, liveness: live }
+    intended_divergence: true
+    divergence_rationale: "Approved records.nickname_prompt keeps the native local rankings dialog manual. First Run and Profile expose the preference."
+    open_dimensions: [presentation]
     gaps:
-      - "The uid2name_dialog vote-panel override (larger centered ask-position) is present per VotePanel.cs:79-81 but its trigger path was not traced end-to-end (the stock client dialog is deprecated in Base too)."
+      - "The overlay-only centered fallback has no paired live capture."
     verification:
-      - { kind: code, ref: "VotePanel registrations + DialogFirstRun cl_allow_uid2name radio", result: pass }
+      - { kind: code, ref: "VotePanel registrations, First Run radio and Profile nickname preference", result: pass }
+      - { kind: visual, ref: "planning/parity/hud-commands/name-prompt.webp and vote-input.txt (a separate server vote stays open after the visible dialog is answered)", result: pass }
     confidence: medium
     notes: "added 2026-07-02 (coverage fold)."
 

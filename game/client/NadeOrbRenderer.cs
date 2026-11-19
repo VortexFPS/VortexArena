@@ -7,33 +7,8 @@ using NVec3 = System.Numerics.Vector3;
 
 namespace VortexArena.Game.Client;
 
-/// <summary>
-/// Renders the networked nade <b>orb</b> entities — the heal / ammo / entrap / veil (and any other
-/// orb-type) fountain spheres a thrown nade leaves behind. The Godot successor to the CSQC
-/// <c>orb_setup</c> / <c>orb_draw</c> path (qcsrc/common/mutators/mutator/nades/nade.qc): the server spawns
-/// a <c>nade_orb</c> entity (<see cref="VortexArena.Net.NetEntityKind.NadeOrb"/>) carrying its
-/// <c>OrbType</c> (a <see cref="NadeRegistry"/> id), absolute <c>OrbExpire</c> time and <c>OrbRadius</c>;
-/// this turns each into a tinted sphere that
-/// <list type="bullet">
-///   <item>SCALES UP from nothing toward its radius over the first ~0.25s of life (QC
-///   <c>self.scale = bound(0,(time-spawn)*4,1)*radius</c>),</item>
-///   <item>FADES + shrinks over its last ~0.25s as the orb expires (QC
-///   <c>alpha = bound(0,(self.ltime-time)*4,1)</c>),</item>
-///   <item>SPINS slowly about world-up (QC <c>avelocity = '0 0 90'</c>).</item>
-/// </list>
-///
-/// Modeled on <see cref="ProjectileRenderer"/>: a per-orb root <see cref="Node3D"/> at the orb's origin with
-/// a <c>Body</c> child built from <c>models/sphere.md3</c> (host-wired <see cref="ModelFactory"/>) tinted to
-/// the per-type <see cref="NadeDef.Color"/>; when the model is absent it falls back to an additive glow
-/// sprite. The heavy tinted material is cached per orb-type, mirroring
-/// <see cref="ProjectileRenderer"/>'s <c>_bodyResCache</c>.
-///
-/// It owns nothing about gameplay: <see cref="OnSpawn"/>/<see cref="OnUpdate"/>/<see cref="OnRemove"/> are
-/// driven by <see cref="ClientWorld"/> from the entity stream, and <see cref="Process"/> advances each live
-/// orb's scale/fade/spin every frame. <see cref="ActiveOrbs"/> exposes the live orbs (Quake-space origin,
-/// radius, color, current alpha) so <c>ViewEffects.UpdateOrbColorFlash</c> can paint the 2D in-orb screen
-/// tint. Origins are Quake-space and converted at the boundary with <see cref="Coords"/>.
-/// </summary>
+/// <summary>Draws a networked grenade orb and supplies its hull and opacity to the view flash.
+/// The native snapshot carries expiry and size. First sight approximates the spawn time.</summary>
 public partial class NadeOrbRenderer : Node3D
 {
     /// <summary>The Godot visual bound to one nade-orb entity.</summary>
@@ -43,7 +18,8 @@ public partial class NadeOrbRenderer : Node3D
         public required Node3D Root;     // positioned at the orb origin each frame
         public Node3D? Body;             // the sphere/sprite that scales/fades/spins (child of Root)
         public Sprite3D? Sprite;         // non-null when the Body is the additive-glow fallback
-        public List<MeshInstance3D> Meshes = new(); // the real-model meshes whose material alpha we drive
+        public StandardMaterial3D? Material; // private to this orb for independent tint and fade
+        public Vector3 SpinAxis;
         public byte Type;                // OrbType — the NadeRegistry id (1..11)
         public Color Tint;               // the per-type m_color (NadeDef.Color), opaque
         public float Radius;             // OrbRadiusClient — the orb radius in qu (drives target scale + flash test)
@@ -52,10 +28,8 @@ public partial class NadeOrbRenderer : Node3D
         public float Alpha = 1f;         // current rendered alpha (cached for ActiveOrbs / the 2D flash)
     }
 
-    /// <summary>The model scale of a 1-unit sphere model so that <c>scale = radius/SphereModelRadius</c> draws
-    /// a sphere of the orb's radius. <c>models/sphere.md3</c> is authored ~16qu radius (DP's stock unit sphere).
-    /// The procedural fallback sphere is built at radius 1 so it uses the raw radius scale.</summary>
-    private const float SphereModelRadius = 16f;
+    // Frame zero maxs.x in the shipped MD3. Xonotic orb_setup uses the model's X extent.
+    private const float ShieldModelRadius = 104.29747f;
 
     private readonly Dictionary<int, Orb> _orbs = new();
 
@@ -68,20 +42,10 @@ public partial class NadeOrbRenderer : Node3D
     /// <summary>Soft round glow sprite texture for the additive-sprite fallback — shared across orbs.</summary>
     private static ImageTexture? _glowTexture;
 
-    /// <summary>
-    /// Builds a fully-textured render node for a model VFS path (host-set to <c>AssetLoader.LoadModel</c>), used
-    /// to draw the orb with its real <c>models/sphere.md3</c> sphere. Null (or a null return / missing content)
-    /// falls back to the additive glow sprite — keeps headless tests and asset-less runs working.
-    /// </summary>
     public Func<string, Node3D?>? ModelFactory { get; set; }
-
-    /// <summary>The sphere model the orb draws (QC <c>setmodel("models/sphere.md3")</c> in <c>orb_setup</c>).</summary>
-    private const string OrbModelPath = "models/sphere.md3";
-
-    // Per-orb-type cache of the tinted sphere Mesh + material, mirroring ProjectileRenderer._bodyResCache. Every
-    // orb of a given type draws an IDENTICAL sphere (radius is applied via node scale, color derives from the
-    // NadeDef), so the heavy Resources are built once and SHARED across instances.
-    private static readonly Dictionary<byte, (Mesh Mesh, StandardMaterial3D Mat)> _bodyResCache = new();
+    public Func<string, Texture2D?>? TextureFactory { get; set; }
+    public Func<float>? ServerTime { get; set; }
+    private const string OrbModelPath = "models/ctf/shield.md3";
 
     // =================================================================================================
     //  Lifecycle hooks (driven by ClientWorld)
@@ -105,17 +69,28 @@ public partial class NadeOrbRenderer : Node3D
 
         var root = new Node3D { Name = $"nadeorb#{orb.Index}_{type}" };
 
-        // Real sphere.md3 when the host wired a factory and the content is present, else the additive-glow
-        // fallback. The sphere is symmetric, so the slow world-up spin reads identically either way.
         Sprite3D? sprite = null;
-        var meshes = new List<MeshInstance3D>();
-        Node3D body = BuildModelBody(type, tint, meshes);
+        StandardMaterial3D? material = null;
+        Node3D? body = ModelFactory?.Invoke(OrbModelPath);
         if (body is null)
+            body = sprite = BuildGlowSprite(tint);
+        else
         {
-            sprite = BuildGlowSprite(tint);
-            body = sprite;
-            meshes.Clear();
+            material = new StandardMaterial3D
+            {
+                AlbedoColor = tint,
+                AlbedoTexture = TextureFactory?.Invoke("textures/nade_orb"),
+                BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            };
+            var meshes = new List<MeshInstance3D>();
+            CollectMeshes(body, meshes);
+            foreach (var mesh in meshes)
+                mesh.MaterialOverride = material;
         }
+        float angle = GD.Randf() * Mathf.Tau;
         body.Name = "Body";
         // Start fully collapsed; Process scales it up over the first ~0.25s (QC orb spawns at scale 0).
         body.Scale = Vector3.Zero;
@@ -130,11 +105,12 @@ public partial class NadeOrbRenderer : Node3D
             Root = root,
             Body = body,
             Sprite = sprite,
-            Meshes = meshes,
+            Material = material,
+            SpinAxis = new Vector3(Mathf.Sin(angle), Mathf.Cos(angle), 0f),
             Type = type,
             Tint = tint,
             Radius = radius,
-            SpawnTime = Now(),
+            SpawnTime = ServerTime?.Invoke() ?? 0f,
             Expire = orb.NadeOrbExpire,
         };
         _orbs[orb.Index] = entry;
@@ -161,7 +137,7 @@ public partial class NadeOrbRenderer : Node3D
         {
             o.Type = type;
             o.Tint = TintFor(type);
-            ApplyTint(o);
+            SetColor(o);
         }
         // _Process does the actual position follow / scale / fade / spin.
     }
@@ -199,7 +175,7 @@ public partial class NadeOrbRenderer : Node3D
         // House rule: a new per-frame node ships with a Prof scope registered in FrameProfiler.TopLevelNodeScopes
         // (else its time leaks into proc:other). Placed after the empty early-out so it costs nothing when idle.
         using var _prof = FrameProfiler.Scope("nadeorbs");
-        float now = Now();
+        float now = ServerTime?.Invoke() ?? 0f;
 
         // Iterate over a snapshot since a removal could mutate the dictionary mid-loop.
         _iterBuffer.Clear();
@@ -223,25 +199,18 @@ public partial class NadeOrbRenderer : Node3D
             if (o.Body is null || !GodotObject.IsInstanceValid(o.Body))
                 continue;
 
-            // (a) SCALE-UP from spawn (QC orb_draw: self.scale grows toward radius over ~0.25s):
-            //     grow = bound(0, (time - spawn) * 4, 1).
-            float grow = Mathf.Clamp((now - o.SpawnTime) * 4f, 0f, 1f);
-
-            // (b) FADE in the last ~0.25s (QC orb_draw: alpha = bound(0, (self.ltime - time) * 4, 1)):
-            //     when no expire is known (0), stay fully opaque.
-            float fade = o.Expire > 0f ? Mathf.Clamp((o.Expire - now) * 4f, 0f, 1f) : 1f;
-            o.Alpha = fade;
-
-            // The sphere model / glow sprite is authored at SphereModelRadius; scale so the drawn radius is the
-            // orb radius, then modulate by both the spawn grow ramp and the expiry fade (so it SHRINKS as it fades).
-            float modelScale = o.Radius / SphereModelRadius;
-            o.Body.Scale = Vector3.One * (modelScale * grow * fade);
-
-            ApplyAlpha(o, fade);
-
-            // (c) SPIN about world-up (QC avelocity '0 0 90' → 90 deg/sec yaw). In Godot, Quake-Z is Godot-Y,
-            //     so the yaw axis is Vector3.Up. RotateObjectLocal keeps the scale untouched.
-            o.Body.RotateObjectLocal(Vector3.Up, Mathf.DegToRad(90f * delta));
+            float age = MathF.Max(0f, now - o.SpawnTime);
+            float lifetime = MathF.Max(0.001f, o.Expire - o.SpawnTime);
+            float progress = Mathf.Clamp(age / lifetime, 0f, 1f);
+            float t = Mathf.Clamp(age / (0.25f * MathF.Min(lifetime, 1f)), 0f, 1f);
+            float grow = t * (2f - t);
+            o.Alpha = Mathf.Sqrt(1f - progress);
+            float scale = o.Radius * 0.6f / (o.Sprite is null ? ShieldModelRadius : 16f);
+            // Keep scale off the rotation basis until after rotating. A zero scale destroys its orientation.
+            float phase = 6f * lifetime * (Mathf.Pow(24f, progress) - 1f) / Mathf.Log(24f);
+            o.Body.Basis = new Basis(o.SpinAxis, Mathf.DegToRad(phase))
+                .Scaled(Vector3.One * MathF.Max(0.0001f, scale * grow));
+            SetColor(o);
         }
     }
 
@@ -266,51 +235,6 @@ public partial class NadeOrbRenderer : Node3D
     //  Node construction
     // =================================================================================================
 
-    /// <summary>
-    /// Build the orb's real <c>models/sphere.md3</c> body via the host <see cref="ModelFactory"/>, tinted to the
-    /// per-type color, collecting its meshes into <paramref name="meshes"/> so <see cref="ApplyAlpha"/> can drive
-    /// their transparency each frame. Returns null when no factory is wired or the model is absent (caller then
-    /// uses the additive-glow fallback).
-    /// </summary>
-    private Node3D? BuildModelBody(byte type, Color tint, List<MeshInstance3D> meshes)
-    {
-        if (ModelFactory is null)
-            return null;
-        Node3D? model = ModelFactory(OrbModelPath);
-        if (model is null)
-            return null;
-
-        // Tint the sphere meshes to the orb color with an alpha-capable material so the expiry fade reads.
-        (Mesh _, StandardMaterial3D mat) = BodyRes(type, tint);
-        CollectMeshes(model, meshes);
-        foreach (MeshInstance3D mi in meshes)
-            mi.MaterialOverride = mat;
-        return model;
-    }
-
-    /// <summary>Shared tinted sphere Mesh + alpha-capable material for an orb type — built once, reused.</summary>
-    private static (Mesh Mesh, StandardMaterial3D Mat) BodyRes(byte type, Color tint)
-    {
-        if (_bodyResCache.TryGetValue(type, out (Mesh Mesh, StandardMaterial3D Mat) res))
-            return res;
-        // A unit-radius sphere for the procedural fallback (scaled to the orb radius via node scale).
-        var mesh = new SphereMesh { Radius = 1f, Height = 2f };
-        var mat = new StandardMaterial3D
-        {
-            AlbedoColor = new Color(tint.R, tint.G, tint.B, 1f),
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.PerPixel,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            EmissionEnabled = true,
-            Emission = tint,
-            EmissionEnergyMultiplier = 0.6f,
-            Metallic = 0.0f,
-            Roughness = 0.7f,
-        };
-        res = (mesh, mat);
-        _bodyResCache[type] = res;
-        return res;
-    }
-
     /// <summary>The additive-glow fallback body when the sphere model is absent (headless / asset-less runs).</summary>
     private static Sprite3D BuildGlowSprite(Color tint)
     {
@@ -323,57 +247,20 @@ public partial class NadeOrbRenderer : Node3D
             Shaded = false,
             DoubleSided = true,
             // A unit pixel-size: with the orb scale (~radius) applied the billboard covers the orb footprint.
-            PixelSize = 1f / SphereModelRadius,
+            PixelSize = 1f,
             NoDepthTest = false,
             AlphaCut = SpriteBase3D.AlphaCutMode.Disabled,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.Linear,
         };
     }
 
-    /// <summary>Re-tint a live orb's body after an OrbType change (recolour meshes / glow sprite).</summary>
-    private void ApplyTint(Orb o)
+    private static void SetColor(Orb o)
     {
-        if (o.Sprite is not null && GodotObject.IsInstanceValid(o.Sprite))
-        {
-            o.Sprite.Modulate = new Color(o.Tint.R, o.Tint.G, o.Tint.B, o.Sprite.Modulate.A);
-            return;
-        }
-        (Mesh _, StandardMaterial3D mat) = BodyRes(o.Type, o.Tint);
-        foreach (MeshInstance3D mi in o.Meshes)
-            if (GodotObject.IsInstanceValid(mi))
-                mi.MaterialOverride = mat;
-    }
-
-    /// <summary>Drive the orb body's render alpha for the spawn/expiry fade. The glow sprite uses its modulate
-    /// alpha; the real-model meshes use a per-orb material alpha (so concurrent orbs of a type don't share a
-    /// fading material, a fresh per-instance material is set the first time the alpha leaves 1).</summary>
-    private void ApplyAlpha(Orb o, float alpha)
-    {
-        if (o.Sprite is not null && GodotObject.IsInstanceValid(o.Sprite))
-        {
-            Color m = o.Sprite.Modulate;
-            o.Sprite.Modulate = new Color(m.R, m.G, m.B, alpha);
-            return;
-        }
-        // Real model: only diverge from the shared opaque material once the orb is actually fading, then keep a
-        // per-instance material so each orb fades independently.
-        foreach (MeshInstance3D mi in o.Meshes)
-        {
-            if (!GodotObject.IsInstanceValid(mi))
-                continue;
-            if (mi.MaterialOverride is not StandardMaterial3D mat)
-                continue;
-            if (alpha >= 1f && mat.AlbedoColor.A >= 1f)
-                continue;
-            if (mat.AlbedoColor.A >= 1f && alpha < 1f)
-            {
-                // Clone the shared material so fading this orb doesn't dim every orb of the type.
-                mat = (StandardMaterial3D)mat.Duplicate();
-                mi.MaterialOverride = mat;
-            }
-            Color a = mat.AlbedoColor;
-            mat.AlbedoColor = new Color(a.R, a.G, a.B, alpha);
-        }
+        Color color = new(o.Tint.R, o.Tint.G, o.Tint.B, o.Alpha);
+        if (o.Material is not null)
+            o.Material.AlbedoColor = color;
+        else if (o.Sprite is not null)
+            o.Sprite.Modulate = color;
     }
 
     /// <summary>Depth-first collect every <see cref="MeshInstance3D"/> at or under <paramref name="node"/>.</summary>
@@ -417,12 +304,6 @@ public partial class NadeOrbRenderer : Node3D
         }
         return ImageTexture.CreateFromImage(img);
     }
-
-    /// <summary>Current client clock time (mirrors <see cref="ProjectileRenderer"/>'s clock): the simulation clock
-    /// the orb's spawn-time and expiry are measured against. 0 in a headless/clockless harness — there the orb's
-    /// spawn time seeds from this same 0, so the scale-up still resolves to grow=0 then ramps once the clock runs.</summary>
-    private static float Now()
-        => VortexArena.Common.Services.Api.Services?.Clock?.Time ?? 0f;
 
     /// <summary>Presence link for an orb entity (so the sim can reach its node, like EntityNode).</summary>
     private sealed class NadeOrbPresence : IEntityPresence

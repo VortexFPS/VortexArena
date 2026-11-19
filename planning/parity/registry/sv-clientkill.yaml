@@ -5,9 +5,7 @@ last_audited: "2026-06-27"
 summary:
   feature_count: 12
   worst_gaps:
-    - "Floating kill-indicator digit entity (setmodel MDL_NUM above the head + g_clones copies + colormod tint) is still not networked — only the announcer + center-print presentation subset is driven (indicator.entity unchanged)."
-    - "`kill` still has no player_blocked gate (CmdKill checks FragsSpectator/IsDead + KillCountdown checks game_stopped, but Base also bails on this.player_blocked — a minor residual gate gap)."
-  reaudit_note: "2026-06-27 re-audit (Waves 16-17): re-read all current port files (KillCountdown.cs, GameWorld.cs host wiring, Commands.cs handlers + registrations, Cts.cs retract, Cvars.cs, NotificationsList.cs) and built the server project green. All 12 rows confirmed at their prior status — Waves 16-17 only shifted line numbers (~+70 lines: Tick drive GameWorld.cs:1850, cts.OnFinishRetract :3139, CmdKill Commands.cs:1696, ClientKillHook GameWorld.cs:968), no status change. Refreshed the drifted line refs below. Found one omission in the impulse.waypoint_kill row note: the live gate ALSO requires p.PersonalCheckpoint != null (QC `if(this.personal)` wrap) — that is MORE faithful than the row claimed, not a regression."
+    - "Compare the countdown sprite, tint and clone timing from paired graphical clients."
 features:
   - id: sv-clientkill.command.kill
     name: "`kill` console command → suicide"
@@ -29,12 +27,11 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Base also bails on `this.player_blocked` before deferring; the port handles game_stopped (KillCountdown.Begin checks GameStopped) but has no player_blocked equivalent — a minor residual gate gap."
+    gaps: []
     verification:
       - { kind: code, ref: "CmdKill (Commands.cs:1696-1707) defers through _world.KillCountdown.Begin(p,0) (:1705) instead of an immediate Combat.Damage; PerformKill (GameWorld.cs:942-962) is Combat.Damage(p,p,p,100000,DEATH_KILL) — self as attacker/inflictor, matching Base Damage(this,this,this). Begin falls back to an immediate kill when delay<=0. Registered Commands.cs:814. FragsSpectator/IsDead guards at :1700-1701.", result: pass }
     confidence: high
-    notes: "2026-06-27 re-audit (Waves 16-17): re-confirmed faithful/live against the current tree, no change. CmdKill begins the g_balance_kill_delay countdown and the self-kill passes (p,p,p). Residual: player_blocked gate still not modeled."
+    notes: "CmdKill uses the Domination movement-block gate from player physics."
   - id: sv-clientkill.countdown.delay
     name: "g_balance_kill_delay countdown timer before death"
     layer: [authority]
@@ -58,7 +55,7 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "The lip-stagger first-think offset (nextthink = starttime + lip*0.05) is not modeled — the first think fires on the next driven tick (a cosmetic clones detail, KillCountdown.cs:136-138)."
+      - "Player and clone first thinks include the copy ordinal stagger, sampled on fixed simulation ticks."
     verification:
       - { kind: code, ref: "Cvars.cs:170 registers g_balance_kill_delay default 2 (= Base xonotic-server.cfg:446). KillCountdown.Begin sets cnt=ceil(killtime) and clamps to min(killtime,1) when RoundActiveNotStarted (= Rounds.IsRoundStarted false, GameWorld.cs:939); Tick decrements once per whole second and fires PerformKill at cnt<=0. Driven over killCountdownPlayers each frame (GameWorld.cs:1848-1850).", result: pass }
     confidence: high
@@ -95,29 +92,30 @@ features:
     base_refs:
       - "server/clientkill.qc:159 ClientKill_TeamChange (spawn killindicator)"
       - "server/clientkill.qc:61 KillIndicator_Think (setmodel MDL_NUM)"
-    port_refs: []
+    port_refs:
+      - "src/VortexArena.Server/KillCountdown.cs: Begin, Tick and TickClones"
+      - "game/net/ServerNet.cs: BuildEntitySet"
+      - "src/VortexArena.Net/NetEntity.cs: EntityStateCodec"
+      - "game/client/CosmeticModelLayer.cs: DriveCountdown"
     constants:
-      - { name: "scale", base: "0.5", port: "none", match: false }
-      - { name: "origin_offset", base: "'0 0 52'", port: "none", match: false }
-      - { name: "digit_model", base: "MDL_NUM(cnt) for cnt<=10", port: "none", match: false }
-      - { name: "lip_stagger", base: "lip*0.05; clientkilltime floor", port: "none", match: false }
+      - { name: "scale", base: "0.5", port: "0.5", match: true }
+      - { name: "origin_offset", base: "0 0 52", port: "0 0 52", match: true }
+      - { name: "digit_model", base: "MDL_NUM(cnt) for cnt<=10", port: "models/sprites/1.spr32 through 10.spr32", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
+      logic: faithful
+      values: faithful
+      timing: partial
+      presentation: partial
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No floating numeric countdown model is attached above the player; nothing is networked for it (KillCountdown drives only the announcer + center-print, explicitly NOT the digit entity — KillCountdown.cs:12-14)."
-      - "Clones on g_clones ghosts (the IL_EACH(g_clones) killindicator copy on each non-respawnghost clone) are also absent."
-      - "The digit-entity colormod tint (black / grey / Team_ColorRGB) is unmodeled."
+      - "Snapshot delivery samples the visible digit. Check moving attachments and action tints in paired captures."
     verification:
-      - { kind: grep, ref: "2026-06-27 re-audit: killindicator/MDL_NUM appear ONLY in comments (GameWorld.cs) + the KillCntdown* state-field subset (ServerPlayerState.cs, KillCountdown.cs) — no floating digit *entity* is spawned or networked. KillCountdown.cs:11-14 + :238-240 document the digit entity as out of scope.", result: fail }
-    confidence: high
-    notes: "Unchanged through Waves 16-17 (still missing/na). CSQC shows MDL_NUM digits 1..10 in Base; the port models only the spoken announcer + center-print countdown, never the world-space digit model. This is the only open dimension for the unit."
+      - { kind: code, ref: "Begin selects player and clone start times. Tick sets the digit. BuildEntitySet and the client proxy paths deliver the change to the sprite builder.", result: pass }
+    confidence: medium
+    notes: "Single-second initial player countdowns and silent CTS kills suppress the digit. Clone indicators advance independently."
   - id: sv-clientkill.announcer.number
     name: "Spoken kill countdown announcer (ANNCE_NUM_KILL_n)"
     layer: [presentation]
@@ -144,7 +142,7 @@ features:
     verification:
       - { kind: code, ref: "KillCountdown.Tick (KillCountdown.cs:221-222) sends MSG_ANNCE NUM_KILL_<cnt> each whole second for cnt<=10, gated via AnnceIfEnabled on the notification's shipped Enabled flag; driven from GameWorld.OnStartFrame (:1848-1850). Silent (CTS-finish) indicators skip the announcer (count==1 guard). Reachable from suicide AND team-change/spectate (both route through Begin).", result: pass }
     confidence: high
-    notes: "2026-06-27 re-audit (Waves 16-17): re-confirmed faithful/live, no change. NUM_KILL ships enabled:false (NotificationsList.cs:177, = Base N___NEVER) and the Tick AnnceIfEnabled gate honors it; the announcer has a live per-second send path on both suicide and deferred team-change/spectate. Floating digit entity still not networked (separate row indicator.entity)."
+    notes: "2026-06-27 re-audit (Waves 16-17): re-confirmed faithful/live, no change. NUM_KILL ships enabled:false (NotificationsList.cs:177, = Base N___NEVER) and the Tick AnnceIfEnabled gate honors it; the announcer has a live per-second send path on both suicide and deferred team-change/spectate. See indicator.entity for the sprite."
   - id: sv-clientkill.centerprint.teamchange
     name: "Center-print 'Suicide/Changing to TEAM/Spectating in N'"
     layer: [presentation]
@@ -167,7 +165,7 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "colormod (the digit entity's tint) is not modeled — the digit entity is not networked (indicator.entity)."
+      - "The attached digit receives the selected team tint through the snapshot. See indicator.entity."
     verification:
       - { kind: code, ref: "KillCountdown.Begin (KillCountdown.cs:143-148) sends MSG_CENTER TEAMCHANGE_<target> with cnt as the ^COUNT arg; TeamChangeCenterName maps 0/-2/team→notif (:241-250). CmdKill→Begin(p,0)=SUICIDE; CmdSelectTeam→Begin(caller,team|best)=RED/BLUE/YELLOW/PINK; CmdSpectate→Begin(p,-2)=SPECTATE; the auto-path ALREADYBEST early-out fires CENTER_TEAMCHANGE_ALREADYBEST (Commands.cs:1638).", result: pass }
     confidence: high

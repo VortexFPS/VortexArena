@@ -61,6 +61,15 @@ public sealed class SpawnNearTeammateMutator : MutatorBase
 
     public SpawnNearTeammateMutator() => NetName = "spawn_near_teammate";
 
+    /// <summary>The server's lookup for the spawning client's replicated preference.</summary>
+    public static Func<Entity, bool>? ClientPreferenceProvider { get; set; }
+
+    private static bool ShouldRelocate(Entity player)
+    {
+        int mode = (int)Api.Cvars.GetFloat("g_spawn_near_teammate_ignore_spawnpoint");
+        return mode == 1 || (mode == 2 && ClientPreferenceProvider?.Invoke(player) == true);
+    }
+
     // QC: REGISTER_MUTATOR(spawn_near_teammate, expr_evaluate(autocvar_g_spawn_near_teammate)).
     public override bool IsEnabled =>
         Api.Services is not null && ExprEvaluate(Api.Cvars.GetString("g_spawn_near_teammate"));
@@ -103,8 +112,7 @@ public sealed class SpawnNearTeammateMutator : MutatorBase
 
         // QC: ignore_spawnpoint == 1, or == 2 && the player's cl_spawn_near_teammate cvar → don't bias the score
         // (the relocation branch in PlayerSpawn handles it instead).
-        int ignoreMode = (int)Api.Cvars.GetFloat("g_spawn_near_teammate_ignore_spawnpoint");
-        if (ignoreMode == 1 || (ignoreMode == 2 && Api.Cvars.GetFloat("cl_spawn_near_teammate") != 0f))
+        if (ShouldRelocate(player))
             return false;
 
         // QC: spawn_spot.msnt_lookat = NULL;
@@ -162,10 +170,7 @@ public sealed class SpawnNearTeammateMutator : MutatorBase
         foreach (int n in perTeam)
             if (n == 1) return false;
 
-        int ignoreMode = (int)Api.Cvars.GetFloat("g_spawn_near_teammate_ignore_spawnpoint");
-        bool ignore = ignoreMode == 1 || (ignoreMode == 2 && Api.Cvars.GetFloat("cl_spawn_near_teammate") != 0f);
-
-        if (ignore)
+        if (ShouldRelocate(player))
         {
             RelocateNearTeammate(player);
         }

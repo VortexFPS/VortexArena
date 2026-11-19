@@ -7,6 +7,8 @@ using VortexArena.Common.Services;
 using VortexArena.Engine.Collision;
 using VortexArena.Engine.Particles;
 using VortexArena.Game.Client.Particles;
+using VortexArena.Game.Loaders;
+using VortexArena.Game.Loaders.Models;
 using NVec3 = System.Numerics.Vector3;
 
 namespace VortexArena.Game.Client;
@@ -134,6 +136,9 @@ public partial class EffectSystem : Node3D
     public Func<string, string?>? VfsTextLoader { get; set; }
 
     private bool _infoLoadAttempted;
+    private bool _usingOriginalAssets;
+    private ParticleFont? _authoredFont;
+    private ParticleFont? _originalFont;
 
     /// <summary>Projected impact decals (bullet holes / scorch / blood stains). Created on first add to the tree.</summary>
     public Decals Decals { get; private set; } = null!;
@@ -193,19 +198,16 @@ public partial class EffectSystem : Node3D
         // over the world itself. Same brushes, same broadphase, same answers.
         FaithfulParticles?.SetTrace(new TraceService(world.ShareForThread()), new TraceService(world));
 
-        // Give the casing sim a world-only tracer too, so brass does full MOVETYPE_BOUNCE world collision
-        // (reflect off real brush faces at cl_casings_ticrate) instead of the FloorZ ground-plane fallback —
-        // faithful to Base Movetype_Physics_MatchTicrate. Same client-only, gate-free tracer rationale as above
-        // (never the server world, never live entities). The sweep is a near-point box (casings are tiny brass).
+        // Local debris sweeps the same static world on the main thread. Casings and Raptor
+        // fragments are points; ordinary model gibs pass their QC hull to the same tracer.
+        var debrisTrace = new TraceService(world);
+        TraceResult TraceDebris(NVec3 from, NVec3 to, NVec3 halfSize)
+            => debrisTrace.Trace(from, -halfSize, halfSize, to, MoveFilter.WorldOnly, null);
+        DebrisTrace trace = TraceDebris;
         if (Casings is not null)
-        {
-            var casingTrace = new TraceService(world);
-            Casings.TraceHook = (from, to) =>
-            {
-                TraceResult r = casingTrace.Trace(from, NVec3.Zero, NVec3.Zero, to, MoveFilter.WorldOnly, null);
-                return new ShellCasings.CasingTrace(r.Fraction, r.EndPos, r.PlaneNormal, r.StartSolid);
-            };
-        }
+            Casings.WorldTrace = trace;
+        if (Gibs is not null)
+            Gibs.WorldTrace = trace;
     }
 
     /// <summary>
@@ -225,7 +227,7 @@ public partial class EffectSystem : Node3D
     /// the segment with the shared fractional accumulator, so per-frame calls compose into a continuous,
     /// speed-independent trail exactly like DP. Returns false when the faithful path is off (mode 2).
     /// </summary>
-    public bool SpawnTrailSegment(string effectName, NVec3 from, NVec3 to, NVec3 velocity)
+    public bool SpawnTrailSegment(string effectName, NVec3 from, NVec3 to, NVec3 velocity, float opacity = 1f)
     {
         if (!UseFaithfulTrails)
             return false;
@@ -234,7 +236,13 @@ public partial class EffectSystem : Node3D
         IReadOnlyList<EffectInfoEmitter>? blocks = LookupInfo(effectName, effect);
         if (blocks is null || blocks.Count == 0)
             return false;
-        FaithfulParticles.Trail(blocks, from, to, velocity, 1);
+        // QC Projectile_DrawTrail splits projectile opacity evenly between density and particle alpha.
+        if (opacity > 0f)
+        {
+            float fade = MathF.Sqrt(opacity);
+            uint tint = 0xFFFFFF00u | (uint)MathF.Round(fade * 255f);
+            FaithfulParticles.Trail(blocks, from, to, velocity, 1, tint, fade);
+        }
         return true;
     }
 
@@ -267,15 +275,68 @@ public partial class EffectSystem : Node3D
         }
     }
     private Func<string, Node3D?>? _modelLoader;
+    private static readonly StringName FireballOpacity = "fireball_opacity";
+    private Shader? _fireballShader;
+    private readonly List<(Md3Morph Model, ShaderMaterial Material, float FinalScale, float? Age)> _fireballBlasts = new();
+
+    public void Spawn(FireballBlastEffect effect)
+    {
+        if (BuildFireballSphere() is not { } sphere)
+            return;
+
+        var (model, material) = sphere;
+        Aabb bounds = model.MeshInstance.GetAabb();
+        Vector3 extent = (-bounds.Position).Max(bounds.End);
+        float modelExtent = MathF.Max(extent.X, MathF.Max(extent.Y, extent.Z));
+        float finalScale = modelExtent > 0f ? effect.FinalScale(modelExtent) : 0f;
+        if (finalScale <= 0f)
+        {
+            model.Free();
+            return;
+        }
+
+        model.Position = Coords.ToGodot(effect.Origin);
+        model.Visible = false;
+        AddChild(model);
+        _fireballBlasts.Add((model, material, finalScale, null));
+    }
+
+    private (Md3Morph Model, ShaderMaterial Material)? BuildFireballSphere()
+    {
+        Node3D? node = _modelLoader?.Invoke(FireballBlastEffect.ModelPath);
+        if (node is not Md3Morph model)
+        {
+            node?.Free();
+            return null;
+        }
+
+        model.SetFrame(0);
+        // DarkPlaces lights this alias model from the world grid. Use the same native model
+        // shader with alpha enabled only for these spheres, including on Compatibility.
+        _fireballShader ??= new Shader
+        {
+            Code = PlayerSkinShader.Code.Replace("void fragment() {",
+                "uniform float fireball_opacity;\nvoid fragment() {\n    ALPHA = fireball_opacity;"),
+        };
+        var material = new ShaderMaterial { Shader = _fireballShader };
+        if (TextureLoader?.Invoke("models/sphere/sphere") is { } texture)
+            material.SetShaderParameter(PlayerSkinShader.AlbedoUniform, texture);
+        material.SetShaderParameter(FireballOpacity, FireballBlastEffect.PeakAlpha);
+        model.MeshInstance.MaterialOverride = material;
+        ModelTint.EnableGridLight(model, true);
+        model.MeshInstance.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        return (model, material);
+    }
 
     public override void _Ready()
     {
         // Sub-systems live as children so they share this node's tree lifetime and transform.
         Decals = new Decals { Name = "Decals" };
         AddChild(Decals);
-        Casings = new ShellCasings { Name = "Casings", ModelLoader = _modelLoader };
+        ICvarService clientCvars = VortexArena.Game.Menu.MenuState.Cvars;
+        Casings = new ShellCasings { Name = "Casings", ModelLoader = _modelLoader, Cvars = clientCvars };
         AddChild(Casings);
-        Gibs = new ModelGibs { Name = "Gibs", ModelLoader = _modelLoader };
+        Gibs = new ModelGibs { Name = "Gibs", ModelLoader = _modelLoader, Cvars = clientCvars };
         AddChild(Gibs);
 
         // Dual particle backends + SDF service live as children (shared transform/lifetime). Font/Decals and
@@ -285,8 +346,6 @@ public partial class EffectSystem : Node3D
         // MenuState.Cvars. The faithful sim, renderer, router and SDF service MUST read them from there — NOT
         // the ambient Api.Cvars, which on a listen server is the SERVER store (it lacks the client particle
         // cvars, so cl_particles reads 0 and every spawn is gated off → nothing renders). See SetCvars.
-        ICvarService clientCvars = VortexArena.Game.Menu.MenuState.Cvars;
-
         FaithfulParticles = new FaithfulParticleBackend { Name = "FaithfulParticles" };
         AddChild(FaithfulParticles);
         FaithfulParticles.SetCvars(clientCvars);
@@ -444,6 +503,7 @@ public partial class EffectSystem : Node3D
         // ModelLoader, the generated fallback otherwise — via the same BuildMesh factory the live spawn uses.
         if (Gibs is not null) list.AddRange(Gibs.BuildWarmupInstances());
         if (Casings is not null) list.AddRange(Casings.BuildWarmupInstances());
+        if (BuildFireballSphere() is { } fireballSphere) list.Add(fireballSphere.Model);
 
         // One representative effect flash so the warm viewport renders with a clustered OmniLight active.
         // (The live fx-light pool itself is seeded by the BuildFromInfo warm bursts above — their
@@ -456,40 +516,44 @@ public partial class EffectSystem : Node3D
     /// <summary>Lazily load effectinfo.txt the first time we need it (so a TextLoader set after _Ready still applies).</summary>
     private void EnsureInfoLoaded()
     {
-        if (_infoLoadAttempted)
-            return;
-        _infoLoadAttempted = true;
+        int mode = (int)VortexArena.Game.Menu.MenuState.Cvars.GetFloat(ParticleCvars.Modern);
+        bool original = mode == 0;
+        bool firstLoad = !_infoLoadAttempted;
 
-        // Source effectinfo.txt straight from the mounted VFS when the host wired a text loader (so the
-        // override/ precedence applies); otherwise the parser's disk fallback finds the content repo copy.
-        // PROCESS-LIFETIME: GetShared parses once and every later match reuses it, so the menu warm can pay
-        // this during menu dwell (MenuAssetWarmer) and a map change / server switch is a straight cache hit.
-        // Never throws — a read miss returns an empty catalog and the heuristic classifier covers it.
-        Info = EffectInfo.GetShared(EffectInfo.DefaultVPath, VfsTextLoader);
-
-        // Build the particle-texture atlas once. A miss leaves Font not-loaded and callers fall back to the
-        // solid-quad/disc path, so this never blocks rendering.
-        try { Font = ParticleFont.Load(TextureLoader, VfsTextLoader); }
-        catch { Font = null; }
-
-        // Wire the dual particle backends now that the atlas + decal subsystem exist. Idempotent (shares this
-        // method's _infoLoadAttempted guard). The per-effect style overlay (effectinfo_xg.txt) is parsed from
-        // the same VFS text loader; absent => every effect resolves to ParticleStyle.Auto (faithful by default).
-        if (FaithfulParticles is not null)
+        if (firstLoad)
         {
-            FaithfulParticles.SetFont(Font);
-            FaithfulParticles.SetDecals(Decals);
+            _infoLoadAttempted = true;
+            FaithfulParticles?.SetDecals(Decals);
+            try { Styles.LoadShared(VfsTextLoader); }
+            catch { /* Missing overlay defaults to Auto. */ }
         }
+        else if (_usingOriginalAssets == original)
+        {
+            return;
+        }
+
+        _usingOriginalAssets = original;
+        if (original)
+            _originalFont ??= ParticleFont.Load(TextureLoader, VfsTextLoader, EffectInfo.OriginalRoot);
+
+        EffectInfo? pinned = original ? EffectInfo.GetShared(EffectInfo.OriginalVPath, VfsTextLoader) : null;
+        bool usePinnedPair = pinned?.Loaded == true && _originalFont?.Loaded == true;
+        Info = usePinnedPair ? pinned! : EffectInfo.GetShared(EffectInfo.DefaultVPath, VfsTextLoader);
+        Font = usePinnedPair ? _originalFont : (_authoredFont ??= ParticleFont.Load(TextureLoader, VfsTextLoader));
+
+        // Faithful particles and projected splats store cell indices. Reset those pools when the atlas
+        // changes so effects emitted with one UV table never sample the other.
+        if (!firstLoad)
+        {
+            FaithfulParticles?.Clear();
+            Splats?.Clear();
+        }
+        FaithfulParticles?.SetFont(Font);
         if (Splats is not null)
             Splats.Font = Font;
         if (ModernParticles is not null)
-            ModernParticles.Font = Font;
-        // Shared for the same reason as Info above. No overlay ships today, so what this actually caches is
-        // the MISS — the VFS probe plus the disk-path fallback walk every match otherwise repeats.
-        try { Styles.LoadShared(VfsTextLoader); }
-        catch { /* no overlay => Auto everywhere */ }
+            ModernParticles.Font = _authoredFont;
 
-        int mode = (int)VortexArena.Game.Menu.MenuState.Cvars.GetFloat(ParticleCvars.Modern);
         string modeName = mode switch { 0 => "original", 2 => "modern", _ => "mixed" };
         GD.Print($"[EffectSystem] effectinfo: {Info.Count} effects, particlefont atlas: " +
                  (Font?.Loaded == true ? "loaded" : "MISSING (solid-quad fallback)") +
@@ -550,6 +614,53 @@ public partial class EffectSystem : Node3D
             return SpawnCasing(origin, velocity, shell: false);
         if (effectName == "CASING_SHELL" || effectName == "casing_shell")
             return SpawnCasing(origin, velocity, shell: true);
+
+        if (ModelSpeciesEffects.TryGetGibEvent(effectName, out GibEffectKind gibKind, out ModelSpecies species))
+        {
+            var cvars = VortexArena.Game.Menu.MenuState.Cvars;
+            float gentleGibs = cvars.GetFloat("cl_gentle_gibs");
+            bool gentle = gentleGibs != 0f || cvars.GetFloat("cl_gentle") != 0f;
+            if (!gentle)
+                count *= 1f - cvars.GetFloat("cl_nogibs");
+            if (cvars.GetFloat("ekg") != 0f)
+                count *= 5f;
+            if (!(count > 0f) || !float.IsFinite(count))
+                return null;
+
+            bool particleOnly = !gentle && cvars.GetFloat("cl_particlegibs") != 0f;
+            if (gentle || particleOnly)
+            {
+                if (gibKind == GibEffectKind.Chunk)
+                    return null;
+                string prefix = particleOnly ? "particlegibs_" : gentleGibs switch
+                {
+                    2f => "",
+                    3f => "happy_",
+                    _ => "morphed_"
+                };
+                effectName = prefix + (gibKind == GibEffectKind.Hit ? "damage_hit" : "damage_dissolve");
+                if (gibKind == GibEffectKind.Splash)
+                    count = Math.Min(count, ModelGibs.MaxSplashAmount);
+            }
+            else if (gibKind == GibEffectKind.Splash)
+            {
+                count = Math.Min(count, ModelGibs.MaxSplashAmount);
+                Gibs?.Splash(origin, velocity, count, species: species);
+                SpawnGibShower(species, origin, count);
+                return null;
+            }
+            else if (gibKind == GibEffectKind.Chunk)
+            {
+                Gibs?.ImpactChunk(origin, velocity, count, species);
+                return null;
+            }
+            else
+                effectName = ModelSpeciesEffects.Prefix(species) + "blood";
+
+            // A hit already carries the byte in the type-2 pointparticle units (stock amount × 16).
+            if (GetInfoBlocks(effectName) is not { Count: > 0 })
+                return null;
+        }
 
         // Raptor cluster-bomb burst: the DEATH_VH_RAPT_FRAGMENT FX tosses cosmetic shell-fragment gibs
         // (RaptorCBShellfragToss) carrying the bursting bomb's velocity. The gameplay layer emits this as the
@@ -685,6 +796,19 @@ public partial class EffectSystem : Node3D
         return node;
     }
 
+    internal bool HasCatalogEffect(string name)
+    {
+        EnsureInfoLoaded();
+        return LookupInfo(name, null) is { Count: > 0 };
+    }
+
+    // DamageEffect uses _particleeffectnum, which leaves missing names silent.
+    internal void SpawnCatalogPoint(string name, NVec3 origin)
+    {
+        if (HasCatalogEffect(name))
+            Spawn(name, origin);
+    }
+
     /// <summary>Spawn directly from a structured <see cref="EffectRequest"/> (the net layer's decoded form).</summary>
     public Node3D? Spawn(in EffectRequest request)
     {
@@ -748,6 +872,20 @@ public partial class EffectSystem : Node3D
     /// parsed mode) — public so the persistent map emitters reuse the proven particle-material path.</summary>
     public Mesh BuildEmitterMesh(EffectInfoEmitter info, Color color)
         => BuildInfoMesh(info, color, Font?.CellInRange(info.Tex0, info.Tex1));
+
+    private void SpawnGibShower(ModelSpecies species, NVec3 origin, float amount)
+    {
+        string name = ModelSpeciesEffects.Prefix(species) + "bloodshower";
+        var cvars = VortexArena.Game.Menu.MenuState.Cvars;
+        float quality = cvars.Has(ParticleCvars.Quality) ? cvars.GetFloat(ParticleCvars.Quality) : 1f;
+        if (!(quality > 0f) || !float.IsFinite(quality) || GetInfoBlocks(name) is not { Count: > 0 })
+            return;
+        // new_te_bloodshower issues separate calls. Blocks with countabsolute depend on that count.
+        // The stock settings slider spans 0–3 (0–150 calls). Bound extreme console values.
+        int samples = (int)MathF.Ceiling(MathF.Min(50f * quality, 1024f));
+        for (int i = 0; i < samples; i++)
+            Spawn(name, origin, PointParticleEmitter.RandomVec(System.Random.Shared) * 1200f, amount / 50f);
+    }
 
     // --- decals / casings / model-gibs entry points (T20) -------------------------------------------
     // These are the public hooks the net/client layer calls for the CSQC temp-entities that aren't plain
@@ -2252,17 +2390,34 @@ public partial class EffectSystem : Node3D
         _liveFxLights.Add(l);
     }
 
-    /// <summary>The one fx-light ager: linear energy fade over each flash's duration, then release to the
-    /// pool. Replaces the per-flash SceneTree Tween + QueueFree.</summary>
+    /// <summary>Advance transient model effects and release expired lights to their pool.</summary>
     public override void _Process(double delta)
     {
-        int count = _liveFxLights.Count;
-        if (count == 0)
+        if (_fireballBlasts.Count == 0 && _liveFxLights.Count == 0)
             return;
-        // #30 slowmo/pause: flash-light fades are CSQC dlight decay in Base (cl.time) — scale with the client
-        // render-time factor so a paused game holds the flashes instead of fading them out on wall clock.
-        float dt = VortexArena.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
-        for (int i = count - 1; i >= 0; i--)
+
+        // The CSQC effect clock follows game time, including slow motion and pause.
+        float dt = ClientRenderTime.ScaleDelta((float)delta);
+        for (int i = _fireballBlasts.Count - 1; i >= 0; i--)
+        {
+            var blast = _fireballBlasts[i];
+            // NetGame polls before this child processes. Its delta includes time before the event arrived.
+            float age = blast.Age is float previousAge ? previousAge + dt : 0f;
+            if (!FireballBlastEffect.Sample(age, out float scaleFraction, out float alpha))
+            {
+                blast.Model.QueueFree();
+                _fireballBlasts.RemoveAt(i);
+                continue;
+            }
+            blast.Age = age;
+            _fireballBlasts[i] = blast;
+            blast.Model.Visible = scaleFraction > 0f;
+            if (scaleFraction > 0f)
+                blast.Model.Scale = Vector3.One * (blast.FinalScale * scaleFraction);
+            blast.Material.SetShaderParameter(FireballOpacity, alpha);
+        }
+
+        for (int i = _liveFxLights.Count - 1; i >= 0; i--)
         {
             FxLight l = _liveFxLights[i];
             l.Age += dt;

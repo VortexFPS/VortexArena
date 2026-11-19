@@ -1,0 +1,144 @@
+DarkPlaces Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+Game is Xonotic using gamedir data
+gamename for server filtering: Xonotic
+Package /tmp/va-script-cry-original2/original/data/shared.pk3 contains the file models/xonotic_jumppad01/xonotic_jumppads01_readme.txt several times
+Package /tmp/va-script-cry-original2/original/data/shared.pk3 contains the file textures/phillipk1x/_GPL.txt several times
+Package /tmp/va-script-cry-original2/original/data/shared.pk3 contains the file textures/phillipk1x/_readme.txt several times
+Package /tmp/va-script-cry-original2/original/data/shared.pk3 contains the file textures/phillipk2x/_GPL.txt several times
+Package /tmp/va-script-cry-original2/original/data/shared.pk3 contains the file textures/phillipk2x/_readme.txt several times
+Current nice level is below the soft limit - cannot use niceness
+-ip option used, setting net_address to "127.0.0.1"
+-port option used, setting port cvar to 26808
+Loaded library "libcurl.so.4"
+Skeletal animation uses SSE code path
+execing quake.rc
+execing default.cfg
+execing xonotic-common.cfg
+Unknown command "r_textbrightness"
+Unknown command "r_textcontrast"
+execing commands.cfg
+execing help.cfg
+execing xonotic-server.cfg
+"maxplayers" set to "16"
+execing testing.cfg
+execing balance-xonotic.cfg
+execing bal-wep-xonotic.cfg
+execing physicsX.cfg
+execing turrets.cfg
+execing vehicles.cfg
+execing gametypes-server.cfg
+execing ctfscoring-samual.cfg
+execing mutators.cfg
+execing randomitems-xonotic.cfg
+execing monsters.cfg
+execing minigames.cfg
+execing physics.cfg
+execing help-xonotic.cfg
+couldn't exec cdtracks.cfg
+execing notifications.cfg
+execing data/campaign.cfg
+execing autoexec/empty.cfg
+execing autoexec.cfg
+SpawnServer: runningmanctf
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Server listening on address 127.0.0.1:26808
+Server listening on address [0:0:0:0:0:0:0:0]:26808
+server: program loaded (crc 51381, size 6720K)
+[::SVQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+:gamestart:dm_runningmanctf:0.1795053894.313104
+:gameinfo:mutators:LIST:crylink arena:norecoil
+:gameinfo:end
+Server spawned.
+Unknown command "crypto_keygen"
+execing post-config.cfg
+RedProbe is connecting...
+RedProbe connected
+:join:1:1:127.0.0.1:RedProbe
+RedProbe connected
+:team:1:-1:4
+Server lag report: 49.4% CPU, 18.00% lost, offset avg 7.6ms, max 107.8ms, sdev 22.2ms
+Server lag report: 100.0% CPU, 49.61% lost, offset avg 84.7ms, max 115.7ms, sdev 26.3ms
+:startdelay_ended
+Server lag report: 99.7% CPU, 33.45% lost, offset avg 71.5ms, max 120.6ms, sdev 31.3ms
+Server lag report: 98.9% CPU, 22.67% lost, offset avg 63.6ms, max 116.1ms, sdev 36.8ms
+Server lag report: 95.2% CPU, 7.71% lost, offset avg 29.1ms, max 106.7ms, sdev 27.6ms
+Server lag report: 89.7% CPU, 10.62% lost, offset avg 21.7ms, max 106.2ms, sdev 23.9ms
+Server lag report: 63.8% CPU, 2.25% lost, offset avg 7.9ms, max 102.8ms, sdev 15.6ms
+BlueProbe is connecting...
+Server lag report: 96.4% CPU, 24.81% lost, offset avg 31.2ms, max 109.7ms, sdev 34.0ms
+Server lag report: 100.0% CPU, 70.14% lost, offset avg 100.9ms, max 120.5ms, sdev 15.2ms
+Server lag report: 100.0% CPU, 90.91% lost, offset avg 112.6ms, max 122.1ms, sdev 6.0ms
+Server lag report: 100.0% CPU, 80.47% lost, offset avg 115.0ms, max 123.5ms, sdev 5.8ms
+Server lag report: 10.0% CPU, 29.41% lost, offset avg 2.1ms, max 149.1ms, sdev 10.2ms
+BlueProbe connected
+:join:2:2:127.0.0.1:BlueProbe
+BlueProbe connected
+:team:2:-1:4
+BlueProbe is now playing
+BlueProbe at probe_cryfire 
+Client "BlueProbe" dropped (Disconnect by user)
+:part:2
+BlueProbe disconnected
+:anticheat:_time:2:63.418850
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+BlueProbe left the game (Disconnect by user)
+Client "RedProbe" dropped (Disconnect by user)
+:part:1
+RedProbe disconnected
+:anticheat:_time:1:63.731350
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+RedProbe left the game (Disconnect by user)
+
+Received Termination signal, exiting...

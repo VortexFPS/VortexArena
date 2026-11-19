@@ -1,0 +1,20 @@
+Dedicated Darkzone and separate native client, disposable loopback profiles
+Before the caller correction
+* player calls a vote for fraglimit 73
+* player's vote for fraglimit 73 was accepted
+
+After the caller and input fixes
+"F1" = "vyes"
+* server calls a vote for fraglimit 73
+* server's vote for fraglimit 73 was accepted
+You accepted the vote.
+* server calls a vote for fraglimit 74
+* server's vote for fraglimit 74 was rejected
+You rejected the vote.
+* server calls a vote for fraglimit 75
+]menu_cmd directmenu Uid2Name
+CONSENT_AFTER_KEY 0
+Vote for fraglimit 75 called by server.
+]cl_cmd handlevote YES
+* server's vote for fraglimit 75 was accepted
+You accepted the vote.

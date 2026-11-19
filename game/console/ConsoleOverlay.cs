@@ -7,6 +7,7 @@ using VortexArena.Common.Diagnostics;
 using VortexArena.Engine.Console;
 using VortexArena.Engine.Simulation;
 using VortexArena.Game.Menu;
+using ServerCommands = VortexArena.Server.Commands;
 
 namespace VortexArena.Game.Console;
 
@@ -71,6 +72,10 @@ public partial class ConsoleOverlay : CanvasLayer
     // gameplay command does — `lsmaps` asks the live server when there is one and answers locally when not.
     private Func<string, string?>? _localRouter;
     private Action<string>? _remoteSender;
+
+    internal Func<IEnumerable<VortexArena.Common.Framework.Entity>?>? ClientEntities { get; init; }
+    internal Func<bool, bool>? AnswerNamePrompt { get; init; }
+    internal Func<string, bool>? LegacyDiagnostic { get; init; }
 
     /// <summary>The input history (DP's <c>Key_History_*</c> ring), loaded at Initialize and saved on teardown.</summary>
     private readonly ConsoleHistory _history = new();
@@ -142,6 +147,12 @@ public partial class ConsoleOverlay : CanvasLayer
         _localRouter = localRouter;
         _remoteSender = remoteSender;
         _commands = new ConsoleCommands(interp, cvars, Print, Clear, localRouter, remoteSender);
+        _commands.MapExists = map => MenuState.Vfs?.Exists($"maps/{map}.bsp") == true;
+        _commands.MapSupportsGametype = map =>
+        {
+            string mode = Common.Menu.MapInfoBackend.ConfiguredGametype(cvars);
+            return MapInfoCache.Supports(MapInfoCache.Get(map), mode, cvars);
+        };
         RegisterHostCommands(interp);
         WireCompletionSources(_commands.Completion);
 
@@ -346,16 +357,10 @@ public partial class ConsoleOverlay : CanvasLayer
         interp.RegisterCommand("toggleconsole", _ => Callable.From(Toggle).CallDeferred(),
             "show or hide the console");
 
-        // QC Cmd_Scoreboard_SetFields (client/hud/panel/scoreboard.qc:767), exposed in Base as the
-        // `scoreboard_columns_set` client command: set the scoreboard's column layout. No argument re-applies the
-        // saved `scoreboard_columns`; "default" / "all" select the two presets; anything else is a literal spec
-        // ("ping pl name | score deaths"). The scoreboard reads the cvar live, so writing it IS the command.
-        interp.RegisterCommand("scoreboard_columns_set", a =>
-        {
-            if (a.Count < 2) { MenuState.Cvars.Set("scoreboard_columns", MenuState.Cvars.GetString("scoreboard_columns")); return; }
-            string spec = string.Join(' ', a.Skip(1));
-            MenuState.Cvars.Set("scoreboard_columns", spec);
-        }, "set the scoreboard's column layout: scoreboard_columns_set [default|all|<spec>]");
+        interp.RegisterCommand("scoreboard_columns_set", a => RunScoreboardColumns(a, 1),
+            "select a temporary scoreboard layout: scoreboard_columns_set [default|expand_default|all|ALL|<spec>]");
+        interp.RegisterCommand("scoreboard_columns_help", _ => PrintScoreboardColumnsHelp(),
+            "show scoreboard layout syntax and field names");
 
         // ---- the four command-PREFIX dispatchers every commands.cfg alias bottoms out in ----
         //
@@ -372,8 +377,38 @@ public partial class ConsoleOverlay : CanvasLayer
         // DP Cmd_ForwardToServer: the client→server channel. QC's CLIENT_COMMAND set (the `cmd` prefix) plus
         // everything aliased through qc_cmd_cmd/qc_cmd_svcmd — lsmaps, records, rankings, ladder, printmaplist,
         // teamstatus, info, time, cvar_changes, join, ready, vote, …
-        interp.RegisterCommand("cmd", a => ForwardToGame(JoinTail(a), "cmd"),
-            "send a client command to the server: cmd <command> [args]");
+        interp.RegisterCommand("cmd", a =>
+        {
+            string tail = JoinTail(a);
+            // Vote commands belong to the accepted client, including on a listen host.
+            if (a.Count > 1 && a[1].Equals("vote", StringComparison.OrdinalIgnoreCase))
+            {
+                _remoteSender?.Invoke(tail);
+                return;
+            }
+            if (ServerCommands.IsLocalDiagnosticLine(tail))
+            {
+                Print($"Unknown command \"{ServerCommands.Tokenize(tail)[0]}\"");
+                return;
+            }
+            ForwardToGame(tail, "cmd");
+        }, "send a client command to the server: cmd <command> [args]");
+
+        interp.RegisterCommand("handlevote", args =>
+        {
+            // LocalCommand_handlevote uses only argv(1). Missing and nonnumeric operands become zero.
+            string choice = args.Count > 1 ? args[1] : "";
+            bool yes = choice.ToLowerInvariant() switch
+            {
+                "yes" or "true" or "on" => true,
+                "no" or "false" or "off" => false,
+                _ => VortexArena.QuakeC.QcStringBuiltins.StringToFloat(choice) != 0f,
+            };
+            if (AnswerNamePrompt?.Invoke(yes) != true)
+                _remoteSender?.Invoke(yes ? "vote yes" : "vote no");
+        }, "answer the active vote or nickname prompt: cl_cmd handlevote <yes|no>");
+        if (!interp.Aliases.ContainsKey("vyes")) interp.DefineAlias("vyes", "cl_cmd handlevote yes");
+        if (!interp.Aliases.ContainsKey("vno")) interp.DefineAlias("vno", "cl_cmd handlevote no");
 
         // These are both direct console commands and bind targets (P ships as waypoint_here_crosshair).
         // Register them explicitly so they always use the C2S route instead of depending on unknown-command
@@ -390,15 +425,38 @@ public partial class ConsoleOverlay : CanvasLayer
                 a => ForwardToGame(string.Join(' ', a), waypointCommand),
                 "place or clear a player waypoint in the current match");
 
+        interp.RegisterCommand(CommandAliasDump.CommandName, args => RunClientDiagnostic(args, null),
+            CommandAliasDump.Description);
+        foreach (var (name, help) in LocalDiagnostics.CommandHelp)
+            interp.RegisterCommand(name, args => RunClientDiagnostic(args, null), help);
+        foreach (string name in new[] { "dumpweapons", "dumpturrets" })
+            interp.RegisterCommand(name, args => RunBalanceDump(JoinDiagnosticArgs(args, 0), name, explicitServer: false),
+                $"{name} [<filename>] — export live server balance");
+
         // QC SERVER_COMMAND (the sv_cmd prefix): admin verbs — kick/ban/gotomap/endmatch/shuffleteams/…
         // Deliberately NOT forwarded to a remote server: the tail alone would be judged by the server's
         // client-privilege gate and rejected anyway, so a round trip would only turn an honest local message
         // into a confusing remote one.
         interp.RegisterCommand("sv_cmd", a =>
         {
-            string tail = JoinTail(a);
+            if (a.Count > 1 && ServerCommands.IsLocalDiagnostic(a[1]))
+            {
+                string line = JoinDiagnosticArgs(a, 1);
+                if (ServerCommands.IsBalanceDump(a[1]))
+                    RunBalanceDump(line, a[1], explicitServer: true);
+                else
+                    RunServerDiagnostic(line);
+                return;
+            }
+            string tail = a.Count > 1 ? a[1].ToLowerInvariant() switch
+            {
+                "bot_cmd" => JoinBotCommand(a, 1),
+                "maplist" => JoinDiagnosticArgs(a, 1),
+                _ => JoinTail(a)
+            } : "";
             if (tail.Length == 0) { Print("usage: sv_cmd <command> [args]"); return; }
-            if (_localRouter?.Invoke(tail) is not string outp)
+            string lineForServer = a[1].Equals("vote", StringComparison.OrdinalIgnoreCase) ? "sv_cmd " + tail : tail;
+            if (_localRouter?.Invoke(lineForServer) is not string outp)
             {
                 Print($"sv_cmd: \"{tail}\" needs a server you are hosting (try `map <name>` first).");
                 return;
@@ -407,37 +465,91 @@ public partial class ConsoleOverlay : CanvasLayer
             if (trimmed.Length > 0)
                 Print(trimmed);
         }, "run a server admin command on the server you are hosting: sv_cmd <command> [args]");
+        interp.RegisterCommand("bot_cmd", a =>
+        {
+            if (_localRouter?.Invoke(JoinBotCommand(a, 0)) is string output)
+                Print(output.TrimEnd());
+            else
+                Print("bot_cmd needs a server you are hosting.");
+        }, "queue a command for a bot on the server you are hosting");
 
         // QC CLIENT_COMMAND run locally (the cl_cmd prefix). Dispatches only names that are REGISTERED
-        // commands: registered names outrank aliases in the interpreter, so re-entering ExecuteLine for one
-        // cannot loop back through the alias that sent us here (`help` = "cl_cmd help; cmd help" is exactly
-        // that shape). An unregistered name is reported rather than routed — a client command the port has
-        // not implemented is not the server's business.
+        // commands. Dispatch the parsed arguments directly so a quoted message or filename stays one
+        // argument. Registered commands also take precedence over the alias that routed us here.
         interp.RegisterCommand("cl_cmd", a =>
         {
-            string tail = JoinTail(a);
-            if (tail.Length == 0) { Print("usage: cl_cmd <command> [args]"); return; }
-            if (a.Count >= 2 && interp.CommandNames.Any(n => string.Equals(n, a[1], StringComparison.OrdinalIgnoreCase)))
-                interp.ExecuteLine(tail);
-            else
+            if (a.Count >= 3 && a[1].Equals("help", StringComparison.OrdinalIgnoreCase)
+                && a[2].Equals("handlevote", StringComparison.OrdinalIgnoreCase))
+            {
+                Print("Usage: cl_cmd handlevote <vote>");
+                Print("  Where <vote> is the selection for either the current poll or uid2name.");
+                return;
+            }
+            if (a.Count >= 3 && a[1].Equals("hud", StringComparison.OrdinalIgnoreCase))
+            {
+                if (a[2].Equals("scoreboard_columns_set", StringComparison.OrdinalIgnoreCase))
+                {
+                    RunScoreboardColumns(a, 3);
+                    return;
+                }
+                if (a[2].Equals("scoreboard_columns_help", StringComparison.OrdinalIgnoreCase))
+                {
+                    PrintScoreboardColumnsHelp();
+                    return;
+                }
+            }
+            if (IsServerDiagnostic(a, 1))
+            {
+                Print("cl_cmd: unknown command \"sv_cmd\".");
+                return;
+            }
+            if (a.Count > 1 && ServerCommands.IsLocalDiagnostic(a[1]))
+            {
+                RunClientDiagnostic(a.Skip(1).ToArray(), "cl_cmd");
+                return;
+            }
+            if (a.Count < 2)
+                Print("usage: cl_cmd <command> [args]");
+            else if (!interp.TryRunRegisteredCommand(a.Skip(1).ToArray()))
                 Print($"cl_cmd: unknown client command \"{a[1]}\".");
         }, "run a client-side command: cl_cmd <command> [args]");
 
         // QC MENU_COMMAND (the menu_cmd prefix): the front-end verbs, routed through the menu's own dispatcher.
         interp.RegisterCommand("menu_cmd", a =>
         {
-            string tail = JoinTail(a);
-            if (tail.Length == 0) { Print("usage: menu_cmd <command> [args]"); return; }
-            MenuCommand.Run(tail);
+            if (IsServerDiagnostic(a, 1))
+            {
+                Print("menu_cmd: unknown command \"sv_cmd\".");
+                return;
+            }
+            if (a.Count > 1 && ServerCommands.IsLocalDiagnostic(a[1]))
+            {
+                RunClientDiagnostic(a.Skip(1).ToArray(), "menu_cmd");
+                return;
+            }
+            if (a.Count < 2) { Print("usage: menu_cmd <command> [args]"); return; }
+            MenuCommand.RunArguments(a.Skip(1).ToArray());
         }, "run a menu command: menu_cmd <command> [args]");
+
+        // These binds and console aliases need the menu route even when the boot config kept only cvars.
+        foreach (var (alias, dialog) in new[]
+        {
+            ("menu_showwelcomedialog", "Welcome"),
+            ("menu_showgamemenudialog", "GameMenu"),
+            ("team_selection_show", "TeamSelect"),
+        })
+        {
+            if (!interp.Aliases.ContainsKey(alias))
+                interp.DefineAlias(alias, "menu_cmd directmenu " + dialog);
+        }
 
         // `lsmaps [gametype]` — QC CommonCommand_lsmaps. Registered CLIENT-side (and therefore ahead of the
         // `commands.cfg` alias, which registered commands outrank) because at the menu there is no server to
         // answer and the alias's route ends in the generic "no server — start a match first" hint. A player
         // asking what maps they have installed can be answered from the mounted search path without one.
         //
-        // A live game still owns the answer: on a listen host that is this very catalog (NetGame feeds
-        // MapList.LsmapsReply into the server's reply seam), and on a remote server it is THEIR pool — which
+        // A live game still owns the answer. The host resolves its catalog with its own world settings.
+        // On a remote server it is THEIR pool — which
         // is the question worth asking, since `vcall gotomap` can only pick from that.
         interp.RegisterCommand("lsmaps", a =>
         {
@@ -493,9 +605,119 @@ public partial class ConsoleOverlay : CanvasLayer
         }, "show or hide the menu");
     }
 
+    private static bool IsServerDiagnostic(IReadOnlyList<string> args, int index) =>
+        args.Count > index + 1 && args[index].Equals("sv_cmd", StringComparison.OrdinalIgnoreCase) &&
+        ServerCommands.IsLocalDiagnostic(args[index + 1]);
+
+    private void RunServerDiagnostic(string line)
+    {
+        if (_localRouter?.Invoke("sv_cmd " + line) is string output)
+            PrintDiagnostic(output);
+        else
+            Print("sv_cmd needs a server you are hosting.");
+    }
+
+    private void RunBalanceDump(string line, string name, bool explicitServer)
+    {
+        if (!explicitServer && LegacyDiagnostic?.Invoke(line) == true)
+            return;
+        if (_localRouter?.Invoke("sv_cmd " + line) is string output)
+            PrintDiagnostic(output);
+        else
+            Print($"{(name.Equals("dumpweapons", StringComparison.OrdinalIgnoreCase) ? "Weapons" : "Turrets")} dump command only works with sv_cmd.");
+    }
+
+    private void RunClientDiagnostic(IReadOnlyList<string> args, string? prefix)
+    {
+        if (LegacyDiagnostic?.Invoke((prefix is null ? "" : prefix + " ") + JoinDiagnosticArgs(args, 0)) == true)
+            return;
+
+        if (ServerCommands.IsBalanceDump(args[0]))
+        {
+            Print($"{(args[0].Equals("dumpweapons", StringComparison.OrdinalIgnoreCase) ? "Weapons" : "Turrets")} dump command only works with sv_cmd.");
+            return;
+        }
+
+        var entities = prefix == "menu_cmd" ? null : ClientEntities?.Invoke();
+        bool client = prefix == "cl_cmd" || entities is not null;
+        if (args[0].Equals(CommandAliasDump.CommandName, StringComparison.OrdinalIgnoreCase))
+        {
+            // GENERIC_COMMANDS_aliases puts the bare command on qc_cmd_svcl. At the menu
+            // an explicit menu_cmd selects MENUQC instead of an unloaded client program.
+            bool dedicated = VortexArena.Game.Net.NetGame.DedicatedRequested;
+            if (prefix is null && dedicated)
+                RunServerDiagnostic(CommandAliasDump.CommandName);
+            else if (prefix == "menu_cmd")
+                DumpLocalCommandAliases(client: false);
+            else if (!dedicated && entities is not null)
+                DumpLocalCommandAliases(client: true);
+            else
+                Print("client: program is not loaded");
+            return;
+        }
+        var output = new System.Text.StringBuilder();
+        LocalDiagnostics.Run(args, client ? "client" : "menu",
+            _cvars!, entities ?? Array.Empty<VortexArena.Common.Framework.Entity>(), text => output.Append(text));
+        PrintDiagnostic(output.ToString());
+    }
+
+    private void DumpLocalCommandAliases(bool client)
+    {
+        // The frontend shares an interpreter. Select game commands for the requested scope and leave out
+        // engine builtins, the host/server forwarders, and user-defined aliases.
+        var interp = _interp!;
+        var names = interp.CommandNames.OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        Print(CommandAliasDump.Save(client ? "cl_cmd" : "menu_cmd", UserPaths.OpenGameExport, writer =>
+        {
+            if (client)
+                CommandAliasDump.WriteSection(writer, "client", "qc_cmd_cl", Describe(names.Where(name =>
+                    name is "hud" or "scoreboard_columns_set" or "sendcvar")));
+            CommandAliasDump.WriteSection(writer, "generic", "qc_cmd_svmenu", Describe(names.Where(name =>
+                client ? CommandAliasDump.IsGeneric(name) : ServerCommands.IsLocalDiagnostic(name))), last: true);
+        }));
+
+        IEnumerable<(string, string)> Describe(IEnumerable<string> entries) =>
+            entries.Select(name => (name, interp.CommandDescription(name)));
+    }
+
+    private static void RunScoreboardColumns(IReadOnlyList<string> args, int start)
+    {
+        string? spec = args.Count > start ? string.Join(' ', args.Skip(start)) : null;
+        MenuCommand.ApplyScoreboardColumns?.Invoke(spec);
+    }
+
+    private void PrintScoreboardColumnsHelp()
+    {
+        var fields = VortexArena.Common.Gameplay.Scoring.GameScores.Fields
+            .Select(field => field.Label).Where(label => label.Length != 0)
+            .Concat(new[] { "ping", "pl", "name", "nick", "kd", "kdr", "kdratio", "sum", "diff", "k-d", "frags" })
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(label => label, StringComparer.OrdinalIgnoreCase);
+        Print("scoreboard_columns_set [default|expand_default|all|ALL|<fields>]\n"
+            + "Without arguments, reload scoreboard_columns. Map start also reloads it.\n"
+            + "expand_default writes the built-in layout to scoreboard_columns. Other layouts are temporary.\n"
+            + "all includes the available score fields. ALL adds sum, K/D and frags.\n"
+            + "Separate left and right columns with |. Use +mode/field or -mode/field with comma-separated modes.\n"
+            + "Filters also accept teams, noteams, noteamspawns and race. Prefix a field with ? to make it optional.\n"
+            + "Example: scoreboard_columns_set name ping pl | +ctf/caps -dm/score\n"
+            + "Fields: " + string.Join(", ", fields));
+    }
+
+    private void PrintDiagnostic(string output)
+    {
+        if (output.Length > 0)
+            Print(output.TrimEnd('\r', '\n'));
+    }
+
+    private static string JoinDiagnosticArgs(IReadOnlyList<string> args, int start) =>
+        string.Join(' ', args.Skip(start).Select(arg =>
+            string.Concat('"', arg.Replace("\\", "\\\\").Replace("\"", "\\\""), '"')));
+
     /// <summary>Everything after the verb, rejoined — the line a prefix dispatcher passes on.</summary>
     private static string JoinTail(IReadOnlyList<string> argv)
         => argv.Count < 2 ? string.Empty : string.Join(' ', argv.Skip(1));
+
+    private static string JoinBotCommand(IReadOnlyList<string> argv, int start) =>
+        string.Join(' ', argv.Skip(start).Select(arg => arg.Any(char.IsWhiteSpace) ? $"\"{arg}\"" : arg));
 
     /// <summary>
     /// Send <paramref name="line"/> down the same client→server route an unrouted console line takes: the

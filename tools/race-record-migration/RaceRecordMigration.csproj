@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(VortexArenaTfm)</TargetFramework>
+    <RollForward>LatestMajor</RollForward>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/VortexArena.Server/VortexArena.Server.csproj" />
+    <ProjectReference Include="../../src/VortexArena.Legacy/VortexArena.Legacy.csproj" />
+    <ProjectReference Include="../../src/VortexArena.Net/VortexArena.Net.csproj" />
+  </ItemGroup>
+</Project>

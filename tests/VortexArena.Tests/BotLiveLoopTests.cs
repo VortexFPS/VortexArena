@@ -65,6 +65,219 @@ public class BotLiveLoopTests
         }
     }
 
+    [Fact]
+    public void BotScript_LoadRoutesNamesAndRunsTimedSynchronizedInput()
+    {
+        const string script = """
+            sv_cmd bot_cmd reset
+            sv_cmd bot_cmd "First Bot" wait 0.3
+            sv_cmd bot_cmd all barrier
+            sv_cmd bot_cmd all barrier
+            sv_cmd bot_cmd all wait_until 0.2
+            sv_cmd bot_cmd all if health>0
+            sv_cmd bot_cmd all presskey forward
+            sv_cmd bot_cmd all else
+            sv_cmd bot_cmd all presskey backward
+            sv_cmd bot_cmd all fi
+            sv_cmd bot_cmd all presskey hook
+            sv_cmd bot_cmd all wait 0.4
+            sv_cmd bot_cmd all releasekey all
+            sv_cmd bot_cmd all pause
+            """;
+        var world = new GameWorld(FlatFloor(), SpawnDicts(new Vector3(0, 0, 32), new Vector3(500, 0, 32)))
+        {
+            ConfigReader = path => path == "tests/sync.bot" ? script + "\n" : null,
+        };
+        world.Boot("dm");
+        Cvars.Set("bot_join_empty", 1);
+        BotBrain first = Assert.IsType<BotBrain>(world.Bots.AddBot("First Bot"));
+        BotBrain second = Assert.IsType<BotBrain>(world.Bots.AddBot("Second Bot"));
+        Assert.Contains("Unknown command", world.Commands.Execute("sv_cmd bot_cmd load tests/sync.bot",
+            isServerConsole: false, caller: first.Bot).Output);
+        Assert.Contains("14 commands read", world.Commands.Execute("sv_cmd bot_cmd load tests/sync.bot").Output);
+
+        RunTo(world, 0.2f);
+        Assert.Equal(Vector3.Zero, first.LastInput.MoveValues);
+        Assert.Equal(Vector3.Zero, second.LastInput.MoveValues);
+        RunTo(world, 0.46f);
+        Assert.Equal(Vector3.Zero, first.LastInput.MoveValues);
+        Assert.Equal(Vector3.Zero, second.LastInput.MoveValues);
+        RunTo(world, 0.68f);
+        Assert.True(first.LastInput.MoveValues.X > 0f);
+        Assert.True(second.LastInput.MoveValues.X > 0f);
+        Assert.True(world.Bots.InputFor(first.Bot, 0.01f).ButtonHook);
+        RunTo(world, 1.1f);
+        Assert.Equal(Vector3.Zero, first.LastInput.MoveValues);
+        Assert.Equal(Vector3.Zero, second.LastInput.MoveValues);
+        Assert.False(first.LastInput.ButtonHook);
+    }
+
+    [Fact]
+    public void BotScript_PrecachesSampleOnEnqueueAndPlaysAfterWait()
+    {
+        var world = new GameWorld(FlatFloor(), SpawnDicts(new Vector3(0, 0, 32)))
+        {
+            ConfigReader = path => path == "tests/cue.bot"
+                ? "sv_cmd bot_cmd Actor wait 0.5\nsv_cmd bot_cmd Actor sound 4 0.5 2 misc/hit.wav\n"
+                : null,
+        };
+        world.Boot("dm");
+        Cvars.Set("bot_join_empty", 1);
+        BotBrain bot = Assert.IsType<BotBrain>(world.Bots.AddBot("Actor"));
+        var precached = new List<string>();
+        var played = new List<string>();
+        world.Services.SoundImpl.SamplePrecached += precached.Add;
+        world.Services.SoundImpl.Broadcast += sound =>
+        {
+            if (sound.Source == bot.Bot && sound.Sample == "misc/hit.wav")
+                played.Add(sound.Sample);
+        };
+
+        Assert.Contains("Unknown command", world.Commands.Execute("bot_cmd Actor sound misc/talk.wav",
+            isServerConsole: false, caller: bot.Bot).Output);
+        Assert.Empty(precached);
+        Assert.Contains("2 commands read", world.Commands.Execute("sv_cmd bot_cmd load tests/cue.bot").Output);
+        world.Commands.Execute("bot_cmd Actor sound misc/hit.wav");
+        Assert.Equal(new[] { "misc/hit.wav" }, precached);
+        Assert.Equal(precached, world.Services.SoundImpl.PrecachedSamples);
+        RunTo(world, 0.3f);
+        Assert.Empty(played);
+        RunTo(world, 0.7f);
+        Assert.Equal(new[] { "misc/hit.wav", "misc/hit.wav" }, played);
+        Assert.Single(precached);
+    }
+
+    [Fact]
+    public void BotScript_SoundUsesPinnedMixDefaultsAndOptionalParameters()
+    {
+        var world = new GameWorld(FlatFloor(), SpawnDicts(new Vector3(0, 0, 32)));
+        world.Boot("dm");
+        Cvars.Set("bot_join_empty", 1);
+        BotBrain bot = Assert.IsType<BotBrain>(world.Bots.AddBot("Actor"));
+        var heard = new List<SoundEvent>();
+        world.Services.SoundImpl.Broadcast += sound =>
+        {
+            if (sound.Source == bot.Bot && sound.Sample == "misc/talk.wav")
+                heard.Add(sound);
+        };
+        world.Commands.Execute("bot_cmd Actor sound misc/talk.wav");
+        world.Commands.Execute("bot_cmd Actor sound 3 misc/talk.wav");
+        world.Commands.Execute("bot_cmd Actor sound 4 0.5 2 misc/talk.wav");
+        RunTo(world, 0.1f);
+
+        Assert.Equal(3, heard.Count);
+        Assert.Equal((SoundChannel.WeaponAuto, 0.7f, 0.015625f), (heard[0].Channel, heard[0].Volume, heard[0].Attenuation));
+        Assert.Equal(((SoundChannel)3, 0.7f, 0.015625f), (heard[1].Channel, heard[1].Volume, heard[1].Attenuation));
+        Assert.Equal(((SoundChannel)4, 0.5f, 2f), (heard[2].Channel, heard[2].Volume, heard[2].Attenuation));
+    }
+
+    [Theory]
+    [InlineData(WeaponFireState.Raise, 2, true, 1, 0, 8, 8)]
+    [InlineData(WeaponFireState.Ready, 2, true, 1, 8, 0, 8)]
+    [InlineData(WeaponFireState.Ready, 0, true, 1, 8, 0, 0)]
+    [InlineData(WeaponFireState.Ready, 0, false, 0, 8, 8, 0)]
+    [InlineData(WeaponFireState.Ready, 0, false, 1, 0, 0, 0)]
+    public void BotScript_CanFireDiagnosticDistinguishesInhibitors(WeaponFireState phase, float cooldown,
+        bool note, int expectedFire, float red, float green, float blue)
+    {
+        var world = new GameWorld(FlatFloor(), SpawnDicts(new Vector3(0, 0, 32)));
+        world.Boot("dm");
+        Cvars.Set("bot_join_empty", 1);
+        BotBrain bot = Assert.IsType<BotBrain>(world.Bots.AddBot("Actor"));
+        WeaponSlotState slot = bot.Bot.WeaponState(new WeaponSlot(0));
+        slot.State = phase;
+        slot.AttackFinished = world.Time + cooldown;
+        slot.TubaNote = note ? new Entity() : null;
+        world.Commands.Execute($"bot_cmd Actor debug_assert_canfire {expectedFire}");
+        world.Bots.InputFor(bot.Bot, world.Simulation.TickSeconds);
+        Assert.Equal(new Vector3(red, green, blue), bot.Bot.ColorModKey);
+    }
+
+    [Fact]
+    public void BotScript_IdleBotConsumesPreviousBarrierReleaseWhileAnotherBotWaits()
+    {
+        var world = new GameWorld(FlatFloor(), SpawnDicts(new Vector3(0, 0, 32), new Vector3(500, 0, 32)));
+        world.Boot("dm");
+        Cvars.Set("bot_join_empty", 1);
+        Assert.IsType<BotBrain>(world.Bots.AddBot("Active"));
+        Assert.IsType<BotBrain>(world.Bots.AddBot("Idle"));
+
+        world.Commands.Execute("bot_cmd Active barrier");
+        world.Commands.Execute("bot_cmd Active console set active_crossed_barrier 1");
+        world.Commands.Execute("bot_cmd Active wait 1");
+        RunTo(world, 0.15f);
+        Assert.Equal(1f, Cvars.Float("active_crossed_barrier"));
+
+        world.Commands.Execute("bot_cmd Idle barrier");
+        world.Commands.Execute("bot_cmd Idle console set idle_crossed_barrier 1");
+        world.Commands.Execute("bot_cmd Idle barrier");
+        world.Commands.Execute("bot_cmd Idle console set idle_crossed_next_barrier 1");
+        RunTo(world, 0.3f);
+        Assert.Equal(1f, Cvars.Float("idle_crossed_barrier"));
+        Assert.Equal(0f, Cvars.Float("idle_crossed_next_barrier"));
+
+        RunTo(world, 1.2f);
+        Assert.Equal(1f, Cvars.Float("idle_crossed_next_barrier"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BotScript_ConsoleRunsConfigAliasesAndWrappedServerCommands(bool loadConfig)
+    {
+        var world = new GameWorld(FlatFloor(), SpawnDicts(new Vector3(0, 0, 32)));
+        if (loadConfig)
+        {
+            world.ConfigReader = path => path == "xonotic-server.cfg"
+                ? "alias boot_mark \"set bot_console_boot 29\""
+                : null;
+        }
+        world.Boot("dm");
+        Cvars.Set("bot_join_empty", 1);
+        BotBrain bot = Assert.IsType<BotBrain>(world.Bots.AddBot("Script"));
+        Assert.Contains("Unknown command", world.Commands.Execute("bot_cmd Script console set bot_console_untrusted 1",
+            isServerConsole: false, caller: bot.Bot).Output);
+
+        world.Commands.Execute("""
+            bot_cmd Script console alias script_mark "set bot_console_alias 17; sv_cmd set bot_console_wrapped 23"
+            """);
+        world.Commands.Execute("bot_cmd Script console script_mark");
+        if (loadConfig)
+            world.Commands.Execute("bot_cmd Script console boot_mark");
+        Assert.Equal(0f, Cvars.Float("bot_console_alias"));
+        RunTo(world, 0.2f);
+        Assert.Equal(17f, Cvars.Float("bot_console_alias"));
+        Assert.Equal(23f, Cvars.Float("bot_console_wrapped"));
+        Assert.Equal(loadConfig ? 29f : 0f, Cvars.Float("bot_console_boot"));
+        Assert.Equal(0f, Cvars.Float("bot_console_untrusted"));
+    }
+
+    [Fact]
+    public void BotScript_AddressingPauseAndAim_ResumeThroughTheLiveBotThink()
+    {
+        var world = new GameWorld(FlatFloor(), SpawnDicts(new Vector3(0, 0, 32)));
+        world.Boot("dm");
+        Cvars.Set("bot_join_empty", 1);
+        BotBrain bot = Assert.IsType<BotBrain>(world.Bots.AddBot("Script"));
+        Assert.Contains("Unknown command", world.Commands.Execute("bot_cmd 1 pause", false, bot.Bot).Output);
+        Assert.Contains("sent to bot Script", world.Commands.Execute("bot_cmd 1 pause").Output);
+        world.Commands.Execute("bot_cmd 1 aim \"90 0 0.2\"");
+        RunTo(world, 0.15f);
+        Assert.Equal(Vector3.Zero, bot.LastInput.MoveValues);
+        Assert.Equal(0f, bot.LastInput.ViewAngles.Y);
+
+        world.Commands.Execute("bot_cmd Script continue");
+        world.Commands.Execute("bot_cmd Script resetaim");
+        world.Commands.Execute("bot_cmd Script aim \"90 0 0.2\"");
+        world.Commands.Execute("bot_cmd Script console set script_completed 1");
+        world.Commands.Execute("bot_cmd Script wait 0.3");
+        RunTo(world, 0.3f);
+        Assert.InRange(bot.LastInput.ViewAngles.Y, 1f, 89f);
+        RunTo(world, 0.55f);
+        Assert.Equal(90f, bot.LastInput.ViewAngles.Y);
+        Assert.Equal(1f, Cvars.Float("script_completed"));
+    }
+
     // =============================================================================================
     // bot_fixcount target math (QC bot.qc:623-664)
     // =============================================================================================

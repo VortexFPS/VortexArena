@@ -2,6 +2,10 @@ unit: tka
 category: gametype
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
 last_audited: "2026-06-28"
+# Map eligibility is tracked in mapinfo.forced_supported and mapinfo.generate.always_supported.
+# Team Keepaway inherits KA maps by default. g_tka_on_ka_maps can disable that fallback, and
+# g_tka_on_tdm_maps enables the TDM fallback, including TDM inherited from DM. These rules apply
+# in the catalog, map details and hosted rotation. BSP-generated eligibility remains open.
 # 2026-06-28 (8th pass, post-parity-port-waves Phase-3b re-verify): ONE nuance fix landed on the 18 rows
 #   (the only port change to the unit this wave was an uncommitted TeamKeepaway.cs edit, +5/-2). The
 #   carried-ball INVISIBILITY ALPHA-SYNC is now ported, touching TWO presentation rows:

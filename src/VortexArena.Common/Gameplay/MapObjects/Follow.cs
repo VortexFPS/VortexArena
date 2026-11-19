@@ -63,7 +63,8 @@ namespace VortexArena.Common.Gameplay
 
         /// <summary>
         /// Resolve every queued misc_follow — the headless analogue of QC's INITPRIO_FINDTARGET pass (run by
-        /// <see cref="MapObjectsRegistry.RunPostSpawn"/> after the door-link pass). Safe to call repeatedly.
+        /// <see cref="MapObjectsRegistry.RunPostSpawn"/> before start-open placement and door linking).
+        /// Safe to call repeatedly.
         /// </summary>
         public static void RunDeferredInit()
         {

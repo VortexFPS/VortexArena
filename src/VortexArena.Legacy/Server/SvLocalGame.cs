@@ -62,13 +62,7 @@ public sealed class SvLocalGameOptions
 public static class SvGameTypes
 {
     /// <summary>qcsrc/common/gametypes/gametype/*/*.qh, each gametype_init(this, title, short name, cvar, ...).</summary>
-    public static readonly IReadOnlyList<(string ShortName, string Cvar)> All = new (string, string)[]
-    {
-        ("dm", "g_dm"), ("tdm", "g_tdm"), ("ctf", "g_ctf"), ("ca", "g_ca"), ("ft", "g_freezetag"), ("kh", "g_keyhunt"),
-        ("dom", "g_domination"), ("lms", "g_lms"), ("ka", "g_keepaway"), ("tka", "g_tka"), ("cts", "g_cts"), ("rc", "g_race"),
-        ("as", "g_assault"), ("ons", "g_onslaught"), ("nb", "g_nexball"), ("inv", "g_invasion"), ("mayhem", "g_mayhem"),
-        ("tmayhem", "g_tmayhem"), ("duel", "g_duel"), ("surv", "g_survival"),
-    };
+    public static readonly IReadOnlyList<(string ShortName, string Cvar)> All = Common.Menu.MapInfoBackend.StockGametypeCvars;
 
     /// <summary>The cvar for a short name ("ctf") or for the cvar's own name ("g_ctf"), or null.</summary>
     public static string? CvarFor(string gameType)

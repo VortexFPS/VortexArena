@@ -28,6 +28,25 @@ public class ParticleDirectSpawnTests
     };
 
     [Fact]
+    public void ClearingLivePoolDoesNotAgeNextParticleByAnExtraSecond()
+    {
+        ParticleSim sim = NewSim(out _);
+        sim.Update(10f);
+        Assert.True(sim.SpawnDirect(Plain()));
+        sim.Clear();
+        Assert.Equal(0, sim.HighWater);
+
+        DirectParticle fresh = Plain();
+        fresh.Lifetime = 0.25f;
+        Assert.True(sim.SpawnDirect(fresh));
+        sim.Update(10.03125f);
+
+        Assert.True(sim.Pool[0].Active);
+        Assert.Equal(254f, sim.Pool[0].Alpha);
+        Assert.Equal(fresh.Origin + fresh.Velocity * 0.03125f, sim.Pool[0].Org);
+    }
+
+    [Fact]
     public void A_Direct_Particle_Lands_In_The_Pool_With_The_Given_Values()
     {
         ParticleSim sim = NewSim(out _);

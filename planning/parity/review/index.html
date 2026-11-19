@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Parity decisions · Vortex Arena</title>
+<style>
+:root{color-scheme:dark;font:16px/1.55 "Inter",system-ui,sans-serif;background:#10151b;color:#e6edf2;accent-color:#a7e1c3}
+*{box-sizing:border-box}body{max-width:1120px;margin:0 auto;padding:34px clamp(18px,4vw,55px) 60px}header{border-top:3px solid #90dbb8;padding:24px 0 12px}
+small,figcaption,.count{color:#afbdc8;font-size:.87rem}h1,h2,p,figure{margin:0}h1{font-size:clamp(36px,6vw,62px);letter-spacing:-.05em;line-height:1.05;margin:.25em 0}header p{max-width:68ch;color:#c6d0d8}
+article{padding:30px 0;border-top:1px solid #384651;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:10px 36px}h2{font-size:1.6rem;letter-spacing:-.025em;margin-bottom:.45em}article p{margin:0 0 .65em}
+figure{grid-column:2;grid-row:1 / span 2}img{display:block;width:100%;border:1px solid #4d5e68;border-radius:5px}figcaption{margin-top:8px}
+fieldset{min-width:0;margin:0;padding:0;border:none}legend{font-weight:650;padding:0 0 6px}label{display:block;cursor:pointer;margin:4px 0;padding:8px 12px;border:1px solid #35434e;border-radius:5px;background:#192129}label:has(input:checked){background:#19362d;border-color:#75bfa1}input{margin-right:9px}button{cursor:pointer;font:inherit;background:#a7e1c3;color:#10251c;border:0;border-radius:5px;padding:9px 18px;font-weight:700}button.clear{background:transparent;color:#afbdc8;text-decoration:underline;font-weight:400;padding:4px 0}button:disabled{opacity:.4;cursor:default}button:focus-visible,a:focus-visible,label:focus-within{outline:2px solid #f7d388;outline-offset:2px}
+footer{border-top:1px solid #384651;padding-top:22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}details{margin:10px 0;font-size:.85rem;color:#c3d0d8}summary{cursor:pointer}code{overflow-wrap:anywhere}a{color:#a7e1c3}
+#earlier{font-size:1rem}#earlier>summary{padding:14px 0;font-weight:650}figure a:has(img){display:block}figure a+a{margin-top:12px}
+@media(max-width:740px){article{grid-template-columns:1fr}figure{grid-column:1;grid-row:auto;margin-bottom:10px}}
+</style>
+<header><small>Vortex Arena &nbsp;/&nbsp; Xonotic parity review</small><h1>Scope decisions</h1>
+<p>One decision is open about remembering ignored players. Your fourteen earlier answers are selected. Review, change or clear any answer, then export your choices. <a id="results" href="../ORDERED-FOLLOWUP.md">Read the implementation results</a>.</p></header>
+<main><section id="decisions" aria-label="Latest decisions"></section>
+<details id="earlier"><summary>Review your seven earlier decisions</summary><div id="approved"></div></details></main>
+<footer><button id="export" disabled>Export prompt (.txt)</button><span class="count" role="status"></span></footer>
+<script>
+const media = path => path;
+const earlier = new Set([
+  "bot-ai.scripting.commands", "mutator-sandbox.drag.grab", "LC-9 / Q8", "duel.mapsupport.gating",
+  "content.particles", "content.stock-demos", "engine.curved-collision"
+]);
+const latestAnswers = {
+  "records.nickname_prompt": 2,
+  "records.original_server_import": 2,
+  "menu.guide.filter_reselection": 0,
+  "menu.guide.catalog_order": 0,
+  "mapinfo.server_visual_defaults": 1,
+  "hud.superweapons.unlimited": 1,
+  "server.matrix-bridge": 0
+};
+const items = [
+  {id:"chat.ignore.persistence",title:"Should a server remember which players you ignored the next time you meet?",
+   comparison:[["Xonotic scoreboard","../scoreboard-blocks/row4-stock-rows.webp"],["Vortex Arena scoreboard","../scoreboard-blocks/row4-native-rows.webp"]],
+   caption:"Viewer and Zebra tested which player could see the ignore icon. The frames and chat logs show the change within a match. Persistence across visits is the choice below.",
+   text:"Ignoring a player hides their chat for you. Xonotic also saves the relationship on that server when both players have persistent identities. On a later visit it can reapply your choice. Vortex currently keeps the list in memory. After a server restart, you have to ignore the player again.",
+   evidence:"The paired clients verified blocked chat and delivery after unignore. In Xonotic’s server code, ignore_add_player writes up to 16 entries keyed by the two player fingerprints, and the connection handler restores them. Vortex’s earlier chat work deferred permanent ignores. Its local ranking database and nickname choices cover a different use of identity.",
+   options:["Match Xonotic. Automatically remember ignores on this server when both players have verified identities. Keep anonymous ignores temporary.","Give the player an explicit choice to remember an ignore on this server. Keep ordinary ignores temporary.","Keep native chat ignores match-scoped and document that they expire."]},
+  {id:"records.nickname_prompt",title:"When should a player be asked to show their nickname in local rankings?",
+   image:"../hud-commands/name-prompt.webp",
+   caption:"The nickname question in a connected Vortex client. Pressing F2 here declined nickname sharing. The server’s separate match vote remained open.",
+   text:"Xonotic opens this question when an undecided player enters a match with rankings or server statistics. Vortex already offers this choice in First Run and Profile. Its separate in-match prompt can be opened with a menu command. Named local ladder entries need both identity tracking and nickname permission.",
+   evidence:"The original HUD checks the undecided value before opening the dialog. A native Darkzone session verified that answering it changes the local preference. In the CTF test, withholding nickname permission kept the result off the ranked ladder. Both games separately record the fastest capture with the player’s in-game name. Each option below leaves the choice with the player.",
+   options:["Ask once on entering a native match with local rankings, following Xonotic’s timing. Keep the identity tracking choice separate.","Wait until the player is about to submit a first eligible local result, explain what would be saved, and ask then.","Keep the existing First Run and Profile controls and leave the in-match prompt manual."]},
+  {id:"records.original_server_import",title:"Should a server moving from Xonotic be able to import its old Race, CTS and CTF records?",
+   image:"../record-lifecycle/01-ctf-after-restart.webp",
+   caption:"A remote player sees a native CTF record of 12.50 seconds after the host restarts. This run started with seeded native records and exercised deletion and rank promotion.",
+   text:"An operator can import Race, CTS and CTF results from an original server.db. Live ladder entries require a verified link between the old and new player identities. The importer preserves the original database and lists unmatched results in a historical archive. Two players sharing a nickname can have different identities.",
+   evidence:"An operator attests to an authenticated original session and the player signs the mapping with their native profile. Synthetic imports exercised consent, replay, faster existing results and preservation of the source. The original’s separate fastest CTF capture has only a name and stays in history.",
+   options:["Keep separate native record history. Document the original server database and native profile formats.","Offer an operator-run, one-time import that displays original rankings as historical results, separately from the live native ladder.","Offer an operator-run migration into the live native ladder for verified identity mappings. Preserve the original database and keep unmatched records in a separate historical list."]},
+  {id:"menu.guide.filter_reselection",title:"Which Guide entry should return after an empty search?",
+   comparison:[["Original Xonotic","guide-original-search.webp"],["Vortex before the change","guide-native-search.webp"],["Vortex after the change","../deferred-audit/guide/native-selection-restored.webp"]],
+   caption:"In the first comparison, clearing the search returned to Community in Xonotic and About this guide in Vortex. The final sheet shows the native Guide restoring the remembered entry.",
+   text:"The Guide remembers the last entry you chose in each topic while it is open. If the filter hides it, the first available match is highlighted and described. A search with no matches clears the description. Clearing the filter restores the remembered entry, unless you selected a different one.",
+   evidence:"Native window checks exercised typing into the filter, clearing it, selecting the temporary result, switching topics and reopening an entry, including with French labels.",
+   options:["Remember the most recently selected Guide entry in each topic and restore it when it is available again after an empty search.","Keep the native behavior of selecting the first matching entry after an empty search."]},
+  {id:"menu.guide.catalog_order",title:"In what order should the Guide list shared entries?",
+   comparison:[["Original Xonotic","guide-original-order.webp"],["Vortex before the change","guide-native-order.webp"],["Original and updated Vortex","../deferred-audit/guide/catalog-order-verified.webp"]],
+   caption:"The old Vortex list opened at Blood loss. The final sheet compares the corrected lists, including Nades at the top of Mutators and Map Editor after the shared gametypes.",
+   text:"Shared Guide entries now appear in the original Xonotic order. Additions specific to Vortex Arena follow the shared entries in their topic.",
+   evidence:"Paired captures show the start and end of the mutator and turret lists. The 24 weapons already appeared in the same order. Native checks also covered translated labels.",
+   options:["Use the original Xonotic order for shared Guide entries and append native-only entries within their topic.","Keep the existing Vortex Arena catalog order and retain native-only entries in their current positions."]},
+  {id:"mapinfo.server_visual_defaults",title:"Should a server be able to suggest map visuals to a remote player?",
+   comparison:[["Darkzone with authored fog","../map-settings/frames/darkzone-authored-fog.webp"],["Same view with local fog disabled","../map-settings/frames/darkzone-local-fog-off.webp"]],
+   caption:"Both captures are from the native client. They show how one of the three switches affects the view. The fog color and density already reach remote clients.",
+   text:"By default, Vortex reads sky, bloom and depth-fog settings from the player’s installed map. In Settings → Effects, a player can enable “Use server map visual suggestions” to receive those switches from a remote host. Explicit local settings still take priority.",
+   evidence:"In a two-player test both clients joined without receiving any switch values. One player opted in and received the server’s choices. Turning the setting off withdrew them. The other player continued using the installed map’s settings throughout.",
+   options:["Allow a server to supply sky, bloom and fog switches automatically for the current map. Explicit player preferences still win.","Add a player opt-in for receiving those three map switches from a server. Use mounted settings until the player opts in.","Keep map visual defaults in the player’s installed map metadata and document how hosts distribute the matching file."]},
+  {id:"hud.superweapons.unlimited",title:"Should unlimited superweapons stay visible on the HUD?",image:"superweapons-hud.webp",
+   caption:"The Stormkeep NIX comparison before the fix. The enlarged areas show the old Vortex infinity badge and the free space on the Xonotic HUD.",
+   text:"In modes such as NIX, a superweapon can last the whole match. With the selected behavior, unlimited superweapons leave the HUD row clear. An ordinary timed pickup still shows its countdown.",
+   evidence:"Pinned superweapons.qc skips the row for IT_UNLIMITED_SUPERWEAPONS. The native production panel was checked with NIX, InstaGib, overlapping flags and a timed Fireball pickup through expiry.",
+   options:["Keep the native infinity badge while unlimited superweapons are active.","Match Xonotic and hide the row for unlimited superweapons. Keep the ordinary timed countdown.","Add a HUD preference for the unlimited badge. Use the original hidden behavior by default."]},
+  {id:"server.matrix-bridge",title:"Should dedicated servers be able to connect a Matrix chat room?",image:"serverinfo.webp",
+   caption:"The native server information screen. An administrator can connect a dedicated match to a Matrix room using the server console.",
+   text:"An administrator can connect a Matrix room to a dedicated server. With the bridge enabled, public player chat reaches the room and incoming room text reaches connected players. The native dedicated console now accepts the original mx controls. The feature is off until the operator configures it.",
+   evidence:"The pinned lib/matrix and server/matrix code defines the controls and chat delivery. A native dedicated server and a connected player exchanged text with a local test homeserver. The checks also covered switching rooms, retry and skipping the bridge account’s own messages.",
+   options:["Implement the optional Matrix bridge inside the native dedicated server, including original-compatible console controls.","Support the integration through a separately configured companion service and document how server operators connect it.","Keep Matrix outside native server scope and document the difference for administrators."]},
+  {id:"bot-ai.scripting.commands",title:"Should maps be able to choreograph bots?",image:"create.webp",caption:"Vortex Arena’s Create Game screen exposes bot count and skill. Scripted commands are a separate server feature.",
+   text:"A map author can tell one bot to walk to a point, turn, wait, then synchronize with other bots. The native server now accepts the 23 executable Xonotic script verbs. The server-loop checks include waits, input holds and barriers.",
+   evidence:"At the pin, server/bot/default/scripting.qc defines the original commands. BotCommandQueue.cs and Commands.BotScripts.cs implement the native queue and console surface. The bot-ai registry records the tests.",
+   options:["Support Xonotic’s full bot command queue, including timed and synchronized sequences.","Build a documented subset for movement, turning and waiting. Track other commands as open.","Keep directed bots as the native feature and document scripted scenes as outside the current release."]},
+  {id:"mutator-sandbox.drag.grab",title:"How far should in-match object editing go?",image:"sandbox.webp",caption:"The running Sandbox Tools panel can edit a prop’s model, scale and ownership. Carrying it with a key is a separate interaction.",
+   text:"In Sandbox, a player can pick up a prop, carry it and release it. Original and native recordings now show the owner and a permitted guest carrying the same kind of prop. Turning on read-only mode preserves a carry already in progress and prevents a fresh one.",
+   evidence:"The scripted-sandbox-buffs report includes owner and guest views, movement types from the server, command timelines and the ownership denial.",
+   options:["Implement carrying and releasing Sandbox objects with Xonotic’s ownership and read-only rules.","Extend the same drag controls to cheat-enabled map editing as well as Sandbox objects.","Keep the existing property editor and defer in-match carrying."]},
+  {id:"LC-9 / Q8",title:"Should a legacy player keep a Xonotic identity?",image:"serverinfo.webp",caption:"Vortex Arena’s server information dialog, opened without a selected server. This capture illustrates where a player inspects a server; it is not a connection test.",
+   text:"When Vortex joins an original Xonotic server, the legacy client has no persistent Xonotic player ID. A player can lose attribution for stats, and servers requiring the original encrypted connection are unavailable. The project reopened this question when it adopted legacy client compatibility.",
+   evidence:"planning/OPEN-QUESTIONS.md · Q8. planning/TODO.md · LC-9. VortexArena.Legacy/Menu/MenuHost.Builtins.cs · CryptoHostKey and CryptoMyIdStatus. ADR-0019 scopes the compatibility stack to the legacy client.",
+   options:["Plan original-compatible identity and encrypted connections for legacy clients.","Prioritize identity for persistent stats and track encrypted-server support separately.","Keep anonymous legacy play and document the server and statistics limitations."]},
+  {id:"duel.mapsupport.gating",title:"Which deathmatch maps should offer Duel?",image:"create.webp",caption:"The Create Game map list filters maps by the selected mode. Large arenas can carry an explicit Duel tag.",
+   text:"Duel is a one-on-one match. Xonotic can offer any deathmatch map for Duel when its fallback setting is enabled. Vortex previously applied a size cutoff in the map details dialog. Both screens now use the fallback, including for large deathmatch arenas.",
+   evidence:"Xonotic common/gametypes/gametype/duel/duel.qh has separate generation and forced-support rules. In Vortex compare MapInfo.SupportsInCatalog with MapInfoBackend.ApplyForcedGametypes.",
+   options:["Use Xonotic’s deathmatch fallback in both screens, including large maps.","Require large deathmatch maps to declare Duel explicitly in both screens.","Keep all eligible maps playable and use a size warning in the map details dialog."]},
+  {id:"content.particles",title:"Which particle artwork should Original mode use?",image:"effects.webp",caption:"Effects settings in the running game. The pixel comparison was made directly on the source images.",
+   text:"The particle atlas is a sheet of small images used to draw smoke, sparks and flashes. The original audit found different pixels in the native atlas and differences in the effect definitions. Original mode now loads its own pinned definitions and atlas. All 4,194,304 decoded atlas pixels match. Modern mode keeps its authored effects.",
+   evidence:"The earlier shared Vortex atlas differed from the reference in 2,856,640 pixels. The separate Original atlas now matches every pinned pixel, and its effect and tile definitions match the pinned files byte for byte.",
+   artwork:[["Pinned Xonotic atlas","particle-reference.webp"],["Earlier shared Vortex atlas","particle-native.webp"]],
+   options:["Match the pinned artwork and effect definitions in Original mode. Preserve the authored modern effects.","Keep the shipped artwork and tune Original mode only where paired gameplay captures show a visible mismatch.","Retain the current artwork and effect definitions as the native visual baseline. Document the difference."]},
+  {id:"content.stock-demos",title:"Should the game ship the two original demo recordings?",image:"demo-list.webp",caption:"The Demos tab in the native profile after bundling the two original recordings.",
+   text:"Xonotic includes Little Bot Orchestra and The Big Keybench. Both recordings now ship in the core pack and open from the native Demos browser. Both reached the final signon stage in graphical playback.",
+   evidence:"Pinned demos/little-bot-orchestra.dem and demos/the-big-keybench.dem. See planning/specs/legacy-compat.md for decoder results.",
+   options:["Bundle both recordings and make playback work from the game’s demo browser.","Offer both recordings as an optional download for the legacy viewer.","Keep the samples external and document how to use them for compatibility testing."]},
+  {id:"engine.curved-collision",title:"How should players move over curved surfaces?",image:"stormkeep.webp",caption:"Stormkeep in the native client. The collision measurements come from recorded engine traces across multiple maps.",
+   text:"A curved floor can look the same while stopping a player or shot in a different place. On original map geometry, native defaults differed on 1,964 of 4,800 recorded traces. The existing DarkPlaces-compatible settings brought all 4,800 within tolerance. Running the same check on the rebuilt Stormkeep also exposed six differences with those settings enabled.",
+   evidence:"DarkPlacesTraceParityTests.The_shared_library_against_DarkPlaces_option_by_option. The source set uses maps-2026.07 and the native set uses maps-2026.08. A windowed walk verified the DarkPlaces profile. Native now defaults to it, with a slab override available. All six rebuilt Stormkeep differences traced to the compiled world brushes.",
+   options:["Adopt the original collision settings for native play after a curved-floor movement playtest, and investigate rebuilt-map differences separately.","Expose original collision as an optional native server ruleset and keep the existing default.","Retain native collision and document its measured movement differences. Keep original collision in legacy mode."]}
+];
+const make=(tag,text)=>{const el=document.createElement(tag);el.textContent=text;return el};
+for(const item of items){
+ const card=make("article",""),intro=make("div",""),details=make("details","");
+ details.append(make("summary","Source evidence"),make("p",item.evidence));
+ if(item.artwork) for(const [label,path] of item.artwork){
+   const a=make("a",label),img=make("img","");a.href=media(path);img.src=a.href;img.dataset.source=path;img.alt=label;a.append(img);details.append(a)
+ }
+ intro.append(make("h2",item.title),make("p",item.text),details);
+ const fig=make("figure","");
+ for(const [label,path] of item.comparison??[["",item.image]]){
+   const link=make("a",label),img=make("img","");
+   link.href=media(path);img.src=link.href;img.dataset.source=path;img.alt=label?label+" — "+item.title:item.caption;link.append(img);fig.append(link);
+ }
+ fig.append(make("figcaption",item.caption));
+ const field=make("fieldset","");field.append(make("legend","Choose scope"));
+ item.options.forEach((option,i)=>{const label=make("label",""),input=document.createElement("input");
+ input.type="radio";input.name=item.id;input.value=i;input.checked=i===(earlier.has(item.id)?0:latestAnswers[item.id]);label.append(input,option);field.append(label)});
+ const clear=make("button","Clear answer");clear.className="clear";clear.type="button";
+ clear.onclick=()=>{for(const input of field.querySelectorAll("input"))input.checked=false;updateCount()};
+ field.append(clear);
+ card.append(intro,fig,field);document.querySelector(earlier.has(item.id)?"#approved":"#decisions").append(card)
+}
+const selected=()=>items.flatMap(item=>{
+ const field=document.getElementsByName(item.id), choice=Array.from(field).find(input=>input.checked);
+ return choice?[{item,answer:item.options[Number(choice.value)]}]:[]
+});
+const download=document.querySelector("#export");
+function updateCount(){const n=selected().length;download.disabled=!n;
+ document.querySelector(".count").textContent=n+" of "+items.length+" answered"}
+updateCount();
+document.addEventListener("change",updateCount);
+download.onclick=()=>{
+ const lines=["Apply my selected Vortex Arena parity decisions. Compare with Xonotic data commit 863cd3e8456e18f577f7fe5fef857ff55ae62cc0. Honor the existing ADRs, implement or document the chosen scope, update the parity evidence, and validate the result. Leave unanswered decisions open.",""];
+ for(const {item,answer} of selected())lines.push(item.id+" — "+item.title,answer,"");
+ const url=URL.createObjectURL(new Blob([lines.join("\n")],{type:"text/plain;charset=utf-8"}));
+ const a=document.createElement("a");a.href=url;a.download="vortex-parity-decisions.txt";document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)
+};
+</script>
+</html>

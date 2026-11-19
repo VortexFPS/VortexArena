@@ -278,7 +278,7 @@ public sealed class Fireball : Weapon
         proj.Health = Primary.Health;
 
         // W_SetupProjVelocity_PRI: velocity = w_shotdir * speed (spread normally 0).
-        proj.Velocity = WeaponFiring.ProjectileVelocity(shot.Dir, Vector3.UnitZ, Primary.Speed, 0f, 0f, Primary.Spread);
+        proj.Velocity = WeaponFiring.ProjectileVelocity(actor, shot.Dir, Vector3.UnitZ, Primary.Speed, 0f, 0f, Primary.Spread);
         proj.Angles = QMath.VecToAngles(proj.Velocity);
 
         // QC fireball.qc:164-165 — flag the fireball as a dodgeable hazard (rating = primary damage).
@@ -441,8 +441,9 @@ public sealed class Fireball : Weapon
         if (ownerHealthAfter >= ownerHealthBefore && self.Cnt == 0
             && Primary.BfgRadius > 0f && Api.Services is not null)
         {
-            // modeleffect_spawn(models/sphere/sphere.md3, ...) BFG visual — left to the CSQC effect layer.
             Vector3 center = self.Origin;
+            if (FireballBlastEffect.Create(center, Primary.BfgRadius) is { } effect)
+                EffectEmitter.Sink.Emit(effect);
             foreach (Entity e in Api.Entities.FindInRadius(center, Primary.BfgRadius).ToList())
             {
                 // QC filter: not the owner, must be DAMAGE_AIM, not independent, and — for a player with an owner —
@@ -532,7 +533,7 @@ public sealed class Fireball : Weapon
         Api.Entities.SetOrigin(proj, spawnOrg);
 
         // W_SetupProjVelocity_UP_SEC: velocity = normalize(w_shotdir + up*(speed_up/speed)) * speed.
-        proj.Velocity = WeaponFiring.ProjectileVelocity(shot.Dir, up, Secondary.Speed, Secondary.SpeedUp, Secondary.SpeedZ, Secondary.Spread);
+        proj.Velocity = WeaponFiring.ProjectileVelocity(actor, shot.Dir, up, Secondary.Speed, Secondary.SpeedUp, Secondary.SpeedZ, Secondary.Spread);
         proj.Angles = QMath.VecToAngles(proj.Velocity);
 
         // QC fireball.qc:300-301 — flag the firemine as a dodgeable hazard (rating = secondary damage).

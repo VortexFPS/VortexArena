@@ -1,7 +1,10 @@
 using System;
+using System.IO;
+using System.Linq;
 using System.Numerics;
 using VortexArena.Formats.Materials;
 using VortexArena.Formats.Md3;
+using VortexArena.Formats.Sidecars;
 using Xunit;
 
 namespace VortexArena.Tests;
@@ -18,6 +21,56 @@ namespace VortexArena.Tests;
 /// </summary>
 public class AutospriteBoltTests
 {
+    [Theory]
+    [InlineData("crylink_projectile_core", "autosprite", false)]
+    [InlineData("crylink_projectile_long", "autosprite2", true)]
+    public void CrylinkStockStagesMultiplyTextureAlphaByEntityFade(string name, string deform, bool axial)
+    {
+        ShaderDef shader = System.Linq.Enumerable.Single(Q3ShaderParser.Parse($$"""
+            {{name}}
+            {
+                deformVertexes {{deform}}
+                {
+                    map textures/projectiles/{{name}}.tga
+                    blendfunc GL_SRC_ALPHA GL_ONE
+                    rgbGen lightingDiffuse
+                }
+            }
+            """).Values);
+        string code = AutospriteShaderGen.Generate(shader, shader.Stages[0], axial);
+        Assert.Contains("instance uniform float effect_opacity", code);
+        Assert.Contains("ALPHA = c.a * effect_opacity;", code);
+    }
+
+    [Fact]
+    public void VampireRelicSkinSelectsAnAdditiveAutospriteAndAlphaBlendedRings()
+    {
+        string core = TestPaths.CorePk3Dir;
+        string relic = Path.Combine(core, "models", "relics", "relic.md3");
+        if (!File.Exists(relic))
+            return;
+
+        var model = Md3Reader.Read(File.ReadAllBytes(relic));
+        var skin = SkinFile.Parse(File.ReadAllText(relic + "_2.skin"));
+        var shaders = Q3ShaderParser.Parse(File.ReadAllText(Path.Combine(core, "scripts", "relics.shader")));
+        Md3Surface sign = Assert.Single(model.Surfaces, surface => surface.Name == "sign");
+        Assert.Equal("relic/1", Assert.Single(sign.Shaders));
+        Assert.Equal("models/relics/sign_vampire", skin.MeshToTexture[sign.Name]);
+        ShaderDef signShader = shaders[skin.MeshToTexture[sign.Name]];
+        string shaderCode = AutospriteShaderGen.Generate(signShader, Assert.Single(signShader.Stages), axial: false);
+        Assert.Contains("skip_vertex_transform", shaderCode);
+        Assert.Contains("unshaded", shaderCode);
+        Assert.Contains("colormod : source_color, instance_index(2)", shaderCode);
+        Assert.Contains("glowmod : source_color, instance_index(3)", shaderCode);
+        Assert.Equal(0, sign.VertexCount % 4);
+
+        ShaderStage ring = Assert.Single(shaders[skin.MeshToTexture["ring"]].Stages);
+        Assert.Equal(BlendFactor.SrcAlpha, ring.BlendSrc);
+        Assert.Equal(BlendFactor.One, ring.BlendDst);
+        Assert.All(model.Surfaces.Where(surface => surface.Name == "ring"), surface =>
+            Assert.NotEqual(surface.Shaders[0], skin.MeshToTexture[surface.Name]));
+    }
+
     private const float Eps = 1e-4f;
 
     // ---------------------------------------------------------------- bake: autosprite (core quads)

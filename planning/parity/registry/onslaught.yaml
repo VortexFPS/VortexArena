@@ -1,7 +1,7 @@
 unit: onslaught
 category: gametype
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
-last_audited: "2026-06-28"
+last_audited: "2026-11-19"
 # NOTE: OPUS re-audit 2026-06-28b (post Phase 1-3b render-plumbing wave) — re-verified the presentation row's
 # producer->CONSUMER chain end-to-end. The W16/W17 PRODUCERS (CollectWaypoints/CollectRadarLinks + world-model
 # assignment) were already registered; this wave (60d45f5 Phase 1 objective entity stream + 493c876 Phase 2
@@ -25,7 +25,7 @@ last_audited: "2026-06-28"
 # RE-CONFIRMED by grep: NO camSetup/WantEventchase death-cam, NO icon bob/spin/punch anim, NO particle/pointparticles
 # calls in Onslaught*.cs — only deferral comments. So presentation.csqc stays logic/values partial, timing/audio
 # missing, presentation partial, liveness PARTIAL (model+sprite+radar producers live; anim/cam/fx half absent).
-# --- prior W16/W17 re-audit 2026-06-27 below (carried, still accurate) ---
+# --- historical W16/W17 re-audit 2026-06-27 below ---
 # NOTE: W16/W17 re-audit 2026-06-27 — ONE row drifted: onslaught.presentation.csqc all-missing -> partial.
 # W16 (b3a9c06) added Onslaught.CollectWaypoints (generator/CP waypoint sprites). W17 (2f0bfdb) added the
 # objective WORLD-MODEL assignment (SpawnGenerator/SpawnControlPoint/SpawnIcon set Entity.Model + progressive
@@ -42,20 +42,12 @@ last_audited: "2026-06-28"
 # cp 1000, buildhealth 100, buildtime 5, regen 20, round_timelimit 500, warmup 5, teleport_radius 200,
 # teleport_wait 5, spawn_choose 1, click_radius 500, shield_force 100 — all match). Live wiring intact:
 # Commands.cs ons_spawn + impulse-21 +use; GameWorld WireObjectiveSpawns + ons.ResolveLinks() + ons.Tick().
-# Carried forward (unchanged) from 2026-06-25 — the Onslaught click-radar SERVER path is ported + LIVE: the `ons_spawn`
-# client command (Commands.cs:CmdOnsSpawn, registered) routes to HandleOnsSpawnCommand which SETS GtOnsSpawnBy +
-# RESPAWN_FORCE for a dead picker (so OnPlayerSpawn → OnsTeleport finally fires) or teleports a live player between
-# own CPs; the +use key (impulse 21) routes to HandleUseKey (the next-to-own-CP gate). spawn_choose teleport-on-
-# respawn is no longer dead — only the client-side click-radar HUD + the death-time auto-open stuffcmd remain
-# deferred. g_onslaught_click_radius (500) now ported. Prior pass (2026-06-26 label) added CaptureShield, ons_Teleport,
-# spawn placement, icon spark sounds.
+# Native click-radar wiring was reconciled with the pinned HUD and Onslaught hooks.
 summary:
   feature_count: 18
   worst_gaps:
-    - "Partial CSQC presentation (W16/W17): generator/control-point/icon world MODELS, progressive damage-model swaps, generator damage frame, RADAR LINK lines, and generator/CP WAYPOINT SPRITES now produced server-side AND consumed/rendered live on the client (SendWaypoints/SendRadarLinks -> WaypointSpriteLayer/RadarPanel; networked .Model -> ClientEntityView). STILL MISSING: icon bob/spin/punch animation, the objective death-cam (ons_camSetup), the generator explosion sequence (rays/shockwave/gibs/electricity), and particle effects (EFFECT_SPARKS/CAP/RAGE/ROCKET_EXPLODE) + build/health-bar overlays."
+    - "The matched recordings show construction, capture, damage, repair, neutral reset, generator destruction and the two-player camera cut. Fine hit tint, exact final-pulse timing, manual chase, spectator and audio behavior need separate evidence."
     - "Bot Onslaught role filters by shield + team-neighbor off the live graph and skips CPs when a generator is attackable; residual: no waypoint-near-objective routing (navigation_routerating), no havocbot_attack_time throttle, no enemyplayers rating, no havocbot_ons_target teammate-cost balancing (timing partial)."
-    - "Spawn/teleport residual (now LIVE): the click-radar server pick (ons_spawn cmd + HandleOnsSpawnCommand) and the +use gate (HandleUseKey) are ported and wired; the CLIENT-side click-radar HUD that generates the clicked 2D map position, plus the death-time auto-open (PlayerDies stuffcmd `qc_cmd_cl hud clickradar` gated on ons_Count_SelfControlPoints>1), are still client-deferred. spawn_at_controlpoints / spawn_at_generator placement live (default OFF)."
-    - "FIXED this pass: onslaught.spawn.teleport_choose liveness partial→live — the ons_spawn client command + HandleOnsSpawnCommand now SET GtOnsSpawnBy (+RESPAWN_FORCE) on the live path, so the spawn_choose teleport-on-respawn branch actually fires; +use (impulse 21) routes to HandleUseKey; g_onslaught_click_radius now ported (match false→true)."
     - "Unmapped Base hooks (registry coverage gaps): PlayHitsound (objective-hit hitsound gating), SendWaypoint, SpectateCopy (copy ons_spawn_by to spectator), TurretValidateTarget/TurretThink/TurretSpawn + MonsterMove/MonsterSpawn (turret/monster integration), reset_map_global/ClientDisconnect/MakePlayerObserver."
 
 features:
@@ -437,7 +429,10 @@ features:
       - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:HandleUseKey (PlayerUseKey next-to-own-CP gate)"
       - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:NearestControlPoint / NearestControlPoint2D / CountSelfControlPoints"
       - "src/VortexArena.Server/Commands.cs:CmdOnsSpawn (Register(\"ons_spawn\", …)) — the live SV_ParseClientCommand ons_spawn hook"
-      - "src/VortexArena.Server/Commands.cs:2104-2113 impulse 21 (+use) → ons.HandleUseKey"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:OnUseKey / OnDeath / RadarRequested"
+      - "game/net/ServerNet.cs:SendOnslaughtRadar; game/net/ClientNet.cs:OnslaughtRadarRequested"
+      - "game/net/NetGame.cs:ToggleClickRadar"
+      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink (active Onslaught round allows respawn)"
     constants:
       - { name: "g_onslaught_teleport_radius", base: "200", port: "200 (CvarTeleportRadius fallback)", match: true }
       - { name: "g_onslaught_teleport_wait", base: "5", port: "5 (CvarTeleportWait fallback)", match: true }
@@ -456,17 +451,13 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "LIVE (was dead): the spawn_choose teleport-on-respawn now fires end-to-end. A dead player issues `cmd ons_spawn [x y z]` (Commands.cs:CmdOnsSpawn, registered) → HandleOnsSpawnCommand picks the nearest same-team CP/gen to the clicked 2D position (NearestControlPoint2D, within g_onslaught_click_radius=500) and SETS player.GtOnsSpawnBy + RESPAWN_FORCE; the forced respawn then runs OnPlayerSpawn → OnsTeleport(GtOnsSpawnBy). A LIVE player issuing ons_spawn teleports between own CPs directly. The +use key (impulse 21) routes to HandleUseKey (next-to-own-CP gate)."
-      - "LIVE subfeature: spawn_at_controlpoints / spawn_at_generator placement near the nearest (or random) same-team node to the death location is faithfully ported (OnPlayerSpawn → SpawnAtNode, 10 narrowing tracebox+traceline iterations, face-away angles). Both default OFF in Base."
-      - "ons_Teleport itself (OnsTeleport) is faithful: 16 narrowing iterations, random disc around target, tracebox+traceline clear-spot check, face-away + teleport_antispam = time + teleport_wait."
-      - "RESIDUAL (client-deferred): the click-radar HUD that generates the clicked 2D position (the CSQC `qc_cmd_cl hud clickradar` overlay) is unported, and the PlayerDies death-time auto-open stuffcmd (gated on ons_Count_SelfControlPoints>1) is not wired — CountSelfControlPoints exists but has no live caller. ONS_TELEPORT_ANTISPAM center print path is via the alive-teleport reply only. A player can still drive the whole feature manually via `cmd ons_spawn x y z`."
+      - "Dedicated coverage of the teleport-antispam centerprint remains open."
     verification:
-      - { kind: code_read, ref: "Onslaught.cs:681-963 OnPlayerSpawn/OnsTeleport/SpawnAtNode/HandleOnsSpawnCommand/HandleUseKey vs sv_onslaught.qc:1603-2005 — teleport disc + spawn placement + click-radar pick logic + constants (radius 200, wait 5, click 500, jitters 128/256, z-offsets 96/128) match", result: pass }
-      - { kind: code_read, ref: "Commands.cs:802 Register(\"ons_spawn\", …, CmdOnsSpawn); CmdOnsSpawn:1673 → ons.HandleOnsSpawnCommand; HandleOnsSpawnCommand:950 player.GtOnsSpawnBy = closestTarget + RespawnFlags |= Force — the live caller that SETS GtOnsSpawnBy", result: pass }
-      - { kind: code_read, ref: "Commands.cs:2111-2112 impulse 21 (+use) → ons.HandleUseKey; GameWorld.cs:3380/3430 honors RespawnFlag.Force on respawn; OnPlayerSpawn reads GtOnsSpawnBy and teleports", result: pass }
-      - { kind: code_read, ref: "grep clickradar/CountSelfControlPoints — CountSelfControlPoints has NO live caller (death-time auto-open stuffcmd not wired); client click-radar HUD absent → residual client-deferred", result: fail }
+      - { kind: code_read, ref: "Onslaught.OnUseKey follows VehicleBoarding.UseKey for both button and impulse 21; OnDeath gates RadarRequested on spawn_choose and more than one own node. ServerNet sends the request only to the owning client.", result: pass }
+      - { kind: manual, ref: "planning/parity/quickmenu-radar/README.md — local Onslaught click reaches ons_spawn and returns its proximity rejection", result: pass }
+      - { kind: manual, ref: "planning/parity/quickmenu-radar/remote-onslaught-radar.webp — remote F-to-open and click teleport, then death-to-open and forced click respawn", result: pass }
     confidence: high
-    notes: "FIX: liveness partial→live. The Onslaught click-radar SERVER pipeline is now ported + wired: the `ons_spawn` client command (CmdOnsSpawn, registered) + HandleOnsSpawnCommand SET GtOnsSpawnBy + RESPAWN_FORCE (the missing setter the prior pass flagged as the dead-branch cause), and +use (impulse 21) → HandleUseKey. spawn_choose teleport-on-respawn now fires end-to-end on the live path; g_onslaught_click_radius now ported (match false→true). Only the CLIENT click-radar HUD + the PlayerDies death-time auto-open stuffcmd remain deferred (CountSelfControlPoints still has no live caller)."
+    notes: "The picker uses the existing authoritative ons_spawn action for a live teleport or forced respawn. Death-time and use-key openings use a typed client control."
 
   - id: onslaught.cp.proximity_decap
     name: "Proximity de-capture (stand near a point to flip it)"
@@ -499,41 +490,46 @@ features:
     name: "CSQC presentation (generator/icon models, animation, radar, death-cam, FX)"
     layer: [presentation]
     base_refs:
-      - "common/gametypes/gametype/onslaught/cl_generator.qc:generator_construct"
-      - "common/gametypes/gametype/onslaught/cl_generator.qc:generator_damage"
-      - "common/gametypes/gametype/onslaught/cl_controlpoint.qc:cpicon_draw"
+      - "common/gametypes/gametype/onslaught/cl_generator.qc:generator_construct, generator_damage"
+      - "common/gametypes/gametype/onslaught/cl_controlpoint.qc:cpicon_draw, cpicon_damage"
       - "common/gametypes/gametype/onslaught/onslaught.qc:WantEventchase"
       - "client/teamradar.qc:draw_teamradar_link"
+      - "common/gametypes/gametype/onslaught/cl_generator.qc"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:SpawnGenerator/SpawnControlPoint/SpawnIcon (Entity.Model = generator/pad/icon md3 + EF_LOWPRECISION)"
-      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:GeneratorModelForBucket / IconModelForFraction (progressive damage-model swap) + GeneratorDamage (Frame=10*(1-hp/max)) + IconBuildThink (PAD1->PAD2)"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:CollectWaypoints (W16: generator/CP waypoint sprites)"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:CollectRadarLinks / RadarLinkSegment (W17: power-graph radar lines)"
-      - "game/net/ServerNet.cs:SendWaypoints (CollectWaypoints) + SendRadarLinks (CollectRadarLinks) — live per-frame send"
-      - "game/net/ClientNet.cs:HandleRadarLinks/RadarLinks + HandleWaypoints/Waypoints; game/hud/RadarPanel.cs:349 DrawLinkQuad; game/client/WaypointSpriteLayer.cs; game/net/ClientEntityView.cs:236 ApplyIdentity (networked .Model -> rendered)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtControlPoint.cs:GeneratorModelForBucket, IconModelForFraction, IconHeal, IconBuildThink"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Onslaught.cs:CollectWaypoints, CollectRadarLinks"
+      - "game/net/ServerNet.cs:BuildEntitySet, ResolveObjState, SendWaypoints, SendRadarLinks"
+      - "game/net/ClientEntityView.cs:DriveEntity, AnimateControlPointIcon"
+      - "src/VortexArena.Common/Gameplay/GameTypes/OnslaughtDestruction.cs"
+      - "src/VortexArena.Net/OnslaughtDestructionWire.cs"
+      - "game/client/ClientWorld.cs:RebuildEntityModel, DriveCsqcModelHooks"
+      - "game/hud/RadarPanel.cs:DrawLinkQuad; game/client/WaypointSpriteLayer.cs"
     constants:
-      - { name: "generator_damage_models", base: "MDL_ONS_GEN..GEN9/DEAD (11 states)", port: "generator.md3/generator_dmg1..9.md3/generator_dead.md3 by 0..10 bucket (server-resolved, networked)", match: true }
-      - { name: "cpicon_damage_models", base: "MDL_ONS_CP..CP3 (4 states)", port: "controlpoint_icon.md3/_dmg1/_dmg2/_dmg3 by 75/50/25% (server-resolved)", match: true }
-      - { name: "cpicon_spin_rate", base: "45 deg/s yaw + bob 9*(1-cos(1.875*t))", port: "none (icon bob/spin/punch animation still client-deferred)", match: false }
+      - { name: "generator_damage_models", base: "MDL_ONS_GEN..GEN9/DEAD (11 states)", port: "generator.md3/generator_dmg1..9.md3/generator_dead.md3 by 0..10 bucket", match: true }
+      - { name: "cpicon_damage_models", base: "MDL_ONS_CP..CP3 (4 states, thresholds strictly below 75/50/25%)", port: "base mesh during construction; damage and repair select the captured mesh at the same thresholds", match: true }
+      - { name: "cpicon_motion", base: "9*(1-cos(1.875*t)) bob; 45 deg/s captured yaw; 60 deg/s punch decay", port: "same bob, capture spin and punch decay on the client render clock", match: true }
+      - { name: "cpicon_build_opacity", base: "health/max_health", port: "existing objective health fraction decoded as opacity", match: true }
     status:
       logic: partial
       values: partial
-      timing: missing
+      timing: partial
       presentation: partial
-      audio: missing
+      audio: na
       liveness: partial
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "LANDED (W16/W17, server-authoritative + live-rendered): generator/control-point/icon WORLD MODELS now assigned (Entity.Model + EF_LOWPRECISION) and networked+rendered via the entity feed (ClientEntityView.ApplyIdentity, the CTF-flag pattern); progressive DAMAGE-MODEL swaps (GeneratorModelForBucket 0..10, IconModelForFraction 75/50/25%) + the pad PAD1->PAD2 capture swap; the generator damage FRAME (Frame=10*(1-hp/max)); the RADAR LINK lines round-trip (CollectRadarLinks -> SendRadarLinks -> ClientNet.RadarLinks -> RadarPanel.DrawLinkQuad, rendered); the generator/CP WAYPOINT SPRITES (CollectWaypoints -> SendWaypoints -> WaypointSpriteLayer/RadarPanel). Models resolved server-side approximate what CSQC generator_damage/cpicon_damage would derive from the networked hp fraction."
-      - "STILL MISSING (untouched by W16/W17): icon BOB/SPIN/PUNCH-on-hit animation (timing missing); the objective DEATH-CAM (ENT_ONSCAMERA/WantEventchase/ons_camSetup) on round loss; the generator EXPLOSION sequence (rays/shockwave/gibs/electricity); all particle EFFECTS (EFFECT_SPARKS/CAP/RAGE/ROCKET_EXPLODE — audio cues emit elsewhere but particles do not); the build-bar/health-bar alpha overlay. liveness PARTIAL because the model/sprite/radar producers are live but the animation/death-cam/explosion/particle half has no code at all."
+      - "The networked models, waypoints and radar links are consumed by the client. Objective meshes now rebind on snapshot model changes, including capture-pad, damage and generator-destruction changes."
+      - "Captured icons react to a decrease in the quantized objective health byte. Multiple hits between snapshots or a decrease smaller than one byte may coalesce. The randomized punch distribution is approximate, and the hit color modulation is still open."
+      - "Both native players received the generator camera and sustained effects. Exact final-pulse appearance, manual chase, spectator views and sound remain unverified."
     verification:
-      - { kind: code_read, ref: "OnslaughtControlPoint.cs SpawnGenerator/SpawnControlPoint/SpawnIcon set Entity.Model (generator/pad/icon md3) + EF_LOWPRECISION; GeneratorDamage Frame + GeneratorModelForBucket/IconModelForFraction swap by hp; IconBuildThink PAD1->PAD2 — W17 diff 2f0bfdb", result: pass }
-      - { kind: code_read, ref: "Onslaught.cs CollectWaypoints (W16 b3a9c06) + CollectRadarLinks (W17 2f0bfdb); ServerNet.cs:493-494 SendWaypoints()/SendRadarLinks() called per advanced frame; ServerNet.cs:1259 SendRadarLinks broadcasts NetControl.RadarLinks", result: pass }
-      - { kind: code_read, ref: "ClientNet.cs:557/732 NetControl.RadarLinks->HandleRadarLinks->RadarLinks list (730); RadarPanel.cs:430-441 iterates RadarLinks + DrawLinkQuad (605); ClientEntityView.cs:274-286 ApplyIdentity assigns networked .Model for render — consumer plumbing built by Phase 1-3b (60d45f5/493c876/0e77bf5), verified live 2026-06-28", result: pass }
-      - { kind: code_read, ref: "NO icon bob/spin/punch anim, NO ons_camSetup death-cam, NO generator explosion sequence, NO particle pointparticles in port — confirmed by grep; these remain client/FX-deferred", result: fail }
+      - { kind: code_read, ref: "ServerNet.ResolveObjState emits 1 during construction and 2 after capture; ClientEntityView drives bob, spin, punch and build opacity from that state and objective health, then ClientWorld consumes the mesh and opacity.", result: pass }
+      - { kind: code_read, ref: "OnslaughtControlPoint.IconDamage and IconHeal mirror the pin's captured-only damage meshes and update the same networked model name used by ClientWorld.RebuildEntityModel.", result: pass }
+      - { kind: unit_test, ref: "OnslaughtCombatTests.ControlPoint_BuildToCompletion_CapturesAndCredits exercises build mesh, damage threshold and healing; ObjStreamCodecTests.ObjState_RoundTrips exercises wire state.", result: pass }
+      - { kind: visual, ref: "planning/parity/scripted-objectives/README.md", result: pass }
+      - { kind: visual, ref: "planning/parity/scripted-objectives/presentation/README.md", result: pass }
     confidence: high
-    notes: "DRIFT (W16/W17 presentation pass): row moves from all-missing -> partial. W16 added CollectWaypoints (generator/CP sprites); W17 added the world-model assignment + progressive damage-model swaps + generator damage frame + pad swap + CollectRadarLinks. All FIVE producers are live-wired AND consumed/rendered on the client (SendWaypoints/SendRadarLinks -> WaypointSpriteLayer/RadarPanel; .Model -> ClientEntityView). NOT faithful: timing(anim)/audio(particle-fx) stay missing, the death-cam + explosion sequence + particle effects are untouched. liveness partial (model/sprite/radar half live, anim/cam/fx half absent)."
+    notes: "2026-11-19 audit against 863cd3e8456e18f577f7fe5fef857ff55ae62cc0."
 
   - id: onslaught.audio.cues
     name: "Onslaught notifications + sounds emission"

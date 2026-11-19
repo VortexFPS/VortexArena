@@ -1,5 +1,7 @@
 // Port of common/mutators/mutator/overkill/sv_weapons.qc REGISTER_MUTATOR(ok_weapons, ...)
 
+using System.Globalization;
+using System.Text.RegularExpressions;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Services;
 
@@ -37,7 +39,7 @@ public sealed class OkWeaponsMutator : MutatorBase
     // Overkill mutator's enable predicate (so the standalone weapons are also available in full Overkill mode).
     public override bool IsEnabled =>
         Api.Services is not null
-        && (ExprEvaluate(Api.Cvars.GetString("g_overkill_weapons"))
+        && (StandaloneEnabled()
             || Mutators.ByName("overkill") is { IsEnabled: true });
 
     public override void Hook()
@@ -66,12 +68,77 @@ public sealed class OkWeaponsMutator : MutatorBase
         }
     }
 
-    /// <summary>QC <c>expr_evaluate(s)</c> for a cvar string: false for "" / "0" / "false", true otherwise.</summary>
-    private static bool ExprEvaluate(string s)
+    private const string StandaloneCvar = "g_overkill_weapons";
+
+    // tokenize_console treats a leading quote as a quoted token and // at a token boundary as a comment.
+    private static readonly Regex ExpressionTokens = new(
+        """//[^\r\n]*|"(?<quoted>(?:[^"\\]|\\["\\]|\\(?!["\\]))*)"?|(?<word>[^\x00 \t\r\n]+)""");
+    private static readonly Regex QuotedEscapes = new("""\\(["\\])""");
+    private static readonly Regex NumericPrefix = new(@"^\s*[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?");
+
+    // This order is observable: the shorter equality operators also capture triple equality tokens.
+    private static readonly string[] ComparisonOperators = [">=", "<=", ">", "<", "==", "!="];
+
+    private static bool StandaloneEnabled()
     {
-        if (string.IsNullOrEmpty(s)) return false;
-        s = s.Trim();
-        if (s == "0" || string.Equals(s, "false", StringComparison.OrdinalIgnoreCase)) return false;
-        return true;
+        // The shipped config supplies 0. Preserve that default when booting without the config files.
+        string expression = Api.Cvars.GetString(StandaloneCvar);
+        if (expression.Length == 0 && !Api.Cvars.Has(StandaloneCvar))
+            return false;
+
+        bool negated = expression.StartsWith('-');
+        if (negated || expression.StartsWith('+'))
+            expression = expression[1..];
+
+        foreach (Match match in ExpressionTokens.Matches(expression))
+        {
+            Group quoted = match.Groups["quoted"];
+            Group word = match.Groups["word"];
+            if (!quoted.Success && !word.Success)
+                continue;
+
+            string token = quoted.Success ? QuotedEscapes.Replace(quoted.Value, "$1") : word.Value;
+            if (!Matches(token))
+                return negated;
+        }
+        return !negated;
+    }
+
+    private static bool Matches(string token)
+    {
+        foreach (string op in ComparisonOperators)
+        {
+            int index = token.IndexOf(op, StringComparison.Ordinal);
+            if (index < 0)
+                continue;
+
+            float left = ParseNumericPrefix(Api.Cvars.GetString(token[..index]));
+            float right = ParseNumericPrefix(token[(index + op.Length)..]);
+            return op switch
+            {
+                ">=" => left >= right,
+                "<=" => left <= right,
+                ">" => left > right,
+                "<" => left < right,
+                "==" => left == right,
+                _ => left != right,
+            };
+        }
+
+        bool negated = token.StartsWith('!');
+        string name = negated ? token[1..] : token;
+        float value = ParseNumericPrefix(name);
+        // QC identifies literal numbers by comparing the token to ftos(stof(token)).
+        string format = value == MathF.Truncate(value) ? "F0" : "F6";
+        if (!string.Equals(name, value.ToString(format, CultureInfo.InvariantCulture), StringComparison.Ordinal))
+            value = ParseNumericPrefix(Api.Cvars.GetString(name));
+        return (value != 0f) != negated;
+    }
+
+    private static float ParseNumericPrefix(string token)
+    {
+        Match prefix = NumericPrefix.Match(token);
+        return prefix.Success && float.TryParse(prefix.ValueSpan, NumberStyles.Float,
+            CultureInfo.InvariantCulture, out float value) ? value : 0f;
     }
 }

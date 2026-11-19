@@ -1,0 +1,153 @@
+DarkPlaces Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+Game is Xonotic using gamedir [0;1mdata[m
+gamename for server filtering: Xonotic
+Package /tmp/va-sandbox-original-keys1/original/data/shared.pk3 contains the file models/xonotic_jumppad01/xonotic_jumppads01_readme.txt several times
+Package /tmp/va-sandbox-original-keys1/original/data/shared.pk3 contains the file textures/phillipk1x/_GPL.txt several times
+Package /tmp/va-sandbox-original-keys1/original/data/shared.pk3 contains the file textures/phillipk1x/_readme.txt several times
+Package /tmp/va-sandbox-original-keys1/original/data/shared.pk3 contains the file textures/phillipk2x/_GPL.txt several times
+Package /tmp/va-sandbox-original-keys1/original/data/shared.pk3 contains the file textures/phillipk2x/_readme.txt several times
+Current nice level is below the soft limit - cannot use niceness
+Loaded library "libd0_blind_id.so.0"
+Loaded library "libd0_rijndael.so.0"
+-ip option used, setting net_address to "127.0.0.1"
+-port option used, setting port cvar to 26706
+Loaded library "libcurl.so.4"
+Skeletal animation uses SSE code path
+execing quake.rc
+execing default.cfg
+execing xonotic-common.cfg
+[1;33mUnknown command "r_textbrightness"[m
+[1;33mUnknown command "r_textcontrast"[m
+execing commands.cfg
+execing help.cfg
+execing xonotic-server.cfg
+"maxplayers" set to "16"
+execing testing.cfg
+execing balance-xonotic.cfg
+execing bal-wep-xonotic.cfg
+execing physicsX.cfg
+execing turrets.cfg
+execing vehicles.cfg
+execing gametypes-server.cfg
+execing ctfscoring-samual.cfg
+execing mutators.cfg
+execing randomitems-xonotic.cfg
+execing monsters.cfg
+execing minigames.cfg
+execing physics.cfg
+execing help-xonotic.cfg
+[1;33mcouldn't exec cdtracks.cfg[m
+execing notifications.cfg
+execing data/campaign.cfg
+execing autoexec/empty.cfg
+execing autoexec.cfg
+SpawnServer: stormkeep
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+Server listening on address 127.0.0.1:26706
+Server listening on address [0:0:0:0:0:0:0:0]:26706
+server: program loaded (crc 51381, size 6720K)
+:gamestart:dm_stormkeep:0.1795063489.685560
+:gameinfo:mutators:LIST:Buffs:norecoil
+:gameinfo:end
+Server spawned.
+there is no public key 0
+execing post-config.cfg
+ParityOwner is connecting...
+ParityGuest is connecting...
+ParityOwner[1;34m connected[m
+:join:1:1:127.0.0.2:ParityOwner
+ParityOwner connected
+:team:1:-1:4
+ParityGuest[1;34m connected[m
+:join:2:2:127.0.0.3:ParityGuest
+ParityGuest connected
+:team:2:-1:4
+ParityOwner[1;34m is now playing[m
+ParityGuest[1;34m is now playing[m
+host:     Xonotic git Server
+version:  Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+protocol: 3504 (DP7)
+map:      stormkeep
+timing:   3.7% CPU, 0.00% lost, offset avg 0.1ms, max 1.5ms, sdev 0.2ms
+players:  2 active (16 max)
+
+#1   ParityOwner         0   0:00:09
+   127.0.0.2:57923
+#2   ParityGuest         0   0:00:08
+   127.0.0.3:53228
+host:     Xonotic git Server
+version:  Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+protocol: 3504 (DP7)
+map:      stormkeep
+timing:   6.7% CPU, 0.00% lost, offset avg 0.8ms, max 8.4ms, sdev 1.0ms
+players:  2 active (16 max)
+
+#1   ParityOwner         0   0:00:15
+   127.0.0.2:57923
+#2   ParityGuest         0   0:00:13
+   127.0.0.3:53228
+Client "ParityOwner" dropped (Disconnect by user)
+:part:1
+ParityOwner[1;34m disconnected[m
+:anticheat:_time:1:14.950100
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+[1;33mParityOwner left the game (Disconnect by user)[m
+Client "ParityGuest" dropped (Disconnect by user)
+:part:2
+ParityGuest[1;34m disconnected[m
+:anticheat:_time:2:15.684475
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+[1;33mParityGuest left the game (Disconnect by user)[m
+:startdelay_ended

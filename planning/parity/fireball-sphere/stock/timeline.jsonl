@@ -1,0 +1,33 @@
+{"seconds": 0.0, "event": "both graphical clients connected", "port": 30542}
+{"seconds": 2.001, "client": "BlueProbe", "command": "cmd join"}
+{"seconds": 3.025, "server": "prvm_edictset server 1 origin \"1216 145 112\"; prvm_edictset server 1 angles \"21 90 0\"; prvm_edictset server 1 fixangle 1"}
+{"seconds": 3.339, "server": "status; g_weaponarena; g_balance_fireball_primary_bfgradius; g_balance_fireball_primary_animtime; g_balance_fireball_primary_radius; g_balance_fireball_primary_refire; g_balance_fireball_primary_laserradius; g_balance_fireball_primary_force; slowmo"}
+{"seconds": 3.742, "server": "prvm_breakpoint server 447537"}
+{"seconds": 3.742, "server": "echo FIREBALL_TRIAL impact; g_balance_fireball_primary_lifetime 15; g_balance_fireball_primary_radius 32; g_balance_fireball_primary_speed 1200; g_balance_fireball_primary_lifetime; g_balance_fireball_primary_radius; g_balance_fireball_primary_speed"}
+{"seconds": 3.742, "client": "BlueProbe", "command": "cmd teleporttotarget probe_fire"}
+{"seconds": 4.798, "server": "echo BlueProbe at probe_fire; prvm_edictget server 2 origin; prvm_edictget server 2 v_angle"}
+{"seconds": 4.798, "server": "prvm_edictget server 2 health; prvm_edictget server 2 armorvalue"}
+{"seconds": 5.198, "trial": "impact", "phase": "capture start"}
+{"seconds": 5.652, "client": "BlueProbe", "event": "attack down", "key": "F8"}
+{"seconds": 6.517, "client": "BlueProbe", "event": "attack up", "key": "F8"}
+{"seconds": 13.07, "server": "prvm_edictget server 2 health; prvm_edictget server 2 armorvalue"}
+{"seconds": 13.07, "trial": "impact", "phase": "capture end", "stock_draw_calls": 28}
+{"seconds": 13.07, "server": "echo FIREBALL_TRIAL timeout; g_balance_fireball_primary_lifetime 0.001; g_balance_fireball_primary_radius 32; g_balance_fireball_primary_speed 1; g_balance_fireball_primary_lifetime; g_balance_fireball_primary_radius; g_balance_fireball_primary_speed"}
+{"seconds": 13.071, "client": "BlueProbe", "command": "cmd teleporttotarget probe_timeout"}
+{"seconds": 14.155, "server": "echo BlueProbe at probe_timeout; prvm_edictget server 2 origin; prvm_edictget server 2 v_angle"}
+{"seconds": 14.155, "server": "prvm_edictget server 2 health; prvm_edictget server 2 armorvalue"}
+{"seconds": 14.555, "trial": "timeout", "phase": "capture start"}
+{"seconds": 15.007, "client": "BlueProbe", "event": "attack down", "key": "F8"}
+{"seconds": 15.852, "client": "BlueProbe", "event": "attack up", "key": "F8"}
+{"seconds": 22.412, "server": "prvm_edictget server 2 health; prvm_edictget server 2 armorvalue"}
+{"seconds": 22.412, "trial": "timeout", "phase": "capture end", "stock_draw_calls": 0}
+{"seconds": 22.412, "server": "echo FIREBALL_TRIAL self-damage; g_balance_fireball_primary_lifetime 15; g_balance_fireball_primary_radius 250; g_balance_fireball_primary_speed 1200; g_balance_fireball_primary_lifetime; g_balance_fireball_primary_radius; g_balance_fireball_primary_speed"}
+{"seconds": 22.412, "client": "BlueProbe", "command": "cmd teleporttotarget probe_fire"}
+{"seconds": 23.561, "server": "echo BlueProbe at probe_fire; prvm_edictget server 2 origin; prvm_edictget server 2 v_angle"}
+{"seconds": 23.562, "server": "prvm_edictget server 2 health; prvm_edictget server 2 armorvalue"}
+{"seconds": 23.962, "trial": "self-damage", "phase": "capture start"}
+{"seconds": 24.414, "client": "BlueProbe", "event": "attack down", "key": "F8"}
+{"seconds": 25.281, "client": "BlueProbe", "event": "attack up", "key": "F8"}
+{"seconds": 31.864, "server": "prvm_edictget server 2 health; prvm_edictget server 2 armorvalue"}
+{"seconds": 31.864, "trial": "self-damage", "phase": "capture end", "stock_draw_calls": 0}
+{"seconds": 31.864, "server": "status"}

@@ -499,7 +499,8 @@ public static class PlayerFrameLogic
         // pre-pass bitmask.
         int itemsPrev = p.Items;
 
-        SuperweaponPass(p);
+        if (Mutators.ByName("instagib") is not { IsEnabled: true })
+            SuperweaponPass(p);
 
         // QC client.qc:1628-1632: draw-through-walls / fullbright debug toggles, OR'd in after the powerup block.
         if (Cvars.Bool("g_nodepthtestplayers"))
@@ -517,11 +518,9 @@ public static class PlayerFrameLogic
     public static System.Func<bool> IsCtsGametype { get; set; } = static () => false;
 
     /// <summary>
-    /// QC <c>player_powerups_remove_all(this, allow_poweroff_sound)</c> (server/client.qc:1521-1535): strip the
-    /// superweapon / unlimited-ammo / unlimited-superweapon item bits and, when allowed, play the power-off sound.
-    /// Called on death (allow=true) and on disconnect (allow=IS_PLAYER). The sound only plays for a live client
-    /// after the first second of the match and only if the unlimited bits weren't part of the start loadout (so an
-    /// arena's permanent unlimited ammo doesn't beep). Returns nothing; mutates <paramref name="p"/>'s item bits.
+    /// QC <c>player_powerups_remove_all(this, allow_poweroff_sound)</c> clears the three superweapon and unlimited
+    /// item bits. Death, observer entry, restart, and disconnect use this cleanup. The item-bit cue requires
+    /// an enabled caller, a client entity, more than one second since match start, and a finite start loadout.
     /// </summary>
     public static void PlayerPowerupsRemoveAll(Player p, bool allowPoweroffSound)
     {
@@ -529,15 +528,18 @@ public static class PlayerFrameLogic
         if ((p.Items & powerBits) == 0)
             return;
 
-        // QC: don't play the poweroff sound when the game restarts or the player disconnects mid-loadout-unlimited.
-        if (allowPoweroffSound && Api.Services is not null)
+        if (allowPoweroffSound && (p.Flags & EntFlags.Client) != 0 && Api.Services is not null)
         {
             float gameStart = StartItem.GameStartTimeProvider?.Invoke() ?? 0f;
             int startItems = StartItemFlagsCache();
             bool startUnlimited = (startItems & ((int)ItemFlag.UnlimitedAmmo | (int)ItemFlag.UnlimitedSuperweapons)) != 0;
             if (Api.Clock.Time > gameStart + 1f && !startUnlimited)
-                Api.Sound.Play(p, SoundChannel.Auto, "misc/poweroff.wav");
+                PlayPoweroff(p);
         }
+
+        if ((p.Items & ((int)ItemFlag.UnlimitedAmmo | (int)ItemFlag.UnlimitedSuperweapons)) != 0
+            && Api.Services is not null)
+            Api.Sound.Stop(p, SoundChannel.Item); // CH_TRIGGER_SINGLE pickup sound
 
         p.Items &= ~powerBits;
     }
@@ -593,7 +595,8 @@ public static class PlayerFrameLogic
             {
                 // QC play_countdown(this, StatusEffects_gettime(Superweapon), SND_POWEROFF): beep the last seconds.
                 float finished = StatusEffectsCatalog.GetTime(p, sw, now);
-                PlayCountdown(p, finished, now);
+                // QC floors elapsed timers to now while the status store exists.
+                PlayCountdown(p, p.HasStatusEffectStore ? MathF.Max(now, finished) : finished, now);
                 if (now >= finished)
                 {
                     p.Items &= ~(int)ItemFlag.Superweapon;
@@ -604,11 +607,7 @@ public static class PlayerFrameLogic
         }
         else if (ownsSuper)
         {
-            // QC: keep the unlimited timer pinned so GetTime never lapses (port: persistence handled by the
-            // PersistentCheck on the effect; re-apply a far-future window when unlimited so a fresh pickup arms it).
-            if (unlimited && !StatusEffectsCatalog.Has(p, sw))
-                StatusEffectsCatalog.Apply(p, sw, 999f);
-
+            // The unlimited item bit is sufficient even if no status was applied.
             if (now < StatusEffectsCatalog.GetTime(p, sw, now) || unlimited)
             {
                 p.Items |= (int)ItemFlag.Superweapon;
@@ -624,15 +623,14 @@ public static class PlayerFrameLogic
             else
             {
                 // QC: timer lapsed without ever setting the bit → expire the effect + strip the owned superweapons.
-                if (StatusEffectsCatalog.Has(p, sw))
-                    StatusEffectsCatalog.Remove(p, sw);
+                StatusEffectsCatalog.Remove(p, sw, StatusEffectRemoval.Timeout);
                 StripOwnedSuperweapons(p);
             }
         }
         else if (StatusEffectsCatalog.Has(p, sw))
         {
             // QC: a stray Superweapon effect with no superweapon owned → clear it.
-            StatusEffectsCatalog.Remove(p, sw);
+            StatusEffectsCatalog.Remove(p, sw, StatusEffectRemoval.Clear);
         }
     }
 
@@ -654,15 +652,18 @@ public static class PlayerFrameLogic
     }
 
     // QC play_countdown(this, finished, samp) (server/client.qc:1532): beep once per integer second crossed in
-    // the last 6 seconds before <paramref name="finished"/> (SND_POWEROFF = misc/poweroff.wav, CH_INFO).
+    // the last 6 seconds, including the terminating frame. With no store, QC passes 0 and still tests the edge.
     private static void PlayCountdown(Player p, float finished, float now)
     {
-        if (Api.Services is null || finished <= 0f) return;
+        if (Api.Services is null || p.IsBot || (p.Flags & EntFlags.Client) == 0) return;
         float frametime = Api.Clock.FrameTime;
         float timeLeft = finished - now;
         if (timeLeft < 6f && MathF.Floor(timeLeft - frametime) != MathF.Floor(timeLeft))
-            Api.Sound.Play(p, SoundChannel.Auto, "misc/poweroff.wav");
+            PlayPoweroff(p);
     }
+
+    private static void PlayPoweroff(Player p)
+        => SoundSystem.PlayOn(p, Sounds.ByName("POWEROFF"), SoundChannel.Auto, SoundLevels.VolBase, SoundLevels.AttenNorm);
 
     private static float Now => Api.Services is not null ? Api.Clock.Time : 0f;
 }

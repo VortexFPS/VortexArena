@@ -396,7 +396,8 @@ features:
       - "common/mutators/mutator/status_effects/status_effect/spawnshield.qc:m_tick/m_remove"
       - "common/mutators/mutator/status_effects/status_effect/stunned.qc:m_tick/m_remove"
       - "common/mutators/mutator/status_effects/status_effect/superweapons.qc:m_persistent"
-      - "server/client.qc (superweapon play_countdown SND_POWEROFF)"
+      - "server/client.qc:play_countdown / player_powerups / player_powerups_remove_all"
+      - "common/mutators/mutator/status_effects/sv_status_effects.qc:m_tick / m_remove"
     port_refs:
       - "src/VortexArena.Server/PlayerFrameLogic.cs:SuperweaponPass / PlayCountdown"
       - "src/VortexArena.Common/Gameplay/StatusEffects.cs:SuperweaponPersistent / StunnedTick / StunnedRemove / SpawnShieldTick / SpawnShieldRemove"
@@ -413,8 +414,8 @@ features:
       - { name: "SpawnShield EF_ADDITIVE|EF_FULLBRIGHT shimmer (after game_starttime)", base: "yes", port: "yes for players AND monsters: SpawnShieldTick sets e.Effects|=EF_ADDITIVE|EF_FULLBRIGHT once now>=game_starttime, networked + rendered (CsqcModelEffects)", match: true }
       - { name: "Stunned EF_SHOCK aura", base: "yes", port: "yes: StunnedTick sets e.Effects|=EF_SHOCK; networked + rendered as blue-white light + EF_SHOCK particle (CsqcModelEffects). OnRemove clears it.", match: true }
       - { name: "Superweapon PERSISTENT via m_persistent", base: "yes", port: "yes: SuperweaponPersistent sets the networked PERSISTENT bit per tick", match: true }
-      - { name: "Superweapon m_sound_rm POWEROFF on lapse", base: "yes", port: "yes: RemovalSound='POWEROFF'->misc/poweroff resolves + plays on NORMAL removal", match: true }
-      - { name: "Superweapon play_countdown beep (last 6s)", base: "yes (beep once per integer second crossed in the last 6s)", port: "yes: PlayCountdown (PlayerFrameLogic.cs:658) beeps misc/poweroff.wav once per integer second crossed when timeLeft<6, called live from SuperweaponPass:596", match: true }
+      - { name: "Superweapon removal cue", base: "Active non-persistent NORMAL removal plays SND_POWEROFF on CH_TRIGGER. TIMEOUT, CLEAR and persistent NORMAL removal are silent.", port: "The registered misc/poweroff sample takes the stacking TriggerAuto channel on normal loss and follows the same removal gates.", match: true }
+      - { name: "Superweapon play_countdown beep (last 6s)", base: "Real-client finite countdown uses SND_POWEROFF on CH_INFO at VOL_BASE and ATTEN_NORM.", port: "Server emits the registered sample as an Auto cue at 0.7 volume and 0.5 attenuation. The ordinary item bit and a still-owned finite superweapon drive the countdown.", match: true }
       - { name: "Stunned m_sound_rm", base: "ons_spark1 (SND_Stunned_Remove)", port: "yes: RemovalSound='STUNNED_REMOVE'->onslaught/ons_spark1 resolves + plays on NORMAL removal", match: true }
     status:
       logic: faithful
@@ -430,6 +431,7 @@ features:
     verification:
       - { kind: code, ref: "Player spawnshield: SpawnSystem.cs:867 Apply(SpawnShield, SpawnShieldExpire-now) at spawn; GameWorld.cs:2383-2386 keeps the effect in lockstep with SpawnShieldExpire each live tick (apply when shielded, CLEAR-remove when not). SpawnShieldTick then sets EF_ADDITIVE|EF_FULLBRIGHT once now>=game_starttime", result: pass }
       - { kind: code, ref: "StunnedTick sets EF_SHOCK (live via BuffsMutator:678 disability); both bits networked (NetEntity) + rendered (CsqcModelEffects); OnRemove (StunnedRemove/SpawnShieldRemove) clears them on removal", result: pass }
-      - { kind: code, ref: "SuperweaponPersistent attached -> Tick sets PERSISTENT; SuperweaponPass (PlayerFrameLogic.cs:570) drives the state machine + PlayCountdown (per-integer-second beep in the last 6s); RemovalSound='POWEROFF'/STUNNED_REMOVE resolve and play on NORMAL removal", result: pass }
+      - { kind: test, ref: "tests/fixtures/superweapons-hud/Probe.cs verifies the ordinary and unlimited item bits, expiry, the channel and mix of each cue, and silent paths.", result: pass }
+      - { kind: in-game, ref: "planning/parity/review/superweapons-poweroff-verification.md", result: pass }
     confidence: high
     notes: "Player spawnshield shimmer LIVE (mirrored from Entity.SpawnShieldExpire). Superweapon play_countdown per-second beep ported + live. Stunned fully live (disability buff). Superweapon PERSISTENT + removal sound faithful. Structural note: player spawnshield keeps two state sources in lockstep."

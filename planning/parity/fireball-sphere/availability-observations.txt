@@ -1,0 +1,11 @@
+existing at spawn: 1; all three challenged, unauthenticated peers: 0
+accepted at 98 ms of simulation after a 125 ms wall pause: 1; repeated auth: still 1
+accepted at exactly 100 ms of simulation: 0
+accepted at 125 ms of simulation: 0; later flush repeated no deliveries
+six physics ticks before first flush: expired blast 0; fresh blast 1 on each accepted peer
+new blast still live at map teardown: one copy on each of four accepted peers
+accepted on replacement map on the same UDP port: 0 previous-map blasts
+FIREBALL_AVAILABILITY PASS
+Build succeeded.
+    0 Error(s)
+Passed!  - Failed:     0, Passed:     8, Skipped:     0, Total:     8, Duration: 87 ms - VortexArena.Tests.dll (net8.0)

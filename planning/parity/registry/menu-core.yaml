@@ -11,10 +11,10 @@ last_audited: "2026-07-02"
 summary:
   feature_count: 35
   worst_gaps:
-    - "Server/event-triggered dialogs are ALL dead: Welcome/MOTD on connect, Team-select, uid2name stats-consent, first-run+ToS, campaign Winner — the ported UI exists (DialogWelcome/DialogTeamSelect/DialogUid2Name/DialogFirstRun/DialogTermsOfService/DialogWinner) but nothing on the live path ever opens them (only the dev --menu-screen flag)."
+    - "Startup First Run/Terms and automatic stats consent remain outside the live menu flow. Native Welcome delivery and TeamSelect's named route are live."
     - "The update-notification system (util.qc updateCheck: update.xonotic.org checkupdate.txt, version banner, banned/promoted/recommended server lists, ToS-version push, hotfix pk3 auto-download) is entirely missing."
     - "Menu audio is entirely missing: no menu music (m_draw 'cd loop $menu_cdtrack') and no click/focus sounds (m_play_click_sound/m_play_focus_sound, menu_sounds cvar is bound in the Audio dialog but nothing plays)."
-    - "Demo browser is a stub (no *.dem enumeration, no playdemo/timedemo backend, no disconnect-confirm dialogs) and the player-stats list (statslist.qc) is missing outright."
+    - "The demo browser can play and benchmark bundled DarkPlaces recordings, but native match auto-recording and the player-stats list (statslist.qc) are missing."
     - "Server browser gaps vs serverlist.qc: no category headings/recommended/promoted rows, no banned-server masks, favorites stored in a port-private favorites.cfg by plain address instead of net_slist_favorites with crypto-id keys, no per-row mod/AES/stats icons, no gametype-prefix text filter."
 features:
   - id: menu-core.vm.lifecycle_toggle
@@ -44,7 +44,7 @@ features:
     intended_divergence: true
     divergence_rationale: "The QC menu is an immediate-mode VM redrawn every frame (m_draw); the port is a Godot Control scene graph (MenuRoot screen stack). The architecture swap is deliberate; behavior-level flows (toggle semantics, m_goto hide-on-close vs keep-open, escape handling) are ported on top of it."
     gaps:
-      - "On disconnect Base reopens the menu and runs 'menu_cmd directmenu Welcome RESET' after 1 s (m_draw); the port returns to the main menu via Shell.ReturnToMainMenu but never routes through a Welcome reset, and the g_campaign-reset+m_sync on disconnect is handled elsewhere (LEAVEMATCH_CMD analogue)."
+      - "On disconnect Base reopens the menu and runs 'menu_cmd directmenu Welcome RESET' after 1 s (m_draw). Shell clears cached Welcome data during teardown and returns to the main menu. The g_campaign-reset+m_sync on disconnect is handled elsewhere (LEAVEMATCH_CMD analogue)."
       - "No menu fade-in/out (menuAlpha 5/s, _menu_alpha cvar export for engine dimming) and no intro logo fade (menuLogoAlpha)."
       - "menu_slowmo, cl_capturevideo frametime override, and menu_mouse_absolute/menu_mouse_speed handling are absent (Godot supplies OS mouse handling — partially intended)."
     verification:
@@ -145,8 +145,10 @@ features:
       - "menu/mutators/events.qh:Menu_ConsoleCommand hook (via menu_cmd.qc:186)"
       - "menu/mutators/events.qc"
     port_refs:
-      - "game/menu/framework/MenuCommand.cs:Dispatch (112)"
+      - "game/console/ConsoleOverlay.cs:RegisterCommands (menu_cmd)"
+      - "game/menu/framework/MenuCommand.cs:Dispatch"
       - "game/menu/framework/MenuDialogRegistry.cs:Create"
+      - "game/Shell.cs:OpenMenuDialog, CloseMenuDialog"
     constants: []
     status:
       logic: partial
@@ -159,12 +161,9 @@ features:
     divergence_rationale: null
     gaps:
       - "directmenu with NO argument (list all openable items to console) and dumptree are not implemented; isdemo and update_conwidths_before_vid_restart are absent (no demo/vid-conwidth backend)."
-      - "directmenu with EXTRA args (readInputArgs buffer — how the server feeds Welcome HOSTNAME/WELCOME/CAMPAIGN text) is not implemented; the port's OpenDialog only takes the name."
-      - "directpanelhudmenu drops the QC 'HUD' name-prefix filter (routes the bare name)."
       - "m_play_click_sound(MENU_SOUND_OPEN) on directmenu is absent (no menu sounds at all)."
-      - "The demo-mode guard (directmenu refused while isdemo() unless 'Welcome') is absent."
     verification:
-      - { kind: code, ref: "MenuCommand.Dispatch handles menu_cmd/directmenu/closemenu/nexposee/servers/profile/settings/inputsettings/videosettings/skinselect/languageselect; Shell wires OpenDialog(+resumeOnClose)", result: pass }
+      - { kind: code, ref: "MenuCommand forwards the parsed argv tail for named open/close. Shell routes Welcome args, honors the Welcome exception during demo playback, and only closes the current matching route. directpanelhudmenu prefixes HUD.", result: pass }
     confidence: high
     notes: "The nav-verb → dialog-name remaps (skinselect→skinselector→Settings User tab) reproduce the QC destinations at behavior level. menu/mutators/events.qc (Menu_ConsoleCommand/ConfigureDialogs hooks) has no port counterpart — no menu-mutator system, cited here for coverage."
 
@@ -349,6 +348,8 @@ features:
       - "_menu_gamemenu_dialog_available registration cvar not exported (harmless unless server QC probes it)."
     verification:
       - { kind: code, ref: "PauseMenu.cs:36-73 fill order matches QC (Main menu/Servers/Profile/Settings/Input/Guide/Quick menu/Join!/Spectate/Leave/Quit); campaign Join!→Restart-level swap in _Process; join/spec/resetmatch reach the match via MenuCommand case 'join'/'spec' → SendGame (MenuCommand.cs:246-252)", result: pass }
+      - { kind: code, ref: "Shell.OpenMenuDialog routes GameMenu to the same OpenPauseMenu as Escape. Direct Input and Video share a focused Settings tab and resume gameplay when their containing dialog closes.", result: pass }
+      - { kind: runtime, ref: "planning/parity/deferred-audit/directmenu-evidence.md#local-runtime-proof", result: pass }
       - { kind: code, ref: "MenuCommand.Dispatch has no 'quickmenu' case → default inert log; NetGame.cs:5219 only handles the bind path", result: fail }
     confidence: high
     notes: "QC indented buttons use directmenu (hide-menu-on-close) — reproduced via PushResumeOnClose."
@@ -385,23 +386,28 @@ features:
       - "menu/xonotic/dialog_welcome.qc:XonoticWelcomeDialog_draw (auto-close, old-server +show_info fallback)"
     port_refs:
       - "game/menu/dialogs/DialogWelcome.cs"
+      - "game/Shell.cs:OpenMenuDialog, ReadWelcomeArguments, TeardownGame"
+      - "game/net/ServerNet.cs:HandleAuth; game/net/ClientNet.cs:HandleAccept; game/net/NetGame.cs:OnMatchWelcome"
     constants: []
     status:
-      logic: stub
-      values: na
+      logic: partial
+      values: partial
       timing: na
       presentation: partial
       audio: na
-      liveness: dead
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Never shown on the live path: the server-side welcome push ('menu_cmd directmenu Welcome HOSTNAME ... WELCOME ...') has no port sender and MenuCommand drops directmenu args, so connecting to a server never pops the MOTD dialog. Only reachable via --menu-screen welcome (dev)."
-      - "Campaign level-brief variant (CAMPAIGN arg substituting _LEVEL_DESC with campaign_shortdesc/longdesc) missing; Enter/Space→Join default and click-outside-closes not ported."
+      - "The native sign-on presents the server's briefing through Welcome and caches it for the server-info bind when automatic display is gated by cl_welcome or intermission. Legacy CSQC's timed show-info fallback remains separate."
+      - "Stock campaign-specific auto-open rules, campaign typography, and additional stock player-count/version/gameplay-tip lines remain partial."
     verification:
-      - { kind: code, ref: "Shell.cs:184 is the only constructor call (dev screen switch); DialogWelcome body is a hardcoded placeholder", result: fail }
+      - { kind: code, ref: "WelcomeDialogData parses HOSTNAME/WELCOME/CAMPAIGN/RESET. A closemenu payload initializes cached data, a plain open reuses it, and teardown clears it.", result: pass }
+      - { kind: test, ref: "WelcomeBriefingTests covers the 4096-byte UTF-8 cap, scalar boundaries, malformed fields and packet truncation.", result: pass }
+      - { kind: runtime, ref: "planning/parity/deferred-audit/directmenu-evidence.md#local-runtime-proof", result: pass }
+      - { kind: runtime, ref: "planning/parity/deferred-audit/welcome-live-evidence.md", result: pass }
     confidence: high
-    notes: "The port shows game state directly on join instead; Base's welcome flow is also what surfaces the campaign level briefing in-game (see sv-campaign.welcome.levelnum)."
+    notes: "See deferred-audit/directmenu-evidence.md for the pinned command trace and welcome-live-evidence.md for automatic sign-on and map changes."
 
   - id: menu-core.nav.teamselect
     name: "Team selection dialog (auto/red/blue/yellow/pink/spectate, availability bitmask)"
@@ -420,13 +426,14 @@ features:
       timing: na
       presentation: partial
       audio: na
-      liveness: dead
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No live opener: Base binds team_selection_show → menu_cmd directmenu TeamSelect and the server sets _teams_available on join; the port has neither (only --menu-screen teamselect), so players never see it — team joining happens through other UI/commands."
+      - "The named TeamSelect opens in a match and reads _teams_available. Native production of that bitmask on join and stock's scoreboard-selector branch remain open."
     verification:
-      - { kind: code, ref: "grep team_selection_show over game/ → no hits outside the InfoMessages hint text; Shell.cs:181 dev-only constructor", result: fail }
+      - { kind: code, ref: "commands.cfg team_selection_show alias, MenuCommand.Dispatch, MenuDialogRegistry TeamSelect and DialogTeamSelect team bits", result: pass }
+      - { kind: runtime, ref: "F5 with a seeded _teams_available mask in planning/parity/deferred-audit/directmenu-evidence.md#local-runtime-proof", result: pass }
     confidence: high
     notes: "The command strings themselves would work if opened during a match (SendGameCommand channel is wired)."
 
@@ -447,14 +454,15 @@ features:
       timing: na
       presentation: partial
       audio: na
-      liveness: dead
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Neither dialog is auto-shown: Base's MainWindow first-draw check (ToS version from the update server via _Nex_ExtResponseSystem_NewToS; first-run when the name/language was never set) is not ported — both are reachable only via --menu-screen firstrun/tos."
-      - "ToS text loading (loadXonoticToS) depends on the update-response system, which is missing."
+      - "FirstRun and TermsOfService resolve by name. MainMenu lacks the stock first-draw, terms-first gate; the stock First Run predicate checks the default _cl_name."
+      - "ToS text loading and fetched-version comparison depend on the external update-response system. Native terms version and consent flow remain product decisions."
     verification:
-      - { kind: code, ref: "MainMenu.BuildUi has no firstDraw ToS/firstrun branch; Shell.cs:182-183 dev-only constructors", result: fail }
+      - { kind: code, ref: "MenuDialogRegistry has named factories for FirstRun and TermsOfService; MainMenu.BuildUi has no automatic startup gate.", result: pass }
+      - { kind: manual, ref: "planning/parity/deferred-audit/color-editing/README.md (First Run HSL name editing on native and pinned stock UI)", result: pass }
     confidence: high
     notes: "First-run's name+language entry UI exists in the port dialog (Localization-driven language picker per Localization.cs:111)."
 
@@ -473,13 +481,12 @@ features:
       timing: na
       presentation: faithful
       audio: na
-      liveness: dead
-    intended_divergence: false
-    divergence_rationale: null
-    gaps:
-      - "Never triggered: in Base the client pops it when cl_allow_uid2name is -1 on a stats-enabled server ('menu_cmd directmenu Uid2Name' from CSQC); the port constructs DialogUid2Name NOWHERE — not even the --menu-screen dev switch (Shell.cs:180-184 has no 'uid2name' case) — so the consent question is never asked, and Race record-name gating then depends on a cvar users can only set via the Profile checkboxes."
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: "Approved records.nickname_prompt retains First Run and Profile for native local rankings. The player can open Uid2Name explicitly in a match. Pinned CSQC can ask on entry when the preference is undecided."
+    gaps: []
     verification:
-      - { kind: code, ref: "grep DialogUid2Name over game/+src/+tests → zero references outside the class file (verified 2026-07-02); the vyes/vno vote halves would log inert in MenuCommand (default case)", result: fail }
+      - { kind: code, ref: "MenuDialogRegistry Uid2Name constructs DialogUid2Name; the dialog reads and writes cl_allow_uid2name.", result: pass }
     confidence: high
     notes: "The real effect (cl_allow_uid2name write) is implemented in the dialog."
 
@@ -534,7 +541,7 @@ features:
       - "game/menu/MapList.cs:Available"
       - "game/menu/CreateGameScreen.cs:maplist half (364-540) + MapInfoCache (548)"
     constants:
-      - { name: "preview fallback", base: "maps/<bsp> → levelshots/<bsp> → nopreview_map", port: "MenuSkin.Image('maps/..') → nopreview_map (no levelshots step)", match: false }
+      - { name: "preview fallback", base: "maps/<bsp> → levelshots/<bsp> → nopreview_map", port: "QcCreateLists tries maps, then levelshots, then the menu placeholder", match: true }
       - { name: "menu_use_default_hostname", base: "1 → hostname \"<name>'s Xonotic Server\"", port: "not implemented", match: false }
     status:
       logic: partial
@@ -693,24 +700,28 @@ features:
       - "menu/xonotic/dialog_media_demo_timeconfirm.qc"
     port_refs:
       - "game/menu/dialogs/DialogMediaDemo.cs"
+      - "game/menu/dialogs/DialogDemoConfirm.cs"
+      - "game/Shell.cs:StartLegacySession"
+      - "game/legacy/LegacyGame.cs"
     constants:
-      - { name: "cl_autodemo checkbox", base: "cl_autodemo", port: "same cvar, live", match: true }
+      - { name: "cl_autodemo recording", base: "cl_autodemo records client demos", port: "cvar is configurable through the checkbox; no native client recorder", match: false }
     status:
-      logic: stub
+      logic: partial
       values: na
       timing: na
       presentation: partial
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No demos/*.dem enumeration (incl. 1-level subdir scan with colored '/' prefixes), no filter glob, no sort; the list renders empty with an honest note."
-      - "Play/Timedemo are inert (no playdemo/timedemo backend) and the two 'disconnect first?' confirm dialogs are not ported."
+      - "The auto-record checkbox sets cl_autodemo. Native matches still lack a client demo recorder."
+      - "Older recordings may refer to assets absent from the current game data, such as the old Akkordeon model."
     verification:
-      - { kind: code, ref: "DialogMediaDemo builds the faithful layout; buttons route bare playdemo/timedemo through MenuCommand (logged inert)", result: fail }
+      - { kind: code, ref: "DialogMediaDemo enumerates and filters VFS recordings, preserves their paths, confirms in-match, and routes Play/Timedemo into the legacy viewer.", result: pass }
+      - { kind: manual, ref: "Both original recordings opened through the native browser using native assets and their embedded client programs. See planning/parity/review/demo-orchestra.webp and demo-keybench.webp.", result: pass }
     confidence: high
-    notes: "The active demo-cinematics track (branch claude/demo-cinematics, .xgd format) will supply the backend; the browser should then enumerate .xgd instead of .dem — flag as intended follow-up, not done."
+    notes: "Native browser sessions return to the main menu upon completion. CLI replay retains its existing exit behavior."
 
   - id: menu-core.media.screenshots
     name: "Screenshot browser (list/filter) + viewer (zoom/slideshow)"
@@ -780,6 +791,7 @@ features:
       - "menu/xonotic/dialog_media.qc:XonoticMediaDialog_fill (tab order)"
       - "menu/xonotic/dialog_media_guide.qc:XonoticGuideTab_fill"
       - "menu/xonotic/guide/guide.qc"
+      - "menu/xonotic/guide/guide.qh (registry sources and visibility)"
       - "menu/xonotic/guide/topics.qc"
       - "menu/xonotic/guide/entries.qc"
       - "menu/xonotic/guide/pages.qc"
@@ -787,6 +799,9 @@ features:
     port_refs:
       - "game/menu/dialogs/MediaScreen.cs (tab order Guide/Demos/Screenshots/Music Player)"
       - "game/menu/dialogs/DialogMediaGuide.cs"
+      - "game/menu/dialogs/GuidePages.cs"
+      - "game/menu/dialogs/GuideCatalogText.cs"
+      - "game/menu/dialogs/GuideWeaponText.cs"
     constants:
       - { name: "topics", base: "Introduction..Mods (13 fixed topics)", port: "same 13, same order", match: true }
     status:
@@ -799,11 +814,137 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Entry lists are only partially populated (weapons + mutators from the port registries); items/powerups/buffs/nades/monsters/vehicles/turrets/gametypes/mods entries and their describe() text pages are missing; the keyword filter is inert."
+      - "Magnet uses the wording in the shipped catalog (the pinned callback adds “greatly”)."
     verification:
       - { kind: code, ref: "MediaScreen tab order matches dialog_media.qc; Guide topics list complete", result: pass }
+      - { kind: code, ref: "DialogMediaGuide.Source wires all 13 topics in pinned shared-entry order and filters localized display names case-insensitively. GuideCatalogText supplies stock gameplay descriptions.", result: pass }
+      - { kind: manual, ref: "planning/parity/review/guide.webp shows the native Items list and the Bullets description.", result: pass }
+      - { kind: code, ref: "GuideCatalogText covers the 20 stock gametype callbacks, 14 visible described mutators, and all stock callbacks for the six added topics. Weapon and Items callbacks use the shipped catalog, native keybindings, and locked default cvars. All 321 checked description keys match shipped common.pot.", result: pass }
+      - { kind: manual, ref: "planning/parity/review/guide-catalog.webp captures the topics before a match, CTF stalemate and Freeze Tag thaw rules, Chinese Duel, restored mutators, the Fusion Reactor filter, and the weapon keybind, DPS and ammo default paragraphs with active cvar overrides.", result: pass }
     confidence: medium
     notes: "Also reachable in-match via the pause menu's Guide button (directmenu guide → MenuDialogRegistry['guide'])."
+
+  - id: menu-core.media.guide.description
+    name: "Guide description refresh and empty state"
+    layer: [presentation]
+    base_refs:
+      - "menu/xonotic/guide/description.qh:XonoticGuideDescription"
+      - "menu/xonotic/guide/description.qc:XonoticGuideDescription_setDescription"
+      - "menu/xonotic/dialog_media_guide.qc:XonoticGuideTab_entryChangeNotify"
+      - "common/util.qc:take_wrapped_line_until"
+    port_refs:
+      - "game/menu/framework/QcMediaLists.cs:QcGuideDescription"
+      - "game/menu/dialogs/DialogMediaGuide.cs:UpdateDescription"
+      - "game/menu/framework/QcLook.cs:QcDraw.WrappedLine"
+    constants: []
+    status:
+      logic: partial
+      values: na
+      timing: na
+      presentation: partial
+      audio: na
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: "Native clears the pane when a filter has zero matches and immediately describes the highlighted entry whenever there is a match. Stock can keep showing the previous description when an index stays zero or the list empties."
+    gaps: []
+    verification:
+      - { kind: manual, ref: "planning/parity/deferred-audit/guide-evidence.md (paired pre-change frames and native blank/restore captures)", result: pass }
+      - { kind: manual, ref: "planning/parity/guide-gametypes/README.md (paired zh_CN Assault through Duel selections and line wrapping at 1100 × 700)", result: pass }
+      - { kind: manual, ref: "planning/parity/guide-gametypes/README.md#rows-2528 (paired zh_CN Freeze Tag through KeyHunt selections, keyboard navigation to offscreen entries, and line wrapping)", result: pass }
+    confidence: high
+    notes: null
+
+  - id: menu-core.media.guide.entries
+    name: "Guide entry filters and keyboard selection"
+    layer: [presentation]
+    base_refs:
+      - "menu/xonotic/guide/entries.qh:XonoticEntryList"
+      - "menu/xonotic/guide/entries.qc:XonoticEntryList_refilter"
+      - "menu/xonotic/guide/entries.qc:EntryList_StringFilterBox_keyDown"
+    port_refs:
+      - "game/menu/framework/QcMediaLists.cs:QcGuideEntryList"
+      - "game/menu/dialogs/DialogMediaGuide.cs:Refilter"
+      - "src/VortexArena.Common/Menu/GuideSelection.cs"
+      - "game/menu/dialogs/DialogMediaGuide.cs:_Input"
+    constants: []
+    status:
+      logic: partial
+      values: na
+      timing: na
+      presentation: faithful
+      audio: unknown
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: "Native remembers the latest selected entry ID per topic and restores it when available. When the remembered entry is filtered out, native highlights the first match as a temporary selection. Explicit row choices, including a click on the temporary selection, replace the remembered ID. Stock can recover a name after zero matches but can carry a stale description and does not retain selections per topic."
+    gaps: []
+    verification:
+      - { kind: test, ref: "tests/VortexArena.Tests/GuideTests.cs (first selection, unavailable entries, replacement selection, topic switches and stable IDs)", result: pass }
+      - { kind: manual, ref: "planning/parity/deferred-audit/guide/verify-native.sh (first-match fallback across zero results, clicking the highlighted fallback, keyboard navigation, filter clearing, topic switches and localized search)", result: pass }
+    confidence: high
+    notes: null
+
+  - id: menu-core.media.guide.pages
+    name: "Guide free-text pages and localized substitutions"
+    layer: [presentation]
+    base_refs:
+      - "menu/xonotic/guide/pages.qh:GuidePage"
+      - "menu/xonotic/guide/pages.qc"
+      - "common/weapons/all.qc:W_Guide_Keybinds"
+      - "common/weapons/weapon/hook.qc:Hook.describe"
+      - "common/weapons/weapon/rifle.qc:Rifle.describe"
+    port_refs:
+      - "game/menu/dialogs/GuidePages.cs"
+      - "game/menu/dialogs/GuideCatalogText.cs"
+      - "game/menu/dialogs/GuideWeaponText.cs"
+    constants: []
+    status:
+      logic: faithful
+      values: na
+      timing: na
+      presentation: faithful
+      audio: na
+      liveness: live
+    intended_divergence: false
+    divergence_rationale: null
+    gaps: []
+    verification:
+      - { kind: manual, ref: "planning/parity/deferred-audit/guide-evidence.md (zh_CN Bunny Hopping and Team Mayhem, plus live Hook and Rifle binding paragraphs)", result: pass }
+      - { kind: manual, ref: "planning/parity/guide-gametypes/README.md (paired zh_CN gametype text, CTS arguments, Duel positional and colored item substitutions, and XPM expansion)", result: pass }
+      - { kind: manual, ref: "planning/parity/guide-gametypes/README.md#rows-2528 (paired zh_CN Freeze Tag through KeyHunt text, localized mode names and KeyHunt CTF cross-reference)", result: pass }
+    confidence: high
+    notes: "The hook and zoom words name actions in both clients. Direct weapon selection keys update after reselection."
+
+  - id: menu-core.media.guide.topics
+    name: "Guide topic routing, catalog order and icons"
+    layer: [presentation]
+    base_refs:
+      - "menu/xonotic/guide/topics.qh:XonoticTopicList"
+      - "menu/xonotic/guide/guide.qh:TOPICS"
+      - "menu/xonotic/guide/guide.qh:REGISTRY_SOURCE"
+      - "common/mutators/mutator/new_toys/new_toys.qc:MutatorNewToys.describe"
+    port_refs:
+      - "game/menu/dialogs/DialogMediaGuide.cs:Source"
+      - "game/menu/dialogs/DialogMediaGuide.cs:WeaponEntries"
+      - "src/VortexArena.Common/Menu/GuideCatalogOrder.cs"
+      - "game/menu/dialogs/GuideCatalogText.cs:DescribeMutator"
+    constants:
+      - { name: "topics", base: "13, Introduction through Mods", port: "same 13 in order", match: true }
+      - { name: "weapon_entries", base: "19 regular, then 3 Overkill regular, then 2 Overkill superweapons", port: "same 24 in order", match: true }
+    status:
+      logic: partial
+      values: na
+      timing: na
+      presentation: partial
+      audio: na
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: "Each topic lists shared entries in the pinned Guide order and appends native-only entries. Gametypes ends with Map Editor after Team Mayhem."
+    gaps: []
+    verification:
+      - { kind: test, ref: "tests/VortexArena.Tests/GuideTests.cs (shared ordering and stable native-only tail)", result: pass }
+      - { kind: manual, ref: "planning/parity/deferred-audit/guide-evidence.md (pinned order comparison, all 24 prior weapon selections, five Overkill icons and New Toys list)", result: pass }
+    confidence: high
+    notes: null
 
   - id: menu-core.misc.credits
     name: "Credits roll (auto-scroll + names list)"
@@ -872,9 +1013,11 @@ features:
       - "game/menu/framework/QcSettingsLists.cs:QcSkinList (the User tab's skin list, skinlist.qc row drawing)"
       - "game/menu/dialogs/DialogHudSetupExit.cs (the HUD-skin list, filter, Set/Save skin and the Reset HUD skin confirm)"
       - "game/menu/framework/MenuSkin.cs:Reload"
+      - "game/menu/framework/MenuState.cs:ExecuteMenuConfig"
     constants:
       - { name: "skin scan", base: "gfx/menu/*/skinvalues.txt (title/author/skinpreview)", port: "same scan via VFS", match: true }
       - { name: "apply", base: "menu_skin set + menu_restart + menu_cmd skinselect", port: "menu_skin + MenuRoot.Restart (reopens Settings User)", match: true }
+      - { name: "apply HUD skin", base: "exec selected hud_*.cfg", port: "execute the selected mounted config through the native interpreter", match: true }
     status:
       logic: partial
       values: faithful
@@ -888,6 +1031,7 @@ features:
       - "The HUD-skin list in DialogHudSetupExit draws its rows with the demo list's QcNameList (title and author per row) rather than a dedicated hudskinlist.qc row widget; a skin saved during the session may not show on Refresh until the file mounts rescan (unverified)."
     verification:
       - { kind: code, ref: "QcSkinList scans skinvalues.txt, binds menu_skin, Set-skin triggers MenuSkin.Reload via menu_restart", result: pass }
+      - { kind: ingame, ref: "planning/parity/deferred-audit/menu-config-evidence.md#hud-skin-and-missing-config", result: pass }
       - { kind: capture, ref: "tools/menu-parity: Settings > User and the HUD setup dialog against Xonotic's menu.dat at 1280x720, dx=0 dy=0 (2026-10-31)", result: pass }
     confidence: high
     notes: "Default-skin '(Default)' title suffix behavior not checked — minor."
@@ -923,7 +1067,8 @@ features:
     base_refs:
       - "menu/xonotic/playermodel.qc:XonoticPlayerModelSelector_loadModels/go"
       - "menu/xonotic/charmap.qc"
-      - "menu/xonotic/colorpicker.qc"
+      - "menu/xonotic/colorpicker.qc:XonoticColorpicker_mouseDrag"
+      - "lib/string.qh:checkColorCode/isCaretEscaped"
       - "menu/xonotic/colorpicker_string.qc"
       - "menu/xonotic/colorbutton.qc"
       - "menu/xonotic/picker.qc"
@@ -933,10 +1078,13 @@ features:
       - "game/menu/framework/PlayerModelSelector.cs"
       - "game/menu/framework/CharmapPicker.cs"
       - "game/menu/framework/HslColorPicker.cs"
+      - "game/menu/framework/CvarControls.cs:CvarLineEdit.ApplyColorAtCaret"
+      - "game/menu/framework/MenuColorCodes.cs:ApplyAtCaret"
       - "game/menu/framework/CrosshairPicker.cs"
       - "game/menu/framework/CrosshairPreview.cs"
       - "game/menu/framework/PickerGrid.cs"
       - "game/menu/dialogs/DialogMultiplayerProfile.cs (hosts model/name/color widgets)"
+      - "game/menu/dialogs/DialogFirstRun.cs (hosts the same HSL name editor)"
     constants:
       - { name: "model cvars", base: "_cl_playermodel/_cl_playerskin", port: "same", match: true }
       - { name: "crosshair id base", base: "crosshair = 31 + cell (crosshairpicker_cellToCrosshair)", port: "MenuPickerMath (tested)", match: true }
@@ -955,6 +1103,7 @@ features:
     verification:
       - { kind: test, ref: "tests/VortexArena.Tests/MenuPickerLogicTests.cs (cell↔crosshair/charmap math)", result: pass }
       - { kind: code, ref: "DialogMultiplayerProfile hosts name preview + HSL picker + charmap typing into _cl_name box (QC layout)", result: pass }
+      - { kind: manual, ref: "planning/parity/deferred-audit/color-editing/README.md (native and pinned stock replace, insert and caret quoting in Profile and First Run)", result: pass }
     confidence: medium
     notes: "The hosting Profile dialog is dialog_multiplayer_profile.qc = menu-dialogs unit; these widget files are owned here. The crosshair picker is hosted by dialog_settings_game_crosshair (menu-dialogs)."
 

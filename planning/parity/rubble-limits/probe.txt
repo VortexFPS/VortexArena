@@ -1,0 +1,26 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver.
+     at: set_use_vsync (platform/linuxbsd/x11/gl_manager_x11.cpp:364)
+OpenGL API 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 20.1.2, 256 bits)
+
+PASS mount shipped assets
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+PASS casings evict oldest across both kinds [20.0, 30.0, 40.0]
+PASS gibs evict oldest across models [20.0, 30.0, 40.0]
+PASS shipped casing and gib meshes used
+PASS casing shrink waits for spawn [20.0, 30.0, 40.0]
+PASS gib shrink waits for spawn [20.0, 30.0, 40.0]
+PASS casing shrink keeps newest old item and incoming item [40.0, 50.0]
+PASS gib shrink keeps newest old item and incoming item [40.0, 50.0]
+PASS casing zero waits for spawn [40.0, 50.0]
+PASS gib zero waits for spawn [40.0, 50.0]
+PASS casing zero clears on spawn []
+PASS model gib splash clears at zero []
+PASS raptor fragments retain their own budget [80.0, 80.0, 80.1]
+PASS live limits rise above 100
+PASS oversized cvars stay bounded
+[GameWorld] tick rate: sys_ticrate=0 -> 72 Hz (engine default; cfg layer not in this store) [sharedStore=False, cfgLoaded=False]
+PASS corpse damage emits a registered model splash
+PASS normal model splash obeys live gib cap and leaves fragments
+PASS Compatibility viewport renders the real batches (135145 changed channels)
+PASS save viewport evidence

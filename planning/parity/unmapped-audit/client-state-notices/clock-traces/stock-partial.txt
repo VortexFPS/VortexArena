@@ -1,0 +1,65 @@
+[notice-probe] line 11.398864 deadline 14.398864
+[notice-probe] receipt 11.398864 duration 3 loading True
+[notice-probe] line 11.398864 deadline 14.398864
+[notice-clock] frame 11.401864
+[notice-clock] frame 11.456440
+[notice-clock] frame 11.513541
+[notice-clock] frame 11.571134
+[notice-clock] frame 11.623777
+[notice-clock] frame 11.680955
+[notice-clock] frame 11.735472
+[notice-clock] frame 11.791781
+[notice-clock] frame 11.849613
+[notice-clock] frame 11.900900
+[notice-clock] frame 11.953128
+[notice-clock] frame 12.004657
+[notice-clock] frame 12.057845
+[notice-clock] frame 12.109938
+[notice-clock] frame 12.161680
+[notice-clock] frame 12.212958
+[notice-clock] frame 12.264600
+[notice-clock] frame 12.315534
+[notice-clock] frame 12.366972
+[notice-clock] frame 12.419376
+[notice-clock] frame 12.467725
+[notice-clock] frame 12.516829
+[notice-clock] frame 12.573706
+[notice-clock] frame 12.625944
+[notice-clock] frame 12.676022
+[notice-clock] frame 12.733350
+[notice-clock] frame 12.783269
+[notice-clock] frame 12.832699
+[notice-clock] frame 12.883263
+[notice-clock] frame 12.937300
+[notice-probe] release 12.937300
+[notice-probe] show 12.937300 deadline 14.398864 remaining 2
+[notice-clock] frame 13.005920
+[notice-clock] frame 13.057429
+[notice-clock] frame 13.108350
+[notice-clock] frame 13.157492
+[notice-clock] frame 13.206499
+[notice-clock] frame 13.258795
+[notice-clock] frame 13.309980
+[notice-clock] frame 13.361421
+[notice-clock] frame 13.413988
+[notice-clock] frame 13.467325
+[notice-clock] frame 13.518713
+[notice-clock] frame 13.568320
+[notice-clock] frame 13.617783
+[notice-clock] frame 13.669278
+[notice-clock] frame 13.717725
+[notice-clock] frame 13.767094
+[notice-clock] frame 13.817560
+[notice-clock] frame 13.873975
+[notice-clock] frame 13.927830
+[notice-clock] frame 13.984279
+[notice-clock] frame 14.032186
+[notice-clock] frame 14.079873
+[notice-clock] frame 14.129409
+[notice-clock] frame 14.177037
+[notice-clock] frame 14.226657
+[notice-clock] frame 14.273883
+[notice-clock] frame 14.321227
+[notice-clock] frame 14.370321
+[notice-clock] frame 14.420598
+[notice-probe] hide 14.420598 deadline 14.398864

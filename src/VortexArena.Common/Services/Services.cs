@@ -41,6 +41,13 @@ public interface ITraceService
     int PointContents(Vector3 point);
 
     /// <summary>
+    /// Tests a stationary box at the toucher's origin against a single entity's brush model.
+    /// The caller has already checked the bounds, which serve as the fallback when model clipping is unavailable.
+    /// </summary>
+    bool BoxTouchesBrushModel(Entity model, Entity toucher, Vector3 mins, Vector3 maxs, bool quake3Compat)
+        => true;
+
+    /// <summary>
     /// QC <c>checkpvs(viewpoint, target)</c>: is <paramref name="target"/> potentially visible from
     /// <paramref name="viewpoint"/> per the map's compiled PVS? A conservative superset of true visibility
     /// (never a false negative), so callers use it as a cheap pre-filter before an exact <see cref="Trace"/>
@@ -107,7 +114,7 @@ public interface IEntityService
 }
 
 [Flags]
-public enum CvarFlags { None = 0, Save = 1, Notify = 2, ReadOnly = 4 }
+public enum CvarFlags { None = 0, Save = 1, Notify = 2, ReadOnly = 4, Private = 8 }
 
 /// <summary>cvar/cvar_set/registercvar (QC cvar builtins). Honors Xonotic cvar names (OPEN Q5).</summary>
 public interface ICvarService
@@ -116,6 +123,7 @@ public interface ICvarService
     string GetString(string name);
     void Set(string name, string value);
     void Register(string name, string defaultValue, CvarFlags flags = CvarFlags.None);
+    void MarkPrivate(string name) { }
 
     /// <summary>Whether this cvar exists (is registered) in the store — the QC engine's command-vs-cvar dispatch
     /// check, used by the console/rcon cvar-set fallback so a whitelisted cvar-style vote (e.g. <c>fraglimit</c>)

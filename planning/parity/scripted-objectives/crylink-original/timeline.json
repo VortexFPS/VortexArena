@@ -1,0 +1,94 @@
+[
+  {
+    "seconds": 0.0,
+    "event": "both graphical clients connected",
+    "port": 26808
+  },
+  {
+    "seconds": 2.0,
+    "client": "BlueProbe",
+    "command": "cmd join"
+  },
+  {
+    "seconds": 2.892,
+    "client": "RedProbe",
+    "command": "cmd spectate"
+  },
+  {
+    "seconds": 3.825,
+    "server": "prvm_edictset server 1 origin \"-288 -208 112\"; prvm_edictset server 1 angles \"11 0 0\"; prvm_edictset server 1 fixangle 1"
+  },
+  {
+    "seconds": 3.826,
+    "client": "BlueProbe",
+    "command": "cmd teleporttotarget probe_cryfire"
+  },
+  {
+    "seconds": 4.776,
+    "server": "echo BlueProbe at probe_cryfire"
+  },
+  {
+    "seconds": 4.776,
+    "server": "prvm_edictget server 2 origin"
+  },
+  {
+    "seconds": 4.776,
+    "server": "prvm_edictget server 2 v_angle"
+  },
+  {
+    "seconds": 4.776,
+    "server": "status"
+  },
+  {
+    "seconds": 4.776,
+    "server": "g_weaponarena"
+  },
+  {
+    "seconds": 4.776,
+    "server": "g_balance_crylink_primary_speed"
+  },
+  {
+    "seconds": 4.776,
+    "server": "g_balance_crylink_primary_spread"
+  },
+  {
+    "seconds": 4.776,
+    "server": "g_balance_crylink_primary_refire"
+  },
+  {
+    "seconds": 4.776,
+    "server": "g_balance_crylink_primary_middle_lifetime"
+  },
+  {
+    "seconds": 4.776,
+    "server": "g_balance_crylink_primary_other_lifetime"
+  },
+  {
+    "seconds": 4.776,
+    "server": "g_balance_crylink_primary_middle_fadetime"
+  },
+  {
+    "seconds": 4.776,
+    "server": "g_balance_crylink_primary_other_fadetime"
+  },
+  {
+    "seconds": 7.332,
+    "client": "BlueProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 7.465,
+    "client": "BlueProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 12.066,
+    "client": "BlueProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 12.191,
+    "client": "BlueProbe",
+    "event": "attack up"
+  }
+]

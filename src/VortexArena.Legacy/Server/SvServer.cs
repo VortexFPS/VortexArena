@@ -24,7 +24,7 @@ public sealed class SvNetConnection : SvConnection
     public IPEndPoint Address { get; }
     public DpNetChannel Channel { get; }
     /// <summary>conn->timeout: the client is dropped when host.realtime passes it.</summary>
-    public double Timeout { get; internal set; }
+    public double Timeout => Channel.TimeoutAt;
     internal double KeepAliveTime, NameTime, ClMovementDisableTimeout;
     internal SvEntityFrame5Database? EntityDatabase;
     internal SvCsqcEntityFrames? CsqcFrames;
@@ -327,11 +327,9 @@ public sealed partial class SvServer : IDisposable, ISvConnectionlessHost<IPEndP
             }
             connection.DatagramsReceived++;
             _scratch.Clear();
-            DpChannelReceive received = connection.Channel.Receive(datagram, RealTime, _scratch, out byte[]? message);
+            double timeout = client.Begun ? Cvar("net_messagetimeout", 300) : Cvar("net_connecttimeout", 15);
+            DpChannelReceive received = connection.Channel.Receive(datagram, RealTime, _scratch, out byte[]? message, timeout);
             foreach (byte[] reply in _scratch) Send(connection, reply);
-            if (received == DpChannelReceive.Invalid) return;
-            // NetConn_ReceivedMessage's newtimeout: "host_client->begun ? net_messagetimeout : net_connecttimeout"
-            connection.Timeout = RealTime + (client.Begun ? Cvar("net_messagetimeout", 300) : Cvar("net_connecttimeout", 15));
             if (received == DpChannelReceive.Message && message is not null)
                 host.Guard("SV_ReadClientMessage", () => ReadClientMessage(host, client, connection, message));
         }

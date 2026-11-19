@@ -1,0 +1,66 @@
+PASS mount shipped assets
+[EffectInfo] parsed 'vortex/original/effectinfo.txt': 301 effects (process-lifetime, shared by every match).
+PASS ordinary splash emits twelve models (12)
+PASS human shower uses the shipped spark and smoke cells (135 particles)
+PASS EKG emits fifty-two models (52)
+PASS fractional suppression samples individual pieces (4)
+PASS complete suppression emits no additional model
+PASS nogibs also suppresses the particle-only splash
+PASS mounted morphed_damage_dissolve definition
+PASS morphed_damage_dissolve uses its mounted atlas cells and no models (32 particles)
+PASS mounted damage_dissolve definition
+PASS damage_dissolve uses its mounted atlas cells and no models (45 particles)
+PASS mounted happy_damage_dissolve definition
+PASS happy_damage_dissolve uses its mounted atlas cells and no models (45 particles)
+PASS mounted particlegibs_damage_dissolve definition
+PASS particlegibs_damage_dissolve uses its mounted atlas cells and no models (183 particles)
+PASS half-quality alien shower runs 25 calls through its species-specific block (31 particles)
+PASS robot shower emits the shipped metal spark and smoke artwork
+PASS zero quality suppresses the shower
+PASS ordinary model expired by three seconds
+PASS stock launch blends base and random velocity and tumbles
+PASS ordinary model expired by three seconds
+PASS live velocity, lift and zero angular scale change the launch
+PASS a live zero lifetime expires on the next draw
+PASS unset casing timing defaults
+PASS unset gib timing defaults
+PASS last float before a tic remains residual
+PASS exactly one tic commits at its boundary
+PASS 32 tic cap retains unpaid time
+PASS next frame consumes catch-up debt
+PASS zero ticrate consumes pending time in one step
+PASS residual gravity and tumble leave committed state intact
+PASS one committed tic caps repeated brush impacts at five
+PASS strict casing residual clips at the BSP wall without sound
+PASS sloppy casing residual passes through without committing
+PASS committed casing reflection and sound occur once
+PASS committed casing trace culls a spawn inside solid
+PASS strict casing residual also culls startsolid
+PASS strict gib residual uses the eight-unit hull without removing chunks
+PASS sloppy gib residual ignores the wall
+PASS committed gib wall hit reflects a limb and removes a chunk
+PASS NOIMPACT removes casing and ordinary gib
+PASS positive gib ticrate leaves an unfinished step
+PASS live zero gib ticrate commits the unfinished step
+[EffectInfo] parsed 'effectinfo.txt': 0 effects (process-lifetime, shared by every match).
+PASS frame-rate fixture retains both debris kinds and three Raptor fragments
+PASS casing, model gib and Raptor poses agree at 30 and 60 FPS
+PASS casing, model gib and Raptor poses agree at 144 and 60 FPS
+PASS casings evict oldest across both kinds [20.0, 30.0, 40.0]
+PASS gibs evict oldest across models [20.0, 30.0, 40.0]
+PASS shipped casing and gib meshes used
+PASS casing shrink waits for spawn [20.0, 30.0, 40.0]
+PASS gib shrink waits for spawn [20.0, 30.0, 40.0]
+PASS casing shrink keeps newest old item and incoming item [40.0, 50.0]
+PASS gib shrink keeps newest old item and incoming item [40.0, 50.0]
+PASS casing zero waits for spawn [40.0, 50.0]
+PASS gib zero waits for spawn [40.0, 50.0]
+PASS casing zero clears on spawn []
+PASS model gib splash clears at zero []
+PASS raptor fragments retain their own budget [79.9, 80.1, 80.1]
+PASS live limits rise above 100
+PASS oversized cvars stay bounded
+PASS corpse damage emits a registered model splash
+PASS normal model splash obeys live gib cap and leaves fragments
+PASS Compatibility viewport renders the real batches (135205 changed channels)
+PASS save viewport evidence

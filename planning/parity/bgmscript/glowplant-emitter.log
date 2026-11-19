@@ -1,0 +1,14 @@
+[MapEmitters] func_pointparticles 'sparks': 4 emissions/s (Absolute), count 6, velocity <50, -100, 30>, box <246.21913, -343.7167, 279.96463>..<350.95557, -287.27484, 368.30048>, 5 brush(es), 32 planes in the first
+[EMITTER-AUDIO-PROBE] channel=-9 mixerSlot=0 source=0 sample=sound/machines/spark.ogg origin=<260.39526, -329.24863, 361.7494> volume=0.700 attenuation=0.500
+[EMITTER-AUDIO-PROBE] channel=-9 mixerSlot=0 source=0 sample=sound/machines/spark.ogg origin=<311.7102, -326.53564, 339.89337> volume=0.700 attenuation=0.500
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+[EMITTER-AUDIO-PROBE] channel=-9 mixerSlot=0 source=0 sample=sound/machines/spark.ogg origin=<273.37994, -303.63812, 313.9141> volume=0.700 attenuation=0.500
+[EMITTER-AUDIO-PROBE] channel=-9 mixerSlot=0 source=0 sample=sound/machines/spark.ogg origin=<305.04437, -314.33698, 327.41794> volume=0.700 attenuation=0.500
+[EMITTER-AUDIO-PROBE] channel=-9 mixerSlot=0 source=0 sample=sound/machines/spark.ogg origin=<305.80078, -314.87198, 302.8527> volume=0.700 attenuation=0.500
+[EMITTER-AUDIO-PROBE] channel=-9 mixerSlot=0 source=0 sample=sound/machines/spark.ogg origin=<298.8303, -307.27908, 298.92725> volume=0.700 attenuation=0.500
+[EMITTER-AUDIO-PROBE] channel=-9 mixerSlot=0 source=0 sample=sound/machines/spark.ogg origin=<334.35324, -324.16214, 341.5091> volume=0.700 attenuation=0.500
+[EMITTER-AUDIO-PROBE] channel=-9 mixerSlot=0 source=0 sample=sound/machines/spark.ogg origin=<306.8046, -321.23798, 319.1065> volume=0.700 attenuation=0.500
+[EMITTER-AUDIO-PROBE] channel=-9 mixerSlot=0 source=0 sample=sound/machines/spark.ogg origin=<270.9306, -311.16125, 302.38367> volume=0.700 attenuation=0.500
+[EMITTER-AUDIO-PROBE] channel=-9 mixerSlot=0 source=0 sample=sound/machines/spark.ogg origin=<255.05098, -337.36746, 354.16138> volume=0.700 attenuation=0.500
+[EMITTER-AUDIO-PROBE] channel=-9 mixerSlot=0 source=0 sample=sound/machines/spark.ogg origin=<311.37225, -317.11017, 331.0703> volume=0.700 attenuation=0.500
+[EMITTER-AUDIO-PROBE] channel=-9 mixerSlot=0 source=0 sample=sound/machines/spark.ogg origin=<280.08084, -329.24933, 338.91043> volume=0.700 attenuation=0.500

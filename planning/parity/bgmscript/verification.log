@@ -1,0 +1,19 @@
+$ dotnet build VortexArena.csproj --no-restore -v:q
+Build succeeded.
+    29 Warning(s)
+    0 Error(s)
+Time Elapsed 00:00:22.01
+
+$ DOTNET_ROLL_FORWARD=Major dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj --no-restore --filter "FullyQualifiedName~MapBgmScriptTests|FullyQualifiedName~MusicSystemTests|FullyQualifiedName~MapObjectLongTailTests|FullyQualifiedName~MapModelColormapTests"
+  Passed VortexArena.Tests.MapBgmScriptTests.EnvelopeFollowsNoteVelocityAndAttackDecaySustainRelease [7 ms]
+  Passed VortexArena.Tests.MapBgmScriptTests.LastCrossedEventControlsTheBurstAndMissingMusicUsesQcFallback [1 ms]
+  Passed VortexArena.Tests.MapBgmScriptTests.ModelOpacityUnderstandsBothLipSignsAndRestoresOpaqueWhenMuted(amplitude: 0.5, lip: 0.800000012, expected: 0.600000024) [< 1 ms]
+  Passed VortexArena.Tests.MapBgmScriptTests.ModelOpacityUnderstandsBothLipSignsAndRestoresOpaqueWhenMuted(amplitude: 0.5, lip: -0.800000012, expected: 0.600000024) [< 1 ms]
+  Passed VortexArena.Tests.MapBgmScriptTests.ModelOpacityUnderstandsBothLipSignsAndRestoresOpaqueWhenMuted(amplitude: 0, lip: -0.800000012, expected: 1) [< 1 ms]
+  Passed VortexArena.Tests.MapBgmScriptTests.ModelOpacityUnderstandsBothLipSignsAndRestoresOpaqueWhenMuted(amplitude: -1, lip: 0.800000012, expected: 1) [< 1 ms]
+  Passed VortexArena.Tests.MapBgmScriptTests.RetriggerAndLoopPreserveAmplitudeAndReplayTheFirstLane [< 1 ms]
+  Passed VortexArena.Tests.MapBgmScriptTests.MapKeysAreTypedAndOnlyClientModelNamesTreatPrefixAsAngular [12 ms]
+Test Run Successful.
+Total tests: 48
+     Passed: 48
+ Total time: 3.8966 Seconds

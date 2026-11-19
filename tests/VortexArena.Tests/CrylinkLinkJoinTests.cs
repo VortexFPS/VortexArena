@@ -46,6 +46,69 @@ public class CrylinkLinkJoinTests
     /// <summary>Stand-in for the last-fired group head: a live spike whose LTime puts the joindelay floor where asked.</summary>
     private static Entity GroupHead(float lifeStart) => new() { ClassName = "spike", LTime = lifeStart };
 
+    [Theory]
+    [InlineData(0.25f, 4.875f, 1f)]
+    [InlineData(0.25f, 5f, 1f)]
+    [InlineData(0.25f, 5.125f, 0.5f)]
+    [InlineData(0.25f, 5.25f, -1f)]
+    [InlineData(2f, 6f, 0.5f)]
+    [InlineData(5f, 7.5f, 1f)] // Stock duration is 320 ticks at 64 Hz.
+    [InlineData(0f, 5.125f, 1f)]
+    public void CrylinkSpike_VisualFadeUsesOnlyDurationsThatFitTheUpstreamByte(
+        float duration, float now, float expected)
+    {
+        var spike = new Entity
+        {
+            ClassName = "spike",
+            NetName = "crylink",
+            LTime = 3f,
+            MaxHealth = 5f,
+            Health = duration > 0f ? 1f / duration : 0f,
+        };
+
+        Assert.Equal(expected, Crylink.ProjectileRenderAlpha(spike, now, 1f / 64f));
+    }
+
+    [Theory]
+    [InlineData(255, 0.5f)]
+    [InlineData(256, 1f)]
+    [InlineData(320, 1f)]
+    public void CrylinkSpike_InitialFadeStartMustFitTheDelayByte(int delayTicks, float expected)
+    {
+        const float tick = 1f / 64f;
+        var spike = new Entity { ClassName = "spike", NetName = "crylink", LTime = 2f,
+            MaxHealth = 2f + delayTicks * tick, Health = 1f };
+        Assert.Equal(expected, Crylink.ProjectileRenderAlpha(spike, spike.MaxHealth + 0.5f, tick));
+    }
+
+    [Fact]
+    public void OtherProjectile_KeepsItsExistingAlpha()
+    {
+        var spike = new Entity { ClassName = "spike", NetName = "mage", Alpha = 0.4f, MaxHealth = 5f, Health = 4f };
+
+        Assert.Equal(0.4f, Crylink.ProjectileRenderAlpha(spike, 5.25f, 1f / 64f));
+    }
+
+    [Theory]
+    [InlineData(FireMode.Primary, true, 0f, 0f)]
+    [InlineData(FireMode.Secondary, true, 0f, 0f)]
+    [InlineData(FireMode.Primary, false, 10f, 7f)]
+    [InlineData(FireMode.Secondary, false, 10f, 7f)]
+    public void Firing_ConsumesCellsOnlyWhenAmmoIsLimited(FireMode mode, bool unlimited, float cells, float expected)
+    {
+        var (crylink, actor, slot, state) = Setup();
+        actor.Items = unlimited ? (int)ItemFlag.UnlimitedAmmo : 0;
+        actor.SetResource(ResourceType.Cells, cells);
+        state.State = WeaponFireState.Ready;
+        state.ButtonAttack = mode == FireMode.Primary;
+        state.ButtonAttack2 = mode == FireMode.Secondary;
+
+        crylink.WrThink(actor, slot, mode);
+
+        Assert.Equal(1, state.BulletCounter);
+        Assert.Equal(expected, actor.GetResource(ResourceType.Cells));
+    }
+
     // ---- primary group ----------------------------------------------------------------------------------
 
     [Fact]

@@ -38,6 +38,8 @@ public sealed partial class MusicPlayer : Node
     /// </summary>
     public Func<string, AudioStream?>? AudioLoader { get; set; }
 
+    internal IReadOnlyDictionary<int, string>? PackTrackRemap { get; set; }
+
     /// <summary>Default fade-in/fade-out time in seconds when switching tracks.</summary>
     public float DefaultFadeTime { get; set; } = 2.0f;
 
@@ -87,11 +89,27 @@ public sealed partial class MusicPlayer : Node
     }
 
     private int _dpNextEntity;
+    private string _selectedTrack = "";
+
+    /// <summary>Seconds into the selected music source, or -1 when it is unavailable or muted.</summary>
+    public float PlaybackPosition
+    {
+        get
+        {
+            if (BgmVolume <= 0f || !_sources.TryGetValue(_selectedTrack, out SourceState? source))
+                return -1f;
+            if (source.Player is { Playing: true } player)
+                return player.GetPlaybackPosition();
+            if (source.DpChannel >= 0)
+                return VortexArena.Game.Audio.DpAudio.Instance.Sound.GetEntChannelPosition(source.DpEntity, ChBgmSingle);
+            return -1f;
+        }
+    }
 
     // The files a track name stands for. A level's track number ("cdtracks/track005", from its mapinfo) means
     // the fifth name of the remap list - Xonotic's cdtracks.cfg builds it in g_cdtracks_remaplist and runs
     // "cd remap" with it - exactly as cd_shared.c CDAudio_Play_byName resolves "cd loop 5".
-    private static IEnumerable<string> DpTrackNames(string track)
+    private IEnumerable<string> TrackNames(string track)
     {
         yield return track;
         string bare = track.StartsWith("cdtracks/", StringComparison.OrdinalIgnoreCase) ? track["cdtracks/".Length..] : track;
@@ -100,8 +118,40 @@ public sealed partial class MusicPlayer : Node
         string[] remap = list.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         foreach (string candidate in VortexArena.Engine.Audio.DpSoundFiles.TrackCandidates(number.Length > 0 ? number : bare, remap))
             yield return candidate;
+        if (int.TryParse(number, out int slot) && PackTrackRemap?.TryGetValue(slot, out string? name) == true)
+            foreach (string candidate in VortexArena.Engine.Audio.DpSoundFiles.TrackCandidates(name, Array.Empty<string>()))
+                yield return candidate;
         yield return "cdtracks/" + bare;
     }
+
+    // The native cfg interpreter does not always expand the nested _cdtrack aliases that
+    // populate g_cdtracks_remaplist. Use the mounted pack's declared map when no candidate resolves.
+    internal static IReadOnlyDictionary<int, string>? ReadPackTrackRemap(VortexArena.Formats.Vfs.VirtualFileSystem? vfs)
+    {
+        if (vfs?.Exists("cdtracks.cfg") != true)
+            return null;
+        string config;
+        try
+        {
+            config = vfs.ReadText("cdtracks.cfg");
+        }
+        catch (VortexArena.Formats.AssetParseException ex)
+        {
+            GD.PrintErr($"[MusicPlayer] cdtracks.cfg: {ex.Message}");
+            return null;
+        }
+
+        var tracks = new Dictionary<int, string>();
+        using var reader = new System.IO.StringReader(config);
+        while (reader.ReadLine() is { } line)
+        {
+            var fields = VortexArena.Common.Config.ConfigInterpreter.Tokenize(line);
+            if (fields.Count >= 3 && fields[0] == "_cdtrack" && int.TryParse(fields[1], out int slot) && slot > 0)
+                tracks[slot] = fields[2];
+        }
+        return tracks;
+    }
+
     private const int ChBgmSingle = 8;   // QC CH_BGM_SINGLE
 
     // TargetMusic_Advance on DarkPlaces' mixer: "sound7(it, CH_BGM_SINGLE, it.noise, vol, ATTEN_NONE, 0, BIT(4))" starts
@@ -125,7 +175,7 @@ public sealed partial class MusicPlayer : Node
         if (src.DpSfx is null)
         {
             VortexArena.Engine.Audio.DpSfx? sfx = null;
-            foreach (string name in DpTrackNames(track))
+            foreach (string name in TrackNames(track))
                 if (bank.Exists(name) && bank.Get(name, forPlay: true) is { Failed: false } found) { sfx = found; break; }
             if (sfx is null)
             {
@@ -238,6 +288,7 @@ public sealed partial class MusicPlayer : Node
         // Ensure the best source exists; for every source ramp state up (if best) or down (if not), then
         // apply volumes. This is the faithful port of the QC per-entity .state model.
         AdvanceAllSources(bestTrack, bestVolume, fadeIn, fadeOut, dt);
+        _selectedTrack = bestTrack;
     }
 
     // ========================================================================
@@ -516,9 +567,10 @@ public sealed partial class MusicPlayer : Node
             return null;
 
         // Try the AudioLoader (VFS-based, reads from mounted content packs).
-        AudioStream? stream = AudioLoader?.Invoke(trackPath);
-        if (stream is not null)
-            return stream;
+        if (AudioLoader is { } load)
+            foreach (string candidate in TrackNames(trackPath))
+                if (load(candidate) is { } stream)
+                    return stream;
 
         // Fallback: try as a res:// path.
         string resPath = $"res://sound/{trackPath}";

@@ -104,8 +104,13 @@ public class GametypeStatusTests
     {
         var ca = new ClanArena();
         Player red1 = P(Teams.Red), red2 = P(Teams.Red), blue1 = P(Teams.Blue), blue2 = P(Teams.Blue);
+        Player eliminatedObserver = P(Teams.Red), pureSpectator = P(Teams.Blue), queuedObserver = P(Teams.Blue);
         red2.DeadState = DeadFlag.Dead; // CA alive test = !IS_DEAD
-        var roster = new[] { red1, red2, blue1, blue2 };
+        eliminatedObserver.IsObserver = pureSpectator.IsObserver = queuedObserver.IsObserver = true;
+        eliminatedObserver.FragsStatus = Player.FragsOutOfGame;
+        pureSpectator.FragsStatus = queuedObserver.FragsStatus = Player.FragsSpectator;
+        ca.OnJoinLate(queuedObserver);
+        var roster = new[] { red1, red2, blue1, blue2, eliminatedObserver, pureSpectator, queuedObserver };
 
         ca.SetRoster(roster); ca.CheckWinner(); // the LIVE per-frame recount (round_handler canRoundEnd -> CheckWinner)
         Assert.Equal(1, ca.AliveCount(Teams.Red));
@@ -120,7 +125,28 @@ public class GametypeStatusTests
         Assert.Equal(1, d.MyTeamIndex);                  // red viewer → index 1, NOT color code 4
         Assert.Equal(2, d.TeamCount);                    // CA default teams
         Assert.Equal(new[] { 1, 2, 0, 0 }, d.Alive);     // fixed red,blue,yellow,pink order
-        Assert.Equal(new HashSet<int> { ids(red2) }, d.EliminatedNetIds);
+        Assert.True(d.EliminatedNetIds.SetEquals([ids(red2), ids(eliminatedObserver), ids(queuedObserver)]));
+        foreach (Player observer in new[] { eliminatedObserver, pureSpectator })
+        {
+            var received = DecodeWithSentinels(ca, observer, roster, ids);
+            Assert.True(received.EliminatedNetIds.SetEquals(d.EliminatedNetIds));
+            Assert.Equal(d.Alive, received.Alive);
+        }
+    }
+
+    [Fact]
+    public void Ca_NoLivingTeams_IsATieWhenResolvingALiveRound()
+    {
+        var ca = new ClanArena();
+        Player observer = P(Teams.Red);
+        observer.IsObserver = true;
+        observer.FragsStatus = Player.FragsSpectator;
+        ca.SetRoster([observer]);
+        int previousRedRounds = ca.GetTeamRounds(Teams.Red);
+
+        Assert.False(ca.CheckTeams());
+        Assert.Equal(-1, ca.CheckWinner());
+        Assert.Equal(previousRedRounds, ca.GetTeamRounds(Teams.Red));
     }
 
     // ------------------------------------------------------------------------------------------------

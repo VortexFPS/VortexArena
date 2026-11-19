@@ -21,6 +21,12 @@ known:
     note: "VirtualFileSystem doc-comment example"
   - path: "maps/campaign"
     note: "campaign file stem — resolved with language/extension variants by Campaign.Load"
+  - path: "models/weapons/h_"
+    note: "WeaponRigAnims.IsHandRig uses StartsWith to classify model names. This literal is a name prefix."
+  - path: "gfx/palette.lmp"
+    note: "Optional Quake content override. AssetLoader and Q1MapLoader use the built-in Quake palette when absent from the installed game."
+  - path: "gfx/colormap.lmp"
+    note: "Optional Quake colormap read by both loaders. With Xonotic data, its absence selects the built-in palette with no colormap-defined fullbright range."
 
   # --- engine-virtual shader names (never files by design) ---
   - path: "textures/common/*"

@@ -217,7 +217,7 @@ public sealed class Seeker : Weapon
         missile.DamageForceScale = Missile.DamageForceScale;
 
         // W_SetupProjVelocity_UP_PRE: velocity = normalize(w_shotdir + up*(speed_up/speed)) * speed.
-        missile.Velocity = WeaponFiring.ProjectileVelocity(shot.Dir, up, Missile.Speed, Missile.SpeedUp);
+        missile.Velocity = WeaponFiring.ProjectileVelocity(actor, shot.Dir, up, Missile.Speed, Missile.SpeedUp);
         missile.Angles = QMath.VecToAngles(missile.Velocity);
 
         // QC seeker.qc:178-179 — flag the seeker missile as a dodgeable hazard (rating = missile damage).
@@ -363,7 +363,7 @@ public sealed class Seeker : Weapon
         Api.Entities.SetOrigin(missile, origin);
 
         // W_SetupProjVelocity_UP_PRE(flac_): w_shotdir*speed + up*speed_up, with random per-shot spread.
-        missile.Velocity = WeaponFiring.ProjectileVelocity(shot.Dir, up, Flac.Speed, Flac.SpeedUp, 0f, Flac.Spread);
+        missile.Velocity = WeaponFiring.ProjectileVelocity(actor, shot.Dir, up, Flac.Speed, Flac.SpeedUp, 0f, Flac.Spread);
         missile.Angles = QMath.VecToAngles(missile.Velocity);
 
         // QC seeker.qc:281-282 — flag the flac projectile as a dodgeable hazard (rating = flac damage).
@@ -442,7 +442,7 @@ public sealed class Seeker : Weapon
         missile.DamageForceScale = Tag.DamageForceScale;
 
         // W_SetupProjVelocity_PRE(tag_): velocity = w_shotdir * speed (with tag_spread, normally 0).
-        missile.Velocity = WeaponFiring.ProjectileVelocity(shot.Dir, Vector3.UnitZ, Tag.Speed, 0f, 0f, Tag.Spread);
+        missile.Velocity = WeaponFiring.ProjectileVelocity(actor, shot.Dir, Vector3.UnitZ, Tag.Speed, 0f, 0f, Tag.Spread);
         missile.Angles = QMath.VecToAngles(missile.Velocity);
 
         // QC seeker.qc:498-499 — flag the tag missile as a dodgeable hazard (rating = hardcoded 50).

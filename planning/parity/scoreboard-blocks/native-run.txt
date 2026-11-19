@@ -1,0 +1,20 @@
+server
+[NetTransport.Server] listening on UDP 28698 (max 32).
+[ServerNet] peer 1744995227 accepted as 'player' (netId 1744995227, id c7741162).
+
+client
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+joined the game
+]bind F8 +showscores
+]hud_panel_scoreboard_itemstats_filter 0
+]hud_panel_scoreboard_accuracy_nocolors 1
+]hud save scoreboard-review
+[HudConfigEditor] Successfully exported to hud_luma_scoreboard-review.cfg! (Note: it's saved in <temporary run>/client/data/hud_luma_scoreboard-review.cfg)
+
+held-scoreboard delay run
+[shell] --cvar hud_panel_scoreboard_accuracy_showdelay_minpos = "0"
+[shell] --cvar hud_panel_scoreboard_itemstats_showdelay_minpos = "0"
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+joined the game

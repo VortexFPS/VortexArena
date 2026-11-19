@@ -79,6 +79,43 @@ public class CompatRemapsTests
         Maxs = new Vector3(16, 16, 45),
     };
 
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    [InlineData(16, false)]
+    public void Q3HurtTrigger_SpawnFlagFourControlsCreatureCooldown(int spawnFlags, bool fast)
+    {
+        TestFacade facade = Boot();
+        var previousProvider = CompatRemaps.Q3CompatProvider;
+        CompatRemaps.Q3CompatProvider = () => true;
+        try
+        {
+            MapObjectsRegistry.RegisterAll();
+            Entity volume = Spawn();
+            volume.SpawnFlags = spawnFlags;
+            Assert.True(SpawnFuncs.TrySpawn("trigger_hurt", volume));
+            Assert.Equal(5f, volume.Dmg);
+
+            Player player = NewPlayer();
+            player.TakeDamage = DamageMode.Yes;
+            facade.GameClock.Time = 2f;
+            volume.Touch!(volume, player);
+            Assert.Equal(2f, player.TriggerHurtTime);
+
+            facade.GameClock.Time = 2.1f;
+            volume.Touch!(volume, player);
+            Assert.Equal(fast ? 2.1f : 2f, player.TriggerHurtTime);
+
+            facade.GameClock.Time = 3.1f;
+            volume.Touch!(volume, player);
+            Assert.Equal(3.1f, player.TriggerHurtTime);
+        }
+        finally
+        {
+            CompatRemaps.Q3CompatProvider = previousProvider;
+        }
+    }
+
     // =====================================================================================
     //  Weapon classname remaps (quake3.qc / quake.qc / wop.qc)
     // =====================================================================================

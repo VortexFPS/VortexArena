@@ -1,0 +1,56 @@
+[
+  {
+    "seconds": 12.01,
+    "frame": "BlueProbe/0010.webp",
+    "sample": 11.944,
+    "label": "neutral"
+  },
+  {
+    "seconds": 15.435,
+    "frame": "BlueProbe/0029.webp",
+    "sample": 15.368,
+    "label": "build"
+  },
+  {
+    "seconds": 20.531,
+    "frame": "BlueProbe/0057.webp",
+    "sample": 20.416,
+    "label": "captured"
+  },
+  {
+    "seconds": 23.544,
+    "frame": "BlueProbe/0074.webp",
+    "sample": 23.478,
+    "label": "cracked"
+  },
+  {
+    "seconds": 30.811,
+    "frame": "BlueProbe/0114.webp",
+    "sample": 30.697,
+    "label": "repaired"
+  },
+  {
+    "seconds": 35.715,
+    "frame": "BlueProbe/0139.webp",
+    "sample": 35.599,
+    "label": "reset"
+  },
+  {
+    "seconds": 43.012,
+    "frame": "BlueProbe/0166.webp",
+    "sample": 41.84,
+    "label": "rebuilt"
+  },
+  {
+    "seconds": 10.747,
+    "frame": "RedProbe/0003.webp",
+    "sample": 10.679,
+    "label": "shielded"
+  },
+  {
+    "seconds": 43.009,
+    "frame": "RedProbe/0167.webp",
+    "sample": 41.836,
+    "label": "exposed"
+  }
+]

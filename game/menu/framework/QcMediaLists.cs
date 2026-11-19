@@ -135,7 +135,7 @@ public partial class QcPlayList : MenuListBox
 
 /// <summary>One row of a guide list: what the topic's DataSource getEntry hands its display callback, and the
 /// description (describe()).</summary>
-public sealed record GuideEntry(string Name, Texture2D? Icon, Func<string> Describe);
+public sealed record GuideEntry(string Id, string Name, Texture2D? Icon, Func<string> Describe);
 
 /// <summary>
 /// xonotic/guide/topics.qc: three text rows per topic — its icon as a square the height of the row, the name half a
@@ -175,23 +175,34 @@ public partial class QcGuideEntryList : MenuListBox
 {
     private IReadOnlyList<GuideEntry> _entries = Array.Empty<GuideEntry>();
 
-    public QcGuideEntryList() => ItemHeight = 3f * MenuMetrics.FontNormalU;
-
-    public IReadOnlyList<GuideEntry> Entries => _entries;
-
-    /// <summary>refilter: the entries after a reload, keeping the selected one's name selected when still present,
-    /// else the first. The caller shows the selected entry's description afterwards (the QC's onChange).</summary>
-    public void SetEntries(IReadOnlyList<GuideEntry> entries, bool sourceChanged)
+    public QcGuideEntryList()
     {
-        string? oldName = !sourceChanged && SelectedItem >= 0 && SelectedItem < _entries.Count ? _entries[SelectedItem].Name : null;
+        ItemHeight = 3f * MenuMetrics.FontNormalU;
+        ItemActivated += OnItemClicked;
+    }
+
+    public event Action? EntryClicked;
+
+    protected override void OnItemClicked(int index)
+    {
+        if (GetItemAtPos(ScrollPos + LastReleasePosition.Y) == index)
+            EntryClicked?.Invoke();
+    }
+
+    public GuideEntry? SelectedEntry => SelectedItem >= 0 && SelectedItem < _entries.Count ? _entries[SelectedItem] : null;
+
+    public void SetEntries(IReadOnlyList<GuideEntry> entries, int selected, bool sourceChanged)
+    {
         _entries = entries;
         ItemCount = entries.Count;
-        int select = 0;
-        for (int i = 0; i < entries.Count; i++)
-            if (entries[i].Name == oldName) select = i;
-        if (sourceChanged) SetScrollImmediate(0);
-        SetSelected(select);
-        QueueRedraw();
+        if (sourceChanged || selected < 0)
+            SetScrollImmediate(0);
+        if (selected < 0)
+            return;
+
+        // Rebuilding may change what a row index represents. The caller refreshes the description once.
+        SetSelectedSilent(selected);
+        ScrollToItem(selected);
     }
 
     protected override void DrawItem(int index, Rect2 rect, bool isSelected, bool isFocused)

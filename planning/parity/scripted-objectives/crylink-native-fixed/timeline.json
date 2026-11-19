@@ -1,0 +1,73 @@
+[
+  {
+    "seconds": 0.0,
+    "event": "both graphical clients connected",
+    "port": 26819
+  },
+  {
+    "seconds": 2.0,
+    "client": "BlueProbe",
+    "command": "cmd join"
+  },
+  {
+    "seconds": 5.994,
+    "client": "BlueProbe",
+    "command": "cmd teleporttotarget probe_cryfire"
+  },
+  {
+    "seconds": 7.449,
+    "server": "status"
+  },
+  {
+    "seconds": 7.449,
+    "server": "g_weaponarena"
+  },
+  {
+    "seconds": 7.449,
+    "server": "g_balance_crylink_primary_speed"
+  },
+  {
+    "seconds": 7.449,
+    "server": "g_balance_crylink_primary_spread"
+  },
+  {
+    "seconds": 7.449,
+    "server": "g_balance_crylink_primary_refire"
+  },
+  {
+    "seconds": 7.449,
+    "server": "g_balance_crylink_primary_middle_lifetime"
+  },
+  {
+    "seconds": 7.449,
+    "server": "g_balance_crylink_primary_other_lifetime"
+  },
+  {
+    "seconds": 7.449,
+    "server": "g_balance_crylink_primary_middle_fadetime"
+  },
+  {
+    "seconds": 7.449,
+    "server": "g_balance_crylink_primary_other_fadetime"
+  },
+  {
+    "seconds": 10.003,
+    "client": "BlueProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 11.082,
+    "client": "BlueProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 15.683,
+    "client": "BlueProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 16.744,
+    "client": "BlueProbe",
+    "event": "attack up"
+  }
+]

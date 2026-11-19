@@ -5,6 +5,8 @@ using VortexArena.Common.Gameplay.Damage;
 using VortexArena.Common.Services;
 using VortexArena.Engine.Collision;
 using VortexArena.Engine.Simulation;
+using VortexArena.Formats.Bsp;
+using VortexArena.Server;
 using Xunit;
 
 namespace VortexArena.Tests;
@@ -28,6 +30,76 @@ public class OnslaughtCombatTests
 
     private static Player NewPlayer(int team) =>
         new Player { Team = team, Flags = EntFlags.Client };
+
+    [Fact]
+    public void RadarUseRespectsAnEarlierMutatorThatConsumedThePress()
+    {
+        Facade();
+        var ons = new Onslaught();
+        ons.Activate();
+        ons.CpCombat.SpawnGenerator(Teams.Red, Vector3.Zero);
+        Player player = NewPlayer(Teams.Red);
+        player.GtTeleportAntispam = -1f;
+        int openings = 0;
+        ons.RadarRequested += _ => openings++;
+        HookHandler<MutatorHooks.PlayerUseKeyArgs> consume = (ref MutatorHooks.PlayerUseKeyArgs _) => true;
+
+        try
+        {
+            MutatorHooks.PlayerUseKey.Add(consume, HookOrder.First);
+            Assert.True(MutatorHooks.FirePlayerUseKey(player));
+            Assert.Equal(0, openings);
+
+            MutatorHooks.PlayerUseKey.Remove(consume);
+            Assert.True(MutatorHooks.FirePlayerUseKey(player));
+            Assert.Equal(1, openings);
+        }
+        finally
+        {
+            MutatorHooks.PlayerUseKey.Remove(consume);
+            ons.Deactivate();
+        }
+    }
+
+    [Fact]
+    public void MapGeneratorPaletteIndicesPowerNativePlayers()
+    {
+        static EntityDict Spawn(string classname, Vector3 origin, params (string Key, string Value)[] fields)
+        {
+            var entity = new EntityDict { ClassName = classname, Origin = origin };
+            foreach (var (key, value) in fields)
+                entity.Fields[key] = value;
+            return entity;
+        }
+
+        var world = new GameWorld(new CollisionWorld(),
+        [
+            Spawn("onslaught_generator", Vector3.Zero, ("team", "5"), ("targetname", "red")),
+            Spawn("onslaught_generator", new Vector3(900, 0, 0), ("team", "14"), ("targetname", "blue")),
+            Spawn("onslaught_controlpoint", new Vector3(400, 0, 0), ("targetname", "middle")),
+            Spawn("onslaught_link", Vector3.Zero, ("target", "red"), ("target2", "middle")),
+            Spawn("onslaught_link", Vector3.Zero, ("target", "blue"), ("target2", "middle"))
+        ]);
+        world.Boot("ons");
+
+        var onslaught = Assert.IsType<Onslaught>(world.GameType);
+        Assert.Equal(Teams.Red, onslaught.NodeByName("red")!.Team);
+        Assert.Equal(Teams.Blue, onslaught.NodeByName("blue")!.Team);
+        Entity pad = Assert.Single(world.Services.Entities.FindByClass("onslaught_controlpoint"));
+        var combat = onslaught.CpCombat;
+        var shields = world.Services.Entities.FindByClass(OnslaughtControlPoint.ShieldClassName);
+        Entity blueShield = Assert.Single(shields, s => s.GtShieldFlag == combat.GeneratorEntity(Teams.Blue));
+        Entity pointShield = Assert.Single(shields, s => s.GtShieldFlag == pad);
+        Assert.True(combat.CaptureShieldVisibleTo(blueShield, Teams.Red));
+        Assert.False(combat.CaptureShieldVisibleTo(blueShield, Teams.Blue));
+        Assert.False(combat.CaptureShieldVisibleTo(pointShield, Teams.Red));
+        Assert.True(combat.CaptureShieldVisibleTo(pointShield, Teams.None));
+
+        combat.ControlPointTouch(pad, NewPlayer(Teams.Red));
+        Assert.Equal(Teams.Red, combat.IconFor(pad.GtPointId)!.GtHomeTeam);
+        onslaught.CaptureControlPoint(pad.GtPointId, Teams.Red);
+        Assert.False(combat.CaptureShieldVisibleTo(blueShield, Teams.Red));
+    }
 
     /// <summary>
     /// A red player touching an enemy-attackable control point spawns a build icon that, once it finishes
@@ -60,7 +132,17 @@ public class OnslaughtCombatTests
         Assert.False(icon!.GtIconBuilt);
         Assert.False(cp.Captured);
 
-        // Drive the build think enough times to finish (buildhealth 100 → 200 at the per-tick rate).
+        const string intact = "models/onslaught/controlpoint_icon.md3";
+        var blue = NewPlayer(Teams.Blue);
+        Combat.Damage(icon, null, blue, 1f, DeathTypes.Generic, icon.Origin, Vector3.Zero);
+        Assert.Equal(intact, icon.Model); // Only opacity represents the icon's health while building.
+
+        ons.CpCombat.IconBuildThink(icon);
+        Assert.False(icon.GtIconBuilt);
+        Assert.Equal("models/onslaught/controlpoint_pad2.md3", cpEnt.Model);
+        Assert.True(cpEnt.Maxs.Z < icon.Origin.Z + icon.Mins.Z - cpEnt.Origin.Z);
+
+        // Drive the build think enough times to finish.
         for (int i = 0; i < 200 && !icon.GtIconBuilt; i++)
             ons.CpCombat.IconBuildThink(icon);
 
@@ -68,6 +150,19 @@ public class OnslaughtCombatTests
         Assert.True(cp.Captured);               // the point flipped
         Assert.Equal(Teams.Red, cp.Team);
         Assert.Equal(Teams.Red, ons.ControlPointOwner(1));
+
+        // Captured icons swap only below each damage threshold and heal back to the intact mesh.
+        cp.Shielded = false;
+        float quarterHealth = icon.GtObjMaxHealth * 0.25f;
+        Combat.Damage(icon, null, blue, quarterHealth, DeathTypes.Generic, icon.Origin, Vector3.Zero);
+        Assert.Equal(intact, icon.Model);
+        Combat.Damage(icon, null, blue, 1f, DeathTypes.Generic, icon.Origin, Vector3.Zero);
+        Assert.Equal("models/onslaught/controlpoint_icon_dmg1.md3", icon.Model);
+        Assert.True(ons.CpCombat.IconHeal(icon, 1f));
+        Assert.Equal(intact, icon.Model);
+        Combat.Damage(icon, null, blue, icon.GtObjHealth, DeathTypes.Generic, icon.Origin, Vector3.Zero);
+        Assert.Equal("models/onslaught/controlpoint_pad.md3", cpEnt.Model);
+        Assert.Null(ons.CpCombat.IconFor(1));
     }
 
     /// <summary>
@@ -125,21 +220,34 @@ public class OnslaughtCombatTests
         Entity? blueGenEnt = ons.CpCombat.SpawnGenerator(Teams.Blue, new Vector3(-500, 0, 0));
         Assert.NotNull(blueGenEnt);
         Assert.True(blueGen.Shielded);
+        Assert.Equal(Solid.BBox, blueGenEnt!.Solid);
 
         var red = NewPlayer(Teams.Red);
-        // Shielded → the hit is ignored (no health lost).
+        Vector3 aim = blueGenEnt.Origin + new Vector3(0, 0, 59);
+        Vector3 start = aim - Vector3.UnitX * 121;
+        Vector3 end = aim + Vector3.UnitX * 200;
+        // A real Vortex-style rail hits the solid generator, whose shield prevents health loss.
         float before = blueGen.Gen!.Health;
-        Combat.Damage(blueGenEnt!, null, red, 500f, DeathTypes.Generic, blueGenEnt!.Origin, Vector3.Zero);
+        Assert.Same(blueGenEnt, WeaponFiring.FireRailgunBullet(red, start, end, 500f, 0));
         Assert.Equal(before, blueGen.Gen.Health);
 
-        // Now unshield the blue generator (red controls a CP linked to it) and destroy it.
+        // Once exposed, the same trace damages the generator and changes its model.
         blueGen.Shielded = false;
-        Combat.Damage(blueGenEnt, null, red, 99999f, DeathTypes.Generic, blueGenEnt.Origin, Vector3.Zero);
+        float damage = before * 0.35f;
+        Assert.Same(blueGenEnt, WeaponFiring.FireRailgunBullet(red, start, end, damage, 0));
+        Assert.Equal(before - damage, blueGen.Gen.Health);
+        Assert.Equal("models/onslaught/generator_dmg3.md3", blueGenEnt.Model);
+
+        Assert.Same(blueGenEnt, WeaponFiring.FireRailgunBullet(red, start, end, 99999f, 0));
+        Assert.Equal("models/onslaught/generator_dead.md3", blueGenEnt.Model);
 
         Assert.True(blueGen.Gen.Destroyed);
         Assert.True(ons.MatchEnded);
         Assert.Equal(Teams.Red, ons.WinningTeam);
         Assert.Equal(1, ons.GetTeamGenerators(Teams.Red)); // ST_ONS_GENS +1 for the round win
         Assert.Equal(100, red.ScoreFrags);                 // QC: attacker SCORE +100 on a generator kill
+        Assert.Equal(blueGenEnt.Origin, ons.CpCombat.GeneratorDestruction!.Value.Origin);
+        ons.CpCombat.ClearGeneratorDestruction();
+        Assert.Null(ons.CpCombat.GeneratorDestruction);
     }
 }

@@ -7,10 +7,10 @@ summary:
   worst_gaps:
     - "Midair-combo (primary_midaircombo_radius) is logic/values FAITHFUL (a dedicated MidairTriggerCombo with own/teammate/enemy gating + the separate midaircombo_speed first-orb delay), but it is still DEAD on the live path because the xonotic default cvar is 0 (it only runs in samual/xdf where radius=100)."
     - "IS_INDEPENDENT_PLAYER owner-gate is ported in the midair path but Entity.IsIndependentPlayer is hardwired false (DamageEntityState.cs:158, no independent-player mode ported), so it is dead-OFF-equivalent; the non-midair W_Electro_TriggerCombo still omits the gate entirely (same harmless effect)."
-    - "Combo explode-over-time (combo_duration, default 0) and sticky orbs (stick default 0, stick_lifetime -1) are intentionally omitted; harmless at xonotic defaults (tracked as dedicated rows)."
+    - "Combo explode-over-time (combo_duration, default 0) has its own coverage row. Static and live-player sticky contacts, death, disconnect and cap replacement were exercised with stick enabled."
     - "FIXED 2026-06-27: Orb damagedbycontents (default 1, ON) is now ported+live (AttackOrb sets orb.DamagedByContents; GameWorld.CreatureFrameAll sweep -> PlayerFrameLogic.ProjectileContentsDamage detonates an orb resting in lava/slime as a SECONDARY blast). No more on-by-default unported electro feature."
     - "FIXED 2026-06-27: bot wr_aim (electromooth) is now FULLY faithful — the mode pick + 1000u range gate (Electro.BotWantsSecondary, wired BotBrain.cs:447) AND the secondary lead speed: Electro overrides BotAimShotSpeed(float, ref ctx) (Electro.cs:277-278) returning secondary_speed 1000 in orb mode, which BotBrain.CurrentShotSpeed (BotBrain.cs:919) consumes. The baseline's lone bot values gap (lead used primary_speed) is now closed."
-    - "Registry coverage gaps still tracked as rows: the Electro_Orb CSQC net-link/scale-pulse draw, the MENUQC weapon-guide describe text (now partial), the sticky-orb mechanic, combo explode-over-time, and the secondary orb_limit rubble cap (all off-by-default)."
+    - "Registry coverage gaps still tracked as rows: the Electro_Orb CSQC net-link/scale-pulse draw, the MENUQC weapon-guide describe text, and combo explode-over-time."
     - "RE-AUDIT 2026-06-27 (post-Waves 16/17): independently re-traced every FIXED claim against the current port — ProjectileCatalog.cs/ProjectileRenderer.cs exist with Electro/ElectroBeam rows + Classify (game/client/), ClientWorld.OnEntitySpawn:452 routes IsProjectile('electro')->Projectiles.OnSpawn->AttachLoopSound:164; MoveTypePhysics.cs Bounce case:202-203 reads ent.BounceFactor/BounceStop; WeaponSplash.ImpactSound:282 is a live Api.Sound.Play wrapper called from all explode paths; DamageSystem.EventDamage:369-371 dispatches non-player GtEventDamage->Projectiles.ShootDown:156-161 fires ProjectileDamage at hp<=0; ELECTROBITCH+IsFlying ported in ExplodeBolt. Common project builds clean (0 errors). All scores below CONFIRMED, no inflation."
 features:
   - id: electro.primary.fire_gate
@@ -261,7 +261,7 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Sticky-orb branch (stick, default 0) is intentionally omitted (no detonation/bounce effect at defaults)."
+      - "Sticky contact and moving-player follow have their own registry row."
     verification:
       - { kind: code, ref: "OrbTouch (Electro.cs:506-522): explode on DAMAGE_AIM/client with touchexplode; else, with the QC self-projectile guard (other.Owner==self.Owner && other.ClassName==self.ClassName -> return, no bounce-sound/stick), play electro_bounce + set bounced flag + reface. ExplodeOrb (525-541): RadiusDamage with secondary balance + deathTag carrying HITTYPE_SECONDARY (and HITTYPE_BOUNCE if bounced) + ELECTRO_BALLEXPLODE particle + ImpactSound(electro_impact). Matches QC W_Electro_Orb_Touch (electro.qc:457-476) + secondary wr_impacteffect.", result: pass }
     confidence: high
@@ -292,7 +292,8 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "AttackOrb (Electro.cs:473-494) sets ProjectileDamage (combo explode: RadiusDamage combo balance, deathTag=DeathCombo, ELECTRO_COMBO, ImpactSound electro_impact_combo) then Projectiles.MakeShootable(orb, exception:1) (Projectiles.cs:91). MakeShootable installs e.GtEventDamage=ShootDown; DamageSystem.EventDamage (DamageSystem.cs:356-360) dispatches a non-player victim's GtEventDamage. ShootDown (Projectiles.cs:106) runs CheckProjectileDamage (W_CheckProjectileDamage, exception 1 passes the stock g_projectiles_damage -2), subtracts hp, fires ProjectileDamage at hp<=0. So an orb CAN be shot down into a combo on the live path.", result: pass }
+      - { kind: code, ref: "Electro.AttackOrb installs a per-inflictor projectile damage exception for electro_bolt and electro_orb_chain. Projectiles.ShootDown schedules the lethal callback and g_projectiles_damage -2 disables all projectile damage.", result: pass }
+      - { kind: test, ref: "OrderedAuditGameplayTests.ElectroOnlyExemptsComboDamageFromTheProjectileDamageGate", result: pass }
     confidence: high
     notes: "FIXED — liveness dead->live: the orb's ProjectileDamage is now invoked via the Wave-1 GtEventDamage seam in DamageSystem.EventDamage (was only ever called by BreakablehookMutator). HP-subtract + g_projectiles_damage gate + combo exception now ported faithfully. Combo detonation sound added. Cross-cutting fix shared by every shoot-down weapon (Devastator/Mortar/Hagar/Minelayer/Arc)."
 
@@ -470,25 +471,30 @@ features:
       - "common/weapons/weapon/electro.qc:W_Electro_Orb_Stick"
       - "common/weapons/weapon/electro.qc:W_Electro_Orb_Follow_Think"
       - "common/weapons/weapon/electro.qc:W_Electro_Orb_Touch (stick branch)"
-    port_refs: []
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:OrbStick"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:SetMovetypeFollow"
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:FollowOrb"
     constants:
-      - { name: "secondary_stick", base: "0 (OFF in xonotic)", port: "none", match: true }
-      - { name: "secondary_stick_lifetime", base: "-1 (inherit orb death_time)", port: "none", match: true }
+      - { name: "secondary_stick", base: "0 (off)", port: "0 (off)", match: true }
+      - { name: "secondary_stick_lifetime", base: "-1 (inherit orb death_time)", port: "-1 (keep existing timer)", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: na
-      presentation: missing
-      audio: missing
-      liveness: na
+      logic: faithful
+      values: faithful
+      timing: faithful
+      presentation: na
+      audio: na
+      liveness: live
     intended_divergence: true
-    divergence_rationale: "Sticky orbs (g_balance_electro_secondary_stick) default 0 in bal-wep-xonotic.cfg, so the stick/MOVETYPE_FOLLOW path is never reached in stock play; intentionally omitted (the OrbTouch self-projectile guard is ported, only the stick branch inside it is absent)."
-    gaps:
-      - "W_Electro_Orb_Stick (re-spawn locked orb facing -trace_plane_normal, MOVETYPE_NONE, optional SetMovetypeFollow to the toucher with W_Electro_Orb_Follow_Think dropping it at the corpse on disconnect) and the stick_lifetime override are not ported. OrbTouch (Electro.cs:506-522) plays the bounce sound and sets the bounced flag but has no `if (stick)` branch."
+    divergence_rationale: "A freed native carrier no longer identifies a live attachment. Native consistently removes the orb, matching stock's null-reference outcome and avoiding the measured stock stale-slot world-origin drop on some disconnects."
+    gaps: []
     verification:
-      - { kind: code, ref: "Grep 'Stick'/'Follow' in Electro.cs -> no match; OrbTouch (Electro.cs:506-522) has no stick branch. Base electro.qc:396-476. stick default 0 (bal-wep-xonotic.cfg:261).", result: fail }
+      - { kind: test, ref: "planning/parity/rubble-limits/electro-limit/observations.txt static sticky contacts and later deadline on the earliest launch", result: pass }
+      - { kind: test, ref: "planning/parity/rubble-limits/electro-limit/follow-observations.txt moving player, death drop, cap eviction and disconnect", result: pass }
+      - { kind: test, ref: "planning/parity/rubble-limits/electro-limit/follow-input-control.txt aligned muzzle, yaw and tick; exact saved expiry through drop; connected stock receiver disconnect count", result: pass }
+      - { kind: test, ref: "OrderedAuditGameplayTests.ElectroAttachmentLossUsesStockDropOrDeleteBranch", result: pass }
     confidence: high
-    notes: "NEW ROW (registry coverage gap). Off-by-default; harmless at stock balance. Was previously only noted inline under electro.secondary.orb_touch_explode."
+    notes: "Native preserves the projectile identity through a static contact. Stock replaces the edict and copies its creationtime. Both keep the launch age for cap selection."
 
   - id: electro.combo.explode_over_time
     name: "Combo explode-over-time (combo_duration sustained damage field)"
@@ -520,25 +526,29 @@ features:
     name: "Secondary orb count limit (oldest-orb rubble cap)"
     layer: [authority]
     base_refs:
-      - "common/weapons/weapon/electro.qc:W_Electro_Attack_Orb (LimitedElectroBallRubbleList / LimitedChildrenRubble)"
-    port_refs: []
+      - "common/weapons/weapon/electro.qc:W_Electro_Attack_Orb"
+      - "common/weapons/weapon/electro.qc:W_Electro_Orb_Stick"
+      - "common/effects/qc/rubble.qc:LimitedChildrenRubble"
+      - "common/effects/qc/rubble.qc:ReplaceOldListedChildRubble"
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/Weapons/Electro.cs:EnforceOrbLimit"
     constants:
-      - { name: "secondary_limit", base: "0 (OFF / unlimited in xonotic)", port: "none", match: true }
+      - { name: "secondary_limit", base: "0 (unlimited)", port: "0 (unlimited)", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: na
+      logic: faithful
+      values: faithful
+      timing: faithful
       presentation: na
       audio: na
-      liveness: na
-    intended_divergence: true
-    divergence_rationale: "g_balance_electro_secondary_limit defaults 0 (unlimited) in bal-wep-xonotic.cfg, so the rubble-cap never engages in stock play; intentionally omitted."
-    gaps:
-      - "When secondary_limit>0 Base tracks live orbs in LimitedElectroBallRubbleList and detonates the oldest (adaptor_think2use_hittype_splash) once the per-player orb count exceeds the limit (ListNewChildRubble/LimitedChildrenRubble, electro.qc:569-575). AttackOrb (Electro.cs:419-503) has no orb-limit list/cap; a player can lay unbounded orbs."
+      liveness: live
+    intended_divergence: false
+    divergence_rationale: null
+    gaps: []
     verification:
-      - { kind: code, ref: "AttackOrb (Electro.cs:419-503) has no Limited*RubbleList logic. secondary_limit default 0 (bal-wep-xonotic.cfg:253).", result: fail }
+      - { kind: test, ref: "OrderedAuditGameplayTests.ElectroEvictsOldestLaunchRegardlessOfLifetimeAndIgnoresUntrackedOrbs", result: pass }
+      - { kind: test, ref: "planning/parity/rubble-limits/electro-limit/observations.txt paired usage, owner isolation, ordinary damage gate and collateral removal", result: pass }
     confidence: high
-    notes: "NEW ROW (registry coverage gap). Off-by-default; harmless at stock balance. Same Limited*Rubble pattern is unported across the projectile weapons."
+    notes: "The cap counts listed live orbs of the firing owner, including the newest launch. A forced use detonation preserves secondary/bounce tagging and is independent of the scheduled think. Ordinary blast damage follows g_projectiles_damage."
 
   - id: electro.secondary.orb_damagedbycontents
     name: "Orb destroyed by lava/slime/drowning (damagedbycontents)"

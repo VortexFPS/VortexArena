@@ -5,7 +5,6 @@ last_audited: "2026-06-27"  # Wave 16/17 re-audit (OPUS): speedrun gaps closed, 
 summary:
   feature_count: 19
   worst_gaps:
-    - "No CopyBody / corpse-clone mechanic (CLONE_MOVING 140 / CLONE_STANDING 142); sv_clones is an unread stub (Cvars.cs:397) and the clone-allowance gating branch IS present (Cheats.cs:80) but moot without the impulses — the only fully-missing cheat impulses now."
     - "No CheatFrame per-frame hook and no Drag subsystem: cannot pick up/carry/throw entities (cheat or normal-range g_grab_range), no te_lightning1 drag beam, no dragbox/dragpoint race map editor; g_grab_range cvar exists (Cvars.cs:395) but is never read."
     - "SPEEDRUN_INIT (30) / SPEEDRUN (141) are IMPLEMENTED + LIVE + now FAITHFUL (Speedrun.cs snapshot/restore, wired in DispatchImpulse): the start-solid tracebox 'cannot move there' guard (Speedrun.cs:118-129) AND the AbortSpeedrun mutator hook (Commands.cs:2145-2150 -> Race/Cts.AbortSpeedrun) are now both modeled — both prior gaps CLOSED in the Wave 16/17 re-audit."
     - "info_autoscreenshot map spawnfunc is now IMPLEMENTED + LIVE (InfoAutoScreenshot.cs, registered + per-map reset + deferred findtarget); minor residual: the g_observepoints observer-camera membership is unwired (no port consumer) and the entity is not dropped on a start-solid spot."
@@ -39,7 +38,7 @@ features:
       - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:Cheats_GatedBySvCheats", result: pass }
       - { kind: code, ref: "Cheats.cs:68-98 (Allowed+Refuse) vs server/cheats.qc:59-90 — gate order matches; dead/observer guards refuse SILENTLY (return false) and only the final sv_cheats==0 fall-through logs, matching Base. The sv_clones clone-allowance branch is NOW present (Cheats.cs:79: cloneImpulse && p.Lip < sv_clones -> return true). Re-verified 2026-06-25.", result: pass }
     confidence: high
-    notes: "Core gate (snapshot AND live cvar, dead block, observer<2 block, maycheat override) is faithful and live. Init/Log wired live in GameWorld.cs:818-820 (Cheats instance GameWorld.cs:173, Log->ChatBroadcast). Refusal-attempt logging fires ONLY on the final sv_cheats==0 fall-through (dead/observer guards refuse silently as in Base). Base passes playername(netname, team, false) with team_colorize=false (bare netname), so the port's p.NetName is faithful. The clone-allowance branch (cloneImpulse param threaded through Allowed) is NOW present — moot until the CLONE impulses exist but the gate logic is complete, so logic upgraded partial->faithful and the gap cleared."
+    notes: "Core gate (snapshot AND live cvar, dead block, observer<2 block, maycheat override) is faithful and live. Init/Log wired live in GameWorld.cs:818-820 (Cheats instance GameWorld.cs:173, Log->ChatBroadcast). Refusal-attempt logging fires ONLY on the final sv_cheats==0 fall-through (dead/observer guards refuse silently as in Base). Base passes playername(netname, team, false) with team_colorize=false (bare netname), so the port's p.NetName is faithful. The clone-allowance branch (cloneImpulse param threaded through Allowed) is NOW present and is used by both clone impulses."
 
   - id: sv-cheats.accounting.cheatcount
     name: "Cheat counting (per-player + global) gating campaign progress"
@@ -286,30 +285,39 @@ features:
 
   - id: sv-cheats.impulse.clone
     name: "Cheat impulses CLONE_MOVING (140) / CLONE_STANDING (142) — CopyBody clones"
-    layer: [authority]
+    layer: [authority, presentation]
     base_refs:
-      - "server/cheats.qc:CheatImpulse (CHIMPULSE_CLONE_MOVING / CLONE_STANDING)"
+      - "server/cheats.qc:59-90,169-185 (CheatsAllowed and clone impulses)"
+      - "server/player.qc:50-144,585-597 (CopyBody and clone death)"
       - "common/impulses/all.qh:157,159"
-    port_refs: []
+    port_refs:
+      - "src/VortexArena.Server/Commands.cs:DispatchImpulse"
+      - "src/VortexArena.Server/Cheats.cs:Allowed,Clone"
+      - "src/VortexArena.Common/Gameplay/Player/PlayerBody.cs:Copy"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:Killed"
+      - "game/net/ServerNet.cs:Classify and body snapshot state"
+      - "game/net/ClientEntityView.cs:DriveEntity"
+      - "game/client/PlayerModel.cs:body pose"
     constants:
-      - { name: "impulse numbers", base: "140 / 142", port: "none", match: false }
-      - { name: "moving clone push", base: "v_forward*300", port: "none", match: false }
-      - { name: "sv_clones (clone cap)", base: "0", port: "0 (stub, Cvars.cs:397; READ by the gate's clone branch but no CLONE impulse consumes it)", match: true }
+      - { name: "impulse numbers", base: "140 / 142", port: "140 / 142", match: true }
+      - { name: "moving clone push", base: "v_forward*300", port: "Forward(view angles)*300", match: true }
+      - { name: "sv_clones allowance default", base: "0", port: "0", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
+      logic: partial
+      values: faithful
+      timing: unknown
+      presentation: partial
       audio: na
       liveness: na
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No CopyBody / corpse-clone mechanic; the clone impulses do nothing and sv_clones is unread. Unchanged by Wave-5."
+      - "The native body does not copy QC custom-entity behavior, drag handoff, or the CopyBody mutator hook. The generalized copy made on regular player death is outside this impulse path."
+      - "Native snapshots preserve model, skin, colors and the selected IQM animation clips. IQM lower-body phase is approximated by the first frame of the selected clip. Clone gib effects and client rendering still need an in-game comparison."
     verification:
-      - { kind: code, ref: "grep CopyBody/CHIMPULSE/sv_clones in src/** -> SpawnSystem.cs mentions CopyBody only in a comment; no clone impulse handler (DispatchImpulse has no 140/142 case); cvar stub at Cvars.cs:397. The gate's clone-allowance branch EXISTS (Cheats.cs:80) but is never reached (no caller passes cloneImpulse:true). Re-verified 2026-06-27.", result: fail }
-    confidence: high
-    notes: "Requires a CopyBody corpse-spawn primitive that the port lacks. SpawnSystem.cs:518 references CopyBody only in a comment about respawn reusing the live edict."
+      - { kind: code, ref: "Pinned 863cd3e84 QC cheats.qc and player.qc compared to DispatchImpulse, Cheats.Clone and PlayerBody.Copy", result: pass }
+    confidence: medium
+    notes: "sv_clones is an allowance independent of sv_cheats. Once used up, the regular map-start/live cheats gate and MayCheat override still apply. Both impulses count even when EF_NODRAW prevents making a body."
 
   - id: sv-cheats.impulse.speedrun
     name: "Cheat impulses SPEEDRUN_INIT (30) / SPEEDRUN (141) — personal waypoint snapshot + restore"
@@ -480,7 +488,7 @@ features:
       - "server/cheats.qc:DragBox_Think"
     port_refs: []
     constants:
-      - { name: "g_grab_range (non-cheat drag range)", base: "200", port: "200 (dead cvar stub, Cvars.cs:395)", match: true }
+      - { name: "g_grab_range (non-cheat drag range)", base: "200", port: "200 (consumed by native Sandbox carry)", match: true }
       - { name: "initial dragspeed", base: "64", port: "none", match: false }
       - { name: "draggee gravity while held", base: "0.00001", port: "none", match: false }
     status:
@@ -493,9 +501,9 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No CheatFrame per-frame hook and no Drag subsystem: cannot pick up/carry/throw entities (cheat or normal-range), no te_lightning1 drag beam. Unchanged by Wave-5."
+      - "The general cheat drag and race map editor are absent. The separate Sandbox mutator implements owner/editor carry and release. The drag beam remains absent."
       - "No dragbox_spawn/dragpoint_spawn/drag_remove/drag_setcnt/drag_save/drag_saveraceent/drag_clear race-checkpoint map-editor commands."
-      - "g_grab_range cvar exists (Cvars.cs:395) but is never read (no consumer)."
+      - "SandboxMutator consumes g_grab_range for Sandbox objects. See mutator-sandbox.drag.grab for that path."
     verification:
       - { kind: code, ref: "grep Drag(/CheatFrame/dragbox in src/** -> none (g_grab_range cvar stub only at Cvars.cs:395). Re-verified 2026-06-27.", result: fail }
     confidence: high

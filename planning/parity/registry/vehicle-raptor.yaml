@@ -216,7 +216,7 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "DRIFT FIX (2026-06-27b): the aux lock crosshair color feedback (red→yellow→green by lock strength) IS now drawn — NetGame.UpdateVehicleHud:3443 calls hud.SetAuxiliaryXhairLock(0, target.Origin, veh.VehLockStrength, 'gfx/vehicles/axh-target') live each frame while veh.VehLockTarget is held. Closed the prior 'not drawn' gap."
+      - "DRIFT FIX (2026-06-27b): the aux lock crosshair color feedback (red→yellow→green by lock strength) IS now drawn — NetGame.UpdateVehicleHud:3443 calls hud.SetAuxiliaryXhairLock(0, target.Origin, veh.VehLockStrength, 'gfx/vehicles/crosshair_lock') live each frame while veh.VehLockTarget is held. Closed the prior 'not drawn' gap."
       - "locktarget==2 alternate direct-trace lock path unimplemented (default is 1, so off the live path)."
       - "AimTurret uses an Euler-subtract approximation of QC's AnglesTransform left-divide — behaviorally close but not bit-identical (the residual 'medium' caveat)."
     verification:
@@ -527,7 +527,7 @@ features:
       - { name: "flare crosshair", base: "vCROSS_RAIN", port: "gfx/vehicles/crosshair_rain (NetGame.cs:3518)", match: true }
       - { name: "dropmark image", base: "vCROSS_DROP (tracetoss predicted impact)", port: "gfx/vehicles/crosshair_drop + BombDropPredict tracetoss (VehiclePhysicsHelpers.cs:358)", match: true }
       - { name: "dropmark linger", base: "dropmark.cnt = time + 5 (red after release)", port: "_raptorDropmarkLinger = _renderClock + 5 (NetGame.cs:3537)", match: true }
-      - { name: "lock crosshair", base: "vCROSS_LOCK / axh-target (AuxiliaryXhair) by lock strength", port: "gfx/vehicles/axh-target via SetAuxiliaryXhairLock(0, ..., VehLockStrength) (NetGame.cs:3443)", match: true }
+      - { name: "lock crosshair", base: "vCROSS_LOCK (AuxiliaryXhair) by lock strength", port: "gfx/vehicles/crosshair_lock via SetAuxiliaryXhairLock(0, ..., VehLockStrength) (NetGame.cs:3443)", match: true }
     status:
       logic: faithful
       values: faithful
@@ -552,32 +552,37 @@ features:
     base_refs:
       - "common/vehicles/vehicle/raptor_weapons.qc:RaptorCBShellfragToss (CSQC)"
       - "common/vehicles/vehicle/raptor_weapons.qc:RaptorCBShellfragDraw (CSQC)"
+      - "common/effects/qc/damageeffects.qc:NET_HANDLE(ENT_CLIENT_DAMAGEINFO)"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:631 (emits RAPTOR_BOMB_SPREAD w/ bomb velocity on burst)"
-      - "game/client/EffectSystem.cs:477 (RAPTOR_BOMB_SPREAD -> SpawnRaptorShellfrags)"
-      - "game/client/ModelGibs.cs:111 (TossShellfrags — the 3 bouncing frag drawables)"
+      - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs (RAPTOR_BOMB_SPREAD at bomb burst)"
+      - "game/client/EffectSystem.cs:SpawnRaptorShellfrags"
+      - "game/client/ModelGibs.cs:TossShellfrags"
+      - "game/client/ModelGibs.cs:PackGibs"
+      - "game/client/DebrisMotion.cs:Draw"
     constants:
-      - { name: "frag model", base: "MDL_VEH_RAPTOR_CB_FRAGMENT (clusterbomb_fragment.md3)", port: "models/vehicles/clusterbomb_fragment.md3 (ModelGibs.cs:118)", match: true }
-      - { name: "frag count", base: "3 (RaptorCBShellfragToss loop)", port: "3 (ModelGibs.cs:113)", match: true }
-      - { name: "frag gravity", base: "0.15", port: "0.15 (GravityScale, ModelGibs.cs:124)", match: true }
-      - { name: "frag lifetime / fade", base: "nextthink time+3, fade after cnt=time+2", port: "Lifetime 3 / FadeDuration 1 (ModelGibs.cs:125-126)", match: true }
-      - { name: "avelocity tumble", base: "avelocity = prandomvec()*vlen(vel) + randomvec()*15/draw", port: "AngularVel = RandomVecG()*|vel| + AngularJitter 15 (ModelGibs.cs:130-131)", match: true }
-      - { name: "damageforcescale", base: "4 (CSQC-only frag, non-damaging)", port: "n/a (cosmetic gib, no damage)", match: true }
+      - { name: "frag model", base: "MDL_VEH_RAPTOR_CB_FRAGMENT (clusterbomb_fragment.md3)", port: "models/vehicles/clusterbomb_fragment.md3", match: true }
+      - { name: "frag count", base: "3 (RaptorCBShellfragToss loop)", port: "3", match: true }
+      - { name: "frag gravity", base: "0.15", port: "0.15", match: true }
+      - { name: "frag lifetime / fade", base: "nextthink time+3, fade after cnt=time+2", port: "lifetime 3, sink over final second", match: false }
+      - { name: "avelocity tumble", base: "avelocity = prandomvec()*vlen(vel) + randomvec()*15/draw", port: "|vel| spin seed plus independent jitter of 15 per committed tic", match: false }
+      - { name: "ticrate and sloppy", base: "cl_gibs_ticrate 0.1 / cl_gibs_sloppy 1, live", port: "same, with the static BSP tracer", match: true }
     status:
       logic: faithful
-      values: faithful
+      values: partial
       timing: faithful
-      presentation: faithful
+      presentation: partial
       audio: na
       liveness: live
-    intended_divergence: false
-    divergence_rationale: null
+    intended_divergence: true
+    divergence_rationale: "Tumble jitter advances on committed tics for consistent render-rate playback. MultiMesh uses a sink and bounds the separate fragment pool to 64."
     gaps:
-      - "DRIFT FIX (2026-06-27b): NOW LIVE (was port_refs:[]). On burst Raptor.cs:631 emits RAPTOR_BOMB_SPREAD carrying the bomb's velocity; the client EffectSystem (EffectSystem.cs:477) routes RAPTOR_BOMB_SPREAD/raptor_bomb_spread to SpawnRaptorShellfrags -> ModelGibs.TossShellfrags, which spawns 3 clusterbomb_fragment.md3 drawables (gravity 0.15, |vel| avelocity seed + 15/draw jitter, 3s lifetime fading over the final second), THEN falls through to render the raptor_bomb_spread particle puff alongside. The only QC detail not reproduced is the surface force-dir backoff on the toss velocity (headless lacks the per-hit surface normal) — cosmetic only."
+      - "The launch lacks QC's surface force-direction backoff and initial roll offsets. Native fragments do not react to blast force."
+      - "Fragment orientation and fade have not been compared in a paired Raptor gameplay capture."
     verification:
-      - { kind: code, ref: "Raptor.cs:631 Emit('RAPTOR_BOMB_SPREAD', origin, bombVel) -> EffectSystem.cs:477 SpawnRaptorShellfrags -> ModelGibs.cs:111 TossShellfrags (3 frags, gravity 0.15, lifetime 3/fade 1, avelocity |vel|+15 jitter) vs raptor_weapons.qc:244-284 RaptorCBShellfragToss/Draw", result: pass }
+      - { kind: code, ref: "Raptor burst emits RAPTOR_BOMB_SPREAD -> EffectSystem.SpawnRaptorShellfrags -> ModelGibs.TossShellfrags, then the effect falls through to the particle puff", result: pass }
+      - { kind: test, ref: "planning/parity/rubble-limits/RubbleLimitProbe.cs, three fragments and seeded transforms across 30/60/144 FPS in the native client", result: pass }
     confidence: high
-    notes: "DRIFT FIX 2026-06-27b: missing->faithful/live. The prior baseline recorded port_refs:[] / all-missing, but the Wave-17 presentation-consumer wave wired the full chain: server emits RAPTOR_BOMB_SPREAD on burst -> networked -> client tosses the 3 cosmetic shell-fragment gibs (ModelGibs.TossShellfrags) with the QC gravity/lifetime/fade/avelocity constants. CSQC-only debris; no gameplay effect (the damaging bomblets are raptor.bombs)."
+    notes: "Cosmetic fragment motion is independent of the damaging bomblets. See physics-movetypes.matchticrate.interp for motion and collision scope."
 
   - id: raptor.missile_alarm
     name: "Incoming guided-missile alarm (per-pilot warning sound)"

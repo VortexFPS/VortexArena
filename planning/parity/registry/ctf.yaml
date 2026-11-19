@@ -6,10 +6,10 @@ summary:
   feature_count: 28
   worst_gaps:
     - "Flag model is static at base: no md3 wave/bob/rotate animation, no glow trail (g_ctf_flag_glowtrails), no dynamic team light (g_ctf_dynamiclights). Dropped/thrown/passed flags DO move under MoveType.Toss/Fly physics and the carried flag trails its carrier each tick."
-    - "Capture-time PERSISTENT record (ctf_CaptureRecord ServerProgsDB write + cross-session g_ctf_leaderboard) is unported (needs a persistent DB); the in-match fastest-cap broadcast CTF_CAPTURE_TIME/_BROKEN/_UNBROKEN IS fired. The leaderboard send/record subsystem (ClientConnect/GetPressedKeys/GetRecords race_SendAll), the takedamage flag-return path (g_ctf_flag_health/_return_damage/_return_when_unreachable) and two-flag g_ctf_reverse remain unported."
-    - "Pass completes as an instant transfer when viable (no physical arc / pass_directional cone) — a deliberate simplification; the flight velocity is still computed for an integrating host. VEHICLE board/leave carrier-drop is NOW wired (OnVehicleEnter/Exit, live); the PORTAL-teleport carrier-leave drop (g_ctf_portalteleport) is still not wired (the PortalTeleport hook has no port dispatch at all)."
+    - "Capture-time persistence and the cross-session leaderboard remain unported. The in-match fastest-capture notifications are implemented. Two-flag g_ctf_reverse remains unported."
+    - "Pass completes as an instant transfer when viable. The native port computes the flight velocity but still lacks the full physical arc and pass_directional cone."
     - "Capture shield spawns the physical ctf_captureshield push entity (model models/ctf/shield.md3, EF_ADDITIVE, force push, CENTER_CTF_CAPTURESHIELD_SHIELDED on touch) co-located with each flag; with the stock samual cfg the shield ratio is 0 (inert) by default exactly like Base, so nobody is shielded and the entity never pushes. Only missing nuance: the per-viewer same-team-hide customize (ctf_CaptureShield_Customize) is not networked."
-    - "Flag-damage / return-when-unreachable (g_ctf_flag_health, _return_damage, _return_when_unreachable lava/slime/needkill health bleed) not implemented; the dropped flag is TakeDamage.Yes but carries no health. THIS WAVE landed two CTF hooks but NEITHER cleanly closes: (1) PortalTeleport carrier-drop is now LIVE (Warpzone.cs:415 -> Ctf.OnPortalTeleport) but its g_ctf_portalteleport gate is INVERTED (drops when cvar!=0; Base drops at the default 0) — logic faithful->partial; (2) AbortSpeedrun(Player) is now logic-faithful but DEAD (Commands.cs:2150 impulse-141 dispatch is Race/Cts-only, never calls the CTF override). Niche CTF hooks still unported: DropSpecialItems flag-eject, followfc superspectate command. CLOSED Wave 16: LogDeath 'F' item code, GiveFragsForKill frag suppression (g_ctf_ignore_frags), and PreferPlayerScore_Clear are now ported + live."
+    - "The native flag handles dropped health, weapon damage and immediate or delayed return on hazards. Check NoDrop and sky collision touch parity on a map using those surfaces."
 features:
   - id: ctf.flag.spawn_setup
     name: "Flag entity spawn + model/skin/bbox setup"
@@ -107,9 +107,11 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_Handle_Capture"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_CaptureRecord"
     port_refs:
+      - "tools/race-record-migration/Migration.cs:Apply"
       - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:Capture"
       - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CaptureDropped"
       - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CaptureRecord"
+      - "src/VortexArena.Server/RaceRecordFile.cs:Open"
     constants:
       - { name: "g_ctf_score_capture (team SCORE)", base: "20 (samual cfg)", port: "cvar; fallback 20", match: true }
       - { name: "CTF_CAPS per capture", base: "+1", port: "+1", match: true }
@@ -124,12 +126,12 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Only the PERSISTENT capture-time record (ctf_CaptureRecord ServerProgsDB write + cross-session g_ctf_leaderboard) remains unported (needs a persistent DB). The in-match fastest-cap broadcast (CTF_CAPTURE_TIME/_BROKEN/_UNBROKEN, picked via MSG_CHOICE) IS now fired by CaptureRecord."
       - "Per-flag score_capture override + cnt-group guard not modeled (own flag home requirement IS faithful)."
     verification:
+      - { kind: test, ref: "RecordMigrationTests (pinned database and native profile integration)", result: pass }
       - { kind: code, ref: "Ctf.cs:Capture (assist to carried.Dropper, capeffect <team>_cap via EffectEmitter, CaptureRecord broadcast) + UpdateLeaderAndCheckLimit; CaptureDropped mirrors it for the auto-cap path", result: pass }
     confidence: high
-    notes: "FIX since last audit: the in-match fastest-cap broadcast (CTF_CAPTURE_TIME/_BROKEN/_UNBROKEN, in-process ctf_captimerecord + holder name) is now ported in CaptureRecord and fired from both Capture and CaptureDropped; one-flag fires INFO_CTF_CAPTURE_NEUTRAL. Capeffect + score fallbacks (capture=20, assist=10) faithful, capture-assist to prior dropper awarded, per-player CTF_CAPTIME best-time recorded. Only the persistent cross-session leaderboard DB remains."
+    notes: "CaptureRecord uses the per-map fastest capture and holder loaded from the writable profile. This separate record applies to valid non-neutral captures even when the ranked ladder is off. The offline importer archives the original name-only fastest capture with its original precision."
 
   - id: ctf.flag.return
     name: "Flag return (player + auto/timeout)"
@@ -184,7 +186,6 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "takedamage-return arming (ctf_flagdamaged / g_ctf_flag_health) not modeled (the dropped flag is TakeDamage.Yes but no health/return-on-damage bleed)."
     verification:
       - { kind: code, ref: "Ctf.cs:OnDeath -> DropFlag (toss velocity = carrier.Velocity + crandom side + up), MoveType.Toss integrated by MoveTypePhysics.RunEntity; penalty_drop fallback matches samual (1)", result: pass }
     confidence: high
@@ -228,6 +229,7 @@ features:
     port_refs:
       - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:ThrowFlag"
       - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:ThrowDropCommon"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:CalculateProjectileVelocity"
       - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:HandleUseKey"
       - "game/net/ServerNet.cs:UseKeyEdge"
     constants:
@@ -246,7 +248,7 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "ServerNet.UseKeyEdge -> ctf.HandleUseKey(p, roster) -> CarriedBy(p)!=null -> ThrowFlag -> ThrowDropCommon(DROP_THROW) -> FlagAnnounceSound(DROPPED). Logic+punish ramp unit-tested in CtfPassThrowTests.", result: pass }
+      - { kind: code, ref: "ServerNet.UseKeyEdge -> ctf.HandleUseKey(p, roster) -> CarriedBy(p)!=null -> ThrowFlag -> ThrowDropCommon(DROP_THROW) -> FlagAnnounceSound(DROPPED). CtfPassThrowTests covers the punish ramp, stock absolute launch, inherited velocity, aim compensation and weapon speed multiplier.", result: pass }
     confidence: high
     notes: "FIX since last audit (audio missing -> faithful): DROP_THROW now falls through to the Handle_Drop body in ThrowDropCommon, firing the global snd_flag_dropped voice (CTF_DROPPED_<team>, ATTEN_NONE) — matching Base sv_ctf.qc:388. The +use rising-edge dispatcher routes a carrier's +use to ThrowFlag; logic incl. the punish ramp and Strength multiplier is faithful and unit-tested."
 
@@ -296,18 +298,12 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, ClientDisconnect)"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, PortalTeleport)"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:RemovePlayer"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnPlayerRemoved"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnVehicleEnter"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnVehicleExit"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnPortalTeleport"
-      - "src/VortexArena.Server/ClientManager.cs:MakePlayerObserver"
-      - "src/VortexArena.Common/Gameplay/Vehicles/VehicleBoarding.cs:198"
-      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:415 (OnPortalTeleport event fire)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnPlayerRemoved/OnVehicleEnter/OnVehicleExit/OnPortalTeleport"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:NotifyPortalTeleport"
     constants:
-      - { name: "g_ctf_portalteleport drop polarity", base: "0 default => DROP on portal cross (cvar=1 KEEPS)", port: "INVERTED: drops only when cvar!=0; keeps at default 0", match: false }
+      - { name: "g_ctf_portalteleport", base: "0", port: "0", match: true }
     status:
-      logic: partial
+      logic: faithful
       values: na
       timing: na
       presentation: na
@@ -315,12 +311,11 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "PORTAL-teleport branch is now WIRED + LIVE (OnPortalTeleport subscribed to WarpzoneManager.OnPortalTeleport, fired on the live Porto-portal crossing at Warpzone.cs:415) but the cvar gate is INVERTED: Base QC drops the flag when !autocvar_g_ctf_portalteleport (i.e. at the default 0), and KEEPS it when the cvar is 1; the port does the opposite (returns early without dropping when g_ctf_portalteleport==0, drops only when !=0). So on a stock server a carrier crossing a Port-O-Launch portal WRONGLY keeps the flag (Base would drop it). Disconnect + MakePlayerObserver (OnPlayerRemoved) and vehicle board/leave (OnVehicleEnter/Exit) drop the flag faithfully."
+    gaps: []
     verification:
-      - { kind: code, ref: "GameType.OnPlayerRemoved -> Ctf.OnPlayerRemoved -> RemovePlayer (ClientManager.MakePlayerObserver:535 + ClientDisconnect); OnVehicleEnter/Exit fired LIVE from VehicleBoarding.cs:198/245/289/305; OnPortalTeleport subscribed in Activate, fired LIVE from Warpzone.cs:415 (Porto-portal crossing). BUT OnPortalTeleport (Ctf.cs:2041) returns when Cvar(g_ctf_portalteleport,0)==0 — inverted vs Base (cvar desc: 'allow carriers to go through portals WITHOUT dropping the flag'), so the default-0 drop never fires and the cvar=1 keep is instead a drop.", result: fail }
+      - { kind: code, ref: "Ctf.OnPortalTeleport calls DropFlag when g_ctf_portalteleport is zero.", result: pass }
     confidence: high
-    notes: "THIS WAVE (uncommitted, build green): the PortalTeleport carrier-drop is finally dispatched on the live path (Warpzone.cs:415 OnPortalTeleport event -> Ctf.OnPlayerRemoved/RemovePlayer), so liveness partial -> live. HOWEVER the new branch's cvar gate is inverted (drops only when g_ctf_portalteleport!=0, Base drops when ==0), so logic faithful -> partial: on a stock server (cvar 0) a carrier crossing a Porto portal keeps the flag where Base would drop it. Disconnect/observe/vehicle paths remain faithful. Fix is a one-line gate flip (drop when ==0)."
+    notes: "The Porto crossing and Swapper fire the same event. The default drops the flag and enabling the cvar lets the player carry it through."
 
   - id: ctf.flag.think_dropped
     name: "Dropped-flag think (landtime, auto-return timer, float, capture-radius)"
@@ -328,16 +323,14 @@ features:
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_FlagThink"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:FlagThinkEntity"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CaptureDropped"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:Tick"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:FlagThinkEntity/FlagDamage/ArmDroppedFlag/CaptureDropped"
     constants:
       - { name: "g_ctf_flag_return_time", base: "30 s", port: "30 s", match: true }
       - { name: "g_ctf_dropped_capture_radius / _delay", base: "100 / 1 s", port: "cvar; fallback 100 / 1", match: true }
       - { name: "g_ctf_flag_dropped_floatinwater", base: "200", port: "cvar; fallback 0 (read live)", match: true }
       - { name: "g_ctf_flag_return_dropped", base: "100 qu", port: "cvar; fallback 0 (read live)", match: true }
     status:
-      logic: faithful
+      logic: partial
       values: faithful
       timing: faithful
       presentation: na
@@ -346,11 +339,11 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Flag-damage / return-when-unreachable (lava/slime/needkill, g_ctf_flag_return_when_unreachable / _return_damage) health bleed not implemented."
+      - "Native touch callbacks do not carry collision trace metadata for the pinned sky and NoDrop touch branch."
     verification:
-      - { kind: code, ref: "Ctf.cs:FlagThinkEntity (dropped-capture-radius auto-cap via CaptureDropped, float-in-water buoyancy via Api.Trace.PointContents, return-when-dropped-near-base, AND the auto-return timer) wired as the entity think; Tick complements it. cfg defaults match Base (radius 100, delay 1, float 200, return_dropped 100).", result: pass }
+      - { kind: code, ref: "Dropped entities wire GtEventDamage and the contents-damage sweep. FlagThinkEntity advances the pending return from current health.", result: pass }
     confidence: high
-    notes: "Dropped-flag auto-capture within g_ctf_dropped_capture_radius (CaptureDropped), float-in-water buoyancy, return-when-dropped-near-base radius, landtime + the 30s auto-return timer + per-tick carrier-follow all implemented and live. Only the flag-damage/unreachable health bleed is still unported."
+    notes: "Weapon damage uses configured health. Lava, slime and trigger hurt cause immediate or delayed returns depending on the cvar. The live entity think enforces the normal timeout at the same tick rate as the pin."
 
   - id: ctf.capture_shield
     name: "Capture shield (block worst players from the flag)"
@@ -646,7 +639,8 @@ features:
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, AbortSpeedrun)"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:AbortSpeedrun (Ctf.cs:1984)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:AbortSpeedrun"
+      - "src/VortexArena.Server/Commands.cs:CmdImpulse"
     constants: []
     status:
       logic: faithful
@@ -654,38 +648,38 @@ features:
       timing: na
       presentation: na
       audio: na
-      liveness: dead
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "AbortSpeedrun(Player) now exists and is logic-faithful (force-return the carried flag via ResetToBase + RespawnFlagEntity, the snd_flag_respawn voice, and the INFO_CTF_FLAGRETURN_ABORTRUN broadcast). BUT it has NO LIVE CALLER: the impulse-141 (CHIMPULSE_SPEEDRUN) dispatch at Commands.cs:2150-2155 only invokes Race.AbortSpeedrun / Cts.AbortSpeedrun in a hardcoded if/else-if on the active GameType — it never reaches Ctf.AbortSpeedrun (CTF is never a Race/Cts). QC instead fires MUTATOR_CALLHOOK(AbortSpeedrun) which the ctf mutator subscribes to globally; the port's gametype-typed dispatch excludes CTF, so a carried flag is still NOT auto-returned on a speedrun abort. Method is dead code until Commands.cs also dispatches to the active GameType's AbortSpeedrun (e.g. a Ctf branch or a virtual)."
+    gaps: []
     verification:
-      - { kind: code, ref: "Ctf.cs:1984 AbortSpeedrun present + faithful. Commands.cs:2150 `if (Cheats.Speedrun(caller)) { if GameType is Race race -> race.AbortSpeedrun; else if Cts cts -> cts.AbortSpeedrun; }` — no CTF branch, so Ctf.AbortSpeedrun is never called. INFO_CTF_FLAGRETURN_ABORTRUN never fired on the live path.", result: fail }
+      - { kind: code, ref: "Impulse 141 calls Ctf.AbortSpeedrun after a successful Cheats.Speedrun reset.", result: pass }
     confidence: high
-    notes: "THIS WAVE (uncommitted, build green): logic missing -> faithful (the AbortSpeedrun method landed with the correct QC body). Liveness na -> DEAD, NOT live: the impulse-141 dispatcher (Commands.cs:2150) hardcodes a Race/Cts-only if/else-if and never calls the CTF override, so the new method has no live caller. NOT closed. Niche path regardless (only a speedrun-enabled CTF map). Wiring needs a Ctf branch (or a polymorphic AbortSpeedrun dispatch) at Commands.cs:2150."
+    notes: "The CTF branch resets the carried flag, clears VIP and the carrier marker, and broadcasts CTF_FLAGRETURN_ABORTRUN."
 
   - id: ctf.drop_special_items
     name: "Throw flag on DropSpecialItems"
     layer: [authority]
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, DropSpecialItems)"
-    port_refs: []
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:OnDropSpecialItems"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:Swapper"
     constants: []
     status:
-      logic: partial
+      logic: faithful
       values: na
       timing: na
       presentation: na
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "QC the ctf DropSpecialItems hook throws a carried flag (ctf_Handle_Throw DROP_THROW) when the generic DropSpecialItems event fires (e.g. nade-drop / forced item-drop). The port drops a carried flag on death (OnDeath -> DropFlag) but has no DropSpecialItems hook, so any non-death special-item-drop path that exists for other items does NOT also eject the flag."
+    gaps: []
     verification:
-      - { kind: code, ref: "DropFlag is called from OnDeath only; no DropSpecialItems hook in Ctf.cs", result: fail }
-    confidence: low
-    notes: "Unmapped in the prior baseline. The common case (death drops the flag) IS covered by ctf.flag.drop_on_death; this row only tracks the separate DropSpecialItems event, which may not have a live dispatch in the port at all."
+      - { kind: code, ref: "The Swapper dispatches DropSpecialItems on its target before moving either player. CTF uses the same throw path as manual throws.", result: pass }
+    confidence: high
+    notes: "Swapper is the only enabled Drop_Special_Items call site in the pin. Forced throws bypass the manual throw cvar and anti-spam gates."
 
   - id: ctf.logdeath_itemcode
     name: "Flag-carrier death-log item code ('F')"
@@ -744,48 +738,57 @@ features:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, ClientConnect)"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, GetPressedKeys)"
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, GetRecords)"
-    port_refs: []
+    port_refs:
+      - "tools/race-record-migration/Migration.cs:Apply"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CaptureRecord"
+      - "src/VortexArena.Server/RaceRecordFile.cs:Open"
+      - "game/net/ServerNet.cs:BuildScoreboard"
+      - "game/hud/ScoreboardPanel.cs:DrawRankings"
+      - "src/VortexArena.Server/CommandReplies.cs:GetRecords"
     constants:
-      - { name: "g_ctf_leaderboard", base: "0 (default off)", port: "n/a", match: false }
+      - { name: "g_ctf_leaderboard", base: "0 (default off)", port: "0 (default off)", match: true }
     status:
-      logic: missing
+      logic: partial
       values: na
       timing: na
-      presentation: missing
+      presentation: faithful
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "QC the g_ctf_leaderboard subsystem (ClientConnect race_SendAll, GetPressedKeys race_checkAndWriteName, GetRecords) sends + records the persistent cross-session fastest-capture leaderboard via the race record store + ServerProgsDB. The port ports neither the race record store nor any of these CTF hooks, so the persistent leaderboard does not exist (the in-match fastest-cap broadcast in ctf.flag.capture is unaffected)."
+      - "The rankings block and the separate paged fastest-capture report have been verified. This row also references the pinned connect and pressed-key hooks, whose complete behavior was outside the report audit."
     verification:
-      - { kind: code, ref: "no ClientConnect/GetPressedKeys/GetRecords CTF hooks in Ctf.cs; g_ctf_leaderboard never read; no race record store", result: fail }
+      - { kind: test, ref: "RecordMigrationTests (pinned database and native profile integration)", result: pass }
+      - { kind: "visual", ref: "planning/parity/record-lifecycle/README.md (rotation, restart and remote CTF ranking)", result: "pass" }
+      - { kind: visual, ref: "planning/parity/record-reports/README.md (CTF fastest-capture report with g_ctf_leaderboard=0)", result: pass }
     confidence: medium
-    notes: "Newly mapped 2026-06-27 (was tracked only as a sub-gap of ctf.flag.capture). Needs a persistent DB + the race record subsystem. Default off."
+    notes: "A CTF rank is filed after an enabled, consenting and valid non-neutral capture. Native scoreboard transport returns saved ranks after process restart. The paged records command reads the separate fastest capture across mounted CTF maps, regardless of the leaderboard cvar. The offline importer merges original UID-ranked captures for verified, consenting owners. The name-only capture stays in the archive."
 
   - id: ctf.followfc_superspec
     name: "Superspectate 'follow flag carrier' command (followfc)"
     layer: [authority]
     base_refs:
       - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, SV_ParseClientCommand)"
-    port_refs: []
+    port_refs:
+      - "src/VortexArena.Server/Commands.cs:CmdFollowFlagCarrier"
+      - "src/VortexArena.Server/ClientManager.cs:Spectate"
     constants:
-      - { name: "g_superspectate", base: "0 (default off)", port: "n/a", match: false }
+      - { name: "g_superspectate", base: "off", port: "off", match: true }
     status:
-      logic: missing
+      logic: faithful
       values: na
       timing: na
       presentation: na
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "QC the ctf SV_ParseClientCommand hook handles the spectator 'followfc [team]' command (gated by g_superspectate): a superspectator jumps to spectating the/an active flag carrier (optionally of a given team), or gets a 'No active flag carrier' message. The port has no followfc command and no superspectate subsystem."
+    gaps: []
     verification:
-      - { kind: code, ref: "no SV_ParseClientCommand 'followfc' CTF hook in the port; superspec_Spectate not ported", result: fail }
-    confidence: low
-    notes: "Newly mapped 2026-06-27 (was unmapped). Niche: only reachable with g_superspectate enabled (default off) and a connected spectator."
+      - { kind: code, ref: "The command uses the active superspec mutator, CTF team roster, and the regular observer target-switch path.", result: pass }
+    confidence: high
+    notes: "An observer can follow a carrier on a named active team or cycle to another carrier without a team filter."
 
   - id: ctf.prefer_score_clear
     name: "Prefer player-score on clear (PreferPlayerScore_Clear)"

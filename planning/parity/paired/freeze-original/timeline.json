@@ -1,0 +1,56 @@
+[
+  {
+    "elapsed": 3.131,
+    "command": "cmd join"
+  },
+  {
+    "elapsed": 13.013,
+    "server_query": "status and scenario cvars"
+  },
+  {
+    "elapsed": 20.118,
+    "frame": "0051.webp",
+    "captured_at": 19.749
+  },
+  {
+    "elapsed": 20.134,
+    "command": "cmd kill"
+  },
+  {
+    "elapsed": 22.766,
+    "frame": "0056.webp",
+    "captured_at": 22.441
+  },
+  {
+    "elapsed": 23.75,
+    "frame": "0059.webp",
+    "captured_at": 23.616
+  },
+  {
+    "elapsed": 25.904,
+    "frame": "0064.webp",
+    "captured_at": 25.529
+  },
+  {
+    "elapsed": 26.324,
+    "server_query": "status and scenario cvars"
+  },
+  {
+    "elapsed": 30.068,
+    "frame": "0075.webp",
+    "captured_at": 29.749
+  },
+  {
+    "elapsed": 32.875,
+    "frame": "0083.webp",
+    "captured_at": 32.655
+  },
+  {
+    "elapsed": 45.09,
+    "server_query": "status and scenario cvars"
+  },
+  {
+    "elapsed": 51.004,
+    "command": "quit"
+  }
+]

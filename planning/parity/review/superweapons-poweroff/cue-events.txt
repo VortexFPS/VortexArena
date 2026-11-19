@@ -1,0 +1,66 @@
+PCMs start when the two PulseAudio monitor recordings begin. Times below
+are seconds from the separate recording starts. These are full-run sample
+match results, before excerpting. Gain is relative to the source waveform.
+
+stock-normal-shield
+picker
+duration 26.811 s
+7.970 s  corr 0.912 gain 0.393
+8.994 s  corr 0.911 gain 0.393
+9.890 s  corr 0.903 gain 0.393
+10.872 s  corr 0.912 gain 0.395
+11.896 s  corr 0.911 gain 0.393
+12.834 s  corr 0.902 gain 0.391
+22.538 s  corr 0.893 gain 0.391
+peer
+duration 26.804 s
+7.986 s  corr 0.975 gain 0.197
+9.053 s  corr 0.974 gain 0.197
+9.864 s  corr 0.966 gain 0.196
+10.845 s  corr 0.974 gain 0.198
+11.869 s  corr 0.974 gain 0.197
+12.850 s  corr 0.960 gain 0.198
+22.493 s  corr 0.782 gain 0.151
+
+stock-overlap-final
+picker
+duration 24.417 s
+20.097 s  corr 0.556 gain 0.359
+peer
+duration 24.410 s
+20.044 s  corr 0.721 gain 0.245
+
+native-normal-map
+picker
+duration 22.859 s
+9.271 s  corr 0.912 gain 0.394
+10.241 s  corr 0.910 gain 0.393
+11.169 s  corr 0.912 gain 0.395
+12.300 s  corr 0.911 gain 0.394
+13.239 s  corr 0.907 gain 0.393
+14.177 s  corr 0.907 gain 0.393
+peer
+duration 22.869 s
+9.313 s  corr 0.912 gain 0.176
+10.273 s  corr 0.911 gain 0.177
+11.191 s  corr 0.908 gain 0.177
+12.407 s  corr 0.911 gain 0.176
+13.324 s  corr 0.908 gain 0.177
+14.241 s  corr 0.908 gain 0.177
+
+native-normal-shield
+picker
+duration 35.552 s
+31.009 s  corr 0.912 gain 0.394
+peer
+duration 35.541 s
+31.084 s  corr 0.871 gain 0.176
+
+native-overlap-final
+picker
+duration 30.987 s
+26.732 s  corr 0.912 gain 0.394
+peer
+duration 30.987 s
+26.881 s  corr 0.980 gain 0.198
+

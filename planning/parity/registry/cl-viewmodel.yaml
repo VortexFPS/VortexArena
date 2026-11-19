@@ -107,6 +107,7 @@ features:
     gaps:
       - "Team colormap is not Base's true colormap palette region swap (256 + c): masked (_shirt/_pants) skins tint faithfully via instance uniforms, maskless skins correctly show no tint (DP model), but the legacy whole-model albedo approximation survives only on unconvertible fallback surfaces."
       - "Per-child m_skin (wepskin) not applied; the gun renders with its base material."
+      - "The native viewmodel depth range and fixed no-shadow state cover those render outcomes. The rest of Xonotic's owner-to-viewmodel EFMASK_CHEAP transfer has no general native consumer."
       - "cl_viewmodel_alpha < 1 (non-default) falls back to the legacy translucent BaseMaterial3D path with NoDepthTest, not a short-depth-range alpha pass (the shared skin shader is deliberately opaque-only); skin-shader surfaces still ignore the alpha, as before."
     verification:
       - { kind: code, ref: "SHORT DEPTH RANGE (2026-07-06, parity/first-person-weapon-models): PlayerSkinShader + Md3MorphShader gained `uniform float viewmodel_depth_range = 1.0` and a vertex() clip-z remap `POSITION.z = mix(z, w, 1.0 - viewmodel_depth_range)` — identity (mix(z,w,0)==z bit-exact) at the default for every world/player material, the DP GL_DepthRange(0,0.0625) near-slice (reversed-Z mirror [0.9375,1], order-preserving so gun self-occlusion survives) on the gun's materials. ViewModelRenderFx.Apply (called at equip: SetWeaponModel/SetWeapon/SetWeaponPlaceholder + the muzzle-flash spawn) gives every gun surface a gun-owned material carrying 0.0625: shared skin/anim ShaderMaterials get a cached DUPLICATE (same Shader object -> same pipelines), per-animator Md3Morph materials are set in place (ModelAnimator keeps writing morph_amount to the same object), and plain opaque textured StandardMaterial3D surfaces (minelayer/tuba/hook... — skins with no _shirt/_pants/_reflect masks never got the skin shader) are converted once (cached) to an equivalent PlayerSkinShader material (EnsureOpaqueSurfaceFx, albedo/_norm/_gloss/_glow/_reflect mapping mirroring WireCompanions), which also puts them on the grid-lit + instance-tint path; unconvertible surfaces + cl_viewmodel_alpha<1 keep the legacy NoDepthTest dup. (A per-INSTANCE uniform was tried first and was screenshot-verified INERT for this vertex-stage value — the per-material duplicate design is the one that renders.) Gun meshes: Layers=1<<18 (portal cams exclude it — PortalRenderer CullMask), IgnoreOcclusionCulling=true (DP entityvisible bypass, gl_rmain.c:4016-4023 — verified: the occlusion buffer would cull an embedded gun), CastShadow=Off (shadow pass must not see compressed depth; stock DP casts no viewmodel shadows), fill light LightCullMask restricted to the gun layer. VERIFIED IN-GAME (windowed screenshots, cl_autopause 0): gun renders at rest; with cl_gunoffset '300 0 0' the gun draws ON TOP of the staircase it is embedded in. Pinned by ViewModelDepthHackTests (shader lines + 0.0625 + portal exclusion + remap math).", result: pass }
@@ -376,6 +377,9 @@ features:
     layer: [presentation]
     base_refs:
       - "common/effects/qc/casings.qc:SpawnCasing"
+      - "common/effects/qc/casings.qh:autocvar_cl_casings_maxcount"
+      - "common/effects/qc/rubble.qc:LimitedChildrenRubble"
+      - "common/effects/qc/rubble.qh:LimitedChildrenRubble"
       - "common/effects/qc/casings.qc:NET_HANDLE(casings)"
       - "common/effects/qc/casings.qc:Casing_Touch"
       - "common/weapons/weapon/machinegun.qc:111 (SpawnCasing caller)"
@@ -390,12 +394,16 @@ features:
       - "src/VortexArena.Common/Gameplay/Effects/EffectsList.cs (CASING_BULLET/CASING_SHELL register)"
       - "game/client/EffectSystem.cs:455-457 (Spawn -> SpawnCasing routing)"
       - "game/client/ShellCasings.cs:Spawn"
+      - "game/client/ShellCasings.cs:_Process"
+      - "game/client/DebrisMotion.cs:Draw"
+      - "game/client/RubblePool.cs:TrySpawn"
       - "game/client/ClientWorld.cs:334 (SoundHook wiring -> OnSound CH_SHOTS)"
     constants:
-      - { name: "cl_casings_bronze_time (bullet)", base: "10", port: "BulletTime 10", match: true }
-      - { name: "cl_casings_shell_time (shell)", base: "30", port: "ShellTime 30", match: true }
-      - { name: "cl_casings_maxcount", base: "100", port: "MaxCasings 100", match: true }
-      - { name: "cl_casings_ticrate", base: "0.03125 (Movetype_Physics_MatchTicrate)", port: "fixed 0.03125 tic accumulator in CasingBody._PhysicsProcess (Ticrate const), catch-up clamped", match: true }
+      - { name: "cl_casings_bronze_time (bullet)", base: "10", port: "10 default, read at spawn", match: true }
+      - { name: "cl_casings_shell_time (shell)", base: "30", port: "30 default, read at spawn", match: true }
+      - { name: "cl_casings_maxcount", base: "100 default, read at spawn", port: "100 default, read from the live client store, capped at 1024", match: false }
+      - { name: "cl_casings_ticrate", base: "0.03125", port: "0.03125 fallback, live cvar, 32 committed steps per draw", match: true }
+      - { name: "cl_casings_sloppy", base: "1, unchecked residual advance", port: "1 fallback, live cvar, zero clips residual against static BSP", match: true }
       - { name: "bouncefactor", base: "0.25 shell / 0.5 bullet", port: "0.25 shell / 0.5 bullet", match: true }
       - { name: "eject up-velocity", base: "30-rand*5 (shotgun shell) / 70-rand*5 (bullet)", port: "30-rand*5 shell / 70-rand*5 bullet (per casingtype)", match: true }
       - { name: "g_casings gate", base: ">=1 shotgun shell / >=2 bullet (default 2)", port: ">=1 Shell / >=2 Bullet (EjectCasing)", match: true }
@@ -403,18 +411,22 @@ features:
       - { name: "bounce sound dist", base: "vdist(velocity,>,50) -> brass*/casings* CH_SHOTS ATTEN_LARGE, nextthink+0.2 throttle", port: "vel>50 -> weapons/brass1-3 | casings1-3 via SoundHook (OnSound CH_SHOTS), 0.2s throttle", match: true }
     status:
       logic: faithful
-      values: faithful
+      values: partial
       timing: faithful
-      presentation: faithful
+      presentation: partial
       audio: faithful
       liveness: live
-    intended_divergence: false
-    divergence_rationale: null
-    gaps: []
+    intended_divergence: true
+    divergence_rationale: "The native casing pool is bounded at 1024. Separate fixed opaque and fade batches preserve authored model materials."
+    gaps:
+      - "Larger cl_casings_maxcount values are bounded to 1024."
     verification:
-      - { kind: code, ref: "Machinegun/Shotgun/Rifle/OkMachinegun/OkHmg/OkShotgun call WeaponFiring.EjectCasing on the LIVE fire-attack path (verified Machinegun.cs:414 alongside the live impact/muzzle FX), per-casingtype g_casings gate (>=1 shell / >=2 bullet) + QC view-frame eject velocity (deterministic Prandom) -> EmitByEffectInfoName('casing_bullet'/'casing_shell') resolves the REGISTERED CASING_BULLET/CASING_SHELL effect (EffectsList:116-117) -> networks origin+velocity (non-null Effect, not a dropped null-effect) -> ClientWorld.OnEffect -> EffectSystem.Spawn routes CASING_BULLET/CASING_SHELL to SpawnCasing -> ShellCasings.Spawn. ShellCasings BulletTime=10/ShellTime=30/MaxCasings=100 (match Base), bouncefactor 0.25 shell/0.5 bullet, avelocity '0 10 0'+100*prandomvec; CasingBody._PhysicsProcess steps a FIXED cl_casings_ticrate=0.03125 tic accumulator (catch-up clamped) with a LIVE world-only TraceHook (EffectSystem:190, a TraceService over the per-map client collision world wired in SetCollisionWorld) doing full MOVETYPE_BOUNCE brush-face collision + trace_startsolid cull (FloorZ is only the no-tracer fallback); bounce sound brass1-3/casings1-3 via SoundHook (wired live ClientWorld:350 -> OnSound CH_SHOTS) when vel>50, throttled 0.2s", result: pass }
+      - { kind: code, ref: "WeaponFiring.EjectCasing emits registered CASING_BULLET/CASING_SHELL; ClientWorld.OnEffect -> EffectSystem.Spawn -> ShellCasings.Spawn; SetCollisionWorld provides the live point sweep, and ClientWorld wires the casing impact SoundHook", result: pass }
+      - { kind: test, ref: "planning/parity/rubble-limits/RubbleLimitProbe.cs Godot Compatibility spawn, residual and MultiMesh assertions", result: pass }
+      - { kind: test, ref: "planning/parity/rubble-limits/network-order.md stock shooter and observer casing visibility in modes 0–2, and native two-client ENet and render checks", result: pass }
+      - { kind: test, ref: "planning/parity/rubble-limits/casing-impact/README.md scripted stock and native audio, rendered opacity, spawn-time lifetimes and catch-up sound throttle", result: pass }
     confidence: high
-    notes: "RE-AUDIT UPGRADE (timing partial->faithful, gap cleared): the casing path is now FULLY LIVE and faithful end-to-end. logic/values/presentation/audio were already faithful (lifetimes 10/30, maxcount 100, avelocity '0 10 0'+100*prandomvec, bounce sounds on CH_SHOTS when vdist>50 / 0.2s throttle, all wired live). TIMING is now also faithful: contrary to the prior baseline note, the sim does NOT integrate per-frame with only a FloorZ ground plane — CasingBody._PhysicsProcess advances in whole 0.03125s cl_casings_ticrate tics (Movetype_Physics_MatchTicrate-style, catch-up clamped) AND a live world-only TraceHook (TraceService over the client collision world, wired in EffectSystem.SetCollisionWorld which NetGame calls per map) gives real MOVETYPE_BOUNCE brush collision + the trace_startsolid cull; FloorZ is only the degenerate no-tracer fallback. No residual gap."
+    notes: "Bullet and shell casings share the live cap. The next spawn evicts the oldest across both models, including when a live edit lowers the cap to zero. A live raise permits new spawns without resizing either MultiMesh."
 
   - id: cl-viewmodel.model.wr_viewmodel_override
     name: "Per-weapon view-model override (wr_viewmodel, e.g. Tuba note-driven model swap)"

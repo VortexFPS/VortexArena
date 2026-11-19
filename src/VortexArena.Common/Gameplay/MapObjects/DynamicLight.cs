@@ -7,7 +7,7 @@
 // Port notes:
 //  * The deferred enemy/path/tag lookups run at QC's INITPRIO_FINDTARGET (after the whole BSP lump spawns).
 //    The port queues each dynlight at spawn and resolves them in MapObjectsRegistry.RunPostSpawn (the headless
-//    analogue of the INITPRIO pass, run right after the door-link pass) — same shape as Doors.RunDeferredLinks.
+//    analogue of INITPRIO_FINDTARGET, before doors move to their start-open positions).
 //  * The path-following branch reuses the func_train pathing in QC (setthink(train_next)). The port's
 //    TrainNext is private to MovingBrushes, so this file ports the minimal train_next/train_wait corner-walk
 //    inline (a dynlight is a zero-size point entity: no bbox, no .view_ofs offset, no TRAIN_CURVE/TRAIN_TURN
@@ -130,8 +130,8 @@ namespace VortexArena.Common.Gameplay
 
         /// <summary>
         /// Resolve every queued dynlight's follow/tag/path target — the headless analogue of QC's
-        /// INITPRIO_FINDTARGET pass (run by <see cref="MapObjectsRegistry.RunPostSpawn"/> after the door-link
-        /// pass). Safe to call repeatedly; the queue drains each call.
+        /// INITPRIO_FINDTARGET pass (run by <see cref="MapObjectsRegistry.RunPostSpawn"/>).
+        /// Safe to call repeatedly; the queue drains each call.
         /// </summary>
         public static void RunDeferredInit()
         {

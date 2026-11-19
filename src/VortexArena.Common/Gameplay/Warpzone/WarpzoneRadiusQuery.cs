@@ -313,36 +313,42 @@ public readonly struct WarpzoneRadiusHit
     /// </summary>
     public readonly WarpzoneTransformChain ToBlastFrame;
 
-    /// <summary>The (possibly portal-shifted) blast origin used for THIS hit, already in the entity's frame.</summary>
+    /// <summary>The search origin in this entity's frame, clipped by the portal exit trace when enabled.</summary>
     public readonly Vector3 LocalBlastOrigin;
 
-    public WarpzoneRadiusHit(Entity entity, WarpzoneTransformChain toBlastFrame, Vector3 localBlastOrigin)
+    /// <summary>The transformed origin before the exit trace, used for nearest-target comparisons.</summary>
+    public readonly Vector3 NominalBlastOrigin;
+
+    public float DistanceSquaredToBounds()
+    {
+        Vector3 nearest = Vector3.Clamp(NominalBlastOrigin, Entity.Origin + Entity.Mins, Entity.Origin + Entity.Maxs);
+        return Vector3.DistanceSquared(NominalBlastOrigin, nearest);
+    }
+
+    public WarpzoneRadiusHit(Entity entity, WarpzoneTransformChain toBlastFrame, Vector3 localBlastOrigin,
+        Vector3 nominalBlastOrigin)
     {
         Entity = entity;
         ToBlastFrame = toBlastFrame;
         LocalBlastOrigin = localBlastOrigin;
+        NominalBlastOrigin = nominalBlastOrigin;
     }
 }
 
 /// <summary>
 /// Warpzone-aware radius query — the C# successor to <c>WarpZone_FindRadius</c> (lib/warpzone/common.qc).
-/// A blast at <c>org</c> with radius <c>rad</c> finds every damageable entity within range INCLUDING those
-/// reachable through a chain of seamless portals: at each portal whose mouth lies within the remaining radius
-/// the search recurses through the portal with the radius reduced by the travelled distance, accumulating the
-/// transform so a victim found on the far side is tagged with the map back to the blast frame.
+/// A radius search finds nearby entities, including candidates reached through a chain of seamless portals.
+/// At each portal whose mouth lies within the remaining radius,
+/// the search recurses through the portal with the remaining radius reduced by at least eight units.
+/// Each hit carries the accumulated transform and its local search and ranking origins.
 ///
-/// The port's warpzones are POJO <see cref="Warpzone"/> objects (each carrying its plane and a trigger volume),
-/// so where QC does <c>WarpZone_MakeAllSolid</c> + <c>FOREACH_ENTITY_RADIUS</c> + a per-zone <c>traceline</c>,
-/// the port finds the relevant zones from the supplied <see cref="WarpzoneManager"/> and recurses analytically.
-/// The 16-deep recursion guard mirrors QC's chained-zone cap (common.qc trace loop). With no warpzones in the
-/// world this returns exactly the plain <see cref="IEntityService.FindInRadius"/> set with identity transforms,
-/// so non-warpzone maps are byte-for-byte unchanged.
+/// The query walks the supplied <see cref="WarpzoneManager"/> to identify linked zones and tracks crossed
+/// pairs on the current path. The 16-deep recursion guard is shared with the native warpzone trace.
+/// With no warpzones the search returns candidates from <see cref="IEntityService.FindInRadius"/> after
+/// applying the standard blacklist, with identity transforms.
 /// </summary>
 public static class WarpzoneRadiusQuery
 {
-    /// <summary>QC the chained-zone cap shared by every warpzone trace/recursion (common.qc <c>i = 16</c>).</summary>
-    private const int MaxZoneDepth = 16;
-
     /// <summary>QC <c>WarpZone_FindRadius_Recurse</c>'s <c>rad - 8</c> clamp — never recurse with the full radius.</summary>
     private const float RadiusRecurseMargin = 8f;
 
@@ -351,10 +357,12 @@ public static class WarpzoneRadiusQuery
     /// <paramref name="origin"/>, plus entities reachable through the <paramref name="manager"/>'s portals, each
     /// tagged with the transform mapping its world position back to the blast frame. Clears and fills
     /// <paramref name="results"/>. An entity reached through two different portal paths is returned once (the
-    /// FIRST/nearest path wins, mirroring QC's <c>WarpZone_findradius_dist</c> nearest-wins bookkeeping).
+    /// nearest path wins, mirroring QC's <c>WarpZone_findradius_dist</c> nearest-wins bookkeeping).
     /// </summary>
+    /// <param name="tracePortalExits">Admit portals by trigger bounds from either side and trace the exit-side
+    /// segment before gathering candidates. Swapper uses this without tracing to individual targets.</param>
     public static void FindRadiusWarpzone(WarpzoneManager? manager, Vector3 origin, float radius,
-        List<WarpzoneRadiusHit> results)
+        List<WarpzoneRadiusHit> results, bool tracePortalExits = false)
     {
         results.Clear();
         if (Api.Services is null || radius <= 0f) return;
@@ -373,21 +381,23 @@ public static class WarpzoneRadiusQuery
                 Entity e = flat[i];
                 if (IsBadEntity(e)) continue;
                 if (e.ClassName == "trigger_warpzone") continue;
-                results.Add(new WarpzoneRadiusHit(e, WarpzoneTransformChain.Identity, origin));
+                results.Add(new WarpzoneRadiusHit(e, WarpzoneTransformChain.Identity, origin, origin));
             }
             return;
         }
 
         // De-dup set keyed by entity reference; nearest path wins (QC WarpZone_findradius_dist).
-        var seen = new HashSet<Entity>();
-        Recurse(manager, origin, radius, WarpzoneTransformChain.Identity, seen, results, depth: 0);
+        var seen = new Dictionary<Entity, int>();
+        Recurse(manager, origin, radius, origin, WarpzoneTransformChain.Identity, seen, new HashSet<Warpzone>(),
+            results, tracePortalExits, depth: 0);
     }
 
-    private static void Recurse(WarpzoneManager manager, Vector3 org, float rad, WarpzoneTransformChain toBlast,
-        HashSet<Entity> seen, List<WarpzoneRadiusHit> results, int depth)
+    private static void Recurse(WarpzoneManager manager, Vector3 org, float rad, Vector3 nominalOrigin,
+        WarpzoneTransformChain toBlast, Dictionary<Entity, int> seen, HashSet<Warpzone> path,
+        List<WarpzoneRadiusHit> results, bool tracePortalExits, int depth)
     {
         if (rad <= 0f) return;
-        if (depth >= MaxZoneDepth) return; // QC: "Too many warpzones in sequence, aborting"
+        if (depth >= WarpzoneTrace.MaxZoneDepth) return;
 
         // Gather every entity in this local radius (QC FOREACH_ENTITY_RADIUS), skipping the blacklist.
         var local = new List<Entity>();
@@ -397,8 +407,15 @@ public static class WarpzoneRadiusQuery
             Entity e = local[i];
             if (IsBadEntity(e)) continue;
             if (e.ClassName == "trigger_warpzone") continue; // zones themselves are handled by the recursion below
-            if (!seen.Add(e)) continue;                       // first/nearest path already recorded this victim
-            results.Add(new WarpzoneRadiusHit(e, toBlast, org));
+            var hit = new WarpzoneRadiusHit(e, toBlast, org, nominalOrigin);
+            if (seen.TryGetValue(e, out int index))
+            {
+                if (hit.DistanceSquaredToBounds() < results[index].DistanceSquaredToBounds())
+                    results[index] = hit;
+                continue;
+            }
+            seen.Add(e, results.Count);
+            results.Add(hit);
         }
 
         // Recurse through each portal whose mouth lies within the remaining radius (QC: the `for (e = wz; ...)`
@@ -408,37 +425,45 @@ public static class WarpzoneRadiusQuery
         for (int z = 0; z < zones.Count; z++)
         {
             Warpzone wz = zones[z];
-            if (!wz.Linked) continue;
+            if (!wz.Linked || path.Contains(wz)) continue;
 
-            // Distance from the blast to the portal's IN plane mouth. QC measures via the trigger box; the port
-            // uses the plane origin (the zone's center), within the remaining radius.
-            float distToZone = (wz.InOrigin - org).Length();
-            if (distToZone >= rad) continue;
+            if (tracePortalExits)
+            {
+                // QC admits the trigger through findradius, which measures to its world-space bounding box.
+                // A triggerless test portal falls back to its mouth origin.
+                Entity? trigger = wz.Trigger;
+                if (trigger is not null && IsBadEntity(trigger)) continue;
+                Vector3 nearest = trigger is not null
+                    ? Vector3.Clamp(org, trigger.Origin + trigger.Mins, trigger.Origin + trigger.Maxs)
+                    : wz.InOrigin;
+                if (Vector3.DistanceSquared(org, nearest) > rad * rad) continue;
+            }
+            else
+            {
+                // The splash and Fireball callers retain their directional mouth-center search.
+                if (Vector3.DistanceSquared(org, wz.InOrigin) >= rad * rad) continue;
+                if (Vector3.Dot(org - wz.InOrigin, wz.Transform.InForward) < 0f) continue;
+            }
 
-            // Only propagate through a portal the blast is on the FRONT of — the side the IN plane's normal faces
-            // (dot > 0), i.e. the side from which an entity would cross INTO the seam. A blast BEHIND the plane
-            // does not reach the linked OUT room through this seam. (QC recurses through every in-radius zone and
-            // leans on the LOS trace + radius reduction to discard the wrong side; the port's explicit front-side
-            // gate is the same outcome without the extra trace, and avoids back-warping loops.)
-            if (Vector3.Dot(org - wz.InOrigin, wz.Transform.InForward) < 0f)
-                continue;
+            Vector3 nominalOriginNew = wz.Transform.TransformOrigin(org);
+            Vector3 orgNew = nominalOriginNew;
+            if (tracePortalExits)
+            {
+                // The exit-to-origin trace runs even when per-target line of sight is disabled.
+                orgNew = Api.Trace.Trace(wz.Transform.OutOrigin, Vector3.Zero, Vector3.Zero, nominalOriginNew,
+                    MoveFilter.NoMonsters, wz.Trigger).EndPos;
+            }
 
-            // Step the blast through the portal (QC org0_new = WarpZone_TransformOrigin(e, org)).
-            Vector3 orgNew = wz.Transform.TransformOrigin(org);
-
-            // QC WarpZone_FindRadius_Recurse (common.qc:650): the recursion radius is
-            // bound(0, rad - vlen(org_new - org0_new), rad - 8), where org0_new is the blast transformed THROUGH
-            // the zone and org_new = trace_endpos of a LOS traceline from the zone's target origin to org0_new.
-            // With a clear seam (the analytic port doesn't re-trace solid here) org_new == org0_new, so the
-            // travelled term is ~0 and the binding clamp is the rad-8 UPPER bound — Base recurses with very nearly
-            // the FULL remaining radius (only shaved by 8qu), NOT reduced by the distance to the portal mouth.
-            // (The previous port reduced by distToZone, under-budgeting far-side splash through a portal.)
-            float radNew = QClamp(rad, 0f, rad - RadiusRecurseMargin);
+            float radNew = MathF.Min(rad - Vector3.Distance(orgNew, nominalOriginNew), rad - RadiusRecurseMargin);
             if (radNew <= 0f) continue;
 
             // Accumulate the transform so far-side victims map back to the blast frame, and recurse.
             WarpzoneTransformChain chainNew = toBlast.Append(wz.Transform);
-            Recurse(manager, orgNew, radNew, chainNew, seen, results, depth + 1);
+            path.Add(wz);
+            bool markedPartner = wz.Partner is { } partner && path.Add(partner);
+            Recurse(manager, orgNew, radNew, nominalOriginNew, chainNew, seen, path, results, tracePortalExits, depth + 1);
+            if (markedPartner) path.Remove(wz.Partner!);
+            path.Remove(wz);
         }
     }
 
@@ -477,6 +502,4 @@ public static class WarpzoneRadiusQuery
         if (s.StartsWith("info_", System.StringComparison.Ordinal)) return true;
         return false;
     }
-
-    private static float QClamp(float v, float lo, float hi) => v < lo ? lo : (v > hi ? hi : v);
 }

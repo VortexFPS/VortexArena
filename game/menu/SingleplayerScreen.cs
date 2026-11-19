@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using VortexArena.Common.Gameplay;
 using VortexArena.Server; // CampaignCatalog / CampaignLevel
@@ -188,7 +189,7 @@ public partial class SingleplayerScreen : MenuScreen
         else if ((r -= 0.25f) < 0) { gt = "ctf"; pmin = 4; pmax = 12; pstep = 2; }
         else if ((r -= 0.15f) < 0) { gt = "tdm"; pmin = 4; pmax = 8; pstep = 2; }
         else if ((r -= 0.10f) < 0) { gt = "ca"; pmin = 4; pmax = 8; pstep = 2; }
-        else if ((r -= 0.10f) < 0) { gt = "ft"; pmin = 4; pmax = 8; pstep = 2; }
+        else if ((r -= 0.10f) < 0) { gt = "freezetag"; pmin = 4; pmax = 8; pstep = 2; }
         else if ((r -= 0.05f) < 0) { gt = "kh"; pmin = 6; pmax = 6; pstep = 6; }
         else
         {
@@ -205,8 +206,14 @@ public partial class SingleplayerScreen : MenuScreen
             gt = "dm"; pmin = 2; pmax = 8; pstep = 1; // mode not registered in the port yet — QC dm weights
         }
 
-        IReadOnlyList<string> maps = MapList.Available();
-        string map = maps.Count > 0 ? maps[rng.Next(maps.Count)] : "dm_example";
+        IReadOnlyList<string> maps = MapList.ForGametype(gt, MenuState.Cvars, inMenu: true)
+            .Where(m => MenuState.Vfs?.Exists($"maps/{m}.waypoints") == true).ToList();
+        if (maps.Count == 0)
+        {
+            GD.PushWarning($"Instant action could not find a {gt} map with bot waypoints.");
+            return;
+        }
+        string map = maps[rng.Next(maps.Count)];
 
         // QC: p = pmin + pstep*floor(random()*((pmax-pmin)/pstep+1)); bot_number = p - 1 (the human fills a slot).
         pmin = pstep * (int)Math.Ceiling(pmin / (double)pstep);

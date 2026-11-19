@@ -93,15 +93,23 @@ features:
     notes: "FIXED this pass (timing partial→faithful; the TimeLimitCancelled-has-no-host-consumer gap is RESOLVED). The ReportsTie override (line 575) is now wired into RunCheckRulesWorld (GameWorld.cs:3710) just like the other timed modes; CampaignBotsMayStart is wired by the server (GameWorld.cs:719). LmsExtrasTests.ReportsTie_* covers the tie/no-tie/pre-match cases. forfeit-min cvar default 0 re-confirmed sv_lms.qc:10."
 
   - id: lms.respawn.continuous
-    name: "Living players respawn continuously throughout the single match (NOT round-based)"
+    name: "Living players respawn throughout a single LMS match"
     layer: [authority]
     base_refs:
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, CalculateRespawnTime)"
       - "common/gametypes/gametype/lms/sv_lms.qc:MUTATOR_HOOKFUNCTION(lms, ReadLevelCvars)"
+      - "server/world.qc:readlevelcvars"
+      - "server/command/vote.qc:ReadyRestart_force"
+      - "server/client.qc:PutClientInServer"
     port_refs:
-      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (case LastManStanding lms: lms.Activate(); break;) (line 2881)"
-      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink → ApplyRespawnTiming (line 3492)"
-    constants: []
+      - "src/VortexArena.Server/GameWorld.cs:Boot / ActivateGameType / DeadPlayerThink"
+      - "src/VortexArena.Server/GameWorld.cs:WireCommandsWarmupVoting / ResetMap"
+      - "src/VortexArena.Server/WarmupController.cs:RestartAfterCountdown / ReadyRestart"
+      - "src/VortexArena.Server/ClientManager.cs:Spawn"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:PutPlayerInServer"
+      - "src/VortexArena.Common/Gameplay/GameTypes/LastManStanding.cs:ApplyRespawnTiming / ResetMapPlayers"
+    constants:
+      - { name: "effective sv_ready_restart_after_countdown in LMS", base: "0 (level flag)", port: "false (per-world warmup policy)", match: true }
     status:
       logic: faithful
       values: faithful
@@ -111,12 +119,14 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Base disables sv_ready_restart_after_countdown (ReadLevelCvars hook) because it can't reset players mid-match without zeroing lives; the port has no ReadLevelCvars-equivalent so sv_ready_restart_after_countdown isn't forced off — minor, since the port's reset goes through ResetMapPlayers (lms.reset.map_players) which DOES re-seed lives cleanly."
+    gaps: []
     verification:
-      - { kind: code, ref: "GameWorld.cs:2940 `case LastManStanding lms: lms.Activate(); break;` — NO EnableRounds() (confirmed in current source). Rounds stays null for LMS, so DeadPlayerThink reaches ApplyRespawnTiming (line 3492): 0-lives ⇒ RESPAWN_SILENT, living ⇒ dynamic delay. CheckWinningCondition latches the win per-frame (line 2832).", result: pass }
+      - { kind: code, ref: "Pin 863cd3e8456e18f577f7fe5fef857ff55ae62cc0, world.qc:2197,2219 and sv_lms.qc:245-251. The LMS hook overrides a level-local boolean, leaving the configured cvar untouched. The port applies the same override when boot resolves LMS and uses it for both reset scheduling and countdown spawn timers.", result: pass }
+      - { kind: test, ref: "LmsSurvivalMatchFlowTests.LmsResetsAtCountdownStartAndRespawnsMidMatchWithoutChangingTheSharedSetting exercises ready-up, countdown spawn timing, death and respawn with lives left, manual restart and a fresh DM world on the same cvar store.", result: pass }
+      - { kind: runtime, ref: "planning/parity/lms-survival-scoring/README.md, native Darkzone LMS restart and map change to DM", result: pass }
     confidence: high
-    notes: "LMS runs as the Base continuous per-lives match — respawn timing owned by ApplyRespawnTiming, win latched by per-frame CheckWinningCondition. Host line numbers shifted (Activate 1916→2392) but the wiring is unchanged."
+    notes: "LMS still leaves the round handler unset. DeadPlayerThink delegates to the existing LMS life-based timing and denies a respawn at zero lives. The host reseeds lives at the countdown start and uses its published start time to extend spawn timers. Each new world resolves its own restart rule, so the configured delayed reset is available again after switching to a mode that permits it."
+
 
   - id: lms.lives.starting_count
     name: "Starting lives = mapinfo lives= (default 5, legacy 9) / override, capped at fraglimit"

@@ -1,0 +1,22 @@
+va-crosshair-stock-repeat
+default         932  377,277 to 422,322
+master-off        0  -
+number-zero       0  -
+alpha-zero        0  -
+size-zero         0  -
+view-lock         0  -
+scores            0  -
+restored        932  377,277 to 422,322
+ring-off        262  385,285 to 414,314
+first-person    932  377,277 to 422,322
+va-crosshair-native-clock
+default        1715  367,267 to 432,332
+master-off        0  -
+number-zero       0  -
+alpha-zero        0  -
+size-zero         0  -
+view-lock         0  -
+scores            0  -
+restored       1715  367,267 to 432,332
+ring-off        347  385,285 to 415,314
+first-person   1715  367,267 to 432,332

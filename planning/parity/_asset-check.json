@@ -1,88 +1,69 @@
 {
- "generated": "2026-07-30",
+ "generated": "2026-11-19",
  "missing": [
   {
-   "ref": "cubemaps/default/sky",
+   "ref": "textures/exx/base_wall01",
    "where": [
-    "game/loaders/AssetSystem.cs:407"
+    "game/net/NetGame.cs:11286",
+    "game/vmap/EditorController.cs:1756"
+   ]
+  }
+ ],
+ "exceptions": [
+  {
+   "ref": "gfx/colormap.lmp",
+   "pattern": "gfx/colormap.lmp",
+   "reason": "Optional Quake colormap read by both loaders. With Xonotic data, its absence selects the built-in palette with no colormap-defined fullbright range.",
+   "where": [
+    "game/Q1MapLoader.cs:645",
+    "game/loaders/AssetLoader.cs:151"
    ]
   },
   {
-   "ref": "gfx/hud/default/nopreview_map",
+   "ref": "gfx/palette.lmp",
+   "pattern": "gfx/palette.lmp",
+   "reason": "Optional Quake content override. AssetLoader and Q1MapLoader use the built-in Quake palette when absent from the installed game.",
    "where": [
-    "game/hud/MapVotePanel.cs:569"
+    "game/Q1MapLoader.cs:645",
+    "game/loaders/AssetLoader.cs:151"
    ]
   },
   {
-   "ref": "gfx/hud/default/weaponvortex",
+   "ref": "maps/campaign",
+   "pattern": "maps/campaign",
+   "reason": "campaign file stem \u2014 resolved with language/extension variants by Campaign.Load",
    "where": [
-    "game/hud/TextureCache.cs:26"
-   ]
-  },
-  {
-   "ref": "gfx/menu/default/nopreview_map",
-   "where": [
-    "game/hud/MapVotePanel.cs:572"
-   ]
-  },
-  {
-   "ref": "gfx/vehicles/axh-ring",
-   "where": [
-    "game/hud/VehicleHud.cs:171"
-   ]
-  },
-  {
-   "ref": "gfx/vehicles/axh-target",
-   "where": [
-    "game/hud/VehicleHud.cs:154",
-    "game/hud/VehicleHud.cs:190",
-    "game/net/NetGame.cs:4962"
-   ]
-  },
-  {
-   "ref": "models/sphere.md3",
-   "where": [
-    "game/client/NadeOrbRenderer.cs:78",
-    "game/client/NadeOrbRenderer.cs:79"
+    "game/menu/SingleplayerScreen.cs:123",
+    "game/menu/SingleplayerScreen.cs:126"
    ]
   },
   {
    "ref": "models/weapons/h_",
+   "pattern": "models/weapons/h_",
+   "reason": "WeaponRigAnims.IsHandRig uses StartsWith to classify model names. This literal is a name prefix.",
    "where": [
     "src/VortexArena.Formats/Sidecars/WeaponRigAnims.cs:30"
    ]
   },
   {
-   "ref": "textures/exx/base_wall01",
+   "ref": "textures/common/nodraw",
+   "pattern": "textures/common/*",
+   "reason": "Q3 common shaders (nodraw/trigger/clip) are virtual \u2014 matched by name, no file expected",
    "where": [
-    "game/net/NetGame.cs:10026",
-    "game/vmap/EditorController.cs:1756"
+    "src/VortexArena.Formats/Sidecars/SkinFile.cs:56",
+    "src/VortexArena.Legacy/Server/SvModelCollision.cs:249"
    ]
   },
   {
-   "ref": "textures/exx/floor01",
+   "ref": "textures/common/trigger",
+   "pattern": "textures/common/*",
+   "reason": "Q3 common shaders (nodraw/trigger/clip) are virtual \u2014 matched by name, no file expected",
    "where": [
-    "src/VortexArena.Formats/Vmap/VmapDocument.cs:476"
+    "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:511"
    ]
   }
  ],
- "unsupported": [
-  {
-   "ref": "models/casing_shell.mdl",
-   "resolved": "models/casing_shell.mdl",
-   "where": [
-    "game/client/ShellCasings.cs:136"
-   ]
-  },
-  {
-   "ref": "models/gibs/chunk.mdl",
-   "resolved": "models/gibs/chunk.mdl",
-   "where": [
-    "game/client/ModelGibs.cs:72",
-    "game/client/ModelGibs.cs:165"
-   ]
-  }
- ],
- "ok": 141,
- "interpolated_skipped": 82
+ "unsupported": [],
+ "ok": 153,
+ "interpolated_skipped": 112
 }

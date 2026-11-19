@@ -1,0 +1,7 @@
+[MapBgm] 'maps/bgm-wall-fixture.bgs': 2 model(s), 0 emitter(s) bound.
+[BGM-PROBE] model=misc_clientmodel models/items/g_h100.md3 time=-1.000 amplitude=-1.000 alpha=1.000 render=<-224, -88, -46>/<-0, 0, 0> server=<-224, -88, -46>/<-0, 0, 0> solid=Not
+[BGM-PROBE] model=func_clientwall *26 time=-1.000 amplitude=-1.000 alpha=1.000 render=<0, 0, 0>/<0, 0, 0> server=<0, 0, 0>/<0, 0, 0> solid=Bsp
+[NetGame] map music: 'cdtracks/sixtyfour' (from mapinfo/worldspawn)
+[BGM-PROBE] model=misc_clientmodel models/items/g_h100.md3 time=1.622 amplitude=1.000 alpha=1.000 render=<-224, -88, -46>/<0, 45, 0> server=<-224, -88, -46>/<-0, 0, 0> solid=Not
+[BGM-PROBE] model=func_clientwall *26 time=1.622 amplitude=1.000 alpha=0.350 render=<0, 0, 72>/<0, 0, 0> server=<0, 0, 0>/<0, 0, 0> solid=Bsp
+[LoadTimeline] host bgm-wall-fixture — load begin → ready, 26314 ms total

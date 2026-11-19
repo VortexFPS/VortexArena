@@ -46,32 +46,18 @@ public static class BspReader
         return Read(new ReadOnlySpan<byte>(data));
     }
 
-    public static BspData Read(ReadOnlySpan<byte> data)
+    /// <summary>Reads only the entity lump, without decoding geometry or lighting.</summary>
+    public static IReadOnlyList<IReadOnlyDictionary<string, string>> ReadEntityLump(ReadOnlySpan<byte> data)
     {
-        if (data.Length < HeaderSize)
-            throw new AssetParseException($"BSP too small: {data.Length} bytes, need at least {HeaderSize} for the header.");
+        ReadLumpDirectory(data, out _, out RawLump[] lumps);
+        return ReadEntities(data, lumps[(int)BspLump.Entities]).entities;
+    }
 
-        string magic = BinaryUtil.ReadMagic(data, 0);
-        if (magic != Magic)
-            throw new AssetParseException($"Not an IBSP file: magic is \"{magic}\", expected \"{Magic}\".");
+    public static BspData Read(ReadOnlySpan<byte> data) => Read(data, null);
 
-        int version = BinaryUtil.ReadInt32(data, 4);
-        if (version != VersionQ3 && version != VersionLive && version != VersionIg)
-            throw new AssetParseException($"Unsupported IBSP version {version} (accept 46/47/48).");
-
-        // Read the 17-entry lump directory and validate every range lies within the buffer.
-        var lumps = new RawLump[LumpCount];
-        for (int i = 0; i < LumpCount; i++)
-        {
-            int baseOff = 8 + i * LumpDirEntrySize;
-            int ofs = BinaryUtil.ReadInt32(data, baseOff);
-            int len = BinaryUtil.ReadInt32(data, baseOff + 4);
-            if (ofs < 0 || len < 0 || (long)ofs + len > data.Length)
-                throw new AssetParseException(
-                    $"Lump {i} ({(BspLump)i}) range [{ofs}, {ofs + (long)len}) lies outside the {data.Length}-byte file.");
-            lumps[i] = new RawLump(ofs, len);
-        }
-
+    public static BspData Read(ReadOnlySpan<byte> data, string? entityTextOverride)
+    {
+        ReadLumpDirectory(data, out int version, out RawLump[] lumps);
         BspTexture[] textures = ReadTextures(data, lumps[(int)BspLump.Textures]);
         BspPlane[] planes = ReadPlanes(data, lumps[(int)BspLump.Planes]);
         BspBrushSide[] brushSides = ReadBrushSides(data, lumps[(int)BspLump.BrushSides], version == VersionIg);
@@ -92,6 +78,15 @@ public static class BspReader
         // probe heuristic; even page = lightmap, odd page = light direction.)
         DeluxemapSplit split = DetectAndSplitDeluxemaps(rawLightmapPages, faces, entities, BspData.LightmapSize);
 
+        var embeddedEntities = entityTextOverride is null ? null : entities;
+
+        // The embedded worldspawn describes the baked lightmaps even when gameplay entities are overridden.
+        if (entityTextOverride is not null)
+        {
+            entText = entityTextOverride;
+            entities = EntityLumpParser.Parse(entText);
+        }
+
         // Lightgrid (lump 15) — the baked per-position MODEL light probes (DP Mod_Q3BSP_LoadLightGrid).
         // Dims derive from the world model's bounds; a length mismatch disables the grid (Build → null).
         LightGridData? lightGrid = null;
@@ -108,6 +103,7 @@ public static class BspReader
             Version = version,
             EntitiesText = entText,
             Entities = entities,
+            EmbeddedEntities = embeddedEntities,
             Textures = textures,
             Planes = planes,
             Brushes = brushes,
@@ -125,6 +121,33 @@ public static class BspReader
             IsDeluxemapped = split.IsDeluxemapped,
             RawLumps = lumps,
         };
+    }
+
+    private static void ReadLumpDirectory(ReadOnlySpan<byte> data, out int version, out RawLump[] lumps)
+    {
+        if (data.Length < HeaderSize)
+            throw new AssetParseException($"BSP too small: {data.Length} bytes, need at least {HeaderSize} for the header.");
+
+        string magic = BinaryUtil.ReadMagic(data, 0);
+        if (magic != Magic)
+            throw new AssetParseException($"Not an IBSP file: magic is \"{magic}\", expected \"{Magic}\".");
+
+        version = BinaryUtil.ReadInt32(data, 4);
+        if (version != VersionQ3 && version != VersionLive && version != VersionIg)
+            throw new AssetParseException($"Unsupported IBSP version {version} (accept 46/47/48).");
+
+        // Read the 17-entry lump directory and validate every range lies within the buffer.
+        lumps = new RawLump[LumpCount];
+        for (int i = 0; i < LumpCount; i++)
+        {
+            int baseOff = 8 + i * LumpDirEntrySize;
+            int ofs = BinaryUtil.ReadInt32(data, baseOff);
+            int len = BinaryUtil.ReadInt32(data, baseOff + 4);
+            if (ofs < 0 || len < 0 || (long)ofs + len > data.Length)
+                throw new AssetParseException(
+                    $"Lump {i} ({(BspLump)i}) range [{ofs}, {ofs + (long)len}) lies outside the {data.Length}-byte file.");
+            lumps[i] = new RawLump(ofs, len);
+        }
     }
 
     private static int Count(RawLump l, int recordSize, string what)
@@ -342,15 +365,17 @@ public static class BspReader
             // The type-specific union begins at o+48 (14 ints). For PATCH, patchsize[2] sits at
             // union int indices [12],[13] (after unused1[3] + mins[3] + maxs[3] + unused2[3]).
             int patchWidth = 0, patchHeight = 0;
+            (Vector3 Mins, Vector3 Maxs)? patchLodBounds = null;
             if (typeRaw == (int)BspFaceType.Patch)
             {
+                patchLodBounds = (BinaryUtil.ReadVec3(data, o + 60), BinaryUtil.ReadVec3(data, o + 72));
                 patchWidth = BinaryUtil.ReadInt32(data, o + 48 + 12 * 4);
                 patchHeight = BinaryUtil.ReadInt32(data, o + 48 + 13 * 4);
             }
             outArr[i] = new BspFace(
                 textureIndex, effectIndex, (BspFaceType)typeRaw,
                 firstVertex, vertexCount, firstElement, numElements,
-                lightmapIndex, patchWidth, patchHeight);
+                lightmapIndex, patchWidth, patchHeight) { PatchLodBounds = patchLodBounds };
         }
         return outArr;
     }

@@ -1,5 +1,7 @@
+using System;
 using Godot;
 using VortexArena.Engine.Simulation;
+using VortexArena.Game.Console;
 
 namespace VortexArena.Game.Menu;
 
@@ -9,10 +11,8 @@ namespace VortexArena.Game.Menu;
 /// "No" command buttons (<c>vyes; setreport cl_allow_uid2name 1</c> / <c>vno; setreport cl_allow_uid2name 0</c>,
 /// COMMANDBUTTON_CLOSE). "Yes" is the preferred focus.
 ///
-/// The <c>cl_allow_uid2name</c> write is the real effect, so each button sets that cvar directly on the shared
-/// store (engine <c>setreport</c> = set + report; MenuCommand has no <c>setreport</c> handler) and runs the vote
-/// command, then closes. The QC dialog is not closable (<c>closable false</c>); the port's frame still draws its
-/// close button.
+/// The buttons and vote binds update the same archived preference and dismiss this dialog.
+/// The normal client replication path reports the change to the active server.
 /// </summary>
 public partial class DialogUid2Name : MenuScreen, IQcDialog
 {
@@ -45,13 +45,28 @@ public partial class DialogUid2Name : MenuScreen, IQcDialog
         yes.CallDeferred(Control.MethodName.GrabFocus); // preferredFocusPriority 1
     }
 
-    /// <summary>Cast the vote, record the consent cvar (engine <c>setreport</c>), and close (COMMANDBUTTON_CLOSE).</summary>
-    private void Answer(bool allow)
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (IsVisibleInTree() && Menu?.Current == this && !ConsoleState.IsOpen &&
+            BindInput.ResolvePress(@event) is string command && !command.StartsWith('+') &&
+            (@event is InputEventKey { Keycode: Key.F1 or Key.F2 }
+                || command.Equals("vyes", StringComparison.OrdinalIgnoreCase)
+                || command.Equals("vno", StringComparison.OrdinalIgnoreCase)
+                || command.StartsWith("cl_cmd handlevote ", StringComparison.OrdinalIgnoreCase)))
+        {
+            GetViewport().SetInputAsHandled();
+            MenuState.Interp?.ExecuteLine(command);
+            return;
+        }
+        base._UnhandledInput(@event);
+    }
+
+    /// <summary>Record only the answer to this prompt. The client's existing cvar replication reports it.</summary>
+    internal void Answer(bool allow)
     {
         CvarService cvars = MenuState.Cvars;
         cvars.Set(Cvar, allow ? "1" : "0");
         cvars.MarkArchived(Cvar);
-        MenuCommand.Run(allow ? "vyes" : "vno");
         GoBack();
     }
 }

@@ -1,0 +1,13 @@
+$ dotnet build VortexArena.csproj --no-restore -v minimal
+/home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/game/client/PortalRenderer.cs(526,47): warning XG0002: Implicit string -> StringName conversion inside _Process allocates per frame (godot#105750). Cache the name as a 'static readonly StringName' and reference that instead. (https://github.com/godotengine/godot/issues/105750) [/home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/VortexArena.csproj]
+    35 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:11.23
+
+$ DOTNET_ROLL_FORWARD=Major dotnet test tests/VortexArena.Tests --no-restore -v minimal
+  VortexArena.Tests -> /home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/tests/VortexArena.Tests/bin/Debug/net8.0/VortexArena.Tests.dll
+Test run for /home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/tests/VortexArena.Tests/bin/Debug/net8.0/VortexArena.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:  6192, Skipped:     0, Total:  6192, Duration: 1 m 15 s - VortexArena.Tests.dll (net8.0)

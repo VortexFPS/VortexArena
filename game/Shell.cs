@@ -1,7 +1,10 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using VortexArena.Common.Diagnostics;
 using VortexArena.Common.Gameplay;
+using VortexArena.Common.Menu;
 using VortexArena.Common.Services;
 using VortexArena.Engine.Collision;
 using VortexArena.Engine.Simulation;
@@ -31,6 +34,8 @@ namespace VortexArena.Game;
 /// </summary>
 public partial class Shell : Node
 {
+    private WelcomeDialogData _welcome;
+
     /// <summary>The game data dir to mount (forwarded to <see cref="MenuState.Boot"/> + each match).</summary>
     [Export] public string DataPath { get; set; } = "res://data";
 
@@ -172,6 +177,8 @@ public partial class Shell : Node
     /// <summary>Apply any <c>--cvar NAME VALUE</c> command-line overrides into the shared store (repeatable; each
     /// <c>--cvar</c> token consumes the next two args). For test/automation/A-B runs that need to pin a cvar at
     /// boot — e.g. <c>vid_vsync</c> / <c>cl_frameprofiler</c> — without touching a config file.</summary>
+    private static readonly Dictionary<string, string> CommandLineCvars = new(StringComparer.Ordinal);
+
     private static void ApplyCvarOverrides()
     {
         string[] args = OS.GetCmdlineArgs();
@@ -179,6 +186,7 @@ public partial class Shell : Node
         {
             if (args[i] != "--cvar")
                 continue;
+            CommandLineCvars[args[i + 1]] = args[i + 2];
             MenuState.Cvars.Set(args[i + 1], args[i + 2]);
             VortexArena.Common.Diagnostics.Log.Info($"[shell] --cvar {args[i + 1]} = \"{args[i + 2]}\"");
             i += 2;
@@ -199,7 +207,7 @@ public partial class Shell : Node
     private void RunBootCommands()
     {
         string[] args = OS.GetCmdlineArgs();
-        var lines = new List<string>();
+        var lines = new List<(string Line, string? Cvar)>();
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i].Length < 2 || args[i][0] != '+')
@@ -209,17 +217,24 @@ public partial class Shell : Node
             while (i + 1 < args.Length && args[i + 1].Length > 0
                    && args[i + 1][0] != '+' && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
                 parts.Add(args[++i]);
-            lines.Add(string.Join(' ', parts));
+            string? cvar = parts.Count >= 3 && parts[0] is "set" or "seta" ? parts[1]
+                : parts.Count >= 2 && IsPinnedMapCvar(parts[0]) ? parts[0] : null;
+            lines.Add((string.Join(' ', parts), cvar));
         }
         if (lines.Count == 0)
             return;
 
         Callable.From(() =>
         {
-            foreach (string line in lines)
+            foreach (var (line, cvar) in lines)
             {
                 VortexArena.Common.Diagnostics.Log.Info($"[shell] +{line}");
-                try { MenuState.Interp?.ExecuteLine(line); }
+                try
+                {
+                    MenuState.Interp?.ExecuteLine(line);
+                    if (cvar is not null && IsPinnedMapCvar(cvar))
+                        CommandLineCvars[cvar] = MenuState.Cvars.GetString(cvar);
+                }
                 catch (Exception ex)
                 {
                     VortexArena.Common.Diagnostics.Log.Severe($"[shell] +{line} failed: {ex.Message}");
@@ -241,6 +256,11 @@ public partial class Shell : Node
         string fileName = (sc >= 0 && sc + 1 < args.Length && !args[sc + 1].StartsWith("--"))
             ? args[sc + 1]
             : "server.cfg";
+        MenuState.Interp!.RegisterCommand("maplist", args =>
+            VortexArena.Engine.Console.ConsoleCommands.EditMaplist(args, MenuState.Cvars, text => GD.Print(text),
+                map => MenuState.Vfs?.Exists($"maps/{map}.bsp") == true,
+                map => MapInfoCache.Supports(MapInfoCache.Get(map),
+                    GameTypes.ByName(BootGametype)?.NetName ?? "dm", MenuState.Cvars), Random.Shared));
         MenuState.ExecServerConfig(fileName);
     }
 
@@ -253,7 +273,7 @@ public partial class Shell : Node
         // --- one-time client bootstrap: mount assets, load the cvar config tree + user prefs, publish Api ---
         MenuState.Boot(DataPath);
         // DS-5: on a server-host boot (--host / --map / --dedicated), exec the operator's server.cfg AFTER the
-        // stock tree + config.cfg (so operator settings override both) and BEFORE the --cvar pins below (so a CLI
+        // stock tree + config.cfg, and BEFORE the --cvar pins below (so a CLI
         // override is still the last word). Absent by default (the install ships only server.cfg.example), so a
         // pure client / capture / smoke run that hasn't opted in is unaffected. `--serverconfig <name>` picks a
         // different file (DP -serverconfig).
@@ -291,7 +311,28 @@ public partial class Shell : Node
         //     gameplay commands to the live world (in-process listen server) or the remote server, and recaptures
         //     the mouse on close only when a match is live and not paused. Created before any boot-into-match path
         //     below so an early `--host`/`--connect` already has a console. ---
-        _console = new ConsoleOverlay { Name = "Console" };
+        _console = new ConsoleOverlay
+        {
+            Name = "Console",
+            ClientEntities = () => _netGame?.ConsoleClientEntities,
+            AnswerNamePrompt = allow =>
+            {
+                if (_menu?.Current is not DialogUid2Name prompt || !prompt.IsVisibleInTree())
+                    return false;
+                prompt.Answer(allow);
+                return true;
+            },
+            LegacyDiagnostic = line =>
+            {
+                if (_legacyGame is not null)
+                    _legacyGame.ConsoleCommand(line);
+                else if (_legacyMenu is not null)
+                    _legacyMenu.ConsoleCommand(line);
+                else
+                    return false;
+                return true;
+            },
+        };
         AddChild(_console);
         _console.Initialize(
             MenuState.Interp!,                       // non-null after MenuState.Boot
@@ -617,6 +658,11 @@ public partial class Shell : Node
         };
         MenuCommand.StartEditor = EditorMap;
         MenuCommand.Connect = OnConnect;
+        MenuCommand.PlayDemo = (path, timedemo) =>
+        {
+            if (MenuState.Vfs is { } files)
+                StartLegacySession(path, null, path, files, timedemo);
+        };
 
         // --- T50: the menu nav verbs + the live-match gameplay-command channel ---
         // The menu→match channel: route through the SAME path the console uses — the in-process listen-server
@@ -637,11 +683,10 @@ public partial class Shell : Node
         MenuCommand.InMatch = () => MatchRunning;
 
         // QC m_goto(name, false): open OVER the menu, keep the menu open on close (nexposee/servers/profile/…).
-        MenuCommand.OpenDialogOverlay = name => OpenMenuDialog(name, resumeOnClose: false);
+        MenuCommand.OpenDialogOverlay = name => OpenMenuDialog(name, [], resumeOnClose: false);
         // QC m_goto(name, true): open + hide-the-menu-on-close (directmenu → drop back into the match on Back).
-        MenuCommand.OpenDialog = name => OpenMenuDialog(name, resumeOnClose: true);
-        // QC closemenu: pop the menu back one level (the dialog is the top screen when closemenu fires).
-        MenuCommand.CloseDialog = _ => { if (_menu.CanPop) _menu.Pop(); };
+        MenuCommand.OpenDialog = (name, args) => OpenMenuDialog(name, args, resumeOnClose: true);
+        MenuCommand.CloseDialog = CloseMenuDialog;
 
         // [T28] QC menu_restart: rebuild the front-end (re-apply skin + re-translate) so a skin/language change shows.
         MenuCommand.MenuRestart = () => _menu.Restart();
@@ -654,14 +699,43 @@ public partial class Shell : Node
     /// fan as a full root screen rather than a framed sub-dialog, matching QC's "Main menu" button (the match
     /// stays connected; the nexposee just shows over it). Unknown names log (QC's invalid-command path).
     /// </summary>
-    private void OpenMenuDialog(string name, bool resumeOnClose)
+    private void OpenMenuDialog(string name, IReadOnlyList<string> args, bool resumeOnClose)
     {
-        if (string.Equals(name, "nexposee", System.StringComparison.OrdinalIgnoreCase))
+        bool welcome = name.Equals("Welcome", StringComparison.OrdinalIgnoreCase);
+        bool demo = _legacyGame?.DemoPath is { Length: > 0 };
+        if (resumeOnClose && demo && !welcome)
+            return;
+        if (args.Count > 0 && (!welcome || !ReadWelcomeArguments(args)))
+            return;
+
+        if (welcome)
+        {
+            if (!MatchRunning || string.IsNullOrEmpty(_welcome.Message))
+            {
+                if (IsNamedDialogOpen(name))
+                    _menu.Pop();
+                return;
+            }
+            if (IsNamedDialogOpen(name))
+                return; // Welcome's payload has already been updated in place.
+        }
+
+        if (name.Equals("GameMenu", StringComparison.OrdinalIgnoreCase))
+        {
+            if (MatchRunning)
+                OpenPauseMenu();
+            return;
+        }
+
+        if (name.Equals("TeamSelect", StringComparison.OrdinalIgnoreCase) && !MatchRunning)
+            return;
+
+        if (name.Equals("nexposee", StringComparison.OrdinalIgnoreCase))
         {
             // QC keeps the match connected and shows the nexposee over it; ShowScreen replaces the stack with the
             // fan (Push'd dialogs from here layer on top, and Back collapses the fan — never tears the match down).
             _menu.ShowScreen(new MainMenu());
-            _menu.Visible = true;
+            ShowInteractiveMenu();
             return;
         }
 
@@ -671,9 +745,46 @@ public partial class Shell : Node
             Log.Warn($"[Shell] menu_cmd: no dialog named '{name}'.");
             return;
         }
-        if (resumeOnClose) _menu.PushResumeOnClose(screen);
-        else _menu.Push(screen);
-        _menu.Visible = true;
+        if (screen is DialogWelcome dialog)
+        {
+            dialog.SetData(_welcome);
+            dialog.Demo = demo;
+        }
+        if (MatchRunning && !_paused && resumeOnClose)
+        {
+            _menu.ShowResumeOnClose(screen, name);
+            ShowInteractiveMenu();
+            return;
+        }
+        if (MatchRunning && !_paused)
+            _menu.ShowScreen(new PauseMenu());
+        if (resumeOnClose) _menu.PushResumeOnClose(screen, name);
+        else _menu.Push(screen, name);
+        ShowInteractiveMenu();
+    }
+
+    private bool IsNamedDialogOpen(string name) =>
+        _menu.Visible && string.Equals(_menu.CurrentRouteName, name, StringComparison.OrdinalIgnoreCase);
+
+    private bool ReadWelcomeArguments(IReadOnlyList<string> args)
+    {
+        if (!WelcomeDialogData.TryParse(args, MenuState.Cvars.GetString("g_campaign_name"), out var data))
+        {
+            Log.Warn("[Shell] menu_cmd: malformed Welcome arguments.");
+            return false;
+        }
+        _welcome = data;
+        if (_menu.Current is DialogWelcome dialog)
+            dialog.SetData(data);
+        return true;
+    }
+
+    private void CloseMenuDialog(string name, IReadOnlyList<string> args)
+    {
+        if (name.Equals("Welcome", StringComparison.OrdinalIgnoreCase) && args.Count > 0 && !ReadWelcomeArguments(args))
+            return;
+        if (IsNamedDialogOpen(name) && _menu.Current is not IQcDialog { QcClosable: false })
+            _menu.Pop();
     }
 
     public override void _ExitTree()
@@ -759,6 +870,8 @@ public partial class Shell : Node
         // With Xonotic's own menu running, Escape is that menu's (LegacyMenu._Input has it first); the native
         // pause menu is never opened over it.
         if (_legacyMenu is not null)
+            return;
+        if (!_paused && _netGame?.HandleHudOverlayEscape() == true)
             return;
         //   1b. the interactive scoreboard: Escape closes it, and Escape WHILE the scoreboard key is held opens
         //       it (QC main.qc:545-551 checks S_TAB before falling through to the menu). Must be claimed here —
@@ -859,7 +972,14 @@ public partial class Shell : Node
     private void OpenPauseMenu()
     {
         _menu.ShowScreen(new PauseMenu());
+        ShowInteractiveMenu();
+    }
+
+    private void ShowInteractiveMenu()
+    {
         _menu.Visible = true;
+        if (!MatchRunning)
+            return;
         _paused = true;
         MouseCapture.MenuWantsCursor = true; // survives NetGame's per-frame reassert on an unpaused tree
         MouseCapture.SetWantCapture(false);
@@ -993,6 +1113,7 @@ public partial class Shell : Node
 
     private void TeardownGame()
     {
+        _welcome = default;
         // Close the messagemode prompt if the match ends while it's open — otherwise the Shell-lifetime overlay
         // (CanvasLayer 90, above the menu) keeps drawing over the main menu and its _Input eats every keystroke,
         // and the static IsOpen leaks into the next match (movement/fire suppressed + BUTTON_CHAT forced).
@@ -1122,21 +1243,26 @@ public partial class Shell : Node
         Game.Legacy.LegacyLocalGames.HandleMapCommand(line, _legacyMenu, _legacyGame, MenuState.Cvars,
             map => StartLegacyLocalGame(map), _console.Print);
 
-    private async void StartLegacySession(string address, VortexArena.Legacy.Local.LegacyLocalGameRequest? local, string? demo = null)
+    private async void StartLegacySession(string address, VortexArena.Legacy.Local.LegacyLocalGameRequest? local,
+        string? demo = null, VortexArena.Formats.Vfs.VirtualFileSystem? demoFiles = null, bool timedemo = false)
     {
         if (string.IsNullOrWhiteSpace(address))
         {
             Log.Warn("[Shell] legacy_connect: empty address.");
             return;
         }
-        if (!Game.Legacy.LegacyData.TryResolve(MenuState.Cvars, out string dataDir, out string problem))
+        string dataDir;
+        if (demoFiles is not null)
+            dataDir = DataPaths.Resolve(DataPath);
+        else if (!Game.Legacy.LegacyData.TryResolve(MenuState.Cvars, out dataDir, out string problem))
         {
             HandleLegacyConnectionFailed(null, problem, address);
             return;
         }
-        Log.Info(local is null
-            ? $"[Shell] connecting to {address} (Xonotic server, legacy compatibility mode; data {dataDir})."
-            : $"[Shell] starting a {address} (Xonotic's own server and client programs; data {dataDir}).");
+        string action = demo is not null
+            ? $"playing {address}"
+            : local is null ? $"connecting to {address}" : $"starting a {address}";
+        Log.Info($"[Shell] {action} (legacy compatibility mode; data {dataDir}).");
         TeardownGame();
         ShowLoadingScreen(local?.Map ?? address);
         EnterMatchView();
@@ -1162,6 +1288,8 @@ public partial class Shell : Node
             // A local game: the session hosts the server too. Null for a join.
             LocalGame = local,
             DemoPath = demo,
+            DemoFiles = demoFiles,
+            Timedemo = timedemo,
             MapCommand = HandleLegacyMapCommand,
             // A level change (match end, vote, changelevel) puts the loading screen back up.
             ShowLoadingScreen = map => { ShowLoadingScreen(map); return _loadingScreen; },
@@ -1170,7 +1298,7 @@ public partial class Shell : Node
         legacy.Disconnected = () =>
         {
             if (legacy != _legacyGame) return;
-            if (demo is not null)
+            if (demo is not null && demoFiles is null)
             {
                 // A recording played from the command line ends the run with it (a measurement, not a visit to
                 // the menu - whose server list would go and ask the master servers).
@@ -1367,9 +1495,21 @@ public partial class Shell : Node
         // load, not the menu frozen behind it. The cursor stays free until the player spawns.
         EnterMatchView();
 
-        // Apply the chosen match limits to the shared cvars so the hosted world reads them.
-        if (config.TimeLimit > 0) MenuState.Cvars.Set("timelimit", config.TimeLimit.ToString());
-        if (config.FragLimit > 0) MenuState.Cvars.Set("fraglimit", config.FragLimit.ToString());
+        // Pass selections before gametype activation, particularly Race's qualifying clock setup.
+        var matchOverrides = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (config.TimeLimit > 0) matchOverrides["timelimit"] = config.TimeLimit.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (config.FragLimit > 0) matchOverrides["fraglimit"] = config.FragLimit.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        foreach (var (name, value) in matchOverrides)
+            if (!CommandLineCvars.ContainsKey(name))
+                MenuState.Cvars.Set(name, value); // keep the menu's selection available for later map changes
+        foreach (string name in new[] { "timelimit_override", "fraglimit_override", "leadlimit_override",
+                     "g_race_teams", "g_race_laps_limit", "g_race_qualifying_timelimit_override", "g_tdm_teams_override" })
+            if (MenuState.Cvars.WasSetByUser(name))
+                matchOverrides[name] = MenuState.Cvars.GetString(name);
+        PointLimitSettings.For(config.Gametype)?.CopyHostOverrides(MenuState.Cvars, matchOverrides);
+        foreach (var (name, value) in CommandLineCvars)
+            if (IsPinnedMapCvar(name))
+                matchOverrides[name] = value;
         // QC menu_loadmap_prepare runs `maxplayers <n>` just before the map loads (commands.cfg:114). Same moment
         // here: the NetGame below adopts the pending count as it starts. 0 = the caller expressed no preference
         // (a CLI/campaign boot), so whatever the config tree or --maxplayers chose stands.
@@ -1392,7 +1532,8 @@ public partial class Shell : Node
             cvars: MenuState.Cvars,
             campaignName: config.CampaignId ?? "",   // non-empty → the server boots this as a campaign level
             campaignIndex: config.CampaignIndex,
-            sharedAssets: MenuState.SharedAssets);   // persist the model/sound/material caches across maps & servers
+            sharedAssets: MenuState.SharedAssets,   // persist the model/sound/material caches across maps & servers
+            matchLimitOverrides: matchOverrides);
         net.LoadingScreen = _loadingScreen;
         net.DismissLoadingScreen = DismissLoadingScreen;
         net.OnConnectionFailed = reason => HandleConnectionFailed(net, reason, config.Map ?? "");
@@ -1405,6 +1546,9 @@ public partial class Shell : Node
 
         AddChild(net);
     }
+
+    private static bool IsPinnedMapCvar(string name) =>
+        VortexArena.Server.GameWorld.IsMatchLimitCvar(name) || MapTempDirective.IsGameplaySetting(name);
 
     /// <summary>
     /// Yield until the GPU has actually painted a frame (so any UI changes — e.g. the loading screen —
@@ -1496,6 +1640,16 @@ public partial class Shell : Node
     {
         net.RunCommand = MenuState.Interp!.ExecuteLine;
         net.ConsolePrint += _console.Print;
+        net.OnMatchWelcome = (data, show) =>
+        {
+            if (_netGame != net)
+                return;
+            _welcome = data;
+            if (_menu.Current is DialogWelcome dialog)
+                dialog.SetData(data);
+            if (show)
+                OpenMenuDialog("Welcome", [], resumeOnClose: true);
+        };
         // A listen-server changelevel (map/gotomap/rotation) reboots the server on the new map, preserving the
         // mode + bots — and, on a campaign auto-advance (win → next level), the campaign id + index so the next
         // level comes up in campaign mode. The event is emitted deferred by NetGame, so this restart runs at idle.

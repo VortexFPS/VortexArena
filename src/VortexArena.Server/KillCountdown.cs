@@ -1,29 +1,27 @@
+using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Engine.Simulation;
 
 namespace VortexArena.Server;
 
 /// <summary>
-/// Server-side port of the <c>kill</c> / team-change countdown from <c>qcsrc/server/clientkill.qc</c>
-/// (<c>ClientKill_TeamChange</c> + <c>KillIndicator_Think</c>). QC defers the actual death by
-/// <c>g_balance_kill_delay</c> seconds and, each whole second, plays the spoken kill-countdown announcer
-/// (<c>Announcer_PickNumber(CNT_KILL, cnt)</c> → <c>ANNCE_NUM_KILL_n</c>) and shows the
-/// <c>CENTER_TEAMCHANGE_*</c> countdown center-print (<c>^COUNT</c>) — the two presentation layers this driver
-/// makes live. The floating digit entity (QC <c>setmodel(MDL_NUM)</c>) is not networked here; the countdown
-/// state lives on <see cref="ServerPlayerState"/> (<c>KillCntdown*</c>, the QC <c>.killindicator</c> /
-/// <c>.cnt</c> / <c>.nextthink</c> subset) and is driven once per server frame from
-/// <c>GameWorld.OnStartFrame</c>.
-///
-/// <para>Faithful timing (QC): the indicator's first think fires ~immediately with <c>cnt = ceil(killtime)</c>,
-/// announces that number, then re-arms <c>nextthink = time + 1</c> and decrements; when <c>cnt &lt;= 0</c> the
-/// real kill fires. So <c>g_balance_kill_delay 2</c> speaks "two", then "one", then kills — total 2 s.</para>
-///
-/// <para>Scope: this driver covers the suicide/team-change <b>presentation</b> countdown (the two DEAD parity
-/// rows sv-clientkill.announcer.number and sv-clientkill.centerprint.teamchange). The kill-indicator entity,
-/// the antispam carry-forward, the clones copy, and the ClientKill mutator gate remain out of scope (separate
-/// parity rows); the eventual death itself is delegated to <see cref="PerformKill"/>.</para>
+/// Drives the suicide and team-change countdowns, including the attached digit, announcements,
+/// staggered clone countdowns and the final kill or team change (server/clientkill.qc).
 /// </summary>
 public sealed class KillCountdown
 {
+    private float _nextIndicatorStart;
+    private readonly List<CloneCountdown> _clones = new();
+    private sealed class CloneCountdown(Entity body, int count, float start)
+    {
+        public readonly Entity Body = body;
+        public int Count = count;
+        public float NextThink = start;
+    }
+
+    public System.Func<IReadOnlyList<Entity>> Entities { get; set; } = static () => System.Array.Empty<Entity>();
+
     // === context sinks (host-wired so the driver stays Godot-free + unit-testable) ===
 
     /// <summary>Current sim time (QC <c>time</c>).</summary>
@@ -131,11 +129,20 @@ public sealed class KillCountdown
 
             // QC clientkill.qc:169-170: cnt = ceil(killtime); the indicator's count is bound(0, cnt, 10).
             st.KillCntdownActive = true;
-            st.KillCntdownSilent = false;
             st.KillCntdownCnt = (int)System.Math.Ceiling(killtime);
-            // QC: nextthink = starttime + lip*0.05 ≈ now (lip staggering is a cosmetic clones detail, not modeled);
-            // the first think fires on the next driven tick, announcing the full cnt.
-            st.KillCntdownNextThink = Now();
+            st.KillCntdownDigit = 0;
+            st.KillCntdownSilent = st.KillCntdownCnt == 1; // QC stores the bounded initial count as its silent flag.
+            float start = System.Math.Max(Now(), _nextIndicatorStart);
+            st.KillCntdownNextThink = start + player.Lip * 0.05f;
+            _nextIndicatorStart = st.KillCntdownNextThink + 0.05f;
+            foreach (Entity body in Entities())
+            {
+                if (!body.IsFreed && body.ClassName == PlayerBody.ClassName && body.Enemy == player
+                    && (body.Effects & CsqcModelEffectFlags.CSQCMODEL_EF_RESPAWNGHOST) == 0
+                    && !_clones.Exists(c => c.Body == body))
+                    _clones.Add(new(body, st.KillCntdownCnt, start + PlayerBody.GetCloneOrdinal(body) * 0.05f));
+            }
+            player.Lip = 0;
         }
 
         // QC clientkill.qc:188-207: the CENTER_TEAMCHANGE_* print, sent with the live count when cnt > 0 and the
@@ -166,7 +173,9 @@ public sealed class KillCountdown
         st.KillCntdownActive = true;
         st.KillCntdownSilent = true;            // QC count = 1
         st.KillCntdownCnt = (int)System.Math.Ceiling(delay);
-        st.KillCntdownNextThink = Now();
+        st.KillCntdownNextThink = Now() + player.Lip * 0.05f;
+        st.KillCntdownDigit = 0;
+        player.Lip = 0;
     }
 
     // QC ClientKill_Now (clientkill.qc:36-60): the lethal step. If a team-change intent is queued, resolve it (the
@@ -197,32 +206,59 @@ public sealed class KillCountdown
 
         // QC KillIndicator_Think:63 — game_stopped, or the owner already left the live state (QC owner.alpha < 0:
         // dead / observing), tears the indicator down without killing.
-        if (GameStopped() || player.IsDead || player.IsObserver)
+        if (GameStopped() || player.IsDead || player.IsObserver || (player.Alpha < 0 && player.Vehicle is null))
         {
             st.KillCntdownActive = false;
             return;
         }
 
         float now = Now();
-        // Drive the per-second think(s): QC nextthink = time + 1 each tick. Catch up if multiple seconds elapsed.
-        while (st.KillCntdownActive && now >= st.KillCntdownNextThink)
+        // SV_RunThink clamps a past deadline to current simulation time before invoking QC.
+        if (now < st.KillCntdownNextThink)
+            return;
+
+        // QC: cnt <= 0 → ClientKill_Now (the death — or the deferred team change — lands).
+        if (st.KillCntdownCnt <= 0)
         {
-            // QC: cnt <= 0 → ClientKill_Now (the death — or the deferred team change — lands).
-            if (st.KillCntdownCnt <= 0)
-            {
-                PerformKillNow(player, st);
-                return;
-            }
+            PerformKillNow(player, st);
+            return;
+        }
 
-            // QC clientkill.qc:77 `if (this.count != 1)`: a silent indicator (CTS finish) plays no announcer.
-            // Otherwise QC clientkill.qc:79-85: announce the current number (cnt <= 10) to a real client. The
-            // announcer is gated on the notification's Enabled flag (NUM_KILL is shipped disabled — N___NEVER in
-            // Base — so it stays silent by default but becomes live the instant the player enables it).
-            if (!st.KillCntdownSilent && st.KillCntdownCnt <= 10 && IsRealClient(player))
+        // QC clientkill.qc:77 `if (this.count != 1)`: a silent indicator (CTS finish) plays no announcer.
+        // Otherwise QC clientkill.qc:79-85: announce the current number (cnt <= 10) to a real client. The
+        // announcer is gated on the notification's Enabled flag (NUM_KILL is shipped disabled — N___NEVER in
+        // Base — so it stays silent by default but becomes live the instant the player enables it).
+        if (!st.KillCntdownSilent && st.KillCntdownCnt <= 10)
+        {
+            st.KillCntdownDigit = (byte)st.KillCntdownCnt;
+            if (IsRealClient(player))
                 AnnceIfEnabled(player, "NUM_KILL_" + st.KillCntdownCnt);
+        }
 
-            st.KillCntdownNextThink += 1f;
-            st.KillCntdownCnt--;
+        st.KillCntdownNextThink = now + 1f;
+        st.KillCntdownCnt--;
+    }
+
+    public void TickClones()
+    {
+        for (int i = _clones.Count - 1; i >= 0; i--)
+        {
+            var c = _clones[i];
+            Entity body = c.Body;
+            if (!body.IsFreed && !GameStopped() && body.Alpha >= 0)
+            {
+                if (Now() < c.NextThink) continue;
+                if (c.Count > 0)
+                {
+                    if (c.Count <= 10) body.CountdownIndicator = new((byte)c.Count, 0);
+                    c.Count--;
+                    c.NextThink = Now() + 1f;
+                    continue;
+                }
+                Combat.Damage(body, body, body, 100000f, DeathTypes.Kill, body.Origin, System.Numerics.Vector3.Zero);
+            }
+            body.CountdownIndicator = default;
+            _clones.RemoveAt(i);
         }
     }
 
@@ -236,8 +272,7 @@ public sealed class KillCountdown
     }
 
     // QC clientkill.qc:191-205: map targetteam → the CENTER_TEAMCHANGE_* notification (0 suicide / -2 spectate /
-    // team index → APP_TEAM_NUM(CENTER_TEAMCHANGE)). The colormod (black/grey/team RGB) is a digit-entity detail
-    // not networked here.
+    // team index → APP_TEAM_NUM(CENTER_TEAMCHANGE)). The digit uses the same team intent.
     private static string? TeamChangeCenterName(int targetTeam) => targetTeam switch
     {
         0 => "TEAMCHANGE_SUICIDE",

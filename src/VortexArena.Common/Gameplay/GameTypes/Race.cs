@@ -30,9 +30,8 @@ namespace VortexArena.Common.Gameplay;
 ///  - per-player lap/checkpoint timing + fastest-lap tracking (<see cref="RaceState"/>, QC race_* fields);
 ///  - record persistence (QC race_readTime/race_writeTime via <see cref="RaceRecords"/>): closing a lap files
 ///    the lap time into the per-map top-99 ranking, classified for the host's INFO_RACE_* notification;
-///  - qualifying mode (QC g_race_qualifying): solo time-trial — closing a lap re-teleports the racer to start
-///    (the finish kill-delay <see cref="OnFinishRetract"/>), ranking by fastest lap; in plain race mode the
-///    racer keeps going until the lap limit, then is retracted.
+///  - qualifying mode (QC g_race_qualifying): score the fastest lap and let racers keep running until
+///    a restart or the qualifying match ends.
 ///
 /// Faithfully ported (depth):
 ///  - penalty zones (<see cref="SpawnPenaltyZone"/>/<see cref="PenaltyTouch"/>/<see cref="SetPenalty"/>, QC
@@ -61,13 +60,12 @@ public sealed class Race : GameType
     private const string CvarSuddenDeath  = "timelimit_suddendeath";    // overtime window (minutes); unused for the latch
     private const string CvarMapName      = "mapname";
 
-    /// <summary>QC <c>g_race_teams</c> (sv_race.qc:14): 2/3/4 → the race is a team game (members add up laps to
-    /// ST_RACE_LAPS). 0/1 = FFA. Bounded to 2..4 when set.</summary>
+    /// <summary>QC <c>g_race_teams</c>: zero selects FFA. A nonzero value selects two to four teams.</summary>
     public int RaceTeams
     {
         get
         {
-            if (!TryCvar(CvarTeams, out float v) || v < 2f) return 0;
+            if (!TryCvar(CvarTeams, out float v) || v == 0f) return 0;
             return System.Math.Clamp((int)v, 2, 4);
         }
     }
@@ -155,12 +153,10 @@ public sealed class Race : GameType
         /// (QC trigger_race_checkpoint_spawn_evalfunc) so a death returns the racer to their last checkpoint.</summary>
         public int RespawnCheckpoint;
 
-        /// <summary>QC <c>race_respawn_spotref</c>: the checkpoint world entity at which this racer respawns
-        /// (server/race.qc:808 — "this is not a spot but a CP, but spawnpoint selection will deal with that"). The
-        /// host forces the next spawn to this entity via <see cref="Entity.SpawnPointTarg"/> (the one-shot redirect
-        /// SelectSpawnPoint short-circuits to), so a respawning racer is placed back at the checkpoint they reached.
-        /// Null = respawn at a normal start spawn (the racer hasn't passed any checkpoint yet).</summary>
+        /// <summary>The last spawn point or checkpoint entity used to prefer the same route on respawn.</summary>
         public Entity? RespawnSpot;
+
+        public int GridPlace;
 
         /// <summary>QC <c>race_started</c>: this racer has crossed the start line at least once (so the lap clock is
         /// running and the respawn falls back to the last checkpoint rather than the grid start).</summary>
@@ -212,6 +208,11 @@ public sealed class Race : GameType
 
     private HookHandler<DeathEvent>? _deathHandler;
     private HookHandler<MutatorHooks.PlayerPhysicsArgs>? _physicsHandler;
+    private HookHandler<MutatorHooks.PlayerSpawnArgs>? _playerSpawnHandler;
+    private HookHandler<MutatorHooks.MakePlayerObserverArgs>? _observerHandler;
+    private bool _hasRaceSpawns;
+    private int _highestSpawnPlace;
+    private float _lowestSpawnPlace;
     // Cached delegate for SpawnSystem.SpotEvalScore so Deactivate can compare by identity (a new closure each time would fail ReferenceEquals).
     private System.Func<Entity, Player, float>? _spotEvalScore;
 
@@ -243,6 +244,7 @@ public sealed class Race : GameType
     /// Note this can be the value <c>2</c> ("qualifying THEN race"), which <see cref="TransitionQualifyingToRace"/>
     /// collapses to 0 (plain race) once the qualifying session ends.</summary>
     public bool Qualifying => TryCvar(CvarQualifying, out float v) && v != 0f;
+    public bool QualifyingThenRace => Cvar(CvarQualifying, 0f) == 2f;
 
     /// <summary>The current map name (QC GetMapname) — the record-DB key segment.</summary>
     public string MapName => Api.Services is null ? "" : Api.Cvars.GetString(CvarMapName);
@@ -252,7 +254,7 @@ public sealed class Race : GameType
 
     /// <summary>
     /// The host's finish-retract hook (QC the kill-delay re-teleport in race_PreparePlayer / Race_FinalCheckpoint):
-    /// after a lap is closed (qualifying) or the race is finished (race mode) the racer is sent back to the start.
+    /// after the race is finished, the racer is sent back to the start.
     /// The simulation resets the racer's lap state (<see cref="RetractPlayer"/>); the host implements the actual
     /// teleport-to-start + optional silent kill. Invoked from <see cref="Tick"/> when the kill delay elapses.
     /// </summary>
@@ -306,12 +308,17 @@ public sealed class Race : GameType
     {
         // QC: checkpoints are spawned from the map's trigger_race_checkpoint entities (see SpawnCheckpoint).
         // gametype_init flags (USEPOINTS) and the qualifying/race mode are engine/server-config concerns.
-        Checkpoints.Clear();
+        TeamGame = RaceTeams != 0;
+        // The gametype registry reuses this instance across maps. Only the record database lives
+        // beyond a map boot. Old scorekeepers must not participate in another map's grid sort.
+        _states.Clear();
+        _retractAt.Clear();
+        _savedFragLimit = _savedLeadLimit = _savedTimeLimit = -1f;
+        LastRecord = default;
+        LastRecordPlayer = null;
+        LastRecordTime = 0f;
+        ClearMapSpawns();
         PenaltyZones.Clear();
-        _punishWrongWay.Clear();
-        _useTargetsBeforeScore.Clear();
-        HighestCheckpoint = 0;
-        TimedCheckpoint = 0; // QC race_timed_checkpoint default 0 (closed-loop track: start line == finish)
         // QC race_ClearRecords: a fresh map has no checkpoint split records yet.
         _checkpointRecords.Clear();
         _checkpointRecordSpeeds.Clear();
@@ -332,32 +339,106 @@ public sealed class Race : GameType
             touch: CheckpointTouch);
         if (e is not null)
         {
-            e.Flags = EntFlags.None; // a checkpoint is a pure trigger volume, not an item
-            e.GtCheckpointIndex = checkpointIndex;
-            // QC trigger_race_checkpoint spawnflag 4: a racer who crosses this checkpoint out of order is killed
-            // (DEATH_HURTTRIGGER 10000), to forbid backwards/shortcut traversal.
-            if (punishWrongWay) _punishWrongWay.Add(e);
-            // QC trigger_race_checkpoint .target/.message + spawnflag 2: a valid crossing fires the checkpoint's
-            // targets (SUB_UseTargets) and the message is blanked during that fire (no centerprint). The map
-            // target/message ride on the checkpoint edict (SpawnObjective doesn't copy them); the spawnflag-2 bit
-            // selects fire-before vs fire-after the lap-time registration (CheckpointTouch).
-            if (!string.IsNullOrEmpty(target)) e.Target = target;
-            if (!string.IsNullOrEmpty(message)) e.Message = message;
-            if (useTargetsBeforeScore) _useTargetsBeforeScore.Add(e);
-            Checkpoints.Add(e);
-            // QC spawnfunc(trigger_race_checkpoint) (server/race.qc:1111): the HIGHEST checkpoint determines the
-            // timed (finish) line — if it carries spawnflag 8 the finish is that CP, otherwise the finish is CP 0
-            // (a closed-loop track). race_timed_checkpoint follows the highest CP, so a later, lower-index CP does
-            // not steal the finish from an earlier higher one.
-            if (checkpointIndex > HighestCheckpoint)
-            {
-                HighestCheckpoint = checkpointIndex;
-                TimedCheckpoint = timed ? checkpointIndex : 0;
-            }
-            // The finish line is the timed checkpoint (QC race_timed_checkpoint); on a closed loop that is CP 0.
-            e.GtIsFinishLine = checkpointIndex == TimedCheckpoint;
+            e.Target = target;
+            e.Message = message;
+            RegisterCheckpoint(e, checkpointIndex, punishWrongWay, timed, useTargetsBeforeScore);
         }
         return e;
+    }
+
+    public void RegisterMapCheckpoint(Entity e)
+    {
+        Vector3 mins = e.Mins;
+        Vector3 maxs = e.Maxs;
+        bool authoredBounds = mins != Vector3.Zero || maxs != Vector3.Zero;
+        MapMover.InitTrigger(e);
+        if (!authoredBounds)
+        {
+            mins = e.Mins;
+            maxs = e.Maxs;
+            if (string.IsNullOrEmpty(e.Model) && mins == maxs)
+            {
+                mins = new Vector3(-48f);
+                maxs = new Vector3(48f);
+            }
+        }
+        float scale = e.ScaleFactor == 0f ? 1f : e.ScaleFactor;
+        Api.Entities.SetSize(e, mins * scale, maxs * scale);
+        if ((e.SpawnFlags & 1) == 0)
+            e.Touch = CheckpointTouch;
+        e.Use = (self, actor) =>
+        {
+            if (MapMover.CurrentUseTrigger?.ClassName != "info_player_deathmatch")
+                CheckpointTouch(self, actor);
+        };
+        MapMover.IndexRegister(e);
+        RegisterCheckpoint(e, e.Cnt, (e.SpawnFlags & 4) != 0, (e.SpawnFlags & 8) != 0,
+            useTargetsBeforeScore: (e.SpawnFlags & 2) == 0);
+    }
+
+    private void RegisterCheckpoint(Entity e, int checkpointIndex, bool punishWrongWay, bool timed,
+        bool useTargetsBeforeScore)
+    {
+        e.Flags = EntFlags.None;
+        e.GtCheckpointIndex = checkpointIndex;
+        if (punishWrongWay) _punishWrongWay.Add(e);
+        if (useTargetsBeforeScore) _useTargetsBeforeScore.Add(e);
+        Checkpoints.Add(e);
+        if (checkpointIndex > HighestCheckpoint)
+        {
+            HighestCheckpoint = checkpointIndex;
+            TimedCheckpoint = timed ? checkpointIndex : 0;
+        }
+        e.GtIsFinishLine = checkpointIndex == TimedCheckpoint;
+    }
+
+    public void ClearMapSpawns()
+    {
+        Checkpoints.Clear();
+        _punishWrongWay.Clear();
+        _useTargetsBeforeScore.Clear();
+        HighestCheckpoint = TimedCheckpoint = 0;
+        _highestSpawnPlace = 0;
+        _lowestSpawnPlace = 0;
+        _hasRaceSpawns = SpawnSystem.RaceSpawnsActive = false;
+    }
+
+    public void RegisterRaceSpawn(Entity spot)
+    {
+        // The stock delegation to spawnfunc_info_player_deathmatch sets the canonical classname.
+        spot.ClassName = "info_player_deathmatch";
+        MapMover.IndexRegister(spot);
+        _hasRaceSpawns = SpawnSystem.RaceSpawnsActive = true;
+        _highestSpawnPlace = System.Math.Max(_highestSpawnPlace, (int)spot.RaceSpawnPlace);
+        _lowestSpawnPlace = MathF.Min(_lowestSpawnPlace, spot.RaceSpawnPlace);
+    }
+
+    public void ValidateMapSpawns(string mapName)
+    {
+        // The verifier is scheduled by a checkpoint spawnfunc, and passes that unchanged edict as the racer.
+        // In PIN the loop's pl_race_checkpoint/place locals never reach Spawn_Score. Every race pass therefore
+        // evaluates an unstarted racer at checkpoint zero and every qualifying pass evaluates the lowest place.
+        if (Checkpoints.Count == 0)
+            return;
+
+        if (!HasSpawn(qualifying: false))
+            throw new InvalidOperationException(
+                $"Race map '{mapName}': checkpoint 0 misses a spawnpoint with race_place=0 (race respawn).");
+        if (!HasSpawn(qualifying: true))
+            throw new InvalidOperationException(
+                $"Race map '{mapName}': checkpoint 0 misses a spawnpoint with race_place={_lowestSpawnPlace} (qualifying).");
+
+        bool HasSpawn(bool qualifying)
+        {
+            foreach (Entity spot in Api.Entities.FindByClass("info_player_deathmatch"))
+            {
+                // Spawn_FilterOutBadSpots runs with teamcheck=0 and a non-client verifier edict.
+                if (spot.Team == Teams.None && spot.SpawnRestriction != 2 && spot.SpawnActive == MapMover.ActiveActive
+                    && EvaluateSpawnTarget(spot, null, qualifying) >= 0f && SpawnSystem.CanPlaceSpawn(spot))
+                    return true;
+            }
+            return false;
+        }
     }
 
     /// <summary>Checkpoints with QC spawnflag 4 (kill on a wrong-order crossing). See <see cref="CheckpointTouch"/>.</summary>
@@ -418,7 +499,8 @@ public sealed class Race : GameType
         {
             // QC checkpoint_passed: a wrong-order crossing of a spawnflag-4 checkpoint kills the racer
             // (Damage 10000, DEATH_HURTTRIGGER); otherwise it is simply ignored.
-            if (_punishWrongWay.Contains(self) && Api.Services is not null)
+            if (expected != (cpIndex >= HighestCheckpoint ? 0 : cpIndex + 1)
+                && _punishWrongWay.Contains(self) && Api.Services is not null)
                 Combat.Damage(p, self, self, 10000f, DeathTypes.Void, p.Origin, Vector3.Zero);
             return;
         }
@@ -472,25 +554,20 @@ public sealed class Race : GameType
     }
 
     /// <summary>
-    /// The lap limit in force. QC <c>g_race_laps_limit</c> (sv_race.qc:408, rc_SetLimits): the default is
-    /// <c>-1</c> = "use the mapinfo laplimit" (here the gametype default <see cref="DefaultLapLimit"/>=7, as the
-    /// port has no per-map laplimit table); <c>0</c> = unlimited; <c>&gt;0</c> = that many laps. The value is fed
-    /// to GameRules_limit_score (the fraglimit), so an explicit fraglimit is honored only when the race cvar is
-    /// unset. 0 means no lap limit (the finish check is guarded by <c>limit &gt; 0</c>).
+    /// Map-local lap limit selected at boot for the active individual or team Race.
     /// </summary>
+    public int? MapLapLimit { get; set; }
+
+    /// <summary>Race's score limit. A negative mode override uses the map or gametype default.</summary>
     public int LapLimit
     {
         get
         {
-            // QC race.qh m_legacydefaults "20 5 7 15 0": the mapinfo laplimit default is 7 (FFA) / 15 (team). The
-            // port has no per-map mapinfo laplimit table, so a map that overrides laplimit in its .mapinfo isn't
-            // honored; the gametype legacy default IS reproduced (the value any non-overriding map gets in Base).
-            int mapinfoDefault = RaceTeams >= 2 ? DefaultTeamLapLimit : DefaultLapLimit;
+            int mapinfoDefault = MapLapLimit ?? (RaceTeams >= 2 ? DefaultTeamLapLimit : DefaultLapLimit);
             if (TryCvar(CvarLapLimit, out float ll))
             {
                 int l = (int)ll;
-                // QC rc_SetLimits: g_race_laps_limit default -1 means "consult the mapinfo laplimit" (here the legacy
-                // gametype default, team-aware). 0 stays unlimited; >0 is the literal lap limit.
+                // QC rc_SetLimits: -1 uses mapinfo. Zero stays unlimited.
                 if (l < 0) return mapinfoDefault;
                 return l;
             }
@@ -554,51 +631,83 @@ public sealed class Race : GameType
         _physicsHandler = OnPlayerPhysics;
         MutatorHooks.PlayerPhysics.Add(_physicsHandler);
 
-        // QC race_spawns (server/race.qh:16): the global counter is incremented once per registered
-        // trigger_race_checkpoint (race.qc:1241 `++race_spawns`). Spawn_Score gates on it: a spawnpoint without a
-        // target is invalid on a race map (spawnpoints.qc:246 `if(race_spawns) if(!spot.target) return '-1 0 0'`).
-        // In the port Checkpoints is the equivalent list; if any checkpoints were registered before Activate was
-        // called (the normal map-load order), enable the race-spawns target requirement gate.
-        SpawnSystem.RaceSpawnsActive = Checkpoints.Count > 0;
+        _playerSpawnHandler = OnPlayerSpawn;
+        MutatorHooks.PlayerSpawn.Add(_playerSpawnHandler);
+        _observerHandler = OnMakePlayerObserver;
+        MutatorHooks.MakePlayerObserver.Add(_observerHandler);
+    }
 
-        // QC trigger_race_checkpoint_spawn_evalfunc (server/race.qc:1055-1083) score-rewriting branch: when NOT
-        // qualifying, add SPAWN_PRIO_RACE_PREVIOUS_SPAWN=50 to a spot when it equals the player's respawn spotref
-        // (so the spot the racer last crossed is slightly preferred in the weighted pick). This is a secondary
-        // fallback: ApplyRespawnSpot already forces the exact checkpoint via SpawnPointTarg (the one-shot redirect
-        // SelectSpawnPoint short-circuits to), so the +50 path only fires on the rare edge case where the forced
-        // redirect was not applied (e.g. the racer's RespawnSpot is null / at checkpoint 0, or qualifying mode).
-        _spotEvalScore ??= RaceSpotEvalScore;    // cache once so Deactivate can compare by identity
+    public void BindSpawnSelection()
+    {
+        SpawnSystem.RaceSpawnsActive = _hasRaceSpawns;
+        _spotEvalScore ??= RaceSpotEvalScore;
         SpawnSystem.SpotEvalScore = _spotEvalScore;
     }
 
-    /// <summary>
-    /// QC <c>trigger_race_checkpoint_spawn_evalfunc</c> score-rewriting branch (server/race.qc:1069-1071):
-    /// <c>if(this == player.race_respawn_spotref || spot == player.race_respawn_spotref) current.x += 50</c>.
-    /// This is called from <see cref="SpawnSystem.ScoreSpot"/> via <see cref="SpawnSystem.SpotEvalScore"/> when
-    /// race checkpoints exist on the map. Returns the prio delta to add (50 when the spot matches the player's
-    /// last-checkpoint respawn anchor, 0 otherwise). Only relevant on a non-qualifying race path when the spot
-    /// is the racer's <see cref="RaceState.RespawnSpot"/> entity (the <c>race_respawn_spotref</c>).
-    /// </summary>
     private float RaceSpotEvalScore(Entity spot, Player player)
     {
-        if (Qualifying) return 0f;  // qualifying evalfunc uses place-only filtering, not a prio bias
-        if (!_states.TryGetValue(player, out RaceState? st)) return 0f;
-        Entity? respawnSpot = st.RespawnSpot;
-        if (respawnSpot is null || respawnSpot.IsFreed) return 0f;
-        // QC: if(this == player.race_respawn_spotref || spot == player.race_respawn_spotref)
-        // 'this' = the checkpoint entity; 'spot' = the spawn spot entity. In the port the respawn spot IS the
-        // checkpoint entity itself (set by CheckpointTouch: st.RespawnSpot = self where self is the checkpoint).
-        // So this half matches when the spawn spot IS the checkpoint (rare: only if a map places an info_player_*
-        // ON the checkpoint trigger). The 'this=checkpoint' half corresponds to the spawn spot's target chain —
-        // when the spot targets a checkpoint that is the RespawnSpot, we also add the bias.
-        if (ReferenceEquals(spot, respawnSpot))
-            return SpawnPrioRacePreviousSpawn;
-        // Check whether the spot's target resolves to the respawn checkpoint entity (the 'this' half in QC).
-        string spotTarget = spot.Target;
-        if (!string.IsNullOrEmpty(spotTarget) && !string.IsNullOrEmpty(respawnSpot.TargetName)
-            && spotTarget == respawnSpot.TargetName)
-            return SpawnPrioRacePreviousSpawn;
-        return 0f;
+        _states.TryGetValue(player, out RaceState? st);
+        return EvaluateSpawnTarget(spot, st, Qualifying);
+    }
+
+    private float EvaluateSpawnTarget(Entity spot, RaceState? st, bool qualifying)
+    {
+        if (string.IsNullOrEmpty(spot.Target))
+            return _hasRaceSpawns ? -1f : 0f;
+
+        bool found = false;
+        float priority = 0f;
+        foreach (Entity target in MapMover.FindByTargetName(spot.Target))
+        {
+            found = true;
+            if (target.ClassName != "trigger_race_checkpoint")
+                continue;
+
+            int checkpoint = target.GtCheckpointIndex;
+            if (qualifying)
+            {
+                if (checkpoint != 0 || spot.RaceSpawnPlace != _lowestSpawnPlace)
+                    return -1f;
+                continue;
+            }
+            if (checkpoint != (st?.RespawnCheckpoint ?? 0))
+                return -1f;
+            if (checkpoint == 0)
+            {
+                int place = st?.GridPlace ?? 0;
+                if (place > _highestSpawnPlace)
+                    place = 0;
+                if (place == 0 && st?.Started != true)
+                    place = _highestSpawnPlace;
+                if (spot.RaceSpawnPlace != place)
+                    return -1f;
+            }
+            if (ReferenceEquals(st?.RespawnSpot, target) || ReferenceEquals(st?.RespawnSpot, spot))
+                priority += SpawnPrioRacePreviousSpawn;
+        }
+        return found ? priority : -1f;
+    }
+
+    private bool OnPlayerSpawn(ref MutatorHooks.PlayerSpawnArgs args)
+    {
+        if (args.Player is not Player player || !_states.TryGetValue(player, out RaceState? st))
+            return false;
+        if (Qualifying || string.IsNullOrEmpty(args.Spot?.Target))
+            ResetSpawnProgress(st);
+        st.RespawnSpot = args.Spot;
+        st.GridPlace = 0;
+        return false;
+    }
+
+    private bool OnMakePlayerObserver(ref MutatorHooks.MakePlayerObserverArgs args)
+    {
+        if (args.Player is Player player && _states.TryGetValue(player, out RaceState? st))
+        {
+            ResetSpawnProgress(st);
+            st.GridPlace = 0;
+            _retractAt.Remove(player);
+        }
+        return false;
     }
 
     /// <summary>QC <c>SPAWN_PRIO_RACE_PREVIOUS_SPAWN</c> (server/spawnpoints.qh:12): priority boost for a
@@ -632,7 +741,7 @@ public sealed class Race : GameType
             into.Add(new Waypoints.WaypointSprite
             {
                 SpriteName = sprite,
-                FixedOrigin = cp.Origin,
+                FixedOrigin = cp.Origin + (cp.Mins + cp.Maxs) * 0.5f,
                 Team = 0,                          // QC SpawnFixed showto=NULL → shown to everyone
                 Color = new Vector3(1f, 0.5f, 0f), // WP_Race* default tint (orange)
                 RadarIcon = 1,                     // RADARICON_RACE
@@ -649,8 +758,8 @@ public sealed class Race : GameType
     /// </summary>
     private void DeclareScoreRules()
     {
-        GS.ScoreRulesBasics(teams: TeamGame, scoreEnabled: false); // QC GameRules_score_enabled(false): no SP_SCORE
         bool qualifying = Qualifying;
+        GS.ScoreRulesBasics(teams: TeamGame, scoreEnabled: false, independent: qualifying);
         if (!TeamGame && qualifying)
         {
             // qualifying solo time-trial: fastest single lap, ascending.
@@ -687,6 +796,16 @@ public sealed class Race : GameType
         Combat.Death.Remove(_deathHandler);
         _deathHandler = null;
         if (_physicsHandler is not null) { MutatorHooks.PlayerPhysics.Remove(_physicsHandler); _physicsHandler = null; }
+        if (_playerSpawnHandler is not null)
+        {
+            MutatorHooks.PlayerSpawn.Remove(_playerSpawnHandler);
+            _playerSpawnHandler = null;
+        }
+        if (_observerHandler is not null)
+        {
+            MutatorHooks.MakePlayerObserver.Remove(_observerHandler);
+            _observerHandler = null;
+        }
         // QC: race_spawns is a global counter that persists until the next map load; clear the port's equivalents
         // on gametype deactivation so a mode-switch doesn't leave the race spawn gates active in DM/CTF.
         SpawnSystem.RaceSpawnsActive = false;
@@ -705,7 +824,11 @@ public sealed class Race : GameType
     }
 
     public void AddPlayer(Player p) => GetState(p);
-    public void RemovePlayer(Player p) => _states.Remove(p);
+    public void RemovePlayer(Player p)
+    {
+        _states.Remove(p);
+        _retractAt.Remove(p);
+    }
 
     /// <summary>
     /// Record a racer crossing a checkpoint (QC race_CheckpointTouch). This is the core timing rule: crossing
@@ -747,13 +870,12 @@ public sealed class Race : GameType
                 // path); fall back to the wall-clock delta only when no physics frames advanced it (e.g. a unit harness
                 // touching checkpoints directly without driving OnPlayerPhysics), so the end-to-end tests still hold.
                 float lapTime = st.RaceMoveTime > 0f ? st.RaceMoveTime : now - st.LapStartTime;
+                if (Qualifying)
+                    lapTime += st.PenaltyAccumulator;
                 if (lapTime > 0f)
                 {
                     if (st.FastestLap <= 0f || lapTime < st.FastestLap)
                         st.FastestLap = lapTime; // QC SP_RACE_FASTEST (lower is better)
-                    st.LapsCompleted += 1;       // QC SP_RACE_LAPS
-                    st.TotalTime += lapTime;     // cumulative race time (QC SP_RACE_TIME ~ time - game_starttime)
-
                     // QC Race_FinalCheckpoint scoring (server/race.qc): SP_RACE_FASTEST tracks the best (lowest)
                     // lap; in a plain race SP_RACE_TIME is the cumulative time and SP_RACE_LAPS counts laps. Times
                     // are TIME_ENCODE'd to hundredths (SFL_TIME). Qualifying ranks by fastest only.
@@ -762,6 +884,8 @@ public sealed class Race : GameType
                         Scoring.GameScores.SetBestTime(p, fastest, Scoring.GameScores.TimeEncode(lapTime));
                     if (!Qualifying)
                     {
+                        st.LapsCompleted++;
+                        st.TotalTime += lapTime;
                         AddCol(p, "RACE_LAPS", 1);
                         // QC g_race_teams (sv_race.qc:399): in a team race the members' laps add up into
                         // ST_RACE_LAPS (team slot 1), the team primary.
@@ -783,11 +907,8 @@ public sealed class Race : GameType
             }
 
             int limit = LapLimit;
-            if (limit > 0 && st.LapsCompleted >= limit)
+            if (!Qualifying && limit > 0 && st.LapsCompleted >= limit)
                 FinishRacer(p, st);
-            else if (Qualifying)
-                // QC qualifying: solo time-trial — after each lap the racer is sent back to start to run again.
-                ScheduleRetract(p, now);
         }
 
         // QC checkpoint_passed (server/race.qc:815-818): the lap clock is (re)started at the START LINE (CP 0), NOT at
@@ -799,6 +920,8 @@ public sealed class Race : GameType
         if (checkpointIndex == 0)
         {
             st.LapStartTime = now;
+            st.PenaltyAccumulator = 0f;
+            st.LastPenalty = null;
             st.MoveTimeFrac = 0f;
             st.MoveTimeCount = 0f;
             st.RaceMoveTime = 0f;
@@ -1240,7 +1363,7 @@ public sealed class Race : GameType
     /// </summary>
     public void CheckWinningCondition()
     {
-        if (_states.Count == 0)
+        if (Qualifying || _states.Count == 0)
             return;
 
         int total = 0, completed = 0;
@@ -1285,6 +1408,92 @@ public sealed class Race : GameType
         }
     }
 
+    public override bool ReportsTie(IReadOnlyList<Player> roster)
+    {
+        if (!QualifyingThenRace)
+            return false;
+
+        if (TeamGame)
+        {
+            foreach (Player player in roster)
+                if (!player.IsObserver)
+                    return GS.CompareTeams(GS.LeaderTeam(), GS.SecondTeam(), strict: false) == 0;
+            return false;
+        }
+
+        Player? best = null;
+        Player? second = null;
+        foreach (Player player in roster)
+        {
+            if (player.IsObserver) continue;
+            if (best is null || GS.ComparePlayers(player, best) > 0)
+            {
+                second = best;
+                best = player;
+            }
+            else if (second is null || GS.ComparePlayers(player, second) > 0)
+                second = player;
+        }
+        return best is not null && second is not null && GS.PrimaryScore(best) == GS.PrimaryScore(second);
+    }
+
+    public void ClearMatchScores()
+    {
+        MatchEnded = RaceCompleting = SuddenDeath = false;
+        Winner = null;
+        foreach (RaceState state in _states.Values)
+        {
+            state.LapsCompleted = 0;
+            state.FastestLap = 0f;
+            state.TotalTime = 0f;
+        }
+    }
+
+    /// <summary>Assign the one-shot grid from the active score schema before a race reset.</summary>
+    public void PrepareStartGrid()
+    {
+        var ranking = new List<Player>(_states.Keys);
+        ranking.Sort(static (a, b) =>
+        {
+            int order = GS.ComparePlayers(b, a);
+            return order != 0 ? order : b.PlayerId.CompareTo(a.PlayerId);
+        });
+        int place = 0;
+        Player? previous = null;
+        var fastest = GS.Field("RACE_FASTEST")!;
+        for (int i = 0; i < ranking.Count; i++)
+        {
+            Player player = ranking[i];
+            RaceState st = _states[player];
+            if (previous is null || GS.ComparePlayers(previous, player) != 0 || previous.PlayerId != player.PlayerId)
+                place = i + 1;
+            st.GridPlace = !player.IsObserver && GS.Get(player, fastest) != 0 ? place : 0;
+            ResetSpawnProgress(st);
+            st.Completed = false;
+            st.PenaltyAccumulator = 0f;
+            st.PenaltyUntil = 0f;
+            previous = player;
+        }
+        _retractAt.Clear();
+        _checkpointRecords.Clear();
+        _checkpointRecordSpeeds.Clear();
+        _checkpointRecordHolders.Clear();
+    }
+
+    private static void ResetSpawnProgress(RaceState st)
+    {
+        st.LapStartTime = 0f;
+        st.MoveTimeFrac = 0f;
+        st.MoveTimeCount = 0f;
+        st.RaceMoveTime = 0f;
+        st.NextCheckpoint = -1;
+        st.RespawnCheckpoint = 0;
+        st.RespawnSpot = null;
+        st.Started = false;
+        st.PenaltyAccumulator = 0f;
+        st.LastPenalty = null;
+    }
+
     /// <summary>
     /// QC rc_SetLimits + reset_map_global (sv_race.qc:199/394): the <c>g_race_qualifying == 2</c> "qualifying
     /// THEN race" transition — once the qualifying session ends, clear qualifying (cvar → 0), restore the saved
@@ -1297,9 +1506,10 @@ public sealed class Race : GameType
         if (Api.Services is null)
             return false;
         // QC: if(g_race_qualifying == 2) { g_race_qualifying = 0; ... }
-        if ((int)Cvar(CvarQualifying, 0f) != 2)
+        if (!QualifyingThenRace)
             return false;
 
+        PrepareStartGrid();
         Api.Cvars.Set(CvarQualifying, "0"); // g_race_qualifying = 0
         // QC restores the saved race_fraglimit/leadlimit/timelimit; the host owns those cvars, so we restore
         // any saved values it stashed (default: leave the configured fraglimit in place).
@@ -1311,22 +1521,6 @@ public sealed class Race : GameType
         DeclareScoreRules(); // QC race_ScoreRules() — re-declare for the now-plain race
         SuddenDeath = false;
 
-        // QC FOREACH_CLIENT race_PreparePlayer: reset every racer to the start.
-        foreach (Player p in new List<Player>(_states.Keys))
-        {
-            RaceState st = _states[p];
-            st.LapStartTime = 0f;
-            st.MoveTimeFrac = 0f;
-            st.MoveTimeCount = 0f;
-            st.RaceMoveTime = 0f;
-            st.NextCheckpoint = -1;
-            st.Completed = false;
-            st.PenaltyAccumulator = 0f;
-            st.PenaltyUntil = 0f;
-            st.RespawnCheckpoint = 0; // QC race_PreparePlayer: reset the respawn anchor for the now-plain race
-            st.RespawnSpot = null;
-            st.Started = false;
-        }
         return true;
     }
 
@@ -1346,55 +1540,28 @@ public sealed class Race : GameType
         if (ev.Victim is not Player victim)
             return false;
 
-        // Death never scores in race and never ends the race — the racer is simply sent back to respawn.
-        // QC race_RetractPlayer (server/race.qc:1229): a racer is returned to their LAST passed checkpoint, not
-        // the grid start. If that checkpoint is the start/finish line (0) the lap clock is cleared (a fresh lap);
-        // otherwise the lap clock is kept and the racer resumes expecting the checkpoint AFTER the one they
-        // respawn at (QC race_checkpoint = race_respawn_checkpoint, advanced by the next crossing).
+        victim.RespawnFlags |= RespawnFlag.Force;
         RaceState st = GetState(victim);
-        int respawnCp = st.RespawnSpot is not null ? st.RespawnCheckpoint : 0;
-        if (respawnCp == 0)
-        {
-            st.LapStartTime = 0f;        // QC race_ClearTime: start the next lap fresh at the start line
-            st.MoveTimeFrac = 0f;        // QC: zero the deterministic lap clock for the fresh lap
-            st.MoveTimeCount = 0f;
-            st.RaceMoveTime = 0f;
-            st.NextCheckpoint = -1;      // re-expect the start line
-        }
+        int respawnCp = st.RespawnCheckpoint;
+        if (Qualifying)
+            ResetSpawnProgress(st);
         else
         {
-            // resume from the respawn checkpoint: the next required CP is the one after it (wrap at the finish).
-            st.NextCheckpoint = respawnCp >= HighestCheckpoint ? 0 : respawnCp + 1;
+            if (respawnCp == 0 || respawnCp == TimedCheckpoint)
+            {
+                st.LapStartTime = 0f;
+                st.MoveTimeFrac = 0f;
+                st.MoveTimeCount = 0f;
+                st.RaceMoveTime = 0f;
+                st.PenaltyAccumulator = 0f;
+            }
+            st.NextCheckpoint = respawnCp;
         }
         // QC race_AbandonRaceCheck (driven from PutClientInServer/respawn): once the race is completing, a racer
         // who dies and would respawn into a finished race is auto-abandoned rather than left running forever.
         AbandonRaceCheck(victim);
         Events?.OnFrag(ev.Attacker as Player, victim, ev.DeathType);
         return false;
-    }
-
-    /// <summary>
-    /// QC <c>trigger_race_checkpoint_spawn_evalfunc</c> + <c>race_respawn_spotref</c> (server/race.qc:1055/808):
-    /// place a (re)spawning racer back at the checkpoint they last reached (the SPAWN_PRIO_RACE_PREVIOUS_SPAWN
-    /// bias) rather than at a random grid start. The host calls this just before <c>SelectSpawnPoint</c>: it sets
-    /// the one-shot forced-spawn redirect (<see cref="Entity.SpawnPointTarg"/>) to the racer's respawn checkpoint
-    /// entity, which SelectSpawnPoint short-circuits to (and PutPlayerInServer consumes). A racer who hasn't
-    /// passed any checkpoint yet (or qualifying, which always restarts from the start line) keeps the normal
-    /// start-spawn selection. Returns true if a checkpoint respawn spot was applied.
-    /// </summary>
-    public bool ApplyRespawnSpot(Player p)
-    {
-        if (!_states.TryGetValue(p, out RaceState? st))
-            return false;
-        // QC: qualifying always respawns at the start line (race_RetractPlayer clears to checkpoint 0); only a
-        // plain race returns the racer to their last checkpoint.
-        if (Qualifying)
-            return false;
-        Entity? spot = st.RespawnSpot;
-        if (spot is null || spot.IsFreed || st.RespawnCheckpoint == 0)
-            return false; // no passed checkpoint (or back at the start line) — use the normal start spawn
-        p.SpawnPointTarg = spot; // QC race_respawn_spotref → the forced one-shot respawn spot
-        return true;
     }
 
     // ============================================================================================
@@ -1450,7 +1617,7 @@ public sealed class Race : GameType
 
             // QC race_checkAndWriteName: keep the uid→display-name DB current (gated on the consent cvars in QC;
             // the port models consent as a non-empty PersistentId).
-            if (!string.IsNullOrEmpty(p.PersistentId))
+            if (!string.IsNullOrEmpty(p.PersistentId) && UidConsentProvider?.Invoke(p) != false)
                 RaceRecords.SetName(p.PersistentId, p.NetName);
 
             // QC vdist(player.velocity - player.velocity_z * '0 0 1', >, speedaward_speed): planar speed only.

@@ -1,0 +1,5 @@
+[legacy] playing the demo data/core.pk3dir/demos/little-bot-orchestra.dem (2361350 bytes)
+[legacy] the loading screen came down 1.29 s after the session was started (0.70 s after entering the game)
+]menu_cmd directmenu GameMenu
+]menu_cmd directmenu Welcome HOSTNAME "Local Demo Fixture" WELCOME "Playback: Join and Spectate disabled."
+[legacy] session over: in the game 16.3 s, entity frames 122, csqc frames 250 (0 faulted), undecoded messages 0, datagrams sent 0 received 0 over demo data/core.pk3dir/demos/little-bot-orchestra.dem; frame mean 58.41 ms p99 396.23 max 818.6, legacy (client) mean 7.45 ms p99 195.73

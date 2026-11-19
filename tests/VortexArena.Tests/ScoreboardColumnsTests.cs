@@ -2,7 +2,9 @@ using System.Collections.Generic;
 using VortexArena.Common.Framework;          // Entity, EntFlags
 using VortexArena.Common.Gameplay;           // Player, Teams
 using VortexArena.Common.Gameplay.Scoring;
+using VortexArena.Engine.Collision;
 using VortexArena.Net;
+using GameWorld = VortexArena.Server.GameWorld;
 using Xunit;
 using GS = VortexArena.Common.Gameplay.Scoring.GameScores;
 
@@ -33,6 +35,22 @@ public class ScoreboardColumnsTests
         GS.ResetTeams();
         GS.Gametype = "dm";
         GS.Teamplay = false;
+    }
+
+    [Fact]
+    public void ScoreboardClientSlotOrderReusesVacantSlotWithoutReorderingConnectedPlayers()
+    {
+        var world = new GameWorld(new CollisionWorld());
+        world.Boot("dm");
+
+        var first = world.Clients.ClientConnect(netName: "first");
+        var second = world.Clients.ClientConnect(netName: "second");
+        Assert.True(world.Clients.ClientDisconnect(first.Player));
+        var replacement = world.Clients.ClientConnect(netName: "replacement");
+
+        Assert.Equal(first.ClientSlot, replacement.ClientSlot);
+        Assert.Equal(new[] { replacement.Player, second.Player }, world.Clients.PlayersByClientSlot);
+        Assert.Equal(new[] { second.Player, replacement.Player }, world.Clients.Players);
     }
 
     /// <summary>Mirror Ctf.cs's ScoreRules so the test's "server" has CTF's mode-specific networked column set.</summary>

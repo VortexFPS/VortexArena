@@ -1,89 +1,58 @@
 # Base coverage ledger
 
-_Generated 2026-07-02 by `tools/parity-coverage.py` from 162 registry shards against `C:\Users\Bryan\Projects\Xonotic\Base\data\xonotic-data.pk3dir\qcsrc`._
+_Generated 2026-11-19 by `tools/parity-coverage.py` from 164 registry shards against `863cd3e8456e18f577f7fe5fef857ff55ae62cc0`._
 
 A Base file is **cited** when any registry row's `base_refs` names it, **excluded** when
 [coverage-scope.yaml](coverage-scope.yaml) declares it out of parity scope (with rationale),
-**deferred** when an audit is scheduled but not yet landed, and **UNMAPPED** when nobody has
-ever looked — the actionable number. Citation is a *claim* that the owning unit audited the
-file; it does not by itself prove row-level completeness (the adversarial verify passes do that).
+**deferred** when an audit is scheduled and **UNMAPPED** when the registry has no
+citation or scope entry. These counts measure traceability. Checking behavior requires
+following the original and native callers or exercising them.
 
 ## Summary
 
 | bucket | files | lines | % of lines |
 |---|---:|---:|---:|
-| cited | 811 | 207192 | 85.9% |
+| cited | 972 | 218569 | 90.6% |
 | excluded | 11 | 4220 | 1.7% |
-| deferred | 177 | 4463 | 1.9% |
-| UNMAPPED | 758 | 25350 | 10.5% |
-| **total** | 1757 | 241225 | 100% |
+| deferred | 172 | 4201 | 1.7% |
+| UNMAPPED | 602 | 14212 | 5.9% |
+| **total** | 1757 | 241202 | 100% |
+
+## Separate source review
+
+The [directory audit](unmapped-audit/README.md) assessed 631 files at this pin. It includes 602 of the 602 files currently marked UNMAPPED. 0 uncited files fall outside that review. The [ordered follow-up](unmapped-audit/S1-REVIEW.md) records behavioral comparisons within that inventory.
+
+The [deferred menu audit](deferred-audit/README.md) assessed 176 additional files. It covers 172 of the 172 current deferred entries. A per-file source assessment establishes the scope of review. Runtime checks are listed separately.
 
 ## Per-directory
 
 | dir | total files | cited | excluded | deferred | UNMAPPED files | UNMAPPED lines |
 |---|---:|---:|---:|---:|---:|---:|
-| `client/` | 109 | 57 | 0 | 0 | 52 | 1674 |
-| `common/` | 1000 | 500 | 0 | 0 | 500 | 11466 |
+| `client/` | 109 | 88 | 0 | 0 | 21 | 294 |
+| `common/` | 1000 | 591 | 0 | 0 | 409 | 4883 |
 | `dpdefs/` | 12 | 1 | 11 | 0 | 0 | 0 |
 | `ecs/` | 21 | 2 | 0 | 0 | 19 | 196 |
-| `lib/` | 101 | 21 | 0 | 0 | 80 | 7116 |
-| `menu/` | 340 | 163 | 0 | 177 | 0 | 0 |
-| `server/` | 174 | 67 | 0 | 0 | 107 | 4898 |
+| `lib/` | 101 | 33 | 0 | 0 | 68 | 5271 |
+| `menu/` | 340 | 168 | 0 | 172 | 0 | 0 |
+| `server/` | 174 | 89 | 0 | 0 | 85 | 3568 |
 
-## Largest UNMAPPED files (top 50)
+## Largest UNMAPPED files (top 0)
 
 | file | lines |
 |---|---:|
-| `common/effects/effectinfo_vehicles.inc` | 1166 |
-| `lib/string.qh` | 667 |
-| `server/pathlib/main.qc` | 545 |
-| `common/debug.qh` | 502 |
-| `lib/net.qh` | 453 |
-| `lib/intrusivelist.qh` | 389 |
-| `lib/oo.qh` | 368 |
-| `common/mapobjects/func/pointparticles.qc` | 340 |
-| `lib/_all.inc` | 330 |
-| `common/effects/effectinfo_nades.inc` | 325 |
-| `client/draw.qc` | 311 |
-| `common/effects/effectinfo_buffs.inc` | 305 |
-| `lib/warpzone/mathlib.qc` | 295 |
-| `lib/registry.qh` | 270 |
-| `server/pathlib/path_waypoint.qc` | 239 |
-| `lib/matrix/matrix.qc` | 236 |
-| `server/pathlib/expandnode.qc` | 236 |
-| `lib/vector.qh` | 232 |
-| `lib/stats.qh` | 217 |
-| `server/pathlib/utility.qc` | 213 |
-| `client/main.qh` | 211 |
-| `lib/promise.qc` | 210 |
-| `common/viewloc.qc` | 206 |
-| `common/effects/effectinfo_gentle_particlegibs.inc` | 199 |
-| `lib/iter.qh` | 192 |
-| `lib/color.qh` | 189 |
-| `lib/deglobalization.qh` | 172 |
-| `common/mapobjects/subs.qh` | 171 |
-| `common/physics/movetypes/movetypes.qh` | 166 |
-| `lib/spawnfunc.qh` | 161 |
-| `server/weapons/accuracy.qc` | 160 |
-| `server/pathlib/movenode.qc` | 158 |
-| `common/monsters/sv_monsters.qh` | 154 |
-| `common/animdecide.qh` | 147 |
-| `server/damage.qh` | 147 |
-| `common/effects/qc/modeleffects.qc` | 146 |
-| `common/mapobjects/func/rainsnow.qc` | 143 |
-| `server/bot/default/navigation.qh` | 140 |
-| `server/scores.qh` | 140 |
-| `lib/bits.qh` | 139 |
-| `server/pathlib/costs.qc` | 135 |
-| `client/view.qh` | 134 |
-| `server/weapons/csqcprojectile.qc` | 132 |
-| `common/monsters/monster.qh` | 126 |
-| `lib/map.qh` | 124 |
-| `common/effects/effectinfo_ctf.inc` | 123 |
-| `common/effects/effectinfo_onslaught.inc` | 123 |
-| `server/items/items.qh` | 123 |
-| `common/mutators/events.qh` | 122 |
-| `common/effects/effectinfo_gentle.inc` | 121 |
+
+Of the 774 unmapped or deferred files, 238 contain only comments, whitespace, include directives or pragma once. The JSON lists those paths separately. Keep the files they include in scope.
+
+## Functions inside cited files
+
+2914 ordinary function names in 452 cited files lack a path:symbol anchor naming the function immediately after the colon. A prose note, line reference or caller may already cover the behavior. The full per-file list is in `_coverage.json` under `uncited_functions`.
+
+| file | names to inspect |
+|---|---:|
+
+## Macro declarations inside cited files
+
+1818 distinct declarations in 377 cited files lack an explicit same-file macro anchor. This scan recognizes line-leading METHOD, MUTATOR_HOOKFUNCTION and REGISTER_* calls with literal identifiers. For a method or hook it checks both the owner and member names. Conditionals, other macro families and token-pasted names require inspection. The JSON lists the declarations under `uncited_macro_declarations`.
 
 ## Deferred (audit scheduled)
 
@@ -91,7 +60,6 @@ file; it does not by itself prove row-level completeness (the adversarial verify
 |---|---:|---|
 | `menu/skin-customizables.inc` | 282 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/serverlist.qh` | 166 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
-| `menu/xonotic/guide/guide.qh` | 133 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/_mod.inc` | 132 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/_mod.qh` | 132 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/item/listbox.qh` | 87 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
@@ -110,12 +78,10 @@ file; it does not by itself prove row-level completeness (the adversarial verify
 | `menu/xonotic/screenshotlist.qh` | 45 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/draw.qh` | 44 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/item/button.qh` | 42 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
-| `menu/xonotic/guide/pages.qh` | 40 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/hudskinlist.qh` | 39 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/keybinder.qh` | 39 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/playlist.qh` | 39 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/item/label.qh` | 38 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
-| `menu/xonotic/guide/entries.qh` | 37 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/inputbox.qh` | 37 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/languagelist.qh` | 37 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/dialog.qh` | 35 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
@@ -130,7 +96,6 @@ file; it does not by itself prove row-level completeness (the adversarial verify
 | `menu/xonotic/slider.qh` | 30 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/checkbox.qh` | 29 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/dialog_multiplayer_join_serverinfotab.qh` | 29 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
-| `menu/xonotic/guide/topics.qh` | 29 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/mixedslider.qh` | 29 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/playermodel.qh` | 29 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/textslider.qh` | 29 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
@@ -155,7 +120,6 @@ file; it does not by itself prove row-level completeness (the adversarial verify
 | `menu/xonotic/credits.qh` | 23 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/dialog_hudsetup_exit.qh` | 23 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/dialog_termsofservice.qh` | 23 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
-| `menu/xonotic/guide/description.qh` | 23 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/dialog_media_screenshot_viewer.qh` | 22 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/playerlist.qh` | 22 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
 | `menu/xonotic/button.qh` | 20 | menu-core + menu-dialogs units — 2026-07-02 unmapped-area audit wave |
@@ -453,10 +417,15 @@ file; it does not by itself prove row-level completeness (the adversarial verify
 - `menu/xonotic/dialog_welcome.qc` is now cited
 - `menu/xonotic/gametypelist.qc` is now cited
 - `menu/xonotic/guide/description.qc` is now cited
+- `menu/xonotic/guide/description.qh` is now cited
 - `menu/xonotic/guide/entries.qc` is now cited
+- `menu/xonotic/guide/entries.qh` is now cited
 - `menu/xonotic/guide/guide.qc` is now cited
+- `menu/xonotic/guide/guide.qh` is now cited
 - `menu/xonotic/guide/pages.qc` is now cited
+- `menu/xonotic/guide/pages.qh` is now cited
 - `menu/xonotic/guide/topics.qc` is now cited
+- `menu/xonotic/guide/topics.qh` is now cited
 - `menu/xonotic/hudskinlist.qc` is now cited
 - `menu/xonotic/image.qc` is now cited
 - `menu/xonotic/inputbox.qc` is now cited
@@ -495,17 +464,3 @@ file; it does not by itself prove row-level completeness (the adversarial verify
 - `menu/xonotic/weaponarenacheckbox.qc` is now cited
 - `menu/xonotic/weaponslist.qc` is now cited
 - `server/command/getreplies.qc` is now cited
-
-## STALE citations (base_refs path matches no Base file — fix the row)
-
-- `client/hud/panel/crosshair.qc`
-- `client/hud/panel/itemstime.qc`
-- `common/gamemodes/gamemode/ctf/sv_ctf.qc`
-- `common/gamemodes/gamemode/freezetag/sv_freezetag.qc`
-- `common/gamemodes/gamemode/keyhunt/sv_keyhunt.qc`
-- `common/gamemodes/gamemode/lms/sv_lms.qc`
-- `common/mutators/mutator/itemstime/sv_itemstime.qc`
-- `common/t_items.qc`
-- `lib/util.qc`
-- `server/mutators/mutator/gamemode_ctf.qc`
-- `server/mutators/mutator/gamemode_onslaught.qc`

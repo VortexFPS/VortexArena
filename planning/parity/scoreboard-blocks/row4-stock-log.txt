@@ -1,0 +1,87 @@
+stock · Running Man DM · independent local profiles
+Data pin 863cd3e8456e18f577f7fe5fef857ff55ae62cc0
+
+run.log
+Viewer cmd join
+Zebra cmd join
+Viewer scoreboard_columns_set name | score | deaths
+Viewer status
+Zebra scoreboard_columns_set name | score | deaths
+Viewer cmd ignore Zebra
+Zebra say SB_BLOCKED
+Viewer cmd unignore Zebra
+Zebra say SB_ALLOWED
+Viewer cmd ignore Zebra
+Viewer cmd clear_ignores
+Viewer cmd unignore Zebra
+Viewer quit
+Viewer cmd join
+Viewer scoreboard_columns_set name | score | deaths
+Viewer status
+Viewer bind F6 +showscores
+Viewer bind w "echo SB_NAV_KEY_LEAK"
+Viewer unbind q
+Viewer cl_cmd hud clickradar
+Viewer cl_cmd hud clickradar
+Viewer cl_cmd hud clickradar
+Viewer echo SB_CONSOLE_REACHABLE
+Viewer cl_cmd hud clickradar
+Viewer cl_deathscoreboard 0
+Viewer kill
+Viewer cl_cmd hud clickradar
+PASS: owner chat filtering, revert, console focus and gameplay bind ownership
+
+server.log
+Server listening on address 127.0.0.1:36255
+Server listening on address [0:0:0:0:0:0:0:0]:36255
+Viewer connected
+Zebra connected
+Viewer connected
+
+Viewer-initial.log
+Connection accepted to 127.0.0.1:36255
+Viewer connected
+Zebra connected
+Viewer is now playing
+Zebra is now playing
+#1   Viewer              0   0:00:37
+#2   Zebra               0   0:00:19
+You will no longer receive messages from Zebra for this match, use unignore to hear them again.
+You can now receive messages from Zebra again.
+Zebra: SB_ALLOWED
+You will no longer receive messages from Zebra for this match, use unignore to hear them again.
+You don't have a stats UID, unable to clear your ignore list.
+You can now receive messages from Zebra again.
+
+Viewer.log
+Connection accepted to 127.0.0.1:36255
+Viewer connected
+Viewer is now playing
+#1   Viewer              0   0:00:21
+#2   Zebra               0   0:01:11
+]bind w "echo SB_NAV_KEY_LEAK"
+]cl_cmd hud clickradar
+]cl_cmd hud clickradar
+]cl_cmd hud clickradar
+]echo SB_CONSOLE_REACHABLE
+SB_CONSOLE_REACHABLE
+]cl_cmd hud clickradar
+SB_NAV_KEY_LEAK
+]cl_deathscoreboard 0
+]kill
+Viewer couldn't take it anymore
+]cl_cmd hud clickradar
+
+Zebra.log
+Connection accepted to 127.0.0.1:36255
+Zebra connected
+Viewer is now playing
+Zebra is now playing
+]say SB_BLOCKED
+Zebra: SB_BLOCKED
+]say SB_ALLOWED
+Zebra: SB_ALLOWED
+Viewer disconnected
+Viewer connected
+Viewer is now playing
+Viewer couldn't take it anymore

@@ -119,12 +119,8 @@ public static class MapObjectsRegistry
         // runtime / moving-warpzone re-link (server.qc:807-815). Both names spawn the same triggerable use-handler.
         SpawnFuncs.Register("trigger_warpzone_reconnect", WarpzoneSpawns.TriggerWarpzoneReconnectSetup);
         SpawnFuncs.Register("target_warpzone_reconnect", WarpzoneSpawns.TriggerWarpzoneReconnectSetup);
-        // map-placed security cameras (lib/warpzone/server.qc spawnfunc func_camera / func_warpzone_camera): the
-        // dpcamera/func_camera entity resolves its target, stores the camera pose, and on touch/view stamps the
-        // viewer's authoritative FixAngle/FixAngleAngles — the same view-orient channel the warpzone owner block
-        // uses (no new wire fields). Routed through the same WarpzoneSpawns.Sink the other warpzone spawnfuncs use
-        // (bridged in GameWorld.cs:453) so it realises on the normal match path. Client view-side presentation
-        // (FixView / portal render) is the listen-host/demo ambient seam, same as LaserRenderer / PortalRenderer.
+        // Fixed-view brush. The common manager resolves its target after map spawn.
+        // Keep the native alias for existing maps.
         SpawnFuncs.Register("func_camera", WarpzoneSpawns.FuncCameraSetup);
         SpawnFuncs.Register("func_warpzone_camera", WarpzoneSpawns.FuncCameraSetup);
 
@@ -138,8 +134,8 @@ public static class MapObjectsRegistry
         SpawnFuncs.Register("trigger_push", Jumppads.PushSetup);
         SpawnFuncs.Register("trigger_push_velocity", Jumppads.PushVelocitySetup);
         SpawnFuncs.Register("target_push", Jumppads.TargetPushSetup);
-        SpawnFuncs.Register("target_position", Jumppads.TargetPushSetup);
-        SpawnFuncs.Register("info_notnull", Jumppads.TargetPushSetup);
+        SpawnFuncs.Register("target_position", Jumppads.TargetPositionSetup);
+        SpawnFuncs.Register("info_notnull", Jumppads.TargetPositionSetup);
 
         // ---- ambient/triggered speakers (target/speaker.qc) ----
         SpawnFuncs.Register("target_speaker", TargetSpeaker.SpeakerSetup);
@@ -269,9 +265,12 @@ public static class MapObjectsRegistry
         // CTF flags (common/gametypes/gametype/ctf/sv_ctf.qc spawnfunc item_flag_team*/item_flag_neutral).
         SpawnFuncs.Register("item_flag_team1", GametypeObjectiveSpawns.FlagTeam1);
         SpawnFuncs.Register("item_flag_team2", GametypeObjectiveSpawns.FlagTeam2);
+        SpawnFuncs.Register("team_CTF_redflag", GametypeObjectiveSpawns.FlagTeam1);
+        SpawnFuncs.Register("team_CTF_blueflag", GametypeObjectiveSpawns.FlagTeam2);
         SpawnFuncs.Register("item_flag_team3", GametypeObjectiveSpawns.FlagTeam3);
         SpawnFuncs.Register("item_flag_team4", GametypeObjectiveSpawns.FlagTeam4);
         SpawnFuncs.Register("item_flag_neutral", GametypeObjectiveSpawns.FlagNeutral);
+        SpawnFuncs.Register("tdm_team", GametypeObjectiveSpawns.TdmTeam);
         // Domination control points (common/gametypes/gametype/domination/sv_domination.qc dom_controlpoint).
         SpawnFuncs.Register("dom_controlpoint", GametypeObjectiveSpawns.DomControlPoint);
         SpawnFuncs.Register("team_dom_point", GametypeObjectiveSpawns.DomControlPoint); // legacy classname alias
@@ -280,6 +279,7 @@ public static class MapObjectsRegistry
         // wrongly visible on the map in the wrong gametype (playtest #20: Stormkeep DM showed a dom_* cluster).
         SpawnFuncs.Register("dom_team", GametypeObjectiveSpawns.DomTeam);
         // Race checkpoints + penalty zones (common/gametypes/gametype/race/sv_race.qc + server/race.qc).
+        SpawnFuncs.Register("info_player_race", GametypeObjectiveSpawns.RaceSpawn);
         SpawnFuncs.Register("trigger_race_checkpoint", GametypeObjectiveSpawns.RaceCheckpoint);
         SpawnFuncs.Register("trigger_race_penalty", GametypeObjectiveSpawns.RacePenalty);
         // Onslaught generators / control points / links (sv_onslaught.qc spawnfunc onslaught_*).
@@ -335,24 +335,29 @@ public static class MapObjectsRegistry
         SpawnFuncs.Register("target_checkpoint", GametypeObjectiveSpawns.TargetCheckpoint);
     }
 
+    /// <summary>Spawn the map lump with start-open placement deferred until target lookup.</summary>
+    public static void SpawnMapLump(Action spawn)
+    {
+        Doors.DeferStartOpen = true;
+        try { spawn(); }
+        finally { Doors.DeferStartOpen = false; }
+    }
+
     /// <summary>
-    /// Post-spawn pass the lead runs once after the whole BSP entity lump has been spawned (the headless
-    /// analogue of QC's INITPRIO_LINKDOORS). It links double/quad doors into their owner/enemy groups now
-    /// that every door's size is known. Safe to call more than once.
+    /// Resolve deferred map references, place start-open doors and then link door groups after the entity
+    /// lump has spawned. Safe to call more than once.
     /// </summary>
     public static void RunPostSpawn()
     {
-        Doors.RunDeferredLinks();
-
-        // T59 INITPRIO_FINDTARGET pass — run AFTER the door-link pass (mirrors QC's priority ordering): resolve
-        // the follow/tag/path/reference lookups of the long-tail entities now that the whole BSP lump has
-        // spawned (and door targetnames are settled). Each family drains its own pending-init queue.
+        // INITPRIO_FINDTARGET (10) precedes door placement (90) and group linking (91).
         DynamicLight.RunDeferredInit();
         ViewLocation.RunDeferredInit();
         Follow.RunDeferredInit();
         AdvancedMovers.RunDeferredInit();
         Teleporters.RunDeferredInit(); // target_teleporter_checktarget disambiguation + teleport_findtarget (dest cache + touch)
         InfoAutoScreenshot.RunDeferredInit(); // aim each info_autoscreenshot at its .target (QC findtarget pass)
+        Doors.RunDeferredPlacement();
+        Doors.RunDeferredLinks();
     }
 
     // ====================================================================
@@ -571,6 +576,7 @@ public static class GametypeObjectiveSpawns
     public static void FlagTeam3(Entity e) => Emit(e, "item_flag_team3", Teams.Yellow);
     public static void FlagTeam4(Entity e) => Emit(e, "item_flag_team4", Teams.Pink);
     public static void FlagNeutral(Entity e) => Emit(e, "item_flag_neutral", Teams.None);
+    public static void TdmTeam(Entity e) => Emit(e, "tdm_team", e.Cnt);
 
     // Domination control point (the owning team starts neutral; the map may set an initial team via fields).
     public static void DomControlPoint(Entity e) => Emit(e, "dom_controlpoint", (int)e.Team);
@@ -583,6 +589,7 @@ public static class GametypeObjectiveSpawns
     public static void DomTeam(Entity e) => Emit(e, "dom_team", (int)e.Team);
 
     // Race checkpoint + penalty zone (checkpoint index / penalty seconds come from the edict fields).
+    public static void RaceSpawn(Entity e) => Emit(e, "info_player_race", (int)e.Team);
     public static void RaceCheckpoint(Entity e) => Emit(e, "trigger_race_checkpoint", Teams.None);
     public static void RacePenalty(Entity e) => Emit(e, "trigger_race_penalty", Teams.None);
 
@@ -632,8 +639,6 @@ public static class GametypeObjectiveSpawns
     public static void TargetInvasionRoundend(Entity e)  => Emit(e, "target_invasion_roundend", Teams.None);
 
     // ---- CTS start/stop/intermediate timers (server/race.qc target_checkpoint_setup, gated !g_race && !g_cts) ----
-    // The port's CTS models a single start→stop course (no defrag intermediate checkpoints), so target_checkpoint
-    // is consumed as a no-op; target_startTimer/target_stopTimer spawn the run timers.
     public static void TargetStartTimer(Entity e) => Emit(e, "target_startTimer", Teams.None);
     public static void TargetStopTimer(Entity e)  => Emit(e, "target_stopTimer", Teams.None);
     public static void TargetCheckpoint(Entity e) => Emit(e, "target_checkpoint", Teams.None);

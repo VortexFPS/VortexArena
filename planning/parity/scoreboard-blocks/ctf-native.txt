@@ -1,0 +1,16 @@
+server
+[shell] --cvar g_ctf_leaderboard = "1"
+[shell] --cvar sv_cheats = "1"
+[NetTransport.Server] listening on UDP 28744 (max 32).
+"sv_cheats" is "1"
+"g_ctf_leaderboard" is "1"
+:kill:suicide:1:1:type=teamchange:items=21
+:kill:suicide:1:1:type=kill:items=21
+client
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+joined the game
+]cmd selectteam red
+]cmd teleporttotarget native_blue
+]cmd teleporttotarget native_red
+]cmd kill

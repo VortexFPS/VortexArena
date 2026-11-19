@@ -148,11 +148,11 @@ public static class ProjectileCatalog
         Add(new Desc { Type = ProjectileType.Rpc, TrailEffect = "TR_ROCKET", Trail = RocketSmoke,
             Body = BodyFamily.RocketMesh, ModelPath = "models/rocket.md3", ModelScale = 2f, SpinDegPerSec = new Vector3(720f, 0, 0),
             GlowColor = RocketOrange, HasLight = true, LoopSound = "weapons/rocket_fly" });
-        // EFFECT_TR_CRYLINKPLASMA (projectile.qc:348-349)
+        // EFFECT_TR_CRYLINKPLASMA (projectile.qc:348-349) has no light block.
         Add(new Desc { Type = ProjectileType.Crylink, TrailEffect = "TR_CRYLINKPLASMA", Trail = PurplePlasma,
-            Body = BodyFamily.GlowSprite, GlowColor = CrylinkPurple, HasLight = true });
+            Body = BodyFamily.GlowSprite, ModelPath = "models/plasmatrail.mdl", GlowColor = CrylinkPurple });
         Add(new Desc { Type = ProjectileType.CrylinkBouncing, TrailEffect = "TR_CRYLINKPLASMA", Trail = PurplePlasma,
-            Body = BodyFamily.GlowSprite, GlowColor = CrylinkPurple, HasLight = true });
+            Body = BodyFamily.GlowSprite, ModelPath = "models/plasmatrail.mdl", GlowColor = CrylinkPurple });
         // EFFECT_TR_GRENADE, MDL_PROJECTILE_GRENADE, sideways tumble for bouncing (projectile.qc:351-353,132-134)
         Add(new Desc { Type = ProjectileType.Grenade, TrailEffect = "TR_GRENADE", Trail = GrenadeSmoke,
             Body = BodyFamily.GrenadeMesh, ModelPath = "models/grenademodel.md3", GlowColor = GrenadeGreen });

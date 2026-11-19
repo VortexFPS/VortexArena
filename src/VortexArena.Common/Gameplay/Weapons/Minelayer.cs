@@ -174,7 +174,7 @@ public sealed class Minelayer : Weapon
         mine.ProjectileDetonateTime = Cvars.DetonateDelay >= 0f ? Api.Clock.Time + Cvars.DetonateDelay : -1f;
 
         // W_SetupProjVelocity_Basic(mine, speed, 0).
-        mine.Velocity = shot.Dir * Cvars.Speed;
+        mine.Velocity = WeaponFiring.CalculateProjectileVelocity(actor, shot.Dir * Cvars.Speed);
         mine.Angles = QMath.VecToAngles(mine.Velocity);
 
         // QC minelayer.qc:321-322 — flag the mine as a dodgeable hazard; rating = damage * 2 ("* 2 because it can

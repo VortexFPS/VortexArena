@@ -1,5 +1,7 @@
+using System.Numerics;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Damage;
 using VortexArena.Common.Gameplay.Scoring;
 using VortexArena.Common.Services;
 using VortexArena.Engine.Collision;
@@ -27,6 +29,73 @@ public class FreezeTagScoreTests
     }
 
     private static Player P(int team) => new Player { Team = team, Flags = EntFlags.Client };
+
+    [Fact]
+    public void LethalHit_PreservesFrozenStatusUntilThaw()
+    {
+        StatusEffectsCatalog.RegisterAll();
+        var ft = new FreezeTag();
+        Player victim = P(Teams.Red);
+        victim.TakeDamage = DamageMode.Yes;
+        victim.SetResource(ResourceType.Health, 100f);
+        ft.Activate();
+        try
+        {
+            new DamageSystem().Apply(new DamageInfo
+            {
+                Target = victim,
+                Attacker = P(Teams.Blue),
+                Amount = 120f,
+                DeathType = DeathTypes.FromWeapon("blaster"),
+            });
+
+            StatusEffectDef frozenStatus = Assert.IsType<StatusEffectDef>(StatusEffectsCatalog.Frozen);
+            Assert.True(ft.IsFrozen(victim));
+            Assert.False(victim.IsDead);
+            Assert.True(StatusEffectsCatalog.Has(victim, frozenStatus));
+            Assert.Equal(0f, Assert.Single(victim.StatusEffects).ExpireTime);
+
+            ft.Unfreeze(victim);
+            Assert.False(StatusEffectsCatalog.Has(victim, frozenStatus));
+        }
+        finally
+        {
+            ft.Deactivate();
+        }
+    }
+
+    [Theory]
+    [InlineData("0", 26f)]
+    [InlineData("1", 25f)]
+    public void FrozenHazard_RelocatesWithoutChangingResources(string cvar, float expectedHeight)
+    {
+        Api.Cvars.Set("g_frozen_damage_trigger", cvar);
+        var ft = new FreezeTag();
+        Player victim = P(Teams.Red);
+        victim.TakeDamage = DamageMode.Yes;
+        victim.SetResource(ResourceType.Armor, 25f);
+        victim.Mins = new Vector3(-16f, -16f, -24f);
+        victim.Velocity = new Vector3(0f, 0f, -500f);
+        victim.SpawnPointTarg = new Entity { Origin = new Vector3(300f, 50f, 25f), Angles = new Vector3(0f, 90f, 0f) };
+        ft.Activate();
+        try
+        {
+            ft.Freeze(victim, attacker: null);
+            new DamageSystem().Apply(new DamageInfo { Target = victim, Amount = 1000f, DeathType = DeathTypes.Lava });
+
+            Assert.True(ft.IsFrozen(victim));
+            Assert.Equal(1f, victim.GetResource(ResourceType.Health));
+            Assert.Equal(25f, victim.GetResource(ResourceType.Armor));
+            Assert.Equal(new Vector3(300f, 50f, expectedHeight), victim.Origin);
+            Assert.Equal(victim.Origin, victim.OldOrigin);
+            Assert.Equal(Vector3.Zero, victim.Velocity);
+            Assert.True(victim.FixAngle);
+        }
+        finally
+        {
+            ft.Deactivate();
+        }
+    }
 
     [Fact]
     public void NullAttacker_RulesFreeze_AwardsNoScore()

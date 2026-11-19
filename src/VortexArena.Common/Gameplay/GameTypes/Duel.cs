@@ -123,20 +123,10 @@ public sealed class Duel : GameType
     /// <summary>
     /// QC MUTATOR_HOOKFUNCTION(duel, FilterItemDefinition) (sv_duel.qc:14): block powerup items from spawning
     /// unless g_duel_with_powerups is set. Returns true if the item should be FILTERED OUT (not spawned).
-    /// Subscribed live via the MutatorHooks.FilterItemDefinition chain in <see cref="Activate"/> (matching how
-    /// Mayhem/TeamMayhem register their item filters); the hook's <c>Definition</c> is the item entity, so the
-    /// powerup test is by classname (the same stand-in Mayhem/NixMutator use — the item-class registry isn't
-    /// fully ported).
+    /// StartItem resolves aliases and attaches the pickup definition before this hook runs.
     /// </summary>
     private bool OnFilterItemDefinition(ref MutatorHooks.FilterItemDefinitionArgs args)
-    {
-        string id = args.Definition.ClassName;
-        // QC: if(definition.instanceOfPowerup) return !autocvar_g_duel_with_powerups;
-        bool isPowerup = id is "item_strength" or "item_shield" or "item_invincible";
-        if (isPowerup)
-            return !WithPowerups;
-        return false;
-    }
+        => args.Definition.Pickup?.IsPowerup == true && !WithPowerups;
 
     /// <summary>
     /// The frag limit currently in force (g_duellimit, else fraglimit, else default 0 = unlimited). 0 means

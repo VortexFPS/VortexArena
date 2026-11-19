@@ -214,7 +214,17 @@ public sealed class PlayerPhysics : IPlayerPhysics
         CheckWater(player);
 
         // ----- frozen movement clamp (QC PM_check_frozen, common/physics/player.qc:649) -----
-        Vector3 move = input.MoveValues;
+        Vector3 commandMove = input.MoveValues;
+        ViewLocationState? activeRegion = player.ActiveViewLocation;
+        bool sideScroll = activeRegion is { SideScroll: true };
+        if (activeRegion is { SideScroll: true } region)
+        {
+            Vector3 bodyFacing = input.ViewAngles;
+            region.RemapMovement(ref commandMove, ref bodyFacing, player.LadderEntity is not null);
+            player.Angles.Y = bodyFacing.Y;
+        }
+
+        Vector3 move = commandMove;
         bool frozen = IsFrozen(player);
         if (frozen)
         {
@@ -273,10 +283,10 @@ public sealed class PlayerPhysics : IPlayerPhysics
         //       (DodgingMutator.CheckPressedKeys reads MovementForward/Right + PressedKeys + ButtonCrouch), the
         //       multijump dodging-redirect, and the bugrigs throttle/steer. QC populates them from the usercmd before
         //       the PlayerPhysics hook runs; the headless sim has no usercmd edict, so bridge them here, just before
-        //       the hook fires. Write the RAW input.MoveValues (not the frozen/typing-clamped `move` local) so a
+        //       the hook fires. Write the unclamped command axes (including the authored view-location transform) so a
         //       frozen-dodge (sv_dodging_frozen) — which Base detects off the raw PHYS_CS movement — can still fire. -----
-        player.MovementForward = input.MoveValues.X;
-        player.MovementRight = input.MoveValues.Y;
+        player.MovementForward = commandMove.X;
+        player.MovementRight = commandMove.Y;
         player.ButtonCrouch = input.ButtonCrouch;
         player.ButtonChat = input.Typing; // QC PHYS_INPUT_BUTTON_CHAT — campcheck typecheck gate reads this
         player.ViewAngles = input.ViewAngles;
@@ -294,13 +304,13 @@ public sealed class PlayerPhysics : IPlayerPhysics
         //       diagonals for record fairness (sv_cts.qc PlayerPhysics). Fold any such rewrite of the entity's
         //       MovementForward/MovementRight back into the local `move` the branch chain below consumes. This is a
         //       strict no-op in every mode that doesn't rewrite them: the input bridge above seeds them from
-        //       input.MoveValues, so the X/Y only differ here if a handler changed them. We preserve the existing
+        //       commandMove, so the X/Y only differ here if a handler changed them. We preserve the existing
         //       frozen/typing zeroing of `move` — a frozen player keeps move==0 because the X/Y guards compare
         //       against the seed, not the raw input — by only adopting the X/Y when move's X/Y is itself non-frozen
         //       (i.e. equals the seed input). -----
-        if (player.MovementForward != input.MoveValues.X && move.X == input.MoveValues.X)
+        if (player.MovementForward != commandMove.X && move.X == commandMove.X)
             move.X = player.MovementForward;
-        if (player.MovementRight != input.MoveValues.Y && move.Y == input.MoveValues.Y)
+        if (player.MovementRight != commandMove.Y && move.Y == commandMove.Y)
             move.Y = player.MovementRight;
 
         // ----- CLIENT-PREDICTION speed parity (QC replicates STAT(MOVEVARS_HIGHSPEED) per-player) -----
@@ -360,6 +370,9 @@ public sealed class PlayerPhysics : IPlayerPhysics
 
         // ----- build wishdir basis (2D yaw-only for ground/air; full angles for water/ladder/jetpack) ---
         Vector3 viewAngles = input.ViewAngles;
+        // QC restores body yaw from v_angle after the movement hook. The movement basis uses v_angle as well.
+        if (sideScroll && !player.FixAngle)
+            player.Angles.Y = viewAngles.Y;
 
         // ----- jump / jetpack activation (QC CheckPlayerJump -> PlayerJump) -----
         // Must run before friction/accel, as in PM_Main. Returns whether the jetpack thrust is active.
@@ -751,7 +764,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
     {
         // QW water-jump out of the surface (this mimics quakeworld code).
         if (input.ButtonJump && player.WaterLevel == WaterLevelSwimming && player.Velocity.Z >= -180f
-            && player.ViewLoc is null && !IsFrozen(player))
+            && player.ActiveViewLocation is null && !IsFrozen(player))
         {
             Vector3 yawAngles = new(0f, viewAngles.Y, 0f);
             QMath.AngleVectors(yawAngles, out Vector3 fwd, out _, out _);
@@ -790,7 +803,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
             // `else if (wishvel == 0)` is attached to the viewloc test, NOT to crouch, so reproduce that order.
             if (input.ButtonCrouch)
                 wishvel.Z = -mp.MaxSpeed;
-            if (player.ViewLoc is not null)
+            if (player.ActiveViewLocation is not null)
                 wishvel.Z = -160f;                               // 1D-rail: drift anyway
             else if (wishvel == Vector3.Zero)
                 wishvel.Z = -60f;                                // drift towards the bottom
@@ -814,7 +827,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
         }
 
         // holding jump swims upward
-        if (input.ButtonJump && player.ViewLoc is null && !IsFrozen(player))
+        if (input.ButtonJump && player.ActiveViewLocation is null && !IsFrozen(player))
         {
             float upspeed = player.WaterLevel >= WaterLevelSubmerged ? mp.MaxSpeed * 0.7f : 200f;
             player.Velocity = new Vector3(player.Velocity.X, player.Velocity.Y, upspeed);
@@ -823,7 +836,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
         // QC physics.qc:408-421 — a viewloc (1D-rail) water volume uses a plain addspeed accel (no QW pass);
         // otherwise the standard QW water acceleration (PM_Accelerate with accelqw 1, no clamp). Inert on
         // stock 3D maps (ViewLoc null), but a real Base branch.
-        if (player.ViewLoc is not null)
+        if (player.ActiveViewLocation is not null)
         {
             float addspeed = wishspeed - QMath.Dot(player.Velocity, wishdir);
             if (addspeed > 0f)
@@ -857,7 +870,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
 
         // QC physics.qc:277-278 — a viewloc (1D-rail) ladder drives the vertical wish from the PREVIOUS tick's
         // forward wishmove (movement_old.x). Inert on stock 3D maps (ViewLoc null).
-        if (player.ViewLoc is not null)
+        if (player.ActiveViewLocation is not null)
             wishvel.Z = player.MovementForwardOld;
 
         // QC physics.qc:280-299 — a func_water "ladder" clamps the wish to the volume's speed and fills the
@@ -1109,7 +1122,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
         // water: jump out of the surface (handled here so it works even at the waterline)
         if (player.WaterLevel >= WaterLevelSwimming)
         {
-            if (player.ViewLoc is not null)
+            if (player.ActiveViewLocation is not null)
             {
                 doublejump = true;
                 mjumpheight *= 0.7f;
@@ -1299,7 +1312,7 @@ public sealed class PlayerPhysics : IPlayerPhysics
         // QC PM_ClientMovement_UpdateStatus:191-193 — a viewloc (1D side-scroller rail) without the FREEMOVE
         // spawnflag FORCES crouch while pressing "down" (movement.x < 0). Inert on stock 3D maps (ViewLoc is
         // always null), but a real Base branch. VIEWLOC_FREEMOVE = BIT(2) = 4 (viewloc.qh).
-        if (player.ViewLoc is { } vloc && (vloc.SpawnFlags & 4) == 0 && input.MoveValues.X < 0f)
+        if (player.ActiveViewLocation is { FreeMove: false } && input.MoveValues.X < 0f)
             doCrouch = true;
 
         // QC PM_ClientMovement_UpdateStatus:194-201 — the force-UNCROUCH chain, in QC's exact precedence

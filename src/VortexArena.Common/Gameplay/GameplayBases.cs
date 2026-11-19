@@ -406,6 +406,7 @@ public abstract partial class GameType : IRegistered
     /// override; null = no description, matching the port's prior behavior for modes not yet ported).
     /// </summary>
     public virtual string? MenuDescription => null;
+    public virtual string? MenuSummary => null;
 
     public virtual void OnInit() { }
 

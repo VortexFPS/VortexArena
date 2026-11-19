@@ -1,26 +1,18 @@
 unit: cl-scoreboard
 category: client
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
-last_audited: "2026-06-27"
+last_audited: "2026-11-19"
 summary:
   feature_count: 21
   worst_gaps:
-    - "Interactive scoreboard UI still entirely absent (arrow navigation, team-selection/join screen, spectate, vote-kick/tell, scoreboard_columns_set cycling, scores_per_round toggle)."
-    - "Item-stats block (per-item pickup-count icon grid) still entirely missing (no SetItemStats/DrawItemStats; inventory not networked for it)."
-    - "fps and skill columns still never render; packet-loss (pl) movement-loss '~N' suffix not tracked."
-    - "Name cell handicap icon LIVE (handicap_level networked end-to-end, exact '1 0 0'+'0 1 1'*((16-lvl)/15) tint); still missing player-color square, ready, ignored, and the (Q) wants-join marker."
-    - "Accuracy block still drawn as plain '%' text, not the per-weapon icon grid; no showdelay/warmup/doublerows/nocolors."
-    - "Content-measured column widths still approximated by a uniform numeric width + elastic name (no title-condense, no maxheight paging / '...and N more' overflow)."
-    - "Rankings still single-column (no multi-column wrap / horizontal scroll)."
-    - "Secondary teamscore (e.g. keyhunt) still not networked (only the primary team slot rides the wire)."
+    - "Race, CTS and gated CTF capture rankings are live. Rankings reload from the native profile. Exact rankings page animation remains incomplete."
+    - "The native team scoreboard transports the primary team score only. Secondary scores cannot break ties."
+    - "FPS and skill cells, movement-loss suffix, several name icons, and aligned spectator columns remain incomplete."
   notable_fixes_since_last_audit:
-    - "RE-AUDIT 2026-06-27 (W16/W17 drift check): ONE material fix, 0 regressions. PER-ROW PING is now NETWORKED + LIVE end-to-end — the prior worst-gap ('ping never networked → SetWireRows hardcodes -1 → dim dash') is CLOSED. ServerNet.BuildScoreboard (ServerNet.cs:2484-2498) feeds pingMs = _transport.RoundTripMs(peerId) (NetTransport.cs:216-219, ENet PeerStatistic.RoundTripTime in ms) for connected humans, -1 for bots/unmapped; it rides ScoreRowWire.PingMs as a ushort (ScoreboardBlock.cs:130 serialize / :185 deserialize, 0xFFFF=-1); SetWireRows now passes ping: wr.PingMs to BOTH player rows (ScoreboardPanel.cs:262) and spectator rows (:244) — NOT the hardcoded -1 the prior audit recorded. GetField Ping colorizes a real ping by the (already-faithful) 20/80/200 bands; bots/loopback-host still show the neutral '-'. Both cl-scoreboard.field.ping (was dead) and the spectator-list showping gap flipped to live/faithful. NOTE: the prior 2026-06-27 audit line below is now partly stale — it asserted 'the ping cell is still dead / ScoreRowWire carries no ping field', which is no longer true."
-    - "RE-AUDIT 2026-06-27 (drift check): TWO fixes. (1) PING COLOR BANDS now match Base: PingColor (ScoreboardPanel.cs:727-738) reads hud_panel_scoreboard_ping_low=20/medium=80/high=200 live from the shared store (registered RegisterDefaults:1523-1525) with the QC band colors '0 1 0'/'1 1 0'/'1 0 0' and the exact lerp — was hardcoded 75/200/500 (an unintended value gap). The ping cell itself is still dead (ping not networked → always -1), but the colorization values are now faithful for when it is fed. (2) TEAM-SIZE side display (team_size_position) now PORTED on cl-scoreboard.teams.grouping_totals: DrawTeamTotals (ScoreboardPanel.cs:934-962) reads hud_panel_scoreboard_team_size_position (0/1/2, registered :1527) and draws the 'N/M' team-size string on the chosen side of each team box — was 'team_size_position absent'. All prior fixes (death/intermission auto-show, secrets feed, speed award, handicap icon, respawn jump-key, fade, spectators) re-confirmed live."
-    - "RE-AUDIT 2026-06-25 (drift check): THREE fixes. (1) Death/intermission auto-show is LIVE on cl-scoreboard.toggle.showscores: UpdateScoreboard (NetGame.cs:3991-4073) implements the cl_deathscoreboard/_delay death scoreboard (4006-4020, client-side death_time stand-in via RESPAWN_TIME), intermission==1 force-up (4000), intermission==2/mapvote suppression (3999,4022), and the CTS-while-dead suppression hook (4013-4018); cl_deathscoreboard=1/_delay=1 cvars registered (NetGame.cs:1659-1660) and read live. (2) The map-stats SECRETS row is FED on cl-scoreboard.block.mapstats via FeedMapStats. (3) The race/CTS SPEED-AWARD line is ported + LIVE on cl-scoreboard.block.rankings (SetSpeedAward NetGame.cs:4065 → DrawSpeedAward ScoreboardPanel.cs:1291)."
-    - "RE-AUDIT 2026-06-25 PRIOR: the name-cell HANDICAP icon is LIVE end-to-end (Entity.HandicapLevel → ScoreboardBlock.CaptureRows → ScoreRowWire.HandicapLevel → SetWireRows → DrawRow:1109-1117 colored square at the EXACT QC tint '1 0 0' + '0 1 1' * ((16-lvl)/15)). The other 4 name icons (player-color swatch, ready, ignored, (Q) wants-join) remain missing."
-    - "Cross-fade in/out: LIVE (re-confirmed). NetGame.UpdateScoreboard:4026 sets ScoreboardPanel.Active=show; Active setter + _Process:747 ramp + _everActive:778 drive PanelFade on the real match path."
-    - "Respawn-status line: LIVE + three-state (re-confirmed). RespawnStat fed every frame by UpdateScoreboard:4035; DrawRespawn:1200 renders the full QC dead/wait/press-jump line; RespawnJumpKey now resolved via BindTable.CommandKey (NetGame.cs:4039)."
-    - "Spectator list / packet-loss (pl) / rankings block: all LIVE (re-confirmed) from Wave 5 — the score wire carries IsSpectator + PacketLossByte; rankings ride the scoreboard wire and feed SetRankings:4062."
+    - "Re-audited all 21 rows in registry order against 863cd3e8456e18f577f7fe5fef857ff55ae62cc0."
+    - "Corrected pickup filtering and item order, stat-block gates and fades, accuracy palette lookup, race paging and resend, and authoritative map stats on the remote client."
+    - "Verified the native dedicated join/gameplay path and HUD skin export. See planning/parity/scoreboard-blocks/README.md for the indexed captures and test scope."
+    - "Restored nested and bare scoreboard commands, transient column layouts, remote map weapon availability, and gated CTF capture rankings."
 features:
   - id: cl-scoreboard.toggle.showscores
     name: "Show while +showscores held (+ death/intermission auto-show)"
@@ -29,26 +21,27 @@ features:
       - "client/hud/panel/scoreboard.qc:Scoreboard_WouldDraw"
     port_refs:
       - "game/net/NetGame.cs:UpdateScoreboard"
-      - "src/VortexArena.Engine/Console/BindTable.cs:ApplyBind"
+      - "src/VortexArena.Engine/Console/BindTable.cs:HandleBind"
     constants:
       - { name: "cl_deathscoreboard", base: "1", port: "1", match: true }
       - { name: "cl_deathscoreboard_delay", base: "1", port: "1", match: true }
     status:
-      logic: faithful
+      logic: partial
       values: faithful
-      timing: faithful
+      timing: partial
       presentation: faithful
       audio: na
       liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Death scoreboard uses a client-side death_time stand-in (first non-zero RESPAWN_TIME stamped against LatestServerTime) rather than the networked CSQCModel death_time; behaviorally equivalent but the gate timing rides the respawn stat rather than a dedicated death_time field."
-      - "Intermission==2 modeled as 'the MapVote panel is showing' rather than the literal STAT(GAME_STOPPED)==2; the QuickMenu / clickable-radar suppression branches of Scoreboard_WouldDraw are not separately modeled."
+      - "Death timing estimates the death stamp from the first respawn-stat observation."
+      - "Native map-vote visibility stands in for intermission stage 2. QuickMenu and clickable-radar scoreboard suppression are not explicit gates."
     verification:
-      - { kind: code, ref: "NetGame.cs:3768-3799 UpdateScoreboard: show = ShowScores || intermissionShow(3772) || deathScoreboard(3790) && !mapVoteShowing(3794); death gate reads cl_deathscoreboard/_delay (3791-3792), CTS-while-dead suppressed (3785-3789); cvars registered NetGame.cs:1588-1589. Re-verified 2026-06-25.", result: pass }
+      - { kind: "code", ref: "BindTable.ShowScores and NetGame.UpdateScoreboard through the native play loop.", result: "partial" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (remote held-scoreboard captures)", result: "pass" }
     confidence: high
-    notes: "FIXED this audit (drift check): was partial (only the +showscores held-button path). Now wires the cl_deathscoreboard death scoreboard, intermission==1 force-up, intermission==2/mapvote suppression, and the CTS DrawDeathScoreboard suppression hook. Default key TAB (+showscores)."
+    notes: "Held binding, interactive visibility, intermission and delayed death all reach Active. CTS suppresses the automatic death board."
 
   - id: cl-scoreboard.fade.inout
     name: "Cross-fade in/out"
@@ -74,9 +67,9 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "NetGame.cs:3798 UpdateScoreboard sets _scoreboard.Active = show; the Active setter (panel:123) shows the panel, _Process (:741) ramps _fadeAlpha at fadein/fadeout speed (:748), DrawPanel (:776) sets _everActive=true so PanelFade (:767) returns the real fade. Re-verified live 2026-06-25.", result: pass }
+      - { kind: "code", ref: "Active and _Process apply the two live fade-speed cvars.", result: "pass" }
     confidence: high
-    notes: "Live via the Active setter; _Process is a Godot engine callback so it runs even though IsDynamic=false. Unchanged this audit."
+    notes: "The animation is driven by the native frame callback."
 
   - id: cl-scoreboard.columns.default_layout
     name: "Default column layout + scoreboard_columns spec"
@@ -84,26 +77,31 @@ features:
     base_refs:
       - "client/hud/panel/scoreboard.qc:Cmd_Scoreboard_SetFields"
       - "client/hud/panel/scoreboard.qc:SCOREBOARD_DEFAULT_COLUMNS"
+      - "client/hud/panel/scoreboard.qc:Cmd_Scoreboard_Help"
+      - "client/command/cl_cmd.qc:LocalCommand_hud"
     port_refs:
       - "game/hud/ScoreboardPanel.cs:EnsureColumns"
-      - "game/hud/ScoreboardPanel.cs:DefaultColumns"
+      - "game/hud/ScoreboardPanel.cs:ApplyColumnSpec"
+      - "game/console/ConsoleOverlay.cs:PrintScoreboardColumnsHelp"
+      - "game/console/ConsoleOverlay.cs:RegisterHostCommands"
     constants:
-      - { name: "MAX_SBT_FIELDS", base: "MAX_SCORE", port: "24 (MaxColumns)", match: true }
+      - { name: "MAX_SBT_FIELDS", base: "64", port: "64", match: true }
     status:
-      logic: faithful
+      logic: partial
       values: faithful
       timing: na
-      presentation: faithful
+      presentation: partial
       audio: na
       liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "scoreboard_columns_set 'all'/'ALL' (full-column auto-build) and the 'expand_default' cvar write-back are not ported; only the verbatim default + an explicit spec parse + the name/separator/primary/secondary auto-fixups."
+      - "Stock default tokens include fps and skill, which lack native values. Unknown-column warnings are omitted."
     verification:
-      - { kind: code, ref: "DefaultColumns (ScoreboardPanel.cs:441) carries SCOREBOARD_DEFAULT_COLUMNS verbatim incl. all per-gametype filters; ScoreboardColumnsTests EndToEnd renders CTF columns", result: pass }
+      - { kind: "code", ref: "Compared QC Cmd_Scoreboard_SetFields and the 64-column bound; ScoreboardColumnsTests cover layout and score-info transport.", result: "partial" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (08 saved, 09 temporary ALL, 10 reloaded and 11 console)", result: "pass" }
     confidence: high
-    notes: "ColumnSpec settable from the user cvar; auto-fixup (name/separator/primary/secondary) ported faithfully. Unchanged this audit."
+    notes: "Both cl_cmd hud scoreboard_columns_set/help and the bare aliases are live. Explicit specs are temporary, a bare set reloads the cvar, and expand_default writes the built-in spec. Score initialization also reloads the saved layout."
 
   - id: cl-scoreboard.columns.gametype_filter
     name: "Per-gametype column filter (+/-pattern/field)"
@@ -112,6 +110,7 @@ features:
       - "common/util.qc:isGametypeInFilter"
     port_refs:
       - "game/hud/ScoreboardPanel.cs:IsGametypeInFilter"
+      - "game/hud/ScoreboardPanel.cs:EnsureColumns"
     constants: []
     status:
       logic: faithful
@@ -124,9 +123,9 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "teams/noteams + race(rc/cts) pseudo-gametypes + comma substring matching ported (ScoreboardPanel.cs:560); '?' nocomplain prefix stripped", result: pass }
+      - { kind: "code", ref: "Compared the comma-delimited +/- matcher including race pseudo-mode and noteamspawns.", result: "pass" }
     confidence: high
-    notes: "Gametype/teamplay come from the networked ScoreInfo (GameScores.Gametype/Teamplay). Unchanged this audit."
+    notes: "Uses networked mode and teamplay. The scoreboard supplies a false team-spawn flag, so noteamspawns matches every mode."
 
   - id: cl-scoreboard.field.formatting
     name: "Per-field value formatting (ScoreString/frags/kdr/sum/dmg)"
@@ -140,7 +139,7 @@ features:
     constants: []
     status:
       logic: partial
-      values: faithful
+      values: partial
       timing: na
       presentation: partial
       audio: na
@@ -148,12 +147,11 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "SP_FPS and SP_SKILL columns never render (FieldByLabel returns null for fps/skill — client-only display fields with no port plumbing); the GetField FPS/SKILL branches exist (ScoreboardPanel.cs:684-697) but are unreachable because the columns are never fed."
-      - "scores_per_round averaging is now plumbed (ScoresPerRound + per-field roundsPlayed division), but no interactive scores_per_round toggle (Ctrl+R) — only a console cvar drives it."
+      - "FPS and skill have no active native client data source."
     verification:
-      - { kind: code, ref: "GetField (ScoreboardPanel.cs:601) handles ping/pl/name/frags/kdr/sum/dmg/label + per-round averaging; ScoreString HIDE_ZERO/RANK/TIME verified by ScoreboardColumnsTests", result: pass }
+      - { kind: "code", ref: "Code trace and ScoreboardColumnsTests for networked fields and formatted values.", result: "partial" }
     confidence: high
-    notes: "Frags=kills-suicides, sum=kills-deaths, primary yellow / secondary cyan faithful. fps/skill branches present but dead (column never fed)."
+    notes: "Ctrl+R toggles the live scores_per_round cvar. Registered score fields use the shared format flags."
 
   - id: cl-scoreboard.field.ping
     name: "Ping column value + color bands"
@@ -161,31 +159,34 @@ features:
     base_refs:
       - "client/hud/panel/scoreboard.qc:Scoreboard_GetField (SP_PING)"
     port_refs:
-      - "game/hud/ScoreboardPanel.cs:GetField (Ping)"
+      - "game/hud/ScoreboardPanel.cs:GetField"
       - "game/hud/ScoreboardPanel.cs:PingColor"
-      - "game/hud/ScoreboardPanel.cs:SetWireRows (PingMs)"
-      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreRowWire (PingMs)"
-      - "game/net/ServerNet.cs:BuildScoreboard (RoundTripMs)"
-      - "game/net/NetTransport.cs:RoundTripMs"
+      - "game/net/ServerNet.cs:BuildScoreboard"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreRowWire"
     constants:
       - { name: "hud_panel_scoreboard_ping_low", base: "20", port: "20", match: true }
       - { name: "hud_panel_scoreboard_ping_medium", base: "80", port: "80", match: true }
       - { name: "hud_panel_scoreboard_ping_high", base: "200", port: "200", match: true }
+      - { name: "hud_panel_scoreboard_ping_low_color", base: "0 1 0", port: "0 1 0", match: true }
+      - { name: "hud_panel_scoreboard_ping_medium_color", base: "1 1 0", port: "1 1 0", match: true }
+      - { name: "hud_panel_scoreboard_ping_high_color", base: "1 0 0", port: "1 0 0", match: true }
     status:
       logic: faithful
       values: faithful
-      timing: na
-      presentation: faithful
+      timing: partial
+      presentation: partial
       audio: na
       liveness: live
     intended_divergence: true
-    divergence_rationale: "A bot / unmapped / loopback-host row sends ping -1, which the port renders as a neutral dim '-' rather than QC's '>>>' no-scores glyph — a deliberate placeholder for the no-real-ping case (a remote human now shows a real number). The ENet RTT is networked as a per-row ushort (not QC's entcs ping slice) — a faithful re-implementation, not a behavior change."
+    divergence_rationale: "The native ping measurement uses ENet RTT per ADR-0005 and ADR-0011. A row without an RTT gets a neutral dash in the player table."
     gaps:
-      - "A bot / unmapped player / loopback-host (~0 RTT) row still shows the neutral dim '-' (PingMs -1) instead of QC's '>>>' no-scores / 'N/A' connecting glyphs; a connected REMOTE human's row shows the real ENet RTT, colorized by the bands."
+      - "Ping samples ride change-gated scoreboard snapshots. Downloading clients have no equivalent pending row."
     verification:
-      - { kind: code, ref: "LIVE PING NETWORKED END-TO-END (drift check 2026-06-27): ServerNet.BuildScoreboard (ServerNet.cs:2484-2498) feeds pingMs = _transport.RoundTripMs(peerId) (NetTransport.cs:216-219, ENet PeerStatistic.RoundTripTime ms) for connected humans, -1 for bots/unmapped → ScoreRowWire.PingMs ushort serialize (ScoreboardBlock.cs:130) / deserialize 0xFFFF=-1 (:185) → SetWireRows passes ping: wr.PingMs (ScoreboardPanel.cs:262 players, :244 spectators) → GetField Ping (:633-635): -1 → dim '-', 0 → 'N/A', else int colorized by PingColor. PingColor (:758-769) reads ping_low=20/medium=80/high=200 from the shared store with QC band colors '0 1 0'/'1 1 0'/'1 0 0' + exact lerp. Fed on the live UpdateScoreboard path (NetGame.cs:4265). Base scoreboard.qc:1041 SP_PING.", result: pass }
+      - { kind: "code", ref: "Server score row -> ScoreboardBlock -> player/spectator row -> PingColor.", result: "partial" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (dedicated remote player row)", result: "pass" }
     confidence: high
-    notes: "FIXED this audit (drift check): per-row ping is now NETWORKED + LIVE (real ENet RTT) — was the prior worst-gap 'ping never networked → SetWireRows hardcodes -1'. The earlier audit's 'SetWireRows ping:-1 always, ScoreRowWire carries no ping field' is now stale: ScoreRowWire DOES carry PingMs and SetWireRows passes wr.PingMs. Color bands were already fixed (20/80/200, cvar-driven). Only residual: bots/host show the neutral '-'. PingPanel/serverlist still use other ping ramps in the port."
+    notes: "Connected human rows use ENet RTT. Scoreboard ping thresholds and interpolated colors use the shared cvar store."
+    open_dimensions: [timing, presentation]
 
   - id: cl-scoreboard.field.packetloss
     name: "Packet-loss (pl) column"
@@ -193,56 +194,63 @@ features:
     base_refs:
       - "client/hud/panel/scoreboard.qc:Scoreboard_GetField (SP_PL)"
     port_refs:
-      - "game/hud/ScoreboardPanel.cs:GetField (Pl)"
+      - "game/hud/ScoreboardPanel.cs:GetField"
+      - "game/net/ServerNet.cs:BuildScoreboard"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreRowWire"
     constants: []
     status:
-      logic: faithful
+      logic: partial
       values: faithful
       timing: na
-      presentation: faithful
+      presentation: partial
       audio: na
       liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Movement loss (QC ping_movementloss, the '~N' suffix) is not tracked by the port — only packet loss contributes (QC's tmp==0 branch). The displayed value + red tint are otherwise bit-faithful."
+      - "Native does not track movement loss for the ~N suffix."
     verification:
-      - { kind: code, ref: "ENet PacketLoss captured per human in ServerNet.BuildScoreboard as min(ceil(loss*255),255), serialized via ScoreRowWire.PacketLossByte, de-quantized in SetWireRows:252, rendered by GetField Pl (ScoreboardPanel.cs:617): blank when 0 else ceil(pl*100) tinted '1 0.5 0.5'-'0 0.5 0.5'*bound(0,pl/0.2,1). Re-verified 2026-06-25.", result: pass }
+      - { kind: "code", ref: "BuildScoreboard quantizes packet loss and GetField formats it.", result: "partial" }
     confidence: high
-    notes: "Live SP_PL value + severity tint from real ENet packet-loss. Movement loss (a client prediction metric) is the only residual. Unchanged this audit."
+    notes: "Packet loss is populated from ENet and uses the Base severity tint."
 
   - id: cl-scoreboard.field.name_icons
     name: "Name-cell icons (player color / ready / handicap / ignored / wants-join)"
     layer: [presentation]
     base_refs:
+      - "client/hud/panel/scoreboard.qh"
+      - "client/main.qc:ignore_list_apply"
       - "client/hud/panel/scoreboard.qc:Scoreboard_GetName"
       - "client/hud/panel/scoreboard.qc:Scoreboard_AddPlayerId"
       - "client/hud/panel/scoreboard.qc:Scoreboard_DrawItem"
     port_refs:
-      - "game/hud/ScoreboardPanel.cs:DrawRow (handicap icon)"
-      - "game/hud/ScoreboardPanel.cs:SetWireRows (HandicapLevel)"
-      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreRowWire (HandicapLevel)"
-      - "src/VortexArena.Common/Gameplay/Handicap.cs:UpdateHandicapLevel"
+      - "game/net/ServerNet.cs:SendScoreboardIgnores"
+      - "game/hud/ScoreboardPanel.cs:DrawRow"
+      - "game/hud/ScoreboardPanel.cs:GetField"
+      - "game/hud/ScoreboardPanel.cs:SetWireRows"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreRowWire"
     constants:
-      - { name: "playerid", base: "0", port: "none", match: false }
-      - { name: "playerid_prefix", base: "#", port: "none", match: false }
+      - { name: "hud_panel_scoreboard_playerid", base: "0", port: "0", match: true }
+      - { name: "hud_panel_scoreboard_playerid_prefix", base: "#", port: "#", match: true }
+      - { name: "hud_panel_scoreboard_playerid_suffix", base: " ", port: " ", match: true }
     status:
       logic: partial
       values: partial
       timing: partial
       presentation: partial
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Handicap icon is PORTED + LIVE (DrawRow:1075-1083 draws a square at the EXACT QC tint '1 0 0' + '0 1 1' * ((16-lvl)/15), white@1 → red@16, fed by the networked handicap_level)."
-      - "Still missing: player-color shirt/pants swatch (gfx/scoreboard/playercolor_*), pulsing ready check, ignored icon, the pulsing (Q) wants-join team marker, and the playerid '#N' prefix (Scoreboard_AddPlayerId)."
-      - "Handicap icon is drawn as a flat colored square (no gfx/scoreboard/player_handicap texture); presentation faithful in tint but not in the actual icon art."
+      - "Player-color, ready and wants-join icons are absent."
+      - "Native chat ignores are match-scoped. Base also supports permanent, UID-backed ignores."
+      - "The optional ID prefix displays native net IDs instead of QC entity numbers."
     verification:
-      - { kind: code, ref: "Handicap fed live: Handicap.UpdateHandicapLevel → Entity.HandicapLevel → ScoreboardBlock.CaptureRows → ScoreRowWire WriteByte/ReadByte → SetWireRows:257 handicapLevel → DrawRow:1075-1083 colored square at the exact QC tint; fed on the live UpdateScoreboard path. The other 4 icons absent (GetField Name returns raw name). Re-verified 2026-06-25.", result: partial }
+      - { kind: "code", ref: "Traced the owner-only ServerNet and ClientNet ignore replacement messages to DrawRow and DrawSpectators.", result: "pass" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (paired owner and other-viewer rows)", result: "pass" }
     confidence: high
-    notes: "Handicap icon networks end-to-end and renders at the exact tint. The other name-cell icons (QC drawpic overlays) remain unported. Unchanged this audit."
+    notes: "Handicap and ignored use the mounted skin art. Ignored state follows the viewer's existing server chat filter, including unignore and native clear_ignores. Player-ID enable, prefix and suffix cvars are read."
 
   - id: cl-scoreboard.sort.players
     name: "Player row sort (primary/secondary/registry order)"
@@ -251,6 +259,7 @@ features:
       - "client/hud/panel/scoreboard.qc:Scoreboard_ComparePlayerScores"
       - "client/hud/panel/scoreboard.qc:Scoreboard_CompareScore"
     port_refs:
+      - "src/VortexArena.Server/ClientManager.cs:PlayersByClientSlot"
       - "game/hud/ScoreboardPanel.cs:SortRows"
       - "game/hud/ScoreboardPanel.cs:CompareRows"
       - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:CompareValues"
@@ -265,11 +274,12 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Final sv_entnum tiebreak not applied (rows fall to List.Sort, which is not stable in .NET); rarely observable, but ties can reorder frame-to-frame."
+      - "Native slot order mirrors active-row ties. Spectators and connecting peers use a separate native roster rather than the QC spectator/downloader ordering."
     verification:
-      - { kind: code, ref: "CompareRows (ScoreboardPanel.cs:398) = primary, secondary, registry-order columns; ZERO_IS_WORST + direction via CompareValues; NotSortable/ClientOnly skipped", result: pass }
+      - { kind: "code", ref: "Compared Scoreboard_ComparePlayerScores and SORT_SWAP to SortRows and exercised client-slot reuse in ScoreboardColumnsTests.", result: "pass" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (paired zero-score tie before and after slot reuse)", result: "pass" }
     confidence: high
-    notes: "Team split handled by the grouping pass; spectator-last now handled by routing IsSpectator rows out of the table entirely. Unchanged this audit."
+    notes: "Primary, secondary and registry-order field comparisons precede descending reusable client-slot order. The native stable net ID remains the action and row identity. Ascending slot order is implicit in the score block. Changes use the reliable snapshot channel, which also protects the roster transition from spectator to active player."
 
   - id: cl-scoreboard.teams.grouping_totals
     name: "Team sections + per-team totals"
@@ -278,14 +288,15 @@ features:
       - "client/hud/panel/scoreboard.qc:Scoreboard_MakeTable"
       - "client/hud/panel/scoreboard.qc:Scoreboard_CompareTeamScores"
     port_refs:
-      - "game/hud/ScoreboardPanel.cs:DrawGroupedByTeam"
-      - "game/hud/ScoreboardPanel.cs:DrawTeamTotals"
+      - "game/hud/ScoreboardPanel.cs:DrawTables"
+      - "game/hud/ScoreboardPanel.cs:DrawTeamScoreBeside"
       - "game/hud/ScoreboardPanel.cs:CompareTeamTotals"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreboardWire"
     constants:
       - { name: "hud_panel_scoreboard_bg_teams_color_team", base: "0", port: "0", match: true }
-      - { name: "team_size_position", base: "0", port: "0", match: true }
+      - { name: "hud_panel_scoreboard_team_size_position", base: "0", port: "0", match: true }
     status:
-      logic: faithful
+      logic: partial
       values: partial
       timing: na
       presentation: partial
@@ -294,12 +305,11 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Only the primary team slot total is shown (SetWireRows stores wire.Teams primary slot); the secondary teamscore (e.g. keyhunt) is not networked/rendered (the wire's Teams list carries a single (team, score) pair)."
-      - "team_size_position N/M side display is now PORTED (DrawTeamTotals:934-962, 0/1/2 placement), but totals are still drawn as colored banner boxes rather than the QC bold hud_fontsize*1.5 free-standing side numbers; size string uses 12px text on the box."
+      - "Secondary team score and remaining slots are not transported. They can change Base tie order."
     verification:
-      - { kind: code, ref: "_teamScores carries the primary slot only (ScoreboardBlock.Teams = single (team,score)); DrawTeamTotals/DrawGroupedByTeam sort via CompareTeamTotals (flag-aware + team-id tiebreak); team_size_position read live (CvarF, ScoreboardPanel.cs:936) drawing 'N/M' on the chosen side (:952-962). Re-verified 2026-06-27.", result: pass }
+      - { kind: "code", ref: "Compared team grouping and primary-score ordering. Reviewed ScoreboardWire.Teams without changing Clan Arena.", result: "partial" }
     confidence: high
-    notes: "FIXED this audit (drift check): the team-size N/M side display (team_size_position 0/1/2) is now ported + cvar-driven (was absent). Secondary teamscore is the only residual value gap; presentation still uses banner boxes vs QC's bold side numbers."
+    notes: "Primary total, team tint and team-size positions are drawn. Clan Arena participation is separately tracked in the Clan Arena registry."
 
   - id: cl-scoreboard.row.highlights
     name: "Row highlights (stripe / self / eliminated)"
@@ -308,6 +318,7 @@ features:
       - "client/hud/panel/scoreboard.qc:Scoreboard_DrawItem"
     port_refs:
       - "game/hud/ScoreboardPanel.cs:DrawRow"
+      - "game/hud/ScoreboardPanel.cs:SetWireRows"
     constants:
       - { name: "table_highlight", base: "1", port: "1", match: true }
       - { name: "table_highlight_alpha", base: "0.2", port: "0.2", match: true }
@@ -319,17 +330,18 @@ features:
       logic: faithful
       values: faithful
       timing: na
-      presentation: faithful
+      presentation: partial
       audio: na
       liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Self-row '<' self-indicator triangle beside the row is not drawn."
+      - "The native table includes a rank-number gutter."
     verification:
-      - { kind: code, ref: "DrawRow (ScoreboardPanel.cs:1031) applies alternating stripe (even rows), self highlight, eliminated black fill at the matching live cvar alphas (CvarF)", result: pass }
+      - { kind: "code", ref: "DrawRow applies cvar alphas and the eliminated IDs supplied by the mode snapshot.", result: "partial" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (remote self row)", result: "pass" }
     confidence: high
-    notes: "Eliminated grey-out fed via SetWireRows eliminatedNetIds (QC eliminatedPlayers bitfield). All alphas live from the shared store. Unchanged this audit."
+    notes: "Alternating and self fills, self triangle, eliminated mask and navigation selection are drawn."
 
   - id: cl-scoreboard.layout.column_widths
     name: "Content-measured column widths + title condensing"
@@ -338,27 +350,30 @@ features:
       - "client/hud/panel/scoreboard.qc:Scoreboard_FixColumnWidth"
       - "client/hud/panel/scoreboard.qc:Scoreboard_initFieldSizes"
     port_refs:
+      - "game/hud/ScoreboardPanel.cs:BaseGeometry"
+      - "game/hud/ScoreboardPanel.cs:MeasureNumericColumn"
       - "game/hud/ScoreboardPanel.cs:ComputeLayout"
+      - "game/hud/ScoreboardPanel.cs:DrawOneTable"
     constants:
-      - { name: "table_fieldtitle_maxwidth", base: "0.07", port: "none", match: false }
-      - { name: "namesize", base: "15", port: "none (elastic)", match: false }
-      - { name: "maxheight", base: "0.6", port: "none", match: false }
+      - { name: "hud_panel_scoreboard_table_fieldtitle_maxwidth", base: "0.07", port: "0.07", match: true }
+      - { name: "hud_panel_scoreboard_namesize", base: "15", port: "15", match: true }
+      - { name: "hud_panel_scoreboard_minwidth", base: "0.6", port: "0.6", match: true }
+      - { name: "hud_panel_scoreboard_maxheight", base: "0.6", port: "0.6", match: true }
     status:
       logic: partial
-      values: missing
+      values: faithful
       timing: na
       presentation: partial
       audio: na
       liveness: live
-    intended_divergence: true
-    divergence_rationale: "Port uses a uniform numeric column width (clamp 44..90px) + an elastic name column instead of QC's per-value content measurement; documented as a readable approximation. No title-condense factor / maxwidth retry / namesize cap."
+    intended_divergence: false
+    divergence_rationale: null
     gaps:
-      - "Columns are uniform-width (clamp 44..90px), not measured to content; long values can clip and titles never condense (sbt_field_title_condense_factor)."
-      - "No maxheight paging (max_players) and no Scoreboard_DrawOthers '... and N more' overflow row — a full team list can overflow the panel."
+      - "The native title squeeze and overflow summary approximate Base's multi-pass layout. others_showscore is present in cfg but unread by the native draw path."
     verification:
-      - { kind: code, ref: "ComputeLayout (ScoreboardPanel.cs:1410): rankW + uniform numW + elastic name; no measurement of cell strings", result: pass }
-    confidence: medium
-    notes: "Scoreboard_DrawOthers '... and N more' overflow row also absent. Unchanged this audit."
+      - { kind: "code", ref: "Audited title cap, name allowance and overflow branch against Scoreboard_FixColumnWidth and Scoreboard_MakeTable.", result: "partial" }
+    confidence: high
+    notes: "Columns measure titles and data. Width obeys the shipped minimum, and the table draws an overflow row behind maxheight."
 
   - id: cl-scoreboard.header.gameinfo
     name: "Game-info header (next map / gametype banner / limits / map+players)"
@@ -367,13 +382,14 @@ features:
       - "client/hud/panel/scoreboard.qc:Scoreboard_Draw (game info section)"
       - "client/hud/panel/scoreboard.qc:Scoreboard_Fraglimit_Draw"
     port_refs:
+      - "game/net/NetGame.cs:ScoreboardTitle"
+      - "game/net/NetGame.cs:FeedScoreboardHeader"
       - "game/hud/ScoreboardPanel.cs:DrawGameInfoHeader"
       - "game/hud/ScoreboardPanel.cs:BuildLimitsHeader"
-      - "game/net/NetGame.cs:FeedScoreboardHeader"
     constants: []
     status:
       logic: faithful
-      values: faithful
+      values: partial
       timing: na
       presentation: partial
       audio: na
@@ -381,12 +397,12 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Lead-limit header term IS now built (BuildLimitsHeader handles ll > 0 && (ll < fl || fl <= 0) with the '^2+N' term and the '& '/'/'  delimiter, LeadLimit/LeadAndFragLimit fed from cvars NetGame.cs:4175-4176)."
-      - "m_hidelimits and campaign player-count suppression not handled."
+      - "Remote frag/lead values depend on the local/replicated cvar store. Base reads authoritative limit STATs."
     verification:
-      - { kind: code, ref: "FeedScoreboardHeader (NetGame.cs:4165) sets FragLimit/TimeLimit/LeadLimit/LeadAndFragLimit/Map from cvars; BuildLimitsHeader (ScoreboardPanel.cs:870) formats time / fraglimit / leadlimit + 'points'/'' label", result: pass }
+      - { kind: "code", ref: "ScoreboardTitle resolves the registered mode text and DrawGameInfoHeader renders the live header.", result: "partial" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (remote Deathmatch header)", result: "pass" }
     confidence: high
-    notes: "Next map + bold gametype banner + 'Map: N/M players' line + lead-limit term ported. (The baseline's leadlimit gap was already closed in the port via LeadLimit/LeadAndFragLimit; refreshed this audit.)"
+    notes: "Registered mode display name, next-map line, authoritative match clock, LMS hide-limits and campaign player-count suppression are wired."
 
   - id: cl-scoreboard.block.spectators
     name: "Spectator list"
@@ -395,13 +411,13 @@ features:
       - "client/hud/panel/scoreboard.qc:Scoreboard_Spectators_Draw"
     port_refs:
       - "game/hud/ScoreboardPanel.cs:DrawSpectators"
+      - "game/hud/ScoreboardPanel.cs:DrawPanel"
       - "game/hud/ScoreboardPanel.cs:SetWireRows"
-      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreRowWire (IsSpectator)"
-      - "game/net/ServerNet.cs:CaptureScoreboard (isSpectator)"
+      - "game/net/ServerNet.cs:BuildScoreboard"
     constants:
-      - { name: "spectators_showping", base: "1", port: "1", match: true }
-      - { name: "spectators_position", base: "1", port: "fixed (after table)", match: false }
-      - { name: "spectators_aligned", base: "0", port: "none", match: false }
+      - { name: "hud_panel_scoreboard_spectators_showping", base: "1", port: "1", match: true }
+      - { name: "hud_panel_scoreboard_spectators_position", base: "1", port: "1", match: true }
+      - { name: "hud_panel_scoreboard_spectators_aligned", base: "0 (read)", port: "0 (cfg only)", match: false }
     status:
       logic: faithful
       values: faithful
@@ -412,27 +428,35 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "spectators_position (0/1/2/3 placement around the blocks) and spectators_aligned column alignment not implemented (drawn after the table only)."
+      - "spectators_aligned is loaded by cfg but has no native draw branch."
     verification:
-      - { kind: code, ref: "ServerNet.BuildScoreboard sets isSpectator: p.IsObserver || p.FragsStatus==FragsSpectator on the wire; ScoreboardBlock serializes it; ScoreboardPanel.SetWireRows (line 242) routes IsSpectator rows into _spectators WITH the networked per-row ping (ping: wr.PingMs, :244); UpdateScoreboard is the live caller; DrawSpectators (ScoreboardPanel.cs:1194) renders the block incl. showping (a remote human now shows a real number; -1 bot/host shows '-'). Re-verified 2026-06-27.", result: pass }
+      - { kind: "code", ref: "Score rows carry the spectator flag and ping through SetWireRows to DrawSpectators.", result: "partial" }
     confidence: high
-    notes: "FIXED this audit (drift check): spectator-row showping now renders the real networked ping (was 'spectator-row ping still -1') — same PingMs feed that un-deaded the score-table ping column. Fed live by the networked IsSpectator wire flag via SetWireRows. The old SetSpectators(...) overloads remain but are dead/unused."
+    notes: "Native spectator count and names wrap. Position selects one of four placements and showping adds available RTT."
 
   - id: cl-scoreboard.block.accuracy
     name: "Accuracy stats block"
     layer: [presentation]
     base_refs:
-      - "client/hud/panel/scoreboard.qc:Scoreboard_AccuracyStats_Draw"
       - "client/hud/panel/scoreboard.qc:Scoreboard_AccuracyStats_WouldDraw"
+      - "client/hud/panel/scoreboard.qc:Scoreboard_AccuracyStats_Draw"
+      - "client/hud/panel/weapons.qc:Accuracy_GetColor"
     port_refs:
       - "game/hud/ScoreboardPanel.cs:DrawAccuracy"
-      - "game/hud/ScoreboardPanel.cs:SetAccuracy"
+      - "game/hud/ScoreboardPanel.cs:StatBlockWouldDraw"
+      - "game/hud/ScoreboardPanel.cs:GetAccuracyColor"
       - "game/net/NetGame.cs:UpdateAccuracy"
+      - "game/hud/ScoreboardPanel.cs:SetAvailableAccuracyWeapons"
+      - "game/net/ClientNet.cs:HandleMatchState"
+      - "game/net/ServerNet.cs:SendMatchState"
+      - "src/VortexArena.Server/GameWorld.cs:MapWeaponBits"
+      - "game/net/ServerNet.cs:WriteOwnerState"
     constants:
       - { name: "hud_panel_scoreboard_accuracy", base: "1", port: "1", match: true }
-      - { name: "accuracy_showdelay", base: "2", port: "none", match: false }
-      - { name: "accuracy_doublerows", base: "0", port: "registered, unused", match: false }
-      - { name: "accuracy_nocolors", base: "0", port: "none", match: false }
+      - { name: "hud_panel_scoreboard_accuracy_doublerows", base: "0", port: "0", match: true }
+      - { name: "hud_panel_scoreboard_accuracy_nocolors", base: "0", port: "0", match: true }
+      - { name: "hud_panel_scoreboard_accuracy_showdelay", base: "2", port: "2", match: true }
+      - { name: "hud_panel_scoreboard_accuracy_showdelay_minpos", base: "0.75", port: "0.75", match: true }
     status:
       logic: partial
       values: partial
@@ -443,80 +467,103 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Drawn as plain text '%' cells, not the per-weapon ICON grid (drawpic weapon model2) with column/row highlighting."
-      - "No accuracy_showdelay gating, no warmup suppression, no doublerows, no Accuracy_GetColor weapon ramp or nocolors option; the port's average color ramp differs from QC's per-weapon ramp."
+      - "Accuracy replicates the recipient's own counter. The followed player's counters are not substituted."
+      - "The native fit check can hide a grid that starts before 91% of the viewport but would extend below it."
     verification:
-      - { kind: code, ref: "NetGame.UpdateAccuracy (NetGame.cs:4150) calls _scoreboard.SetAccuracy(_accuracyById) live; DrawAccuracy (ScoreboardPanel.cs:1212) averages + draws %-cells, gated off in Invasion", result: pass }
+      - { kind: "code", ref: "Compared Stock WouldDraw, mode hooks and weapons.qc Accuracy_GetColor. Traced owner accuracy bytes, owner inventory and the authoritative map weapon mask through UpdateAccuracy.", result: "partial" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (remote color toggle, held stat-grid delay and 08 map-eligible unfired weapons)", result: "pass" }
     confidence: high
-    notes: "Live feed (per-id hit% 0..100, -1 never fired, from networked LocalAccuracyBytes) but a simplified presentation. Unchanged this audit."
+    notes: "The icon grid, average, colored and white cells, doublerows and fades are live. Suppressed during warmup and in Race, CTS and Nexball. The scoreboard reads the configured accuracy breakpoints, including the 20% default yellow stop."
 
   - id: cl-scoreboard.block.itemstats
     name: "Item-stats block"
-    layer: [presentation]
+    layer: [authority, presentation]
     base_refs:
-      - "client/hud/panel/scoreboard.qc:Scoreboard_ItemStats_Draw"
       - "client/hud/panel/scoreboard.qc:Scoreboard_ItemStats_WouldDraw"
-    port_refs: []
-    constants:
-      - { name: "hud_panel_scoreboard_itemstats", base: "1", port: "registered, unused", match: false }
-      - { name: "itemstats_filter_mask", base: "12", port: "none", match: false }
-      - { name: "itemstats_showdelay", base: "2.2", port: "none", match: false }
-    status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
-      audio: na
-      liveness: na
-    intended_divergence: false
-    divergence_rationale: null
-    gaps:
-      - "No item-stats block at all: Base shows a per-item icon grid of pickup counts (g_inventory.inv_items), filtered by itemstats_filter_mask=12. The port has no SetItemStats / DrawItemStats and inventory is not networked for it."
-    verification:
-      - { kind: code, ref: "No DrawItemStats/SetItemStats in ScoreboardPanel; itemstats cvar registered in RegisterDefaults (line 1481) but never read for drawing", result: fail }
-    confidence: high
-    notes: "itemstats default cvars are registered but there is no draw path. Unchanged this audit."
-
-  - id: cl-scoreboard.block.rankings
-    name: "Race/CTS rankings block (+ speed award)"
-    layer: [presentation]
-    base_refs:
-      - "client/hud/panel/scoreboard.qc:Scoreboard_Rankings_Draw"
-      - "client/hud/panel/scoreboard.qc:Scoreboard_MainPanel (race speed award)"
+      - "client/hud/panel/scoreboard.qc:Scoreboard_ItemStats_Draw"
+      - "client/hud/panel/scoreboard.qc:is_item_filtered"
+      - "common/items/all.qh:default_order_items"
+      - "common/items/inventory.qh:Inventory_Send"
     port_refs:
-      - "game/hud/ScoreboardPanel.cs:DrawRankings"
-      - "game/hud/ScoreboardPanel.cs:SetRankings"
-      - "game/hud/ScoreboardPanel.cs:DrawSpeedAward"
-      - "game/hud/ScoreboardPanel.cs:SetSpeedAward"
-      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreboardWire (SpeedAward*)"
-    constants: []
+      - "game/hud/ScoreboardPanel.cs:DrawItemStats"
+      - "game/hud/ScoreboardPanel.cs:StatBlockWouldDraw"
+      - "game/hud/ScoreboardPanel.cs:SetItemStats"
+      - "game/net/ServerNet.cs:CollectItemStats"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreboardBlock"
+      - "game/net/NetGame.cs:UpdateScoreboard"
+    constants:
+      - { name: "hud_panel_scoreboard_itemstats", base: "1", port: "1", match: true }
+      - { name: "hud_panel_scoreboard_itemstats_doublerows", base: "0", port: "0", match: true }
+      - { name: "hud_panel_scoreboard_itemstats_filter", base: "1", port: "1", match: true }
+      - { name: "hud_panel_scoreboard_itemstats_filter_mask", base: "12", port: "12", match: true }
+      - { name: "hud_panel_scoreboard_itemstats_showdelay", base: "2.2", port: "2.2", match: true }
+      - { name: "hud_panel_scoreboard_itemstats_showdelay_minpos", base: "0.75", port: "0.75", match: true }
     status:
       logic: faithful
-      values: faithful
-      timing: na
+      values: partial
+      timing: partial
       presentation: partial
       audio: na
       liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Speed-award / all-time-fastest line is now PORTED + LIVE (DrawSpeedAward, ScoreboardPanel.cs:1257, fed by SetSpeedAward NetGame.cs:3837 from networked SpeedAward/Best + holders; QC unit conversion + alltimebest gate)."
-      - "No multi-column wrap / horizontal scroll (single-column rankings list)."
+      - "Native tallies are keyed by icon and use 16-bit capped counts. QC uses inventory IDs and writes one byte per item."
+      - "The native fit check reserves space for the complete grid. Its open timer is based on Godot frame time."
     verification:
-      - { kind: code, ref: "Rankings: ServerNet.BuildScoreboard snapshots RaceRecords into _scoreRankings → ScoreboardBlock Rankings (int24 TIME_ENCODE + holder) → NetGame.UpdateScoreboard:3834 SetRankings + RankingsSelfName:3835; DrawRankings (ScoreboardPanel.cs:1301) gold/silver/bronze + self-row highlight, gated rc/cts. Speed award: ServerNet.cs:2242-2248 captures cts/race SpeedAward* → ScoreboardBlock:193-196 serialize → NetGame.cs:3837 SetSpeedAward → DrawSpeedAward:1257. Re-verified live 2026-06-25.", result: pass }
+      - { kind: "code", ref: "ItemPickupRules records successful pickups. The two ScoreboardColumnsTests item-stat cases exercise nonempty and empty wire round-trips.", result: "partial" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (remote pickup grid, filtering and held stat-grid delay)", result: "pass" }
     confidence: high
-    notes: "FIXED this audit (drift check): the speed-award / all-time-fastest line is now networked end-to-end and rendered (was the prior worst-gap). Multi-column wrap remains the only residual."
+    notes: "Native pickup tallies are live for the viewer or spectatee. Cells follow the stock unsorted Items registry; weapon pickups are a separate QC stream. The mask and mode hooks now govern the live grid."
+
+  - id: cl-scoreboard.block.rankings
+    name: "Race, CTS and CTF capture rankings (+ race speed award)"
+    layer: [authority, presentation]
+    base_refs:
+      - "client/hud/panel/scoreboard.qc:Scoreboard_Rankings_Draw"
+      - "client/hud/panel/scoreboard.qc:Scoreboard_Draw"
+      - "common/gametypes/gametype/ctf/cl_ctf.qc:ShowRankings"
+      - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_CaptureRecord"
+    port_refs:
+      - "game/hud/ScoreboardPanel.cs:DrawRankings"
+      - "game/hud/ScoreboardPanel.cs:DrawSpeedAward"
+      - "game/net/ServerNet.cs:BuildScoreboard"
+      - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreboardWire"
+      - "game/net/NetGame.cs:UpdateScoreboard"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CaptureRecord"
+      - "src/VortexArena.Server/RaceRecordFile.cs:Open"
+    constants:
+      - { name: "g_ctf_leaderboard", base: "0", port: "0", match: true }
+      - { name: "hud_panel_scoreboard_ctf_leaderboard", base: "1", port: "1", match: true }
+    status:
+      logic: partial
+      values: partial
+      timing: partial
+      presentation: partial
+      audio: na
+      liveness: live
+    intended_divergence: false
+    divergence_rationale: null
+    gaps:
+      - "Native uses an immediate 95%-height page budget. Base animates the bottom and adapts the row count over subsequent frames."
+    verification:
+      - { kind: "code", ref: "Read ShowRankings hooks, Scoreboard_Rankings_Draw, native storage, BuildScoreboard and the live snapshot decoder. RaceRecordsTests cover ranked record operations. CtfVariantsTests drive enabled and disabled normal, one-flag, too-short and anonymous captures through FlagTouch.", result: "partial" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (12 CTF carry and 13 CTF ranking)", result: "pass" }
+      - { kind: "visual", ref: "planning/parity/record-lifecycle/README.md (rotation, restart and remote CTF ranking)", result: "pass" }
+    confidence: high
+    notes: "Race and CTS records and gated CTF capture records wrap column-major. The CTF server cvar gates collecting and sending capture rows, and the client cvar gates display. The selected block scrolls when records exceed the viewport budget. Rank colors, self fill and speed award holders are drawn. Rankings and speed changes invalidate the score snapshot independently of player score changes."
 
   - id: cl-scoreboard.block.mapstats
     name: "Map stats (monsters / secrets)"
-    layer: [presentation]
+    layer: [authority, presentation]
     base_refs:
       - "client/hud/panel/scoreboard.qc:Scoreboard_MapStats_Draw"
     port_refs:
       - "game/hud/ScoreboardPanel.cs:DrawMapStats"
       - "game/net/NetGame.cs:FeedMapStats"
+      - "game/net/ServerNet.cs:SendMatchState"
+      - "game/net/ClientNet.cs:HandleMatchState"
       - "src/VortexArena.Common/Gameplay/MapObjects/Triggers.cs:SecretSetup"
-      - "src/VortexArena.Common/Gameplay/MapObjects/EntityMapObjectStateExtra.cs:SecretsTotal"
     constants: []
     status:
       logic: faithful
@@ -524,15 +571,15 @@ features:
       timing: na
       presentation: faithful
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Map-stats are read from server-side static state (MonsterAI / MapObjectsState) directly on the client feed path — live for a listen-server host, but neither monsters nor secrets are networked as a STAT, so a remote (non-host) client would not see the rows."
+    gaps: []
     verification:
-      - { kind: code, ref: "FeedMapStats (NetGame.cs:4183) sets MonstersTotal/Killed per-mode and SecretsTotal/SecretsFound from MapObjectsState.SecretsTotal/SecretsFound (:4205-4207), populated server-side by Triggers.SecretSetup (++SecretsTotal) / SecretTouch (++SecretsFound), registered as live spawnfuncs (MapObjectsRegistry.cs:59). Fed every frame while shown (UpdateScoreboard:3815). DrawMapStats (ScoreboardPanel.cs:1137) draws both rows. Re-verified 2026-06-25.", result: pass }
+      - { kind: "code", ref: "Audited the same server-to-client path for both counter pairs. Remote capture confirms a real trigger_secret touch updates the secret count.", result: "pass" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (remote Secrets found 1/1)", result: "pass" }
     confidence: high
-    notes: "FIXED this audit (drift check): the Secrets row is now fed (was 'never fed → SecretsTotal stays -1'). Both monsters and secrets ride server-side static state (host path); networking them as STATs for remote clients is the residual."
+    notes: "The authoritative MatchState carries ordinary monster and secret counters plus round Invasion wave totals. A zero total suppresses its row."
 
   - id: cl-scoreboard.block.respawn
     name: "Respawn-status line"
@@ -542,8 +589,8 @@ features:
     port_refs:
       - "game/hud/ScoreboardPanel.cs:DrawRespawn"
       - "game/net/NetGame.cs:UpdateScoreboard"
-      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink"
       - "game/net/ClientNet.cs:RespawnTimeStat"
+      - "src/VortexArena.Server/GameWorld.cs:DeadPlayerThink"
     constants:
       - { name: "respawntime_decimals", base: "1", port: "1", match: true }
     status:
@@ -557,9 +604,9 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "GameWorld.DeadPlayerThink sets Player.RespawnTimeStat (negated while Respawning); networked via ClientNet.RespawnTimeStat; NetGame.cs:3807-3811 feeds RespawnStat/RespawnServerTime/RespawnJumpKey every frame while shown; DrawRespawn (ScoreboardPanel.cs:1166) renders the three-state QC line; RespawnJumpKey now resolved via BindTable.CommandKey('jump','+jump') (NetGame.cs:3811). Re-verified live 2026-06-25.", result: pass }
+      - { kind: "code", ref: "Traced the signed owner respawn field to DrawRespawn.", result: "pass" }
     confidence: high
-    notes: "FIXED this audit (drift check): the +jump keybind is now resolved (RespawnJumpKey fed from BindTable.CommandKey) — was the only residual last audit. The three-state line is fully faithful."
+    notes: "Native uses the live jump bind and current server time and hides the line in intermission."
 
   - id: cl-scoreboard.ui.interactive
     name: "Interactive scoreboard UI (navigation / team select / spectate / kick / tell / column cycling)"
@@ -567,43 +614,55 @@ features:
     base_refs:
       - "client/hud/panel/scoreboard.qc:Scoreboard_UI_Enable"
       - "client/hud/panel/scoreboard.qc:HUD_Scoreboard_InputEvent"
-    port_refs: []
+      - "client/hud/panel/radar.qc:HUD_Radar_InputEvent"
+      - "client/main.qc:CSQC_InputEvent"
+    port_refs:
+      - "game/hud/ScoreboardPanel.cs:UiEnable"
+      - "game/hud/ScoreboardPanel.cs:UiHandleKey"
+      - "game/net/NetGame.cs:SetupCameraAndHud"
+      - "game/net/NetGame.cs:_UnhandledInput"
     constants: []
     status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
+      logic: partial
+      values: na
+      timing: unknown
+      presentation: partial
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No interactive UI: the port scoreboard is a passive overlay. Missing TAB panel cycling (SCOREBOARD↔RANKINGS), arrow-key player/team selection, ENTER/SPACE team-join + spectate, Ctrl+C column-layout cycle, Ctrl+R scores_per_round toggle, Ctrl+T tell, Ctrl+K vote-kick, ESC exit, and the team-selection screen (scoreboard_ui_enabled==2) with its join prompts and world dimming (0.7)."
+      - "Team joining and spectate/tell/vote-kick dispatch still need dedicated in-match comparisons."
+      - "Some scoreboard inputs remain approximations, including same-name selection and clipped rankings focus."
     verification:
-      - { kind: code, ref: "No Scoreboard_UI_Enable / HUD_Scoreboard_InputEvent equivalent; ScoreboardPanel takes no input", result: fail }
-    confidence: high
-    notes: "A large v0.8.x feature surface entirely absent; the port draws the read-only table only. Unchanged this audit."
+      - { kind: "code", ref: "Compared CSQC_InputEvent and HUD_Radar_InputEvent with NetGame input routing and ScoreboardUiNavigationTests.", result: "partial" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (paired living and dead radar, rebound scores, interactive focus and Escape)", result: "pass" }
+    confidence: medium
+    notes: "Living Tab dismisses clickable radar and shows held scores. Dead score binds temporarily hide radar until release. Interactive navigation owns gameplay key presses and dismisses a radar opened while it has focus. Escape closes the active UI and console binds remain reachable."
 
   - id: cl-scoreboard.draw.export
-    name: "Scoreboard text export (dump_scoreboard / scoreboard_export)"
+    name: "Scoreboard HUD skin cvar export (hud save)"
     layer: [presentation]
     base_refs:
       - "client/hud/panel/scoreboard.qc:Scoreboard_Draw_Export"
-    port_refs: []
+      - "client/hud/hud_config.qc:HUD_Panel_ExportCfg"
+    port_refs:
+      - "game/hud/HudConfigEditor.cs:ExportCfg"
+      - "game/hud/ScoreboardPanel.cs:RegisterDefaults"
     constants: []
     status:
-      logic: missing
-      values: na
+      logic: faithful
+      values: partial
       timing: na
-      presentation: missing
+      presentation: na
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No equivalent of Scoreboard_Draw_Export (writes the scoreboard table to a file handle for the dump-scoreboard console command); the port has no scoreboard-export command."
+      - "Native skin export writes the registered scoreboard prefix as a superset of the pinned curated appearance list."
     verification:
-      - { kind: code, ref: "No Scoreboard_Draw_Export / export command found in the port HUD code", result: fail }
-    confidence: medium
-    notes: "Minor utility; added for completeness. Base scoreboard.qc:22. Unchanged this audit."
+      - { kind: "code", ref: "Compared the 15 pinned keys with the native export from the remote gameplay session.", result: "partial" }
+      - { kind: "visual", ref: "planning/parity/scoreboard-blocks/README.md (export command and captured cfg excerpt)", result: "pass" }
+    confidence: high
+    notes: "The pinned function exports scoreboard skin cvars through hud save. The native console entry writes its skin cfg through HudConfigEditor."

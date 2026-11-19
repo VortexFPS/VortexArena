@@ -86,9 +86,7 @@ public static class Doors
         if (this_.Speed == 0f)
             this_.Speed = 100f;
 
-        // DOOR_START_OPEN: spawn at pos2 and swap, so it operates in reverse.
-        if ((this_.SpawnFlags & StartOpen) != 0)
-            DoorInitStartOpen(this_);
+        ScheduleStartOpen(this_);
 
         this_.Touch = DoorTouch;
 
@@ -137,13 +135,7 @@ public static class Doors
         this_.Pos1 = Vector3.Zero;
         this_.Pos2 = this_.MoveDir;
 
-        if ((this_.SpawnFlags & StartOpen) != 0)
-        {
-            // door_rotating_init_startopen: spawn open, run in reverse.
-            this_.Angles = this_.MoveDir;
-            this_.Pos2 = Vector3.Zero;
-            this_.Pos1 = this_.MoveDir;
-        }
+        ScheduleStartOpen(this_);
 
         InitShared(this_);
 
@@ -225,11 +217,38 @@ public static class Doors
         // (QC also raises SendFlags |= SF_TRIGGER_RESET for CSQC; door networking is latent/commented in Base.)
     }
 
+    private static readonly List<Entity> _pendingStartOpen = new();
+    internal static bool DeferStartOpen { get; set; }
+
+    private static void ScheduleStartOpen(Entity door)
+    {
+        if ((door.SpawnFlags & StartOpen) == 0)
+            return;
+        if (DeferStartOpen)
+            _pendingStartOpen.Add(door);
+        else
+            DoorInitStartOpen(door);
+    }
+
+    internal static void RunDeferredPlacement()
+    {
+        foreach (Entity door in _pendingStartOpen)
+            if (!door.IsFreed)
+                DoorInitStartOpen(door);
+        _pendingStartOpen.Clear();
+    }
+
     /// <summary>QC <c>door_init_startopen</c>: place at pos2, then swap pos1/pos2 so it runs in reverse.</summary>
     private static void DoorInitStartOpen(Entity this_)
     {
-        MapMover.SetOrigin(this_, this_.Pos2);
-        (this_.Pos1, this_.Pos2) = (this_.Origin, this_.Pos1);
+        if (this_.ClassName == "door_rotating")
+        {
+            this_.Angles = this_.Pos2;
+            Api.Entities.SetOrigin(this_, this_.Origin); // relink the rotated brush
+        }
+        else
+            MapMover.SetOrigin(this_, this_.Pos2);
+        (this_.Pos1, this_.Pos2) = (this_.Pos2, this_.Pos1);
     }
 
     // ================= LinkDoors =================

@@ -524,7 +524,7 @@ public sealed class PowerupsMutator : MutatorBase
         Api.Entities.SetOrigin(e, org);
         e.Origin = org;
         // QC W_CalculateProjectileVelocity(this, velocity, v_forward * 750, false) — toss forward off the corpse.
-        e.Velocity = owner.Velocity + QMath.Forward(owner.Angles) * 750f;
+        e.Velocity = WeaponFiring.CalculateProjectileVelocity(owner, QMath.Forward(owner.Angles) * 750f);
         e.MoveType = MoveType.Toss;
         e.Solid = Solid.Trigger;
         e.Flags |= EntFlags.Item;

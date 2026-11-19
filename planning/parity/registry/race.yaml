@@ -5,14 +5,14 @@ last_audited: "2026-06-28"
 summary:
   feature_count: 19
   worst_gaps:
-    - "race_place START GRID ordering + trigger_race_checkpoint_verify map-load validation still missing. This wave SET cl_movecliptokeyboard=2 at activation (Race.cs:540) but the cvar has NO reader in the port, so the client input clip is still not forced (write live, effect dead). This wave also seeded the Base timelimit=20 default at activation (GameWorld.cs:3106-3107) — an unconfigured race map now times out at 20 min."
+    - "Race start-grid ordering and pinned spawn validation are wired through native boot and match reset. This wave SET cl_movecliptokeyboard=2 at activation (Race.cs:540) but the cvar has NO reader in the port, so the client input clip is still not forced (write live, effect dead). This wave also seeded the Base timelimit=20 default at activation (GameWorld.cs:3106-3107) — an unconfigured race map now times out at 20 min."
     - "FIXED since 2026-06-27: the cl_allow_uid* consent gate on the record DB is now LIVE — Race.UidConsentProvider (Race.cs:269) is wired at activation (GameWorld.cs:3015-3017) to Commands.GetClientCvarFloat(cl_allow_uidtracking)==1 && (cl_allow_uid2name)==1 (uid2name default -1 = NOT consenting, exactly as Base). A record-worthy time without consent fires INFO_RACE_NEW_MISSING_NAME and is NOT stored (Race.cs:844-852, RaceRecords.WouldBeNewRecord gate). The 9th notification (RACE_NEW_MISSING_NAME) is now declared + wired. The baseline's record-DB / notifications consent gap is closed for the finish-time record; the SpeedAwardFrame all-time-best still keys on a non-empty PersistentId (no consent gate) — residual."
     - "FIXED since 2026-06-25: the Race force-keyboard movement quantization is now LIVE for Race itself — Race.Activate registers OnPlayerPhysics on MutatorHooks.PlayerPhysics (Race.cs:491-492), which runs all 3 QC rc PlayerPhysics slices every physics frame: (1) the deterministic .race_movetime lap-clock accumulator (frac/count split), (2) the race_penalty freeze, (3) the M_SQRT1_2 octant snap. Lap timing now reads the deterministic accumulator (RaceMoveTime) rather than the wall clock on the live path. Residual: cl_movecliptokeyboard 2 stuffcmd (FixClientCvars) is not sent; disableclientprediction=2 during freeze has no port mechanism."
     - "FIXED since 2026-06-25: the bot race role IS now ported + LIVE — BotObjectiveRoles.RoleRace (havocbot_role_race) routes the bot to its next expected trigger_race_checkpoint at QC's 1000000/5000 routerating, wired via BotRoles.ChooseRole (\"rc\"/\"race\" => RoleRace, BotRoles.cs:103). A bot-filled race now navigates the track."
     - "FIXED since 2026-06-22: speed awards (race_SpeedAwardFrame) are now fully ported + LIVE — Race.SpeedAwardFrame is driven each frame (GameWorld.cs:3421), round-best + persisted all-time-best planar speed are networked (ScoreboardBlock.SpeedAward) + rendered (ScoreboardPanel.DrawSpeedAward), and the RaceTimerPanel speed-at-CP readout is fed (NetGame.cs:3725 (RaceCheckpointSpeed))."
     - "FIXED since 2026-06-22: the HUD_Mod_Race MOD-ICON (floating PB + server-best + medal flash) IS now ported — ModIconsPanel has a Race case (DrawRace) fed via NetGame.cs:4075-4104; the rankings display cap now reads g_cts_send_rankings_cnt (Base default 15, capped at RANKINGS_CNT 99) instead of a hardcoded 15. Both the mod-icon and the split panels remain host-side feeds (no TE_CSQC_RACE net path), so they are listen-server only; the RANKINGS scoreboard column is the one genuinely-networked piece."
     - "Lap-limit default (port 7) differs from Base (-1 = consult mapinfo). cl_allow_uid* consent gate on the record DB still absent (RaceRecords only checks for a non-empty uid; the cvars exist in the menu but are not consulted)."
-    - "Carried: the spawnflag-4 wrong-way kill AND spawnflag-8 timed-finish are both armed from the BSP lump (WireObjectiveSpawns GameWorld.cs:3032-3043); the wrong-way kill still uses DeathTypes.Void not Base DEATH_HURTTRIGGER (cosmetic deathtype only). The g_race_qualifying_timelimit SOURCE is wired at activation (GameWorld.cs:2960-2978) and respawn-at-last-checkpoint is LIVE (RespawnSpot/ApplyRespawnSpot via Clients.OnPreSpawn → SpawnSystem SpawnPointTarg)."
+    - "Carried: the spawnflag-4 wrong-way kill AND spawnflag-8 timed-finish are both armed from the BSP lump (WireObjectiveSpawns GameWorld.cs:3032-3043); the wrong-way kill still uses DeathTypes.Void not Base DEATH_HURTTRIGGER (cosmetic deathtype only). The g_race_qualifying_timelimit SOURCE is wired at activation (GameWorld.cs:2960-2978) and Race death respawns use the authored spawn targeting the last checkpoint."
 features:
   - id: race.mode.setup_limits
     name: "Mode setup + limits (teams, qualifying, lap/frag/time limits)"
@@ -163,10 +163,14 @@ features:
       - "server/race.qc:race_readPos"
       - "server/race.qc:race_writeTime"
       - "server/race.qc:race_setTime"
+      - "common/gametypes/gametype/race/sv_race.qc:MUTATOR_HOOKFUNCTION(rc, GetRecords)"
     port_refs:
+      - "tools/race-record-migration/Migration.cs:Apply"
       - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:SetTime"
       - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:WriteTime"
       - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:ReadPos"
+      - "src/VortexArena.Server/RaceRecordFile.cs:Open"
+      - "src/VortexArena.Server/CommandReplies.cs:GetRecords"
     constants:
       - { name: "RANKINGS_CNT", base: "99", port: "99", match: true }
       - { name: "record key scheme", base: "strcat(map, record_type, field, pos)", port: "map+type+field+pos", match: true }
@@ -182,10 +186,12 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
+      - { kind: test, ref: "RecordMigrationTests (pinned database and native profile integration)", result: pass }
       - { kind: test, ref: "RaceRecordsTests", result: pass }
       - { kind: code, ref: "Race.RecordFinishTime (Race.cs:844-852): a record-worthy time (RaceRecords.WouldBeNewRecord) with consent withheld (UidConsentProvider false) fires INFO_RACE_NEW_MISSING_NAME and is NOT stored; the gate is wired LIVE at GameWorld.cs:3015-3017 to Commands.GetClientCvarFloat(cl_allow_uidtracking)==1 && (cl_allow_uid2name)==1", result: pass }
+      - { kind: code, ref: "planning/parity/record-reports/README.md (native dedicated Race output on Leave Em Behind and Courtfun)", result: pass }
     confidence: high
-    notes: "FIXED since 2026-06-27 (was the cl_allow_uid* consent-gate gap). Filing is live (CrossCheckpoint -> RecordFinishTime -> SetTime); the classified result is consumed (race.records.notifications). The Base cl_allow_uidtracking==1 && cl_allow_uid2name==1 consent gate is now ported + live via Race.UidConsentProvider (wired to the per-client replicated-cvar store), with the cl_allow_uid2name default -1 treated as NOT consenting exactly as Base. A record-worthy time without consent is announced (NEW_MISSING_NAME) and discarded rather than silently stored."
+    notes: "Race ranked records save on clean native world shutdown and reload from the writable profile. The native client replicates both UID opt-ins; defaults with name consent undecided do not admit a named record. The offline importer accepts a pinned server.db save or dump and merges verified, consenting owners by native fingerprint."
 
   - id: race.records.notifications
     name: "Record result + finish/abandon notifications (INFO_RACE_*)"
@@ -310,33 +316,43 @@ features:
     notes: "Team-lap accumulation into the secondary team slot (ST_RACE_LAPS) tested."
 
   - id: race.qualifying.mode
-    name: "Qualifying solo time-trial (rank by fastest, retract after each lap)"
+    name: "Qualifying time trial and ready or timed completion"
     layer: [authority]
     base_refs:
+      - "common/gametypes/gametype/race/race.qh:Race INIT"
+      - "common/gametypes/gametype/race/sv_race.qc:race_ScoreRules"
+      - "common/gametypes/gametype/race/sv_race.qc:WinningCondition_QualifyingThenRace"
+      - "common/gametypes/gametype/race/sv_race.qc:ReadLevelCvars"
       - "common/gametypes/gametype/race/sv_race.qc:rc_SetLimits"
+      - "server/command/cmd.qc:ClientCommand_ready"
+      - "server/race.qc:race_SendTime"
       - "server/race.qc:race_RetractPlayer"
+      - "server/world.qc:CheckRules_World"
     port_refs:
       - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:Qualifying"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:RetractPlayer"
-      - "src/VortexArena.Server/GameWorld.cs:2945-2978 (race.Activate + OnFinishRetract = Clients.Spawn)"
-    constants: []
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:CrossCheckpoint"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:ReportsTie"
+      - "src/VortexArena.Server/Commands.cs:CmdReady"
+      - "src/VortexArena.Server/GameWorld.cs:RunCheckRulesWorld"
+    constants:
+      - { name: "minimum qualifying times for automatic race restart with no ready racer", base: 2, port: 2, match: true }
     status:
       logic: partial
-      values: partial
-      timing: partial
+      values: faithful
+      timing: faithful
       presentation: na
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Retract uses Clients.Spawn (a normal spawn), not the Base checkpoint/grid-aware respawn (race_RetractPlayer + spawn_evalfunc by race_place)."
-      - "independent_players / MAKE_INDEPENDENT_PLAYER (solo scoring isolation) not modeled."
-      - "Qualifying checkpoint records + RACE_NET_CHECKPOINT_*_QUALIFYING packets absent."
+      - "The full independent-player body and damage behavior used by the PIN during qualifying is outside the lifecycle port."
+      - "Stock qualifying checkpoint packets are absent on the native wire. Native and legacy use separate protocols."
     verification:
-      - { kind: code, ref: "Race.Qualifying + OnFinishRetract wiring (GameWorld.cs:2953)", result: partial }
-    confidence: medium
-    notes: "Unchanged by Wave-2. Solo retract-to-start works; the qualifying-specific networking, isolation and grid spawn do not."
+      - { kind: test, ref: "RaceGridSpawnTests ready commands, scored laps, no-ready terminal cases and tied overtime", result: pass }
+      - { kind: code, ref: "planning/parity/race-grid/qualifying-probe.sh on leave_em_behind", result: pass }
+    confidence: high
+    notes: "Timed qualifying bypasses ordinary warmup. A valid lap updates fastest without counting a Race lap or forcing a CTS-style finish respawn. At expiry a ready active racer or two active racers with a lap opens the restart countdown. A qualifying server without that gate runs stock overtime or intermission."
 
   - id: race.qualifying.transition
     name: "Qualifying-then-race transition (g_race_qualifying==2 -> 0)"
@@ -344,10 +360,19 @@ features:
     base_refs:
       - "common/gametypes/gametype/race/sv_race.qc:reset_map_global"
       - "common/gametypes/gametype/race/sv_race.qc:rc_SetLimits"
+      - "server/command/vote.qc:reset_map"
+      - "server/command/vote.qc:ReadyRestart_force"
+      - "server/scores.qc:Score_ClearAll"
+      - "server/world.qc:CheckRules_World"
     port_refs:
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:PrepareStartGrid"
       - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:TransitionQualifyingToRace"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:SaveRaceLimits"
-    constants: []
+      - "src/VortexArena.Server/GameWorld.cs:ResetMap"
+      - "src/VortexArena.Server/GameWorld.cs:RunCheckRulesWorld"
+      - "src/VortexArena.Server/WarmupController.cs:ReadyRestart"
+    constants:
+      - { name: "RESTART_COUNTDOWN", base: 10, port: 10, match: true }
+      - { name: "sv_ready_restart_after_countdown default", base: 0, port: 0, match: true }
     status:
       logic: faithful
       values: faithful
@@ -359,40 +384,57 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "GameWorld.cs:2960-2978 Race activation reads g_race_qualifying_timelimit(_override), derives g_race_qualifying=2 + SaveRaceLimits + replaces the active timelimit with the qualifying clock; RunCheckRulesWorld timelimit-elapsed branch (GameWorld.cs:3597) calls race.TransitionQualifyingToRace() + re-arms GameStartTime", result: pass }
+      - { kind: test, ref: "RaceGridSpawnTests tests both reset boundaries, cleared ranks, retained ranking on a score-preserving reset, restored limits and persistent record", result: pass }
     confidence: high
-    notes: "FIXED again since 2026-06-22 (qualifying-timelimit source now wired). The full qualifying==2 chain is live: g_race_qualifying_timelimit(_override)>0 derives qualifying==2 and replaces the active timelimit with the qualifying clock at activation (GameWorld.cs:2960-2978, the prior audit's last open gap), and when that clock elapses TransitionQualifyingToRace converts the session to a plain race (clears g_race_qualifying, restores the stashed fraglimit/leadlimit/timelimit, re-declares score rules, resets every racer) instead of going to intermission."
+    notes: "The real qualifying restart clears scoreboard scores before Race assigns grid places. With no fastest scores remaining, racers spawn at the last place. The existing option defers the same reset until the end of the ten-second countdown. The reset restores the saved main limits and retains the persistent map record. Map-local racer state is rebuilt at each map boot."
 
   - id: race.spawn.grid_respawn
     name: "Spawn grid by race_place + respawn at last checkpoint"
     layer: [authority]
     base_refs:
+      - "common/gametypes/gametype/race/sv_race.qc:reset_map_global"
+      - "common/gametypes/gametype/race/sv_race.qc:PlayerSpawn"
+      - "common/gametypes/gametype/race/sv_race.qc:PutClientInServer"
+      - "common/gametypes/gametype/race/sv_race.qc:PlayerDies"
+      - "server/command/vote.qc:reset_map"
+      - "server/race.qc:checkpoint_passed"
+      - "server/race.qc:trigger_race_checkpoint_verify"
       - "server/race.qc:trigger_race_checkpoint_spawn_evalfunc"
-      - "server/race.qc:spawnfunc(info_player_race)"
+      - "server/race.qc:spawnfunc(trigger_race_checkpoint)"
       - "server/race.qc:race_RetractPlayer"
+      - "server/race.qc:spawnfunc(info_player_race)"
+      - "server/scores.qc:PlayerScore_Sort"
+      - "server/spawnpoints.qc:Spawn_Score"
+      - "server/spawnpoints.qc:SelectSpawnPoint"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:ApplyRespawnSpot"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:OnDeath (respawn-checkpoint resume)"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:CheckpointTouch (RespawnSpot/RespawnCheckpoint update)"
-      - "src/VortexArena.Server/GameWorld.cs:2953 (Clients.OnPreSpawn = p => race.ApplyRespawnSpot(p))"
-      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:332 (consumes Player.SpawnPointTarg)"
-    constants: []
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:RegisterMapCheckpoint"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:RegisterRaceSpawn"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:ValidateMapSpawns"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:RaceSpotEvalScore"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:OnPlayerSpawn"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:PrepareStartGrid"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:OnDeath"
+      - "src/VortexArena.Common/Gameplay/Player/SpawnSystem.cs:ScoreSpot"
+      - "src/VortexArena.Server/ClientManager.cs:Spawn"
+      - "src/VortexArena.Server/GameWorld.cs:Boot"
+      - "src/VortexArena.Server/GameWorld.cs:ResetMap"
+    constants:
+      - { name: "SPAWN_PRIO_RACE_PREVIOUS_SPAWN", base: 50, port: 50, match: true }
     status:
-      logic: partial
-      values: partial
+      logic: faithful
+      values: faithful
       timing: na
       presentation: na
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "race_place START-GRID ordering still missing: racers do not get ordered start positions in a multi-racer race (no race_place read / info_player_race grid)."
-      - "trigger_race_checkpoint_verify map-load validation (missing-spawn error) not performed."
+    gaps: []
     verification:
-      - { kind: code, ref: "Race.ApplyRespawnSpot sets Player.SpawnPointTarg to the last-passed checkpoint; wired LIVE via ClientManager.OnPreSpawn (invoked ClientManager.cs:616 before SelectSpawnPoint) → SpawnSystem.cs:332 short-circuits to the forced spot; OnDeath resumes NextCheckpoint after the respawn CP", result: partial }
+      - { kind: test, ref: "RaceGridSpawnTests through GameWorld boot, join, qualifying expiry, normal damage and forced respawn", result: pass }
+      - { kind: code, ref: "planning/parity/race-grid/README.md, probe.sh and overlay-probe.sh (native gameplay and paired PIN/native map boot)", result: pass }
     confidence: high
-    notes: "FIXED (partial) since baseline — the prior audit marked this fully dead/missing. The respawn-at-last-checkpoint half (Base race_respawn_checkpoint / race_respawn_spotref / SPAWN_PRIO_RACE_PREVIOUS_SPAWN) is now implemented and genuinely live: crossing a CP in order re-points RespawnSpot, a death resumes from that CP (or clears the lap at the start line), and the host forces the next spawn there via SpawnPointTarg. Still open: the race_place start-grid ordering and the map-load checkpoint-verify."
+    notes: "Ordinary numbered-checkpoint Race. A reset that preserves scores assigns grid places by strict score order. A real qualifying countdown clears scores first. Unranked joins use the last place and qualifying uses the lowest place. Death uses the last linked checkpoint branch where available. The stock emergency pass relaxes target evaluation and keeps the race-spawn target requirement. PIN validates the effective checkpoint-zero Race and qualifying requests. Both hosts accept the same leave_em_behind checkpoint-1 hole and reject broken effective starts. CTS/DeFRaG placement is outside this row."
 
   - id: race.movement.quantization
     name: "Force-keyboard movement quantization + race_movetime + FixClientCvars"
@@ -556,6 +598,7 @@ features:
       - "server/race.qc:race_SpeedAwardFrame"
       - "server/race.qc:race_send_speedaward / race_send_speedaward_alltimebest"
     port_refs:
+      - "tools/race-record-migration/Migration.cs:Apply"
       - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:SpeedAwardFrame"
       - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:ReadSpeedAwardBest / WriteSpeedAwardBest"
       - "src/VortexArena.Server/GameWorld.cs:3421 (race.SpeedAwardFrame(Clients.Players))"
@@ -578,6 +621,7 @@ features:
     gaps:
       - "All-time-best persistence keys off PersistentId (non-empty uid) rather than the cl_allow_uid* consent gate Base uses (same uid-gate divergence as the record DB)."
     verification:
+      - { kind: test, ref: "RecordMigrationTests (pinned database and native profile integration)", result: pass }
       - { kind: code, ref: "Race.SpeedAwardFrame tracks round-best planar speed + persists the all-time best (RaceRecords.WriteSpeedAwardBest); driven LIVE per frame at GameWorld.cs:3421; networked via ScoreboardBlock.SpeedAward (ServerNet.cs:2303) → ScoreboardPanel.DrawSpeedAward; RaceTimerPanel speed-at-CP fed at NetGame.cs:3725 (RaceCheckpointSpeed)", result: pass }
     confidence: high
-    notes: "FIXED since 2026-06-22 (was all-missing/dead). race_SpeedAwardFrame is fully ported: Race.SpeedAwardFrame runs every server frame, tracks the round-best planar speed + holder/uid, and persists the all-time best into RaceRecords; both are networked into the scoreboard (works for a pure remote client) and the per-CP speed readout is fed into RaceTimerPanel. Shared with the sibling CTS gametype (Cts.SpeedAwardFrame)."
+    notes: "FIXED since 2026-06-22 (was all-missing/dead). race_SpeedAwardFrame is fully ported: Race.SpeedAwardFrame runs every server frame, tracks the round-best planar speed + holder/uid, and persists the all-time best into RaceRecords; both are networked into the scoreboard (works for a pure remote client) and the per-CP speed readout is fed into RaceTimerPanel. Shared with the sibling CTS gametype (Cts.SpeedAwardFrame). The offline importer requires verified identity and new consent for historical speed awards and preserves an equal or faster native award."

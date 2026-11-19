@@ -208,6 +208,11 @@ public static class ItemSpawnFuncs
     {
         // item_buff_random — a null type forces randomization (QC BUFF_SPAWNFUNCS(random, NULL)).
         SpawnFuncs.Register("item_buff_random", e => BuffsMutator.SpawnMapBuff(e, null, 0));
+        foreach (var (suffix, team) in BuffTeamVariants)
+        {
+            int tm = team;
+            SpawnFuncs.Register("item_buff_random" + suffix, e => BuffsMutator.SpawnMapBuff(e, null, tm));
+        }
 
         foreach (string t in BuffSpawnTypes)
         {
@@ -223,7 +228,8 @@ public static class ItemSpawnFuncs
         foreach (var (className, buff) in BuffCompatClassnames)
         {
             string b = buff; // capture
-            SpawnFuncs.Register(className, e => BuffsMutator.SpawnMapBuff(e, b, 0));
+            SpawnFuncs.Register(className, e => BuffsMutator.SpawnMapBuff(e, b,
+                (e.SpawnFlags & 2) != 0 ? Teams.Red : (e.SpawnFlags & 4) != 0 ? Teams.Blue : Teams.None));
         }
     }
 
@@ -357,11 +363,18 @@ public static class ItemSpawnFuncs
 
         WeaponPickup def = PickupFor(w);
 
-        // QC weapon_defaultspawnfunc: default respawntime; default pickup ammo if the edict didn't set it; the
-        // g_pickup_weapons_anyway pickup_anyway. The ammo + weapon-set seeding happen in WeaponPickup.ItemInit.
+        // The pinned spawn callback supplies jitter together with the default respawn time.
         if (e.ItemRespawnTime == 0f)
-            e.ItemRespawnTime = ItemPickupRules.CvarOr(
-                w.IsSuperWeapon ? "g_pickup_respawntime_superweapon" : "g_pickup_respawntime_weapon", 10f);
+        {
+            string kind = w.IsSuperWeapon ? "superweapon" : "weapon";
+            e.ItemRespawnTime = ItemPickupRules.CvarOr("g_pickup_respawntime_" + kind, w.IsSuperWeapon ? 120f : 10f);
+            e.ItemRespawnTimeJitter = ItemPickupRules.CvarOr("g_pickup_respawntimejitter_" + kind, w.IsSuperWeapon ? 10f : 0f);
+        }
+
+        // Map pickups store a relative duration. ItemTouch feeds it to the player's status effect.
+        if (w.IsSuperWeapon && e.SuperweaponsFinished == 0f)
+            e.SuperweaponsFinished = ItemPickupRules.CvarOr("g_balance_superweapons_time", 30f);
+
         if (ItemPickupRules.CvarBoolOr("g_pickup_weapons_anyway", false))
             e.PickupAnyway = 1;
 
@@ -437,8 +450,8 @@ public sealed class WeaponPickup : Pickup
 
     /// <summary>
     /// QC weapon_defaultspawnfunc body: put this weapon in the world item's weapon set (STAT(WEAPONS,this)) and,
-    /// if its ammo resource isn't already set on the edict, seed the pickup ammo (WEP_CVAR(pickup_ammo), else the
-    /// matching g_pickup_&lt;resource&gt; amount). Item_GiveTo then grants the weapon + that ammo on touch.
+    /// if its ammo resource isn't already set, seed it from the map's shot count or the weapon's pickup-ammo default.
+    /// Item_GiveTo then grants the weapon and that ammo on touch.
     /// </summary>
     public override void ItemInit(Entity item)
     {
@@ -446,7 +459,9 @@ public sealed class WeaponPickup : Pickup
 
         if (_weapon.AmmoType != ResourceType.None && item.GetResource(_weapon.AmmoType) == 0f)
         {
-            float ammo = ItemPickupRules.CvarOr($"g_balance_{_weapon.NetName}_pickup_ammo", PickupAmmoFallback());
+            float ammo = item.Count > 0
+                ? System.MathF.Round(item.Count * CompatRemaps.GetAmmoConsumption(_weapon), MidpointRounding.AwayFromZero)
+                : ItemPickupRules.CvarOr($"g_balance_{_weapon.NetName}_pickup_ammo", PickupAmmoFallback());
             if (ammo > 0f)
                 item.SetResourceExplicit(_weapon.AmmoType, ammo);
         }

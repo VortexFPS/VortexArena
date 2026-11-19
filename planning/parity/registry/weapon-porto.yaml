@@ -5,7 +5,7 @@ last_audited: "2026-06-28"
 summary:
   feature_count: 13
   worst_gaps:
-    - "No portal-aim trajectory preview (Porto_Draw): Base draws a reflecting red/blue Draw_CylindricLine polyline (16 points, up to 2 portals/reflections, slick-continue / noimpact-stop / CheckWireframeBox 96^3 gate) showing where the in/out portals would land while you hold porto. The port renders nothing. Still entirely missing — the single largest remaining porto gap."
+    - "PortoTrajectoryPreview reaches the render loop. The combined-shot preview still needs an in-match host and remote comparison."
     - "ProbeImpact re-trace approximation: the touch path re-probes the impact face with a short worldonly traceline (Porto.cs:384-402) because the engine touch carries no per-contact trace_dphit* flags; on a glancing bounce the probe ray can miss or hit an adjacent face, so the slick/clip vs noimpact vs place branch selection (and the recovered plane normal handed to the warpzone) is approximate rather than exact."
     - "Projectile not flagged FL_PROJECTILE and dphitcontentsmask (SOLID|BODY|PLAYERCLIP) not set on the spawned bouncemissile — mostly cosmetic for porto (ProbeImpact recovers PLAYERCLIP independently), but the engine move uses its default contents mask rather than Base's."
 features:
@@ -277,26 +277,28 @@ features:
     layer: [presentation]
     base_refs:
       - "common/weapons/weapon/porto.qc:Porto_Draw"
-    port_refs: []
+    port_refs:
+      - "game/client/PortoTrajectoryPreview.cs:BuildPolyline"
+      - "game/client/ClientWorld.cs:PortoPreview"
+      - "game/net/NetGame.cs:SetupCameraAndHud"
     constants:
-      - { name: "polyline length", base: "16 points, up to 2 portals/reflections", port: "n/a", match: false }
-      - { name: "line color", base: "red before 1st portal, blue after", port: "n/a", match: false }
-      - { name: "line width", base: "Draw_CylindricLine width 4", port: "n/a", match: false }
+      - { name: "polyline capacity", base: "16", port: "16", match: true }
+      - { name: "line width", base: "4", port: "4", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
+      logic: partial
+      values: faithful
+      timing: unknown
+      presentation: unknown
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "While holding porto (non-secondary mode), Base draws a reflecting red/blue cylindric-line polyline (with the same slick-continue / noimpact-stop / CheckWireframeBox size checks the placement uses) predicting where the in/out portals will land. The port STILL renders nothing — the signature porto view feature is absent."
+      - "The preview uses current view angles. Check the held-angle branch, reflected placement and visual width against upstream with g_balance_porto_secondary 0."
     verification:
-      - { kind: code, ref: "grep: no Porto_Draw / trajectory preview polyline in src/ or game/", result: fail }
-    confidence: high
-    notes: "Most visible porto-specific presentation gap. The CheckWireframeBox 96^3 size gate exists in Base both here (preview) and in the spawner; the port now has the spawner-side gate (touch path) but not the preview polyline. Re-audited 2026-06-28: still missing."
+      - { kind: code_read, ref: "2026-11-18: ClientWorld instantiates the node with the shared lines pool. NetGame binds weapon, view and suppression providers. _Process calls BuildPolyline, which traces and draws the red and blue segments.", result: pass }
+    confidence: medium
+    notes: "The 2026-06-28 absence finding was obsolete. No new in-match comparison of portal placement."
 
   - id: weapon-porto.presentation.projectile_render
     name: "Projectile render (PORTO_RED / PORTO_BLUE, trail, scale)"

@@ -1,0 +1,12 @@
+Native before follow-loss handling
+FOLLOW moved owner=Alpha target=Beta targetFreed=False order=1 move=Follow solid=Not origin=<1216, 427.96875, 8.753998> next=80.153
+FOLLOW dead owner=Alpha target=Beta targetFreed=False order=1 move=Follow solid=Not origin=<1216, 427.96875, 8.753998> next=80.153
+FOLLOW disconnected owner=Alpha target=Beta targetFreed=True order=2 move=Follow solid=Not origin=<1216, 307.96875, 8.753998> next=82.014
+
+Stock exploratory run with the default two-second kill delay
+The detached client slot was still nonzero at the orb's loss check.
+origin         '12 -7.34788112e-16 -27.96875'
+nextthink      118.043854
+aiment         entity 2
+owner          entity 1
+move_movetype  6

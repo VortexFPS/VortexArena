@@ -6,7 +6,7 @@ summary:
   feature_count: 18
   worst_gaps:
     - "CTF capture burst never renders: Ctf.cs:787 emits the effectinfo name '<team>_cap' through the RegistryName-keyed Emit(string) overload -> Effects.ByName returns null -> request silently dropped (registry names are CAP_RED/...)"
-    - "Whole catalog families are present-but-never-requested: nade_* trail/burn/explode (NadeBoom substitutes generic EXPLOSION_*), gentle/happy/morphed/particlegibs damage_* (no gentle gib-splash selection ported), vehicle impact/explode blocks (no client damageeffects DamageInfo handler), onslaught generator gib, CTF flag_touch/pass"
+    - "Whole catalog families are present-but-never-requested: nade_* trail/burn/explode (NadeBoom substitutes generic EXPLOSION_*), vehicle impact/explode blocks (no client damageeffects DamageInfo handler), onslaught generator gib, CTF flag_touch/pass"
     - "No unit test covers the effectinfo.txt parser / keyword table / baseline defaults, nor a wire-protocol encode/decode round-trip; verified by code read only (confirmed: only ParticleParityTests/ParticleAnalyticTrace exist, neither hits EffectInfo.Parse/ApplyKeyword/EffectNetProtocol)"
     - "Heuristic fallback BuildFromInfo clamps derived life to [0.05,6]s + midpoint (intended; only when faithful/modern backend un-routed)"
     - "te_* helper -> registry-name mapping is a port convention; caller coverage of these specific wrappers not exhaustively traced (beam/arc temp-effects route to BeamRenderer, not the particle catalog)"
@@ -135,16 +135,22 @@ features:
     notes: "CORRECTED from the draft's liveness:unknown. The wire protocol is fully live and bidirectional on the real networked path. The draft's gap 'decode side not located/confirmed wired' is RESOLVED: ClientNet.DecodeEffect + ReadColor implement the net_effect NET_HANDLE. Only the test gap remains."
 
   - id: fx-effectinfo.catalog.file
-    name: "Shipped effectinfo.txt catalog (~800 layered blocks)"
+    name: "Original-mode effectinfo catalog and particle atlas"
     layer: [presentation]
     base_refs:
       - "data/xonotic-data.pk3dir/effectinfo.txt"
+      - "data/xonotic-data.pk3dir/particles/particlefont.txt"
+      - "data/xonotic-data.pk3dir/particles/particlefont.tga"
       - "common/effects/effectinfo.inc"
     port_refs:
-      - "Base/data/xonotic-data.pk3dir/effectinfo.txt"
+      - "data/core.pk3dir/vortex/original/effectinfo.txt"
+      - "data/core.pk3dir/vortex/original/particles/particlefont.txt"
+      - "data/core.pk3dir/vortex/original/particles/particlefont.png"
+      - "game/client/EffectSystem.cs:EnsureInfoLoaded"
     constants:
       - { name: "effect block count", base: "800 blocks (violence build)", port: "800 blocks", match: true }
       - { name: "file size", base: "9043 lines", port: "9043 lines", match: true }
+      - { name: "atlas", base: "2048x2048 TGA and particlefont.txt", port: "pixel-identical lossless PNG and byte-identical particlefont.txt", match: true }
     status:
       logic: faithful
       values: faithful
@@ -156,9 +162,10 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: value, ref: "wc/grep: 9043 lines, 800 '^effect ' blocks; staintex=30/staincolor=30/stainsize=8 occurrences; standard violence build; all key weapon/item/CTF names present", result: pass }
+      - { kind: value, ref: "Compared with v0.8.6-1779-g863cd3e84. Original effectinfo and UV table are byte-identical. ImageMagick compare -metric AE reports 0 for Base TGA vs the lossless PNG.", result: pass }
+      - { kind: code, ref: "EffectSystem.EnsureInfoLoaded selects the pinned catalog and atlas together for cl_particles_modern=0 and the original Vortex-authored assets for Mixed and Modern.", result: pass }
     confidence: high
-    notes: "Same shipped file DarkPlaces parses. Gentle-mode effects are extra named blocks selected by consumers (cl_gentle/sv_gentle), not a separate file."
+    notes: "Original mode mounts the pinned pair from vortex/original. Mixed and Modern keep the 831-block authored catalog and existing atlas. Switching atlases clears the faithful sprite and splat pools so old cell indices are never interpreted under the new table."
 
   - id: fx-effectinfo.parser.tokenize
     name: "effectinfo.txt parser/tokeniser (CL_Particles_ParseEffectInfo)"
@@ -409,24 +416,26 @@ features:
       - "common/effects/effectinfo_gentle_particlegibs.inc"
     port_refs:
       - "Base/data/xonotic-data.pk3dir/effectinfo.txt"
+      - "game/client/EffectSystem.cs:Spawn"
     constants:
       - { name: "name families", base: "damage_hit/damage_dissolve + morphed_/happy_/particlegibs_ prefixed variants", port: "all 8 names present with matching block counts (3/3, 2/4, 3/3, 3/5)", match: true }
     status:
       logic: faithful
       values: faithful
       timing: na
-      presentation: faithful
+      presentation: partial
       audio: na
-      liveness: dead
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Nothing in the port composes these names: Base's net_gibsplash handler (common/effects/qc/gibs.qc:214-240) picks the prefix (morphed_ default, '' when cl_gentle_gibs==2, happy_ when ==3, particlegibs_ when cl_particlegibs) and pointparticles(prefix+damage_hit/damage_dissolve). The port's gib path (game/client/ModelGibs.cs) has no gentle-mode or particle-gib effect selection at all, so these blocks parse but are never requested. Consumer gap belongs to the gibs/damageeffects unit."
+      - "The stock bytecode and both native backends took the expected branches. Native Original rendered gentle mode 2 and particle-only in the aligned visual fixture. The appearance of the morphed and happy variants and cross-engine pixel equivalence remain open."
     verification:
+      - { kind: test, ref: "planning/parity/rubble-limits/gib-options-live/observations.txt paired hit and dissolve selections under seven client settings", result: pass }
       - { kind: value, ref: "grep port effectinfo.txt: damage_dissolve 3 / damage_hit 3 / morphed_ 4+2 / happy_ 3+3 / particlegibs_ 5+3 blocks; shipped file byte-identical to Base", result: pass }
-      - { kind: code, ref: "grep src+game for morphed_/happy_/particlegibs_/damage_dissolve/damage_hit: zero hits outside menu cvar wiring (cl_gentle_gibs checkbox)", result: fail }
+      - { kind: test, ref: "planning/parity/rubble-limits/gib-options.txt records active particles from each of the four original damage_dissolve variants", result: pass }
     confidence: high
-    notes: "added 2026-07-02 (coverage fold). cl_gentle/cl_gentle_gibs menu cvars exist (DialogSettingsUser.cs:80) but no gameplay code reads them for gib effects."
+    notes: "The type-1 corpse event selects the four mounted dissolve definitions. The native and stock type-2 hit event selects the corresponding damage_hit variant. The stock names and amounts were traced from the executed source branches."
 
   - id: fx-effectinfo.catalog.onslaught
     name: "Onslaught generator gib blocks (gib_explode / gib_flame)"

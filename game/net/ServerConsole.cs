@@ -102,7 +102,13 @@ public sealed partial class ServerConsole : Node
         while (_lines.TryDequeue(out string? line))
         {
             try { CommandSink?.Invoke(line); }
-            catch (Exception ex) { GD.PrintErr($"[ServerConsole] command '{line}' failed: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                if (VortexArena.Server.Commands.IsMatrixTokenCommand(line))
+                    GD.PrintErr("[ServerConsole] mx token failed.");
+                else
+                    GD.PrintErr($"[ServerConsole] command '{line}' failed: {ex.Message}");
+            }
         }
     }
 

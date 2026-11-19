@@ -50,6 +50,7 @@ public sealed class ConfigInterpreter
     private readonly List<string> _diagnostics = new();
     private int _aliasDepth;
     private long _commandBudget;
+    private bool _forwardUnknownCommands = true;
 
     // Caps (generous; only there to stop a pathological alias/exec loop, never hit by real configs).
     private const int MaxExecDepth = 48;
@@ -126,6 +127,9 @@ public sealed class ConfigInterpreter
     /// </summary>
     public Action<string, IReadOnlyList<string>>? UnknownCommandHandler { get; set; }
 
+    /// <summary>Optional host dispatch for an expanded command line, with the original token quoting.</summary>
+    public Func<string, string, bool>? HostCommandHandler { get; set; }
+
     /// <summary>
     /// Optional host callback fired after a <c>seta</c>/<c>seta_temp</c> assignment with the cvar name — the C#
     /// successor to DP's <c>CVAR_SAVE</c> archive flag that <c>seta</c> sets (a plain <c>set</c> does not).
@@ -169,6 +173,15 @@ public sealed class ConfigInterpreter
     public string CommandDescription(string name)
         => _commandHelp.TryGetValue(name, out string? d) ? d : "";
 
+    /// <summary>Run a registered command with arguments the caller has already parsed and expanded.</summary>
+    public bool TryRunRegisteredCommand(IReadOnlyList<string> argv)
+    {
+        if (argv.Count == 0 || !_commands.TryGetValue(argv[0], out var handler))
+            return false;
+        handler(argv);
+        return true;
+    }
+
     /// <summary>Pre-seed an alias (DP engine aliases). Body is stored raw and expanded on invocation.</summary>
     public void DefineAlias(string name, string body) => _aliases[name] = body;
 
@@ -181,7 +194,9 @@ public sealed class ConfigInterpreter
     /// <c>exec</c>). Guards against reentrant include cycles and a depth blow-out. Returns false (and records a
     /// diagnostic) when the file can't be read; a missing include is never fatal.
     /// </summary>
-    public bool ExecuteFile(string path)
+    /// <param name="path">The mounted config path.</param>
+    /// <param name="forwardUnknownCommands">Whether unresolved commands in this file and its includes may reach the host fallback.</param>
+    public bool ExecuteFile(string path, bool forwardUnknownCommands = true)
     {
         if (_execStack.Count >= MaxExecDepth)
         {
@@ -193,6 +208,8 @@ public sealed class ConfigInterpreter
             Diag($"exec cycle skipped: '{path}'");
             return false;
         }
+        bool wasForwarding = _forwardUnknownCommands;
+        _forwardUnknownCommands &= forwardUnknownCommands;
         try
         {
             string? text;
@@ -211,6 +228,7 @@ public sealed class ConfigInterpreter
         }
         finally
         {
+            _forwardUnknownCommands = wasForwarding;
             _execStack.Remove(path);
         }
     }
@@ -269,11 +287,7 @@ public sealed class ConfigInterpreter
         if (--_commandBudget < 0)
             return; // runaway guard; real configs are nowhere near the budget
 
-        // Peek the raw first token WITHOUT expansion. `alias` must protect its body from $-expansion at
-        // definition time (so `alias if_client "${* asis}"` stores the literal body), whereas every other
-        // command expands its whole line. The command name itself may still need expansion
-        // (e.g. `_sv_dedicated_${sv_dedicated}`), so only treat it as a literal `alias` define when the raw
-        // first token is exactly `alias`.
+        // Peek before expansion so definitions can retain references until invocation.
         List<string> rawArgv = Tokenize(command);
         if (rawArgv.Count == 0)
             return;
@@ -284,18 +298,30 @@ public sealed class ConfigInterpreter
             return;
         }
 
+        // Cmd_ExecuteString's command-buffer entry bypasses expansion for bind definitions.
+        // Alias invocation has its own preprocessing pass before the resulting command is executed.
+        string verb = rawArgv[0];
+        if (args is null && (verb is "bind" or "in_bind") && command.StartsWith(verb, StringComparison.Ordinal)
+            && command.Length > verb.Length && char.IsWhiteSpace(command[verb.Length]))
+        {
+            Dispatch(command, rawArgv, args);
+            return;
+        }
+
         // Normal path: expand the full line (cvar refs, alias args, $$→$), then re-tokenize and dispatch.
         string expanded = Expand(command, args);
         List<string> argv = Tokenize(expanded);
         if (argv.Count == 0)
             return;
 
-        Dispatch(argv, args);
+        Dispatch(expanded, argv, args);
     }
 
-    private void Dispatch(List<string> argv, IReadOnlyList<string>? args)
+    private void Dispatch(string line, List<string> argv, IReadOnlyList<string>? args)
     {
         string cmd = argv[0];
+        if (HostCommandHandler?.Invoke(cmd, line) == true)
+            return;
 
         switch (cmd.ToLowerInvariant())
         {
@@ -303,7 +329,7 @@ public sealed class ConfigInterpreter
             case "seta":
             case "set_temp":
             case "seta_temp":
-            case "setp": // DP "set private" — same store for us
+            case "setp": // DP "set private"
                 CmdSet(argv);
                 return;
             case "alias": // reached only via an expanded alias body that produced an `alias …` line
@@ -324,11 +350,8 @@ public sealed class ConfigInterpreter
         }
 
         // Host-registered command (bind sink, etc.).
-        if (_commands.TryGetValue(cmd, out Action<IReadOnlyList<string>>? handler))
-        {
-            handler(argv);
+        if (TryRunRegisteredCommand(argv))
             return;
-        }
 
         // Alias invocation (DP: aliases shadow cvars but not built-in commands).
         if (_aliases.TryGetValue(cmd, out string? body))
@@ -351,7 +374,7 @@ public sealed class ConfigInterpreter
         // surface (a single bare token like `kill`, or a denylisted multi-token like `say hello`). Hand it to the
         // host's catch-all (the console's router to the live server / remote stringcmd) if one is wired. During
         // config load the hook is null, so this stays the original "count and move on" (the cfg exec is unchanged).
-        if (UnknownCommandHandler is not null)
+        if (_forwardUnknownCommands && UnknownCommandHandler is not null)
         {
             UnknownCommandHandler(cmd, argv);
             return;
@@ -380,6 +403,8 @@ public sealed class ConfigInterpreter
         // `seta`/`seta_temp` carry DP's CVAR_SAVE (archive) bit; let the host persist them (no-op during cfg load).
         if (argv[0].StartsWith("seta", StringComparison.OrdinalIgnoreCase))
             CvarArchiveHook?.Invoke(name);
+        if (argv[0].Equals("setp", StringComparison.OrdinalIgnoreCase))
+            _cvars.MarkPrivate(name);
     }
 
     /// <summary>

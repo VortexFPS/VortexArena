@@ -623,8 +623,7 @@ public partial class CvarLineEdit : LineEdit
 
     /// <summary>
     /// QC <c>inputBox.enterText(s)</c>: insert <paramref name="s"/> at the caret (replacing any selection),
-    /// advance the caret past it, and write the cvar — used by the charmap and the name colorpicker to type a
-    /// glyph / a <c>^xRGB</c> color code into this box. Mirrors the engine inputbox's enterText.
+    /// advance the caret past it, and write the cvar. The charmap uses this to type a glyph into the box.
     /// </summary>
     public void InsertAtCaret(string s)
     {
@@ -637,6 +636,39 @@ public partial class CvarLineEdit : LineEdit
         CaretColumn = caret + s.Length;
         CvarUi.Cvars.Set(_cvar, Text);
         CvarUi.Cvars.MarkArchived(_cvar);
+    }
+
+    /// <summary>Apply a picker color using XonoticColorpicker_mouseDrag's caret rules.</summary>
+    public void ApplyColorAtCaret(string code)
+    {
+        string text = Text;
+        int column = CaretColumn;
+        if (HasSelection())
+        {
+            column = GetSelectionFromColumn();
+            int start = Utf16Index(text, column);
+            text = text.Remove(start, Utf16Index(text, GetSelectionToColumn()) - start);
+        }
+
+        int caret = Utf16Index(text, column);
+        string edited = MenuColorCodes.ApplyAtCaret(text, caret, code, out int end);
+        Text = edited;
+        // Removed and inserted color syntax is ASCII, so both index types change by the same amount.
+        CaretColumn = column + end - caret;
+        EmitSignal(SignalName.TextChanged, Text);
+    }
+
+    private static int Utf16Index(string text, int column)
+    {
+        // Godot LineEdit columns count Unicode code points. C# ranges count UTF-16 code units.
+        int index = 0;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (column-- == 0)
+                break;
+            index += rune.Utf16SequenceLength;
+        }
+        return index;
     }
 }
 

@@ -1,3 +1,4 @@
+using System;
 using System.Text;
 
 namespace VortexArena.Game.Menu;
@@ -29,7 +30,7 @@ public static class MenuColorCodes
             {
                 char n = s[i + 1];
                 if (n == '^') { sb.Append('^'); i++; continue; }       // ^^ → literal ^
-                string? col = Code(n, s, i, out int extra);
+                string? col = Code(s, i, out int extra);
                 if (col != null)
                 {
                     if (spanOpen) { sb.Append("[/color]"); spanOpen = false; }
@@ -46,8 +47,6 @@ public static class MenuColorCodes
         return sb.ToString();
     }
 
-    /// <summary>One Quake colour code → a BBCode hex colour, <c>""</c> for ^7 (reset), or null if not a code.
-    /// <paramref name="extra"/> = chars after the caret the code occupies.</summary>
     /// <summary>
     /// The text split at its colour codes, each run with the colour it is drawn in (DrawQ_String with
     /// allowColorCodes): <paramref name="baseColor"/> until the first code, ^7 back to it. Alpha is the base's.
@@ -65,7 +64,7 @@ public static class MenuColorCodes
             {
                 char n = s[i + 1];
                 if (n == '^') { sb.Append('^'); i++; continue; }
-                string? col = Code(n, s, i, out int extra);
+                string? col = Code(s, i, out int extra);
                 if (col != null)
                 {
                     if (sb.Length > 0) { runs.Add((sb.ToString(), current)); sb.Clear(); }
@@ -81,13 +80,70 @@ public static class MenuColorCodes
         return runs;
     }
 
-    private static string? Code(char first, string s, int caret, out int extra)
+    /// <summary>
+    /// Replace the color at or immediately before the insertion point. A code starting at the insertion
+    /// point still applies to the following text, so leave it in place.
+    /// </summary>
+    internal static string ApplyAtCaret(string text, int caret, string code, out int end)
     {
-        extra = 0;
-        if (first is >= '0' and <= '9')
+        // checkColorCode(..., true): match from inside a valid code or just after it. Repeat for adjacent codes.
+        while (true)
         {
-            extra = 1;
-            return first switch
+            int start = caret;
+            int length = 0;
+            for (int i = Math.Max(0, caret - 5); i < caret && i + 1 < text.Length; i++)
+            {
+                if (text[i] != '^')
+                    continue;
+                int candidateLength = ColorCodeLength(text, i);
+                if (candidateLength >= caret - i && !IsCaretEscaped(text, i))
+                {
+                    start = i;
+                    length = candidateLength;
+                    break;
+                }
+            }
+            if (length == 0)
+                break;
+            text = text.Remove(start, length);
+            caret = start;
+        }
+
+        // Quote a bare caret so it cannot consume the leading caret of the new color code.
+        if (caret > 0 && text[caret - 1] == '^' && !IsCaretEscaped(text, caret - 1))
+            code = "^" + code;
+        end = caret + code.Length;
+        return text.Insert(caret, code);
+    }
+
+    private static bool IsCaretEscaped(string text, int caret)
+    {
+        int start = caret;
+        while (start > 0 && text[start - 1] == '^')
+            start--;
+        return ((caret - start) & 1) != 0;
+    }
+
+    private static int ColorCodeLength(string s, int caret)
+    {
+        char first = s[caret + 1];
+        if (first is >= '0' and <= '9')
+            return 2;
+        if (first == 'x' && caret + 4 < s.Length
+            && IsHex(s[caret + 2]) && IsHex(s[caret + 3]) && IsHex(s[caret + 4]))
+            return 5;
+        return 0;
+    }
+
+    /// <summary>One Quake colour code → a BBCode hex colour, <c>""</c> for ^7 (reset), or null if not a code.
+    /// <paramref name="extra"/> = chars after the caret the code occupies.</summary>
+    private static string? Code(string s, int caret, out int extra)
+    {
+        int length = ColorCodeLength(s, caret);
+        extra = Math.Max(0, length - 1);
+        if (length == 2)
+        {
+            return s[caret + 1] switch
             {
                 '0' => "#000000",
                 '1' => "#ff0000",
@@ -101,11 +157,9 @@ public static class MenuColorCodes
                 _ => "#808080",       // ^9: half brightness
             };
         }
-        if (first == 'x' && caret + 4 < s.Length
-            && IsHex(s[caret + 2]) && IsHex(s[caret + 3]) && IsHex(s[caret + 4]))
+        if (length == 5)
         {
             char r = s[caret + 2], g = s[caret + 3], b = s[caret + 4]; // ^xRGB (3 hex) → #RRGGBB
-            extra = 4;
             return new string(new[] { '#', r, r, g, g, b, b });
         }
         return null;

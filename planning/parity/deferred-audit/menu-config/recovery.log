@@ -1,0 +1,40 @@
+Recovery fixture directory: /tmp/tmp.8PzMoSUXJj
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+
+[MenuState] user gamedir mounted: /tmp/tmp.8PzMoSUXJj/profile/data (drop .pk3 packs in its maps/ subfolder).
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"
+"maxplayers" set to "32"
+[MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).
+[MenuState] cvar help: 1386 engine descriptions.
+PASS primary saves the full bind table
+PASS primary reload restores unbound key and literal values
+PASS named save and exec restore key table and literal values
+WARNING: [MenuState] could not write data/backup.cfg: Is a directory : '/tmp/tmp.8PzMoSUXJj/profile/data/backup.cfg'
+     at: bool VortexArena.Game.Menu.MenuState.WriteConfig(string, bool) (res://game/menu/framework/MenuState.cs:505)
+     C# backtrace (most recent call first):
+         [0] void Godot.GD.PushWarning(string) (/root/godot/modules/mono/glue/GodotSharp/GodotSharp/Core/GD.cs:396)
+         [1] bool VortexArena.Game.Menu.MenuState.WriteConfig(string, bool) (/tmp/tmp.8PzMoSUXJj/game/menu/framework/MenuState.cs:505)
+         [2] bool VortexArena.Game.Menu.MenuState.SaveNamedConfig(string) (/tmp/tmp.8PzMoSUXJj/game/menu/framework/MenuState.cs:474)
+         [3] void VortexArena.Game.Menu.MenuState.FactoryReset() (/tmp/tmp.8PzMoSUXJj/game/menu/framework/MenuState.cs:523)
+         [4] void ConfigRecoveryProbe._Ready() (/tmp/tmp.8PzMoSUXJj/game/menu/ConfigRecoveryProbe.cs:51)
+         [5] bool Godot.Node.InvokeGodotClassMethod(Godot.NativeInterop.godot_string_name&, Godot.NativeInterop.NativeVariantPtrArgs, Godot.NativeInterop.godot_variant&) (/root/godot/modules/mono/glue/GodotSharp/GodotSharp/Generated/GodotObjects/Node.cs:2646)
+         [6] bool ConfigRecoveryProbe.InvokeGodotClassMethod(Godot.NativeInterop.godot_string_name&, Godot.NativeInterop.NativeVariantPtrArgs, Godot.NativeInterop.godot_variant&) (/tmp/tmp.8PzMoSUXJj/.godot/mono/temp/obj/Debug/Godot.SourceGenerators/Godot.SourceGenerators.ScriptMethodsGenerator/ConfigRecoveryProbe_ScriptMethods.generated.cs:48)
+         [7] Godot.NativeInterop.godot_bool Godot.Bridge.CSharpInstanceBridge.Call(nint, Godot.NativeInterop.godot_string_name*, Godot.NativeInterop.godot_variant**, int, Godot.NativeInterop.godot_variant_call_error*, Godot.NativeInterop.godot_variant*) (/root/godot/modules/mono/glue/GodotSharp/GodotSharp/Core/Bridge/CSharpInstanceBridge.cs:24)
+PASS failed backup leaves primary and live settings intact
+"maxplayers" set to "16"
+"maxplayers" set to "32"
+PASS successful backup precedes reset
+PASS executing the actual reset backup restores the prior preferences
+WARNING: [MenuState] could not write data/backup.cfg: Access to the path '/tmp/tmp.8PzMoSUXJj/profile/data/gnvpvbho.ve4' is denied.
+     at: bool VortexArena.Game.Menu.MenuState.WriteConfig(string, bool) (res://game/menu/framework/MenuState.cs:497)
+     C# backtrace (most recent call first):
+         [0] void Godot.GD.PushWarning(string) (/root/godot/modules/mono/glue/GodotSharp/GodotSharp/Core/GD.cs:396)
+         [1] bool VortexArena.Game.Menu.MenuState.WriteConfig(string, bool) (/tmp/tmp.8PzMoSUXJj/game/menu/framework/MenuState.cs:497)
+         [2] bool VortexArena.Game.Menu.MenuState.SaveNamedConfig(string) (/tmp/tmp.8PzMoSUXJj/game/menu/framework/MenuState.cs:474)
+         [3] void VortexArena.Game.Menu.MenuState.FactoryReset() (/tmp/tmp.8PzMoSUXJj/game/menu/framework/MenuState.cs:523)
+         [4] void ConfigRecoveryProbe._Ready() (/tmp/tmp.8PzMoSUXJj/game/menu/ConfigRecoveryProbe.cs:69)
+         [5] bool Godot.Node.InvokeGodotClassMethod(Godot.NativeInterop.godot_string_name&, Godot.NativeInterop.NativeVariantPtrArgs, Godot.NativeInterop.godot_variant&) (/root/godot/modules/mono/glue/GodotSharp/GodotSharp/Generated/GodotObjects/Node.cs:2646)
+         [6] bool ConfigRecoveryProbe.InvokeGodotClassMethod(Godot.NativeInterop.godot_string_name&, Godot.NativeInterop.NativeVariantPtrArgs, Godot.NativeInterop.godot_variant&) (/tmp/tmp.8PzMoSUXJj/.godot/mono/temp/obj/Debug/Godot.SourceGenerators/Godot.SourceGenerators.ScriptMethodsGenerator/ConfigRecoveryProbe_ScriptMethods.generated.cs:48)
+         [7] Godot.NativeInterop.godot_bool Godot.Bridge.CSharpInstanceBridge.Call(nint, Godot.NativeInterop.godot_string_name*, Godot.NativeInterop.godot_variant**, int, Godot.NativeInterop.godot_variant_call_error*, Godot.NativeInterop.godot_variant*) (/root/godot/modules/mono/glue/GodotSharp/GodotSharp/Core/Bridge/CSharpInstanceBridge.cs:24)
+PASS failed temporary-file creation preserves existing backup and current settings

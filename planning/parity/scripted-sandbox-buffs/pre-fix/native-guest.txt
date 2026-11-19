@@ -1,0 +1,7 @@
+]cmd teleporttotarget parity_guest
+]cmd g_sandbox object_info object
+SANDBOX - WARNING: No information could be found. Make sure you are facing an object
+]cmd g_sandbox object_edit skin 0
+SANDBOX - WARNING: Object could not be edited. Make sure you are facing an object that you have edit rights over
+]cmd teleporttotarget parity_guest
+]cmd teleporttotarget parity_buff_view

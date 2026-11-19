@@ -8,7 +8,7 @@ summary:
     - "OPUS re-audit 2026-06-27 (branch claude/parity-port-waves): the prior baseline UNDER-claimed — reading the CURRENT code, FOUR gaps it still listed as open have actually been closed, plus the one it already credited. (1) touch_material_fx presentation missing→faithful: the four impact effects are registered in EffectsList.cs:303-306 (Effects.Register(\"IMPACT_METAL\",\"impact_metal\")+stone/wood/flesh), so EmitByEffectInfoName(\"impact_<mat>\") (SandboxMutator.cs:410) resolves a non-null Effect (Effect.ByEffectInfoName matches NetName, Effect.cs:87) and Emit (count 1..10 >0) is no longer dropped at ServerNet.WriteEffect; effectinfo.txt has the four blocks (5529+), unknown materials render nothing both ends. NOTE: networks-by-id is code-verified; the in-game particle was not visually re-confirmed (no kind:visual)."
     - "(2) object.spawn ModelExists: NO LONGER permissive on the live path — NetGame.WireSandbox:952-953 wires ModelExistsProvider = _vfs.Exists, so object_spawn rejects a non-existent model (Base fexists). (3) object.attach presentation missing→faithful: ObjectAttachSet now calls Api.Models.SetAttachment (SandboxMutator.cs:298-299) → EngineServices.SetAttachment (:796) sets Aiment+tag; MOVETYPE_FOLLOW child tracked each step by FlyMove.PhysicsFollow (:483) → real tag-follow (bone-precise offset is a renderer detail, not visually re-confirmed). (4) object_info mesh: tag enumeration no longer stubbed — MeshTagNamesProvider wired to ModelService.Tags (NetGame.cs:958-961), SandboxMutator.cs:890-893 prints the real tag list."
     - "CORRECTED: object.duplicate COPY clipboard is NOT an empty no-op (baseline was stale). SandboxObjectStore.SetClipboard → SetSandboxClipboard (NetGame.cs:948/971-983) sets cl_sandbox_clipboard (un-escaped, +MarkArchived) for the LOCAL-HOST player, so copy→paste works on a listen server. Residual: a remote client on a dedicated server is skipped (no svc_stufftext channel) → liveness stays partial. Command surface still GENUINELY LIVE: g_sandbox client-callable (Commands.cs:843), routed CmdSandbox (Commands.cs:2275, gated on sandbox.Added) → HandleCommand; WireSandbox (NetGame.cs:911, on the live setup path NetGame.cs:843) injects PrintTo/Trace/CryptoIdfp(=PersistentId)/NetName/ViewYaw/RealClients/Store/ModelExists/MeshTagNames; MutatorActivation.Apply at GameWorld.cs:631. All 15 g_sandbox* cfg defaults byte-identical (mutators.cfg:95-109)."
-    - "The Sandbox_* veto hooks remain FULLY PORTED + fired at SandboxMutator.cs:358 (think grab) / :555 (DatabaseSave) / :632 (command gate) with no subscriber (Base-faithful empty MUTATOR_CALLHOOK). physics-2 → MoveType.Physics=32 (:823) == Base MOVETYPE_PHYSICS=32. Touch FX SOUND live (settouch equiv :204, dispatched by FlyMove.cs:107). STILL DEAD/MISSING (genuinely unchanged): drag/grab (+button8) entirely absent — no Drag/Drag_Begin/Drag_Finish; .Grab is computed (:359/361/363) but nothing consumes it; objects cannot be physically carried. CSQC object→client networking (CSQCMODEL_AUTOINIT/AUTOUPDATE) has no port seam (:236/376), so a spawned object's client render is unverified. (Several baseline line-number refs were stale by ~10-15 lines; refreshed where load-bearing.)"
+    - "Sandbox carry lacks the drag beam and mouse-wheel distance adjustment. Client presentation of Sandbox object-specific properties remains limited."
 features:
   - id: mutator-sandbox.core.registration
     name: "Mutator activation via g_sandbox + onadd autoload"
@@ -400,26 +400,34 @@ features:
     base_refs:
       - "server/cheats.qc:Drag (grab switch on e.grab)"
       - "server/cheats.qc:Drag_Begin"
+      - "server/cheats.qc:Drag_Update"
       - "server/cheats.qc:Drag_Finish"
-    port_refs: []
+    port_refs:
+      - "game/net/NetGame.cs:SampleInput"
+      - "game/net/ServerNet.cs:ToMovementInput"
+      - "src/VortexArena.Server/GameWorld.cs:OnClientMove"
+      - "src/VortexArena.Common/Gameplay/Mutators/SandboxMutator.cs:DriveDrag"
     constants:
-      - { name: "g_grab_range", base: "200", port: "none", match: false }
-      - { name: "drag_movetype", base: "MOVETYPE_WALK (gravity ~0.00001)", port: "none", match: false }
+      - { name: "g_grab_range", base: "200", port: "200", match: true }
+      - { name: "drag_movetype", base: "MOVETYPE_WALK (gravity ~0.00001)", port: "MoveType.Walk (gravity 0.00001)", match: true }
+      - { name: "drag smoothing", base: "min(frametime * 10, 1)", port: "min(frameTime * 10, 1)", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
+      logic: partial
+      values: faithful
+      timing: faithful
       presentation: missing
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "STILL MISSING: no Drag/Drag_Begin/Drag_Finish system. ObjectThink computes .Grab (e.Grab, written at SandboxMutator.cs:343-347) but nothing consumes it; +button8 does nothing; objects cannot be physically carried. (grep: no Drag_Begin/Drag_Finish/button8 grab consumer anywhere; e.Grab is written but never read.)"
+      - "Mouse-wheel distance adjustment, drag speed presets, portal-aware selection and the drag beam are absent."
+      - "The native Sandbox path releases on entering observer, vehicle, and dead-player states. Other Base consumers of the generic cheat-drag system are handled separately."
     verification:
-      - { kind: grep, ref: "no Drag_Begin/Drag_Finish/+button8 grab consumer in src/ or game/; e.Grab is written by ObjectThink but never read", result: fail }
+      - { kind: test, ref: "SandboxDragTests verifies native bind state, UID ownership, editor-free and readonly gates, view steering and physics restoration", result: pass }
+      - { kind: test, ref: "InputCommandImpulseTests.Impulse_RoundTrips_On_The_Wire covers the carried drag bit", result: pass }
     confidence: high
-    notes: "UNCHANGED from baseline (still missing). The shared generic drag system (also used by g_monsters_edit) was not ported. Only the .grab classification half exists."
+    notes: "V is the default bind. The held input drives server-side carry and returning to the object's original physics on release."
 
   - id: mutator-sandbox.hooks.gating
     name: "readonly mode + Sandbox_DragAllowed/SaveAllowed/EditAllowed mutator hooks"

@@ -7,9 +7,9 @@ summary:
   worst_gaps:
     - "RandomSeed shared-RNG broadcast is now PORTED + LIVE (FIX 2026-06-27): server producer (RandomSeed.cs ticked every frame) + match-state network seam + per-instance client PrandomContext, with the 5s/65536 re-roll constants matching Base — but no client EFFECT consumes the decoded seed yet (presentationally inert; seed value not bit-exact by design). RedirectionThink is now PARTIAL + LIVE (FIX 2026-06-27): quit_and_redirect reconnects clients at match end via RedirectHandler -> MenuCommand.Connect, but the 'self' restart variant, sv_public -2, the two-pass retry loop, and the quit_and_redirect_timer defer are unported. PingPLReport stays PARTIAL: PL networked + consumed by the HUD PL column, but the ping column is hard -1 and the playerstats latency feed is still missing."
     - "DumpStats (:scores:/:status: console+eventlog scores dump) is now PORTED and LIVE (FIX 2026-06-27): Commands.DumpStats(final) is called at NextLevel (final=true) + via the `printstats` server command (final=false); the per-call score-LOG-FILE open/append (sv_logscores_file path) is the only residual (the eventlog-file sink covers structured logging)."
-    - "GameWorld.Shutdown does slowmo-reset + ban-save + unfinished PlayerStats_GameReport(false), but ServerProgsDB persistence, bot_endgame, CheatShutdown and WeaponStats_Shutdown on teardown are still absent."
+    - "GameWorld.Shutdown does slowmo-reset + ban-save + unfinished PlayerStats_GameReport(false), but ServerProgsDB persistence, bot_endgame and CheatShutdown on teardown are still absent."
     - "World-layer leadlimit / leadlimit_and_fraglimit WIN semantics and the CheckRules_World mutator hook are still not evaluated in the checkrules cascade (leadlimit math only feeds the frags-remaining announcer). WinningCondition_RanOutOfSpawns is PORTED."
-    - "serverflags + animated-lightstyle CLIENT consumers are now PARTIAL (FIX 2026-06-27): the HUD pickup-timer gate reads SERVERFLAG_FORBID_PICKUPTIMER (PickupPanel) and a styled dynlight animates via LightStyles.Sample (DynamicLightRenderer). STILL OPEN: no fullbright player-render gate reads SERVERFLAG_ALLOW_FULLBRIGHT, and world-brush lightmap animation for named styles is unported (styled geometry renders steady; only the dynlight node flickers)."
+    - "serverflags + animated-lightstyle CLIENT consumers are now PARTIAL (FIX 2026-06-27): the HUD pickup-timer gate reads SERVERFLAG_FORBID_PICKUPTIMER (PickupPanel) and a styled dynlight animates via LightStyles.Sample (DynamicLightRenderer). The native night-vision overlay now reads SERVERFLAG_ALLOW_FULLBRIGHT. World-brush lightmap animation for named styles remains unported in the Q3 BSP path."
 features:
   - id: sv-world-rules.boot.worldspawn
     name: "worldspawn map-init bookkeeping"
@@ -95,11 +95,15 @@ features:
     layer: [authority, presentation]
     base_refs:
       - "server/world.qc:readlevelcvars"
+      - "server/client.qc:ClientInit_misc"
+      - "client/view.qc:View_NightVision"
     port_refs:
       - "src/VortexArena.Common/Gameplay/ServerFlags.cs"
       - "src/VortexArena.Server/GameWorld.cs:ReadLevelCvars"
       - "src/VortexArena.Server/GameWorld.cs:Boot"
       - "game/hud/PickupPanel.cs"
+      - "game/net/ServerNet.cs:SendClientInit"
+      - "game/client/NightVisionOverlay.cs:UpdateOverlay"
     constants:
       - { name: "SERVERFLAG_ALLOW_FULLBRIGHT", base: "BIT(0) from sv_allow_fullbright", port: "1<<0 from sv_allow_fullbright (ServerFlags.cs:24)", match: true }
       - { name: "SERVERFLAG_FORBID_PICKUPTIMER", base: "BIT(4) from sv_forbid_pickuptimer", port: "1<<4 from sv_forbid_pickuptimer (ServerFlags.cs:36)", match: true }
@@ -115,11 +119,11 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Only the FORBID_PICKUPTIMER consumer is ported: the HUD pickup panel reads the bit to gate the leading match timer (PickupPanel.cs:169-173, QC client/hud/panel/pickup.qc:91). The ALLOW_FULLBRIGHT consumer is still unported — nothing reads SERVERFLAG_ALLOW_FULLBRIGHT to gate fullbright player rendering (Base client/view.qc:1115 cl_fullbright gate), so that bit has no on-screen effect."
+      - "PickupPanel consumes the shared-store serverflags cvar. The night-vision gate consumes the networked ClientInit flags on both listen and remote clients."
     verification:
-      - { kind: code, ref: "ServerFlags.cs (SERVERFLAG_* bit table, AllowFullbright=1<<0/ForbidPickupTimer=1<<4) + GameWorld.ReadLevelCvars (cs:1650-1660: clears+sets both bits, writes ServerFlags.Value and mirrors to the `serverflags` cvar). LIVE at GameWorld.Boot + re-run on source cvar change. CLIENT consumer now LIVE for the pickup-timer half: PickupPanel.cs:169-173 reads (serverflags & SERVERFLAG_FORBID_PICKUPTIMER) from the shared store to enforce the showtimer==1 gate (only 'spectating' shows the timer when forbidden). No fullbright player-render gate reads the bit (grep game/: no SERVERFLAG_ALLOW_FULLBRIGHT consumer). vs readlevelcvars:2189-2195.", result: partial }
+      - { kind: code, ref: "ReadLevelCvars publishes both bits, and ServerNet sends ClientInit on accept and refreshes it when the flags change. NightVisionOverlay reads ALLOW_FULLBRIGHT and PickupPanel reads FORBID_PICKUPTIMER.", result: pass }
     confidence: high
-    notes: "FIX since 2026-06-25 (presentation): the FORBID_PICKUPTIMER client consumer is now PORTED and LIVE — the HUD pickup panel gates its leading match timer on the published serverflag exactly as QC. presentation missing->partial. STILL OPEN: the ALLOW_FULLBRIGHT consumer (the fullbright player-render gate) is unported, so that bit still has no observable effect. Server-side authority half (ServerFlags table + ReadLevelCvars derive/publish) remains faithful+live."
+    notes: "ALLOW_FULLBRIGHT bypasses only the overlay. The client-selected scene lighting stays active. See cl-view.screen.nightvision."
   - id: sv-world-rules.warmup.ready_count
     name: "ReadyCount ready-up majority + countdown abort"
     layer: [authority]
@@ -323,32 +327,33 @@ features:
     name: "PingPLReport ping/packet-loss client report"
     layer: [authority, presentation]
     base_refs:
-      - "server/world.qc:PingPLReport_Spawn"
-      - "server/world.qc:PingPLReport_Think"
+      - "server/world.qc:PingPLReport_Spawn, PingPLReport_Think"
+      - "common/playerstats.qc:latency_sum, latency_cnt"
     port_refs:
-      - "game/net/ServerNet.cs:BuildScoreboard"
+      - "game/net/ServerNet.cs:SamplePeerStats, BuildScoreboard"
       - "src/VortexArena.Net/ScoreboardBlock.cs:ScoreRowWire"
-      - "game/hud/ScoreboardPanel.cs:SetRows"
+      - "game/hud/ScoreboardPanel.cs:networked player and spectator rows"
+      - "src/VortexArena.Server/PlayerStats.cs:PingProvider, FinalizePlayer"
     constants:
-      - { name: "ping_packetloss_byte", base: "min(ceil(ping_packetloss*255),255) (world.qc:74)", port: "min(ceil(PacketLoss*255),255) (ServerNet.cs:2234)", match: true }
-      - { name: "LATENCY_THINKRATE", base: "10 (s) — playerstats latency record", port: "none (no latency feed)", match: false }
-      - { name: "report_period_s", base: "3 / maxclients", port: "n/a — PL folded into the per-tick scoreboard block, not a round-robin entity", match: false }
+      - { name: "ping_packetloss_byte", base: "min(ceil(ping_packetloss*255),255)", port: "min(ceil(PacketLoss*255),255)", match: true }
+      - { name: "LATENCY_THINKRATE", base: "10 seconds for the playerstats latency record", port: "PlayerStats.PingProvider has no live producer", match: false }
+      - { name: "report_period_s", base: "3 / maxclients", port: "ENet stats sampled every 0.25 seconds and carried in scoreboard deltas", match: false }
     status:
       logic: partial
       values: partial
       timing: partial
-      presentation: partial
+      presentation: faithful
       audio: na
       liveness: partial
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Only the packet-loss (PL) half is fed: the port has NO ping feed — the scoreboard ping column is hard -1 (ScoreboardPanel.cs:228/249 'Ping isn't networked per row yet'), and there is no playerstats latency record (the LATENCY_THINKRATE=10s avg-latency accumulation for the xonstat report)."
-      - "Mechanism diverges: Base uses the TE_CSQC_PINGPLREPORT round-robin entity (one client per think, 3/maxclients s); the port quantizes ENet PacketLoss to a 0..255 byte and folds it into the per-tick scoreboard wire (ScoreRowWire.PacketLossByte), de-quantized client-side for the PL column."
+      - "The scoreboard displays both RTT and packet loss. PlayerStats still has no live ping provider or ten-second average-latency sampler."
+      - "Base sends a round-robin TE_CSQC_PINGPLREPORT entity. The native server sends ENet RTT and loss together in the existing scoreboard snapshot."
     verification:
-      - { kind: code, ref: "ServerNet.BuildScoreboard (ServerNet.cs:2230-2242) computes plByte = min(ceil(_transport.PacketLoss(peer)*255),255) per connected human (bots/unmapped = 0) and packs it into ScoreRowWire.PacketLossByte; ScoreboardBlock.cs:119/172 writes/reads the byte; ScoreboardPanel.cs:251 de-quantizes the 0..255 loss byte to a 0..1 fraction for the PL column. Ping left -1 (ScoreboardPanel.cs:228/249). No PingPLReport entity / no latency record (grep). vs world.qc:74/96/58.", result: partial }
+      - { kind: code_read, ref: "ServerNet.SamplePeerStats fills the peer stats cache. BuildScoreboard copies RTT into PingMs and quantizes loss. ScoreboardPanel consumes the wire values for remote player and spectator rows.", result: pass }
     confidence: high
-    notes: "FIX since 2026-06-25: the PL half is now PORTED and LIVE — measured ENet packet loss is quantized to the same 0..255 byte as QC (min(ceil(loss*255),255)) and networked via the scoreboard block, then consumed by the HUD PL column. missing->partial on logic/values/timing/presentation, na->partial on liveness. STILL OPEN: the ping column has no per-row feed (hard -1) and the playerstats latency average (LATENCY_THINKRATE=10s) is unported. Mechanism intentionally folds PL into the existing scoreboard wire rather than reproducing the TE_CSQC_PINGPLREPORT round-robin entity."
+    notes: "2026-11-19 audit corrected the missing scoreboard ping lead."
   - id: sv-world-rules.boot.lightstyles
     name: "Animated lightstyle table install"
     layer: [authority, presentation]
@@ -462,6 +467,7 @@ features:
     port_refs:
       - "src/VortexArena.Server/GameWorld.cs:Shutdown"
       - "src/VortexArena.Server/TimeoutController.cs:ResetSlowmoOnShutdown"
+      - "src/VortexArena.Server/WeaponStats.cs:Flush"
     constants: []
     status:
       logic: partial
@@ -474,11 +480,11 @@ features:
     divergence_rationale: null
     gaps:
       - "ServerProgsDB persistence on shutdown (db_save/db_dump of server.db<sessionid>) has no port analogue."
-      - "bot_endgame, CheatShutdown, WeaponStats_Shutdown and MapInfo_Shutdown are not performed on world teardown."
+      - "bot_endgame, CheatShutdown and MapInfo_Shutdown are not performed on world teardown."
     verification:
       - { kind: code, ref: "GameWorld.Shutdown (cs:1377-1398): Bans.Save() + Timeout.ResetSlowmoOnShutdown() + (if !Intermission.Running) PlayerStats.GameReport(finished:false) + cvar-changed unsubscribe — vs world.qc:2618-2670 (slowmo reset, Ban_SaveBans, PlayerStats_GameReport(false), db_save, bot_endgame).", result: partial }
     confidence: high
-    notes: "FIXED since 2026-06-22: GameWorld.Shutdown is no longer a near-no-op — it now does the slowmo-reset-on-active-timeout (Timeout.ResetSlowmoOnShutdown, TimeoutController.cs:243), the Ban_SaveBans re-persist, AND the unfinished-match PlayerStats_GameReport(false) (only when intermission never ran, to avoid double-report). liveness partial->live. STILL OPEN: ServerProgsDB persistence, bot_endgame, CheatShutdown, WeaponStats_Shutdown — so logic stays partial."
+    notes: "FIXED since 2026-06-22: GameWorld.Shutdown is no longer a near-no-op — it now does the slowmo-reset-on-active-timeout (Timeout.ResetSlowmoOnShutdown, TimeoutController.cs:243), the Ban_SaveBans re-persist, AND the unfinished-match PlayerStats_GameReport(false) (only when intermission never ran, to avoid double-report). liveness partial->live. STILL OPEN: ServerProgsDB persistence, bot_endgame and CheatShutdown. Local weaponstats now flushes on teardown (see sv-weaponstats.local-report)."
   - id: sv-world-rules.eventlog.dumpstats
     name: "DumpStats final/periodic scores dump (:scores: / :status:)"
     layer: [authority]

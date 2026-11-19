@@ -882,70 +882,67 @@ public static class BotObjectiveRoles
     {
         var bot = brain.Bot;
         int myTeam = (int)bot.Team;
-        var kh = brain.GameType as KeyHunt;
+        if (bot.IsDead || brain.GameType is not KeyHunt kh)
+            return;
         float now = Api.Clock.Time;
-        bool botCarries = bot.GtCarried is not null; // QC this.kh_next — the bot is holding at least one key
+        bool botCarries = kh.IsCarrier(bot); // QC this.kh_next: at least one held key
 
         // ---- Role state machine (QC havocbot_role_kh_* + HavocBot_ChooseRole) ----
 
-        // Dead bots don't transition; the role persists across death (Base's dead-early-return in each role).
-        if (!bot.IsDead)
+        // QC HavocBot_ChooseRole (sv_keyhunt.qc:1322): initial random role pick (none → offense/defense/freelancer).
+        if (brain.KhRole == KhBotRole.None)
         {
-            // QC HavocBot_ChooseRole (sv_keyhunt.qc:1322): initial random role pick (none → offense/defense/freelancer).
-            if (brain.KhRole == KhBotRole.None)
-            {
-                float r = (float)Prandom.Float() * 3f;
-                brain.KhRole = r < 1f ? KhBotRole.Offense : r < 2f ? KhBotRole.Defense : KhBotRole.Freelancer;
-                brain.KhRoleTimeout = 0f;
-            }
+            float r = (float)Prandom.Float() * 3f;
+            brain.KhRole = r < 1f ? KhBotRole.Offense : r < 2f ? KhBotRole.Defense : KhBotRole.Freelancer;
+            brain.KhRoleTimeout = 0f;
+        }
 
-            // QC all non-carrier roles: if the bot picks up a key → become carrier (no timeout).
-            if (brain.KhRole != KhBotRole.Carrier && botCarries)
-            {
-                brain.KhRole = KhBotRole.Carrier;
-                brain.KhRoleTimeout = 0f;
-            }
-            // QC havocbot_role_kh_carrier: if the bot loses its key → become freelancer.
-            else if (brain.KhRole == KhBotRole.Carrier && !botCarries)
-            {
-                brain.KhRole = KhBotRole.Freelancer;
-                brain.KhRoleTimeout = 0f;
-            }
+        // QC all non-carrier roles: if the bot picks up a key → become carrier (no timeout).
+        if (brain.KhRole != KhBotRole.Carrier && botCarries)
+        {
+            brain.KhRole = KhBotRole.Carrier;
+            brain.KhRoleTimeout = 0f;
+        }
+        // QC havocbot_role_kh_carrier: if the bot loses its key → become freelancer.
+        else if (brain.KhRole == KhBotRole.Carrier && !botCarries)
+        {
+            brain.KhRole = KhBotRole.Freelancer;
+            brain.KhRoleTimeout = 0f;
+        }
 
-            // Per-role timeout handling.
-            switch (brain.KhRole)
-            {
-                case KhBotRole.Defense:
-                case KhBotRole.Offense:
-                    // QC defense/offense: role_timeout = time + random()*10+20 (20-30 s); on timeout → freelancer.
-                    if (brain.KhRoleTimeout == 0f)
-                        brain.KhRoleTimeout = now + (float)Prandom.Float() * 10f + 20f;
-                    if (now > brain.KhRoleTimeout)
-                    {
-                        brain.KhRole = KhBotRole.Freelancer;
-                        brain.KhRoleTimeout = 0f;
-                    }
-                    break;
+        // Per-role timeout handling.
+        switch (brain.KhRole)
+        {
+            case KhBotRole.Defense:
+            case KhBotRole.Offense:
+                // QC defense/offense: role_timeout = time + random()*10+20 (20-30 s); on timeout → freelancer.
+                if (brain.KhRoleTimeout == 0f)
+                    brain.KhRoleTimeout = now + (float)Prandom.Float() * 10f + 20f;
+                if (now > brain.KhRoleTimeout)
+                {
+                    brain.KhRole = KhBotRole.Freelancer;
+                    brain.KhRoleTimeout = 0f;
+                }
+                break;
 
-                case KhBotRole.Freelancer:
-                    // QC freelancer: role_timeout = time + random()*10+10 (10-20 s); on timeout → offense|defense.
-                    if (brain.KhRoleTimeout == 0f)
-                        brain.KhRoleTimeout = now + (float)Prandom.Float() * 10f + 10f;
-                    if (now > brain.KhRoleTimeout)
-                    {
-                        brain.KhRole = (float)Prandom.Float() < 0.5f ? KhBotRole.Offense : KhBotRole.Defense;
-                        brain.KhRoleTimeout = 0f;
-                    }
-                    break;
+            case KhBotRole.Freelancer:
+                // QC freelancer: role_timeout = time + random()*10+10 (10-20 s); on timeout → offense|defense.
+                if (brain.KhRoleTimeout == 0f)
+                    brain.KhRoleTimeout = now + (float)Prandom.Float() * 10f + 10f;
+                if (now > brain.KhRoleTimeout)
+                {
+                    brain.KhRole = (float)Prandom.Float() < 0.5f ? KhBotRole.Offense : KhBotRole.Defense;
+                    brain.KhRoleTimeout = 0f;
+                }
+                break;
 
-                // Carrier: no timeout.
-                default:
-                    break;
-            }
+            // Carrier: no timeout.
+            default:
+                break;
         }
 
         // ---- Rating triple selection (QC havocbot_goalrating_kh(team_scale, dropped_scale, enemy_scale)) ----
-        int allOwned = kh?.AllOwnedByWhichTeam() ?? Teams.None;
+        int allOwned = kh.AllOwnedByWhichTeam();
 
         float rsTeam, rsDropped, rsEnemy;
         if (brain.KhRole == KhBotRole.Carrier)
@@ -978,7 +975,7 @@ public static class BotObjectiveRoles
 
         if (!brain.GoalRatingTimedOut) return;
         brain.BeginGoalRating(rater);
-        RateKeyHuntTargets(brain, rater, bot, rsTeam, rsDropped, rsEnemy);
+        RateKeyHuntTargets(kh, rater, bot, rsTeam, rsDropped, rsEnemy);
         // QC havocbot_goalrating_kh tail: items at 80000 (keys apart, KH bots stay stocked); QC's KH roles
         // rate NO enemy players — the key triple already routes toward enemy carriers when appropriate.
         BotRoles.GoalrateItems(brain, rater, bot.Origin, 10000f, 80000f);
@@ -986,29 +983,18 @@ public static class BotObjectiveRoles
         rater.End();
     }
 
-    /// <summary>Helper to rate all reachable keys and carriers per the three ratingscale components.</summary>
-    private static void RateKeyHuntTargets(BotBrain brain, GoalRater rater, Entity bot, float rsTeam, float rsDropped, float rsEnemy)
+    private static void RateKeyHuntTargets(KeyHunt kh, GoalRater rater, Entity bot, float rsTeam, float rsDropped, float rsEnemy)
     {
-        // QC havocbot_goalrating_kh: rate every key — toward an ally carrier (team), an enemy carrier (enemy),
-        // or a dropped key (dropped). The base scales are *10000 in QC; RatingKey is the port's BOT_RATING_* anchor.
-        if (Api.Services is null) return;
-        int myTeam = (int)bot.Team;
-        Api.Entities.FindByClass("item_kh_key", _scratch);
-        for (int i = 0; i < _scratch.Count; i++)
+        // Stock's nested ifs in kh_waypointsprite_visible_for_bot bypass the visibility/PVS branch
+        // when there is an attached waypoint. A live dropped key or carrier always has that waypoint.
+        // GoalRater still requires a reachable route and keeps the first key on a rating tie.
+        foreach (KeyState state in kh.WorldKeys)
         {
-            Entity key = _scratch[i];
-            if (key.IsFreed) continue;
-            Entity? carrier = key.GtCarrier;
-            if (carrier is not null)
-            {
-                if (ReferenceEquals(carrier, bot)) continue; // QC: head.owner == this → skip my own key
-                float scale = (int)carrier.Team == myTeam ? rsTeam : rsEnemy;
-                rater.Rate(bot.Origin, carrier, carrier.Origin, RatingKey * scale, 100000f);
-            }
-            else
-            {
-                rater.Rate(bot.Origin, key, key.Origin, RatingKey * rsDropped, 100000f);
-            }
+            if (state.Entity is not { IsFreed: false } key || ReferenceEquals(state.Carrier, bot))
+                continue;
+            Entity target = state.Carrier is { } carrier ? carrier : key;
+            float scale = state.Carrier is null ? rsDropped : Teams.SameTeam(target, bot) ? rsTeam : rsEnemy;
+            rater.Rate(bot.Origin, target, target.Origin, RatingKey * scale, 100000f);
         }
     }
 
@@ -1416,11 +1402,7 @@ public static class BotObjectiveRoles
     /// <summary>
     /// CTS bot role (QC <c>havocbot_role_cts</c>): route the bot to its next expected race checkpoint. QC walks
     /// <c>g_racecheckpoints</c> and route-rates every checkpoint whose <c>.cnt</c> matches the bot's
-    /// <c>.race_checkpoint</c> (with -1 → any), so the bot heads to the next gate. The port's CTS is a single
-    /// start→stop course (no intermediate <c>trigger_race_checkpoint</c> entities), so "the next checkpoint" is the
-    /// start timer until the run is in progress, then the stop timer (finish). Both are rated with QC's enormous
-    /// 1000000/5000 routerating so the course goal always wins over items/enemies — exactly the QC intent.
-    /// Falls back to the generic role if the CTS gametype/timers aren't resolvable.
+    /// <c>.race_checkpoint</c>, so the bot heads to the next touchable gate.
     /// </summary>
     public static void RoleCts(BotBrain brain, GoalRater rater)
     {
@@ -1434,35 +1416,17 @@ public static class BotObjectiveRoles
         if (!brain.GoalRatingTimedOut) return;
         brain.BeginGoalRating(rater);
 
-        // QC: the bot's expected next checkpoint. A run not yet in progress (NextCheckpoint < 0, or not Running)
-        // wants the start timer (cp 0); once the start is crossed (Running) it wants the stop timer (the finish).
         Cts.CtsState st = cts.GetState(p);
-        bool wantFinish = st.Running;
-
-        Entity? goal = null;
-        for (int i = 0; i < cts.Timers.Count; i++)
+        foreach (Entity gate in cts.Timers)
         {
-            Entity t = cts.Timers[i];
-            if (t.IsFreed) continue;
-            bool isStart = t.GtIsStartTimer;
-            bool isStop = t.GtIsStopTimer;
-            if (wantFinish ? isStop : isStart)
-            {
-                // QC: rate every matching checkpoint; the brain routes to the highest-rated (nearest wins on bias).
-                rater.Rate(bot.Origin, t, t.Origin, RatingRaceCheckpoint, 5000f);
-                goal = t;
-            }
+            if (cts.IsNextCheckpoint(gate, st))
+                rater.Rate(bot.Origin, gate, gate.Origin + (gate.Mins + gate.Maxs) * 0.5f, RatingRaceCheckpoint, 5000f);
         }
-
-        // If the expected timer kind isn't on the map (e.g. a stop-only or start-only authoring quirk), fall back to
-        // the other timer so the bot still moves toward the course rather than freezing.
-        if (goal is null)
-            for (int i = 0; i < cts.Timers.Count; i++)
-            {
-                Entity t = cts.Timers[i];
-                if (!t.IsFreed && (t.GtIsStartTimer || t.GtIsStopTimer))
-                    rater.Rate(bot.Origin, t, t.Origin, RatingRaceCheckpoint, 5000f);
-            }
+        foreach (Entity gate in cts.Checkpoints)
+        {
+            if (cts.IsNextCheckpoint(gate, st))
+                rater.Rate(bot.Origin, gate, gate.Origin + (gate.Mins + gate.Maxs) * 0.5f, RatingRaceCheckpoint, 5000f);
+        }
 
         rater.End();
     }
@@ -1504,7 +1468,7 @@ public static class BotObjectiveRoles
             // QC: if(it.cnt == cp || cp == -1) — rate the gate matching the bot's next checkpoint (or any if -1).
             if (cp == -1 || it.GtCheckpointIndex == cp)
             {
-                rater.Rate(bot.Origin, it, it.Origin, RatingRaceCheckpoint, 5000f);
+                rater.Rate(bot.Origin, it, it.Origin + (it.Mins + it.Maxs) * 0.5f, RatingRaceCheckpoint, 5000f);
                 goal = it;
             }
         }
@@ -1516,7 +1480,7 @@ public static class BotObjectiveRoles
             {
                 Entity it = race.Checkpoints[i];
                 if (!it.IsFreed)
-                    rater.Rate(bot.Origin, it, it.Origin, RatingRaceCheckpoint, 5000f);
+                    rater.Rate(bot.Origin, it, it.Origin + (it.Mins + it.Maxs) * 0.5f, RatingRaceCheckpoint, 5000f);
             }
 
         rater.End();

@@ -1,0 +1,6 @@
+VSTest version 18.7.1 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    35, Skipped:     0, Total:    35, Duration: 598 ms - VortexArena.Tests.dll (net8.0)

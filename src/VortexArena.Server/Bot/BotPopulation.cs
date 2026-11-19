@@ -177,6 +177,7 @@ public sealed class BotPopulation
         public bool ButtonUse => Input.ButtonUse;
         public bool ButtonAttack1 => Input.ButtonAttack1;
         public bool ButtonAttack2 => Input.ButtonAttack2;
+        public bool ButtonHook => Input.ButtonHook;
         public bool ButtonJetpack => Input.ButtonJetpack;
         public bool Typing => Input.Typing;
         public int Impulse => Input.Impulse;
@@ -192,6 +193,54 @@ public sealed class BotPopulation
 
     /// <summary>The brain driving <paramref name="p"/>, or null if it isn't a managed bot.</summary>
     public BotBrain? BrainOf(Player p) => _byPlayer.TryGetValue(p, out BotBrain? b) ? b : null;
+
+    internal float ScriptBarrierTime { get; private set; }
+
+    internal void ResetScripts()
+    {
+        foreach (BotBrain brain in _brains)
+        {
+            brain.Script?.Reset();
+            brain.ScriptBarrierReleased = false;
+        }
+        ScriptBarrierTime = _world.Time;
+    }
+
+    internal void TryReleaseScriptBarrier(float now)
+    {
+        foreach (BotBrain brain in _brains)
+            if (brain.Script is { HasCommands: true } script && (!script.AtBarrier || brain.ScriptBarrierReleased))
+                return;
+
+        ScriptBarrierTime = now;
+        // Idle bots also acknowledge the release, even before their first command queue exists.
+        foreach (BotBrain brain in _brains)
+            brain.ScriptBarrierReleased = true;
+    }
+
+    internal BotCommandQueue ScriptFor(BotBrain brain) => brain.Script ??= new BotCommandQueue(brain, this, _world);
+
+    internal BotBrain? FindScriptBot(string selector)
+    {
+        // QC findchainflags(FL_CLIENT) visits bots in reverse edict order.
+        if (int.TryParse(selector, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)
+            && number > 0 && number <= _brains.Count)
+            return _brains.OrderByDescending(brain => brain.Bot.Index).ElementAt(number - 1);
+        return _brains.Find(brain => brain.Bot.NetName.Equals(selector, StringComparison.Ordinal));
+    }
+
+    internal bool ReplaceScriptBots(int count)
+    {
+        SettempCvars.Set("bot_vs_human", 0);
+        SettempCvars.Set("minplayers", 0);
+        SettempCvars.Set("minplayers_per_team", 0);
+        SettempCvars.Set("bot_number", 0);
+        while (_brains.Count > 0)
+            RemoveNewest();
+        SettempCvars.Set("bot_number", count);
+        _currentBots = _brains.Count;
+        return FixCount(_world.Time, multiplePerFrame: true) && _brains.Count == count;
+    }
 
     public BotPopulation(GameWorld world)
     {
@@ -390,6 +439,8 @@ public sealed class BotPopulation
         {
             cache.Time = now;
             cache.Input = brain.ThinkProduce(p, dt);
+            if (brain.Script?.TakeImpulse() is > 0 and var impulse)
+                _world.Commands.Execute($"impulse {impulse}", isServerConsole: false, caller: p);
         }
         return cache; // the IMovementInput-implementing cache object itself — no per-read struct box
     }
@@ -400,7 +451,7 @@ public sealed class BotPopulation
 
     /// <summary>QC <c>bot_fixcount(false)</c>: converge the roster on the target (ONE add per frame, trims all
     /// excess). Returns false on a spawn failure (server full), arming the 10s backoff.</summary>
-    private bool FixCount(float time)
+    private bool FixCount(float time, bool multiplePerFrame = false)
     {
         int activeRealPlayers = 0, realPlayers = 0;
         // QC MUTATOR_HOOKFUNCTION(lms, Bot_FixCount, CBC_ORDER_EXCLUSIVE) (sv_lms.qc:693): LMS overrides the
@@ -442,10 +493,12 @@ public sealed class BotPopulation
         BotsWouldLeave = botsWouldLeave;
 
         // only add ONE bot per frame to avoid utter chaos (QC bot.qc:667-681, multiple_per_frame=false).
-        if (_currentBots < target)
+        while (_currentBots < target)
         {
             if (SpawnBot(null, null) is null)
                 return false;
+            if (!multiplePerFrame)
+                break;
         }
         while (_currentBots > target && target >= 0)
             RemoveNewest();
@@ -624,7 +677,10 @@ public sealed class BotPopulation
         if (!string.IsNullOrEmpty(model))
             _preferredModel[p] = model;
         if (!string.IsNullOrEmpty(model) || _preferredSkin.ContainsKey(p))
+        {
             ApplyPreferredModel(p);                          // the connect auto-Join already spawned it
+            _world.UpdatePlayerSpecies(p);
+        }
         // the OnBotConnected hook registered the brain; sync its skill now that BotSkill is final.
         if (_byPlayer.TryGetValue(p, out BotBrain? brain))
         {
@@ -649,7 +705,7 @@ public sealed class BotPopulation
         {
             // largest team by live player count (QC TeamBalance largest-team pick).
             int bestTeam = 0, bestCount = -1;
-            foreach (int team in Teams.Active(_world.Teamplay.TeamCount))
+            foreach (int team in _world.Teamplay.ActiveTeams)
             {
                 int n = _world.Teamplay.CountTeam(team, _world.Clients.Players);
                 if (n > bestCount) { bestCount = n; bestTeam = team; }

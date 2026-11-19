@@ -95,6 +95,10 @@ public static class UserPaths
         return full;
     }
 
+    /// <summary>Open an export with a game-relative filename supplied by the command handler.</summary>
+    internal static System.IO.Stream OpenGameExport(string filename) =>
+        System.IO.File.Create(Resolve($"{GameDirFolderName}/{filename}"));
+
     /// <summary>
     /// Use forward slashes on every platform — the form Godot's <see cref="ProjectSettings.GlobalizePath"/>
     /// emits and that both Godot's file APIs and .NET's <c>System.IO</c> accept on Windows (where

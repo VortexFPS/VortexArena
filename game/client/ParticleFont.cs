@@ -88,7 +88,8 @@ public sealed class ParticleFont
     /// (e.g. <c>VirtualFileSystem.ReadText</c>). Returns a loaded font, or a font with <see cref="Loaded"/>
     /// false if either source is missing/unreadable (never throws — the caller falls back to solid quads).
     /// </summary>
-    public static ParticleFont Load(Func<string, Texture2D?>? texLoader, Func<string, string?>? textLoader)
+    public static ParticleFont Load(Func<string, Texture2D?>? texLoader, Func<string, string?>? textLoader,
+        string vpathPrefix = "")
     {
         var font = new ParticleFont();
         if (texLoader is null || textLoader is null)
@@ -97,7 +98,7 @@ public sealed class ParticleFont
         // 1) the UV table — the same normalized rects DP loads in CL_Particles_Init.
         try
         {
-            string? table = textLoader(TableVPath);
+            string? table = textLoader(vpathPrefix + TableVPath);
             if (!string.IsNullOrEmpty(table))
                 font.ParseTable(table);
         }
@@ -109,7 +110,7 @@ public sealed class ParticleFont
         // 2) the atlas image. LoadTexture returns an ImageTexture; pull its Image for cropping.
         try
         {
-            Texture2D? tex = texLoader(AtlasVPath);
+            Texture2D? tex = texLoader(vpathPrefix + AtlasVPath);
             Image? img = tex?.GetImage();
             if (img is not null)
             {

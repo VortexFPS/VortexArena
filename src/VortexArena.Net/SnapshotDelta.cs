@@ -119,6 +119,7 @@ public sealed class ServerSnapshotHistory
 public sealed class ClientSnapshotHistory
 {
     private readonly (ushort Seq, Dictionary<int, NetEntityState> Map)[] _ring;
+    private Dictionary<int, NetEntityState> _decodeScratch = new();
 
     public ClientSnapshotHistory()
     {
@@ -155,9 +156,9 @@ public sealed class ClientSnapshotHistory
         if (baselineSeq != 0 && baseline is null)
             return null; // we no longer hold that baseline — wait for the server to send a full snapshot
 
-        // Build into the target ring slot (reused dict — no per-frame allocation).
-        ref var slot = ref _ring[snapshotSeq % _ring.Length];
-        Dictionary<int, NetEntityState> result = slot.Map;
+        // Decode before replacing the ring slot. Its map may be the baseline when a slow client
+        // acknowledges a snapshot exactly one ring behind, and must survive a failed decode.
+        Dictionary<int, NetEntityState> result = _decodeScratch;
         result.Clear();
         if (baseline is not null)
             foreach (KeyValuePair<int, NetEntityState> kv in baseline)
@@ -183,7 +184,9 @@ public sealed class ClientSnapshotHistory
             result[entnum] = s;
         }
 
-        slot.Seq = snapshotSeq;
+        ref var slot = ref _ring[snapshotSeq % _ring.Length];
+        _decodeScratch = slot.Map;
+        slot = (snapshotSeq, result);
         LastDecodedSeq = snapshotSeq;
         return result;
     }

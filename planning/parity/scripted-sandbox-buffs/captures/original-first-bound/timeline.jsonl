@@ -1,0 +1,16 @@
+{"seconds": 9.268, "client": "owner", "command": "cmd join", "key": "F1"}
+{"seconds": 9.269, "client": "guest", "command": "cmd join", "key": "F1"}
+{"seconds": 12.04, "server": "status"}
+{"seconds": 12.22, "server": "sv_cheats 1"}
+{"seconds": 12.702, "client": "owner", "command": "cmd teleporttotarget parity_buff_start", "key": "F4"}
+{"seconds": 12.702, "client": "guest", "command": "cmd teleporttotarget parity_buff_view", "key": "F5"}
+{"seconds": 15.581, "client": "owner", "frame": "06-buff-before-owner.webp"}
+{"seconds": 15.671, "client": "guest", "frame": "06-buff-before-guest.webp"}
+{"seconds": 15.671, "client": "owner", "command": "cmd teleporttotarget parity_buff_touch", "key": "F6"}
+{"seconds": 17.124, "client": "owner", "frame": "07-buff-after-owner.webp"}
+{"seconds": 17.172, "client": "guest", "frame": "07-buff-after-guest.webp"}
+{"seconds": 17.172, "server": "sv_cheats 0"}
+{"seconds": 17.352, "server": "status"}
+{"seconds": 17.533, "client": "owner", "command": "quit", "key": "F10"}
+{"seconds": 18.299, "client": "guest", "command": "quit", "key": "F10"}
+{"seconds": 19.064, "server": "quit"}

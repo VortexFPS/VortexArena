@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using VortexArena.Common.Config;
+using VortexArena.Common.Services;
 using VortexArena.Engine.Simulation;
 
 namespace VortexArena.Engine.Console;
@@ -627,6 +628,8 @@ public sealed class ConsoleCommands
     /// the menu/headless console) → the existence check is SKIPPED and the map is added as-is (deviation R4).
     /// </summary>
     public Func<string, bool>? MapExists { get; set; }
+    /// <summary>Checks the mode and feature requirements for maplist cleanup.</summary>
+    public Func<string, bool>? MapSupportsGametype { get; set; }
 
     /// <summary>The RNG behind <c>maplist shuffle</c> (seedable for deterministic tests; QC uses <c>random()</c>).</summary>
     public Random ShuffleRng { get; set; } = new Random();
@@ -682,6 +685,26 @@ public sealed class ConsoleCommands
     /// </summary>
     private void CmdMaplist(IReadOnlyList<string> a)
     {
+        if (_localRouter is not null)
+        {
+            string line = string.Join(' ', a.Select(arg => arg.Length == 0 || arg.Any(char.IsWhiteSpace)
+                || arg.Contains('"') || arg.Contains('\\')
+                ? string.Concat('"', arg.Replace("\\", "\\\\").Replace("\"", "\\\""), '"') : arg));
+            if (_localRouter(line) is string output)
+            {
+                if (output.Length > 0)
+                    _print(output.TrimEnd('\n', '\r'));
+                return;
+            }
+        }
+
+        EditMaplist(a, _cvars, _print, MapExists, MapSupportsGametype, ShuffleRng);
+    }
+
+    /// <summary>Apply a maplist edit to the calling console's cvar store.</summary>
+    public static void EditMaplist(IReadOnlyList<string> a, ICvarService cvars, Action<string> print,
+        Func<string, bool>? exists, Func<string, bool>? supports, Random shuffleRng)
+    {
         string action = a.Count >= 2 ? a[1] : "";
         switch (action)
         {
@@ -689,14 +712,14 @@ public sealed class ConsoleCommands
                 if (a.Count == 3)
                 {
                     string map = a[2];
-                    if (MapExists is not null && !MapExists(map))
+                    if (exists is not null && !exists(map))
                     {
-                        _print($"maplist: ERROR: {map} does not exist!");
-                        return;
+                        print($"maplist: ERROR: {map} does not exist!");
+                        break;
                     }
-                    string cur = _cvars.GetString("g_maplist");
+                    string cur = cvars.GetString("g_maplist");
                     // QC: if empty set to map, else PREPEND "map existing".
-                    _cvars.Set("g_maplist", cur == "" ? map : map + " " + cur);
+                    cvars.Set("g_maplist", cur == "" ? map : map + " " + cur);
                     return;
                 }
                 break;
@@ -705,30 +728,23 @@ public sealed class ConsoleCommands
                 {
                     string del = a[2];
                     string rebuilt = "";
-                    foreach (string w in WordList.Words(_cvars.GetString("g_maplist")))
+                    foreach (string w in WordList.Words(cvars.GetString("g_maplist")))
                         if (w != del)
                             rebuilt = WordList.Cons(rebuilt, w);
-                    _cvars.Set("g_maplist", rebuilt);
+                    cvars.Set("g_maplist", rebuilt);
                     return;
                 }
                 break;
             case "shuffle":
-                _cvars.Set("g_maplist", WordList.Shuffle(_cvars.GetString("g_maplist"), ShuffleRng));
+                cvars.Set("g_maplist", WordList.Shuffle(cvars.GetString("g_maplist"), shuffleRng));
                 return;
             case "cleanup":
-                // QC filters by MapInfo_CheckMap; without a catalog the faithful fallback is identity (keep all),
-                // honoring MapExists when wired (drop words whose bsp is gone). Deviation R4.
-                if (MapExists is not null)
-                {
-                    string filtered = "";
-                    foreach (string w in WordList.Words(_cvars.GetString("g_maplist")))
-                        if (MapExists(w))
-                            filtered = WordList.Cons(filtered, w);
-                    _cvars.Set("g_maplist", filtered);
-                }
+                if (exists is not null || supports is not null)
+                    cvars.Set("g_maplist", string.Join(' ', WordList.Words(cvars.GetString("g_maplist"))
+                        .Where(map => exists?.Invoke(map) != false && supports?.Invoke(map) != false)));
                 return;
         }
-        _print("Usage: maplist <action> [<map>] — actions: add, cleanup, remove, shuffle");
+        print("Usage: maplist <action> [<map>] — actions: add, cleanup, remove, shuffle");
     }
 
     /// <summary>

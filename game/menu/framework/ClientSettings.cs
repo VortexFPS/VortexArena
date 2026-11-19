@@ -40,6 +40,8 @@ public static class ClientSettings
         RegisterTintDefaults(MenuState.Cvars);
         RegisterStairSmoothDefaults(MenuState.Cvars);
         RegisterEngineClientDefaults(MenuState.Cvars);
+        MenuState.Cvars.Register("cl_spawn_near_teammate", "1", CvarFlags.Save,
+            "Toggle relocation near teammates when the server uses per-client spawn preferences.");
         RegisterParticleDefaults(MenuState.Cvars);
         Client.AdaptiveQuality.RegisterDefaults(MenuState.Cvars);
         ApplyTextureCompression();
@@ -558,6 +560,9 @@ public static class ClientSettings
         // (Both values belong to the earlier look: with r_darkplaces_colour 1, the default below, every model
         // takes DarkPlaces' own light-grid arithmetic and this cvar is not consulted.)
         c.Register("r_model_light_gamma", "0");
+        c.Register("r_fullbright", "0");
+        c.Register("r_fakelight", "0");
+        c.Register("r_fakelight_intensity", "0.75");
         // The colour arithmetic of the 3D picture (game/client/NativeColour.cs). 1 = DarkPlaces' (the default
         // since October 2026: stored texel times stored lightmap times two, blending on display values), 0 = the
         // earlier native look (linear-light combine), kept for one release. Read once at start.
@@ -610,6 +615,9 @@ public static class ClientSettings
         // ---- (N3) Volumetric fog + light shafts. Port-only; DP has no volumetric anything. OFF by
         // default and absent from the low/med/normal presets: it is a per-frame froxel volume pass, and
         // fog that hides players is a gameplay change, not a graphics one.
+        c.Register("r_drawfog", "1", CvarFlags.Save, "Show map depth fog");
+        c.Register(VortexArena.Common.Menu.MapClientVisualSettings.ServerSuggestionsCvar, "0", CvarFlags.Save,
+            "Use native server suggestions for map bloom, sky and depth fog");
         c.Register("r_volumetricfog", "0");
         c.Register("r_volumetricfog_density", "0.015");
         c.Register("r_volumetricfog_shafts", "1");

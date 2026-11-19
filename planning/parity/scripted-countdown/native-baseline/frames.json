@@ -1,0 +1,25 @@
+{
+  "capture": "/tmp/va-countdown-native5",
+  "frames": {
+    "observer-before.webp": {
+      "source": "RedProbe/0012.webp",
+      "sample": 14.747
+    },
+    "observer-during.webp": {
+      "source": "RedProbe/0032.webp",
+      "sample": 17.254
+    },
+    "observer-after.webp": {
+      "source": "RedProbe/0053.webp",
+      "sample": 19.884
+    },
+    "player-countdown.webp": {
+      "source": "BlueProbe/0009.webp",
+      "sample": 15.5
+    },
+    "player-after.webp": {
+      "source": "BlueProbe/0026.webp",
+      "sample": 19.753
+    }
+  }
+}

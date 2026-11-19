@@ -1,0 +1,35 @@
+Silent port, release SDL and native ENet
+stock cvar=12, datagrams=24, send groups=[0.0, 1.0, 2.0, 3.01, 4.01, 5.01, 6.01, 7.01, 8.01, 9.02, 10.02, 11.02], last send=11.02s, observation ended=16.03s
+native cvar=12, datagrams=5, send groups=[0.0, 0.51, 1.51, 3.5, 7.51], last send=7.51s, observation ended=12.11s
+load-ready to failure=12.12s
+[NetGame] connection failed: Couldn't connect to the server.
+stock cvar=22, datagrams=24, send groups=[0.0, 1.0, 2.0, 3.01, 4.01, 5.02, 6.02, 7.02, 8.03, 9.03, 10.04, 11.06], last send=11.06s, observation ended=16.07s
+native cvar=22, datagrams=6, send groups=[0.0, 0.51, 1.51, 3.51, 7.51, 15.51], last send=15.51s, observation ended=22.14s
+load-ready to failure=22.14s
+[NetGame] connection failed: Couldn't connect to the server.
+
+Successful stock signon, Stormkeep peer
+Connection accepted to 127.0.0.1:29066
+picker picked up a Superweapon
+picker picked up a Superweapon
+
+Successful native signon, Stormkeep peer
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 2, tickrate 64 Hz.
+[NetGame] client loaded map 'stormkeep' (dm) for render + prediction collision.
+joined the game
+
+Legacy server with the pinned programs and Stormkeep
+ Silence to release on server clock: signon 12.008s, playing 3.000s
+Test Run Successful.
+Total tests: 89
+
+Standalone Vortex legacy client against a stock Stormkeep server with the pinned program
+[legacy] 6 packages mounted, 1380 engine cvars, default.cfg executed (27 files, 598 aliases)
+[legacy] signon stage 4: in the game. view entity 1, player entity 1, 16.6 s after starting
+[legacy] client state: TimedOut (server stopped responding)
+The archived --legacy-loss driver measured 18.05 wall seconds from pausing its own server to client timeout with net_messagetimeout 18. The preceding trial measured 18.06 seconds.
+
+Repeat with bounded silent-port assertions
+Xonotic 0.8.6: 12 pairs at each setting. Last sends at 11.03 s and 11.02 s.
+Native ENet: 12.12 s at setting 12, 22.14 s at setting 22.
+Expanded managed run including retained channel deadlines and timedemo signon: 90 passed.

@@ -96,10 +96,9 @@ generic/client verbs only. (Note: at this rev there is **no** `version` GENERIC_
 - **getrecords(page)** (`:35`): 10 pages filled by the `GetRecords` mutator hook (each gametype
   contributes its record table — CTF captime, race records…); empty → "No records available".
 - **getrankings** (`:46`): top `RANKINGS_CNT` race/CTS times for the current map, rows
-  `strpad(8, ordinal) strpad(-8, TIME_ENCODED_TO_TEXT) name`; record type `CTS_RECORD` if `g_cts`
-  else `RACE_RECORD`; empty → "No records are available for the map: <map>".
+  use an eight-character ordinal and formatted time followed by the holder. The active game uses CTS, CTF or the default Race record type.
 - **getladder** (`:71`): cross-map ladder over the race DB — per-place counts, `LADDER_FIRSTPOINT
-  floor(100/i)` scoring, 100/10 speed-award points, top-N table; empty → "No ladder on this server!".
+  floor(100/i)` by rank and ten points per speed award. The top 30 appear in the table. The pin prints a header even when no one is ranked.
 - **getmaplist** (`:233`): `^7Maps in list (N):` + `^2/^3`-alternating words of `g_maplist` that
   pass `MapInfo_CheckMap`.
 - **getlsmaps** (`:252`): enumerate the **full MapInfo catalog** filtered by forbidden flags, blue
@@ -116,20 +115,20 @@ generic/client verbs only. (Note: at this rev there is **no** `version` GENERIC_
 |---|---|
 | GENERIC_COMMAND registries + qc_cmd_* aliases | `ConsoleCommands.Register` (Engine console table, ConsoleCommands.cs:67-114) + `Commands.RegisterBuiltins` (server table, Commands.cs:878-917), glued by `RouteUnknown` → local world or remote clc_stringcmd; live via `ConsoleOverlay.cs:107` |
 | addtolist/removefromlist | `ConsoleCommands.CmdAddToList/CmdRemoveFromList (301/324)` + `Commands.CmdAddToList/CmdRemoveFromList (3035/3048)` + `WordList.Cons` |
-| maplist | `ConsoleCommands.CmdMaplist (346)` + `Commands.CmdMaplist (3060)` + `WordList.Shuffle`; existence gate = `ConsoleCommands.MapExists` hook (:292) — **test-only wiring**; server has **no** gate; `MapRotation.MapExists` defaults `_ => true` and is never assigned live |
+| maplist | `ConsoleCommands.CmdMaplist` and `Commands.CmdMaplist` check mounted BSPs when adding and filter by the active game and required features on cleanup. |
 | settemp/settemp_restore | `SettempCvars.Set/Restore (33/52)` + `Commands.CmdSettemp/CmdSettempRestore (2401/2409)` + console-side `ConsoleCommands.CmdSettemp (422)` |
 | rpn | `Rpn.Run` + `Rpn.Format9g` (C `%.9g` reproduction); `MaxStack = 128` (Rpn.cs:37) vs Base 16; db/digest/eval/localtime/fexists ops fall to the cvar-push fallback (documented scope deviation R3) |
 | nextframe | `Commands.CmdNextFrame (3093)` = `Deferred.Defer(0, tail)`; console impl runs inline when no world (documented degenerate) |
-| dumpcommands, qc_curl, restartnotifs, runtest, markup/`red` | NOT IMPLEMENTED (runtest/qc_curl = intended divergences: xunit suite / HTTP-free core) |
+| dumpcommands | Writes server, client or menu aliases from the active program’s registrations. See the [operator export comparison](../local-commands/README.md). |
 | cl_cmd dispatch | shared console table + `NetGame.RunBoundCommand (5195+)` bind intercepts (quickmenu, radar toggles, weapon impulses) |
 | hud configure/quickmenu/radar | live via `DialogHudConfirm.cs:60` + `HudConfigEditor` (`_hud_configure`), `QuickMenuPanel.Toggle`, `NetGame:5203-5222` |
-| hud save / scoreboard_columns_set | DEAD: `HudConfigEditor.cs:323` emits `hud save myconfig` — no handler anywhere; `ScoreboardPanel.ColumnSpec (207)` is a faithful parser with **zero assignment sites** |
-| handlevote / vyes / vno | NOT IMPLEMENTED (`DialogUid2Name.cs` buttons documented inert; `VotePanel.cs:65-68` renders hints for non-working binds) |
+| hud save / scoreboard_columns_set | The named HUD export and temporary, saved and expanded scoreboard layouts were exercised in live clients. |
+| handlevote / vyes / vno | The local client interprets the vote argument and forwards its choice to the server. When the nickname dialog is active, its answer updates the archived player preference. |
 | sendcvar / sentcvar / GetCvars | `ConsoleCommands.CmdSendCvar (454)` + `ClientNet.PumpReplicatedCvars (958-987)` push loop + `Commands.CmdSentCvar (3305)` (allowlist + weaponpriority fixups moved to server receive) |
-| localprint, mv_download, print_cptimes, debug quartet | NOT IMPLEMENTED (backends partially exist: `CenterPrintPanel.AddStandard`, `CsqcModelEffects`, `CheckpointsPanel` splits) |
+| localprint | The live HUD displays the first message argument using the configured centerprint duration. |
 | getrankings | `CommandReplies.GetRankings (146)` — faithful format vs live RaceRecords store |
-| getrecords / getladder | stubs: `RecordsReply` zeroed each `Recompute` (:70-71); `GetLadder() => "No ladder on this server!"` (:183) |
-| getmaplist / getlsmaps / getmonsterlist | `CommandReplies.GetMaplist/GetLsmaps/GetMonsterlist (82/106/126)`; lsmaps lists the rotation, not the catalog; no asterisks / LSMAPS_MAX |
+| getrecords / getladder | `CommandReplies` builds per-mode pages and cross-map ladders from the mounted catalog and record database. |
+| getmaplist / getlsmaps / getmonsterlist | The host filters the effective rotation and installed catalog. `lsmaps` marks maps without a record and reports how many entries exceed the 250-map cap. The monster reply uses the native registry. |
 | server/command/common.qh | declarations header — flat `Commands.Register` table + `TimeoutController`; behaviors audited in sv-commands-votes |
 
 ## Parity assessment
@@ -139,19 +138,8 @@ generic/client verbs only. (Note: at this rev there is **no** `version` GENERIC_
   nextframe, rpn's entire cfg-used op surface (incl. the `%.9g` round-trip), sendcvar/sentcvar
   replication (fixups verified equivalent, moved server-side), getrankings and getmonsterlist
   formats, the reply-cache seam (lazy recompute = fresh-value superset of QC's init-time strzone).
-- **Worst gaps** (what an admin/player hits):
-  1. `hud save` dead (HUD layout export impossible; Ctrl+S emits into the void) and
-     `scoreboard_columns_set` dead (parser exists, nothing assigns it — columns always default).
-  2. `handlevote`/`vyes`/`vno` missing — F1/F2 can't answer a call-vote; VotePanel shows key hints
-     that do nothing; only console `vote yes|no` works.
-  3. getladder hardcoded empty + getrecords pages always empty (`GetRecords` mutator hook unported)
-     even when the mode has records; getlsmaps under-reports (rotation, not catalog; no new-map
-     asterisks; no 250 cap).
-  4. maplist add existence gate + cleanup filter inert on BOTH live paths (console `MapExists`
-     hook only assigned in tests; server `CmdMaplist` has no gate, cleanup is identity).
-  5. Missing verb tail: dumpcommands, qc_curl, restartnotifs, `red`/markup chat filter (+ easter
-     eggs), localprint, mv_download, print_cptimes, blurtest/boxparticles/debugmodel/
-     create_scrshot_ent, demo free-camera buttons.
+- The native empty-ladder message and on-demand refresh differ from the pin’s header and startup cache. For an empty map rotation cvar, the native reply can show the effective rotation. Missing-map rejection on the original also prints detailed usage. [Dedicated map and record comparisons](../record-reports/README.md)
+- Other command gaps, including remaining developer commands and optional integrations, have individual entries in the [feature registry](../registry/console-commands.yaml).
 - **Intended divergences:** registry-macro/alias machinery → two flat C# tables (bare command
   names); runtest → xunit; qc_curl → HTTP-free core; rpn db/digest/eval ops → cvar-push fallback
   (Rpn.cs header R3); GetCvars deprecated request direction dropped (client pushes unprompted);
@@ -165,16 +153,9 @@ generic/client verbs only. (Note: at this rev there is **no** `version` GENERIC_
 - Unit tests: `tests/VortexArena.Tests/GenericCommandsTests.cs` (cons/addtolist/maplist/settemp/
   nextframe/rpn-registration), `RpnTests.cs` (op coverage + `%.9g`), `CvarReplicationTests.cs`,
   `ServerClientCommandsTests.cs:PrintMapList_ShowsTheRotation`, `ConsoleTests.cs` (routing).
-- Dead/missing claims re-verified 2026-07-02 by grep: no `"hud"` command registration; `ColumnSpec`
-  has no assignment site; `handlevote|vyes|vno` only in comments/hints; `dumpcommands|qc_curl|
-  restartnotifs|localprint|mv_download|print_cptimes|blurtest` absent; `MapExists =` only in tests;
-  `SettempCvars.Restore` single caller (Commands.cs:2411).
-- Not verified in-game: rankings output against a populated race DB (confidence: medium on that row).
+- Both dedicated hosts rejected a missing map and produced the same cleaned CTF rotation. A separate client received records, rankings and ladder reports. [Paired map and remote ranking evidence](../record-reports/README.md)
+- Native captures verify named HUD exports, centerprints, custom scoreboard columns and a CTF record earned in play. [HUD commands](../hud-commands/README.md) · [Scoreboard captures](../scoreboard-blocks/README.md) · [Gameplay-earned records](../record-lifecycle/earned/README.md)
 
 ## Open questions
 
 - Who (if anything) restores settemp cvars at map end on the live path? Needs a runtime check.
-- Should `hud save` be wired to a HudConfigEditor export (the emitter already exists) — one-line
-  command bridge plus a cfg writer?
-- Is a MapInfo-style map catalog planned? Both maplist gaps and the lsmaps under-reporting trace
-  to the same missing seam (`MapRotation.MapExists` default `_ => true`).

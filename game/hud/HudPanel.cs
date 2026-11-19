@@ -506,10 +506,10 @@ public abstract partial class HudPanel : Control
     /// <summary>Paint the panel chrome: the skin 9-slice border frame (QC <c>HUD_Panel_DrawBg</c>) around the
     /// whole panel. No-op when the resolved bg is "0"/inherit-of-0 — or when the configure-mode pre-pass
     /// (<see cref="_Draw"/>) already painted the full-panel frame this draw.</summary>
-    protected void DrawBackground()
+    protected void DrawBackground(CanvasItem? target = null)
     {
         if (_configureBgDrawn) return;
-        DrawBackgroundRect(new Rect2(Vector2.Zero, Size2), LiveBgAlpha);
+        DrawBackgroundRect(new Rect2(Vector2.Zero, Size2), LiveBgAlpha, null, target);
     }
 
     /// <summary>Paint the skin 9-slice border frame (QC <c>HUD_Panel_DrawBg</c>) around an explicit panel-local
@@ -521,7 +521,7 @@ public abstract partial class HudPanel : Control
     /// <summary>As <see cref="DrawBackgroundRect(Rect2,float)"/>, but with an explicit frame colour — QC's
     /// <c>panel_bg_color</c> override (the scoreboard reassigns it to the TEAM colour around each team's table,
     /// scoreboard.qc:2688-2693, and restores it afterwards). Null keeps the resolved <c>Cfg.BgColor</c>.</summary>
-    protected void DrawBackgroundRect(Rect2 panelRect, float bgAlpha, Color? colorOverride)
+    protected void DrawBackgroundRect(Rect2 panelRect, float bgAlpha, Color? colorOverride, CanvasItem? target = null)
     {
         string bg = Cfg.Bg;
         if (string.IsNullOrEmpty(bg) || bg == "0") return; // luma: no frame for this panel
@@ -534,8 +534,9 @@ public abstract partial class HudPanel : Control
         const float borderMultiplier = 4f;
         var outer = new Rect2(panelRect.Position.X - t, panelRect.Position.Y - t,
                               panelRect.Size.X + 2f * t, panelRect.Size.Y + 2f * t);
-        if (!HudSkin.DrawBorderPicture(this, outer, bg, col, bgAlpha, t * borderMultiplier))
-            DrawRect(panelRect, new Color(col.R, col.G, col.B, bgAlpha * 0.7f));
+        CanvasItem canvas = target ?? this;
+        if (!HudSkin.DrawBorderPicture(canvas, outer, bg, col, bgAlpha, t * borderMultiplier))
+            canvas.DrawRect(panelRect, new Color(col.R, col.G, col.B, bgAlpha * 0.7f));
     }
 
     /// <summary>Paint a flat translucent fill over an arbitrary local rect (inner sub-region backing — the

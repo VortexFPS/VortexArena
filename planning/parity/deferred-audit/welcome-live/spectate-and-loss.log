@@ -1,0 +1,9 @@
+Fixture sent SIGKILL to the dedicated server process.
+[lb]Shell] connecting to 127.0.0.1:27985.
+[NetTransport.Client] connecting to 127.0.0.1:27985 …
+[NetGame] connecting to 127.0.0.1:27985.
+[ClientNet] handshake accepted by '^2Separate Loopback Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by '^2Separate Loopback Server': netId 1.
+now spectating
+[NetGame] connection failed: Lost connection to the server.
+[lb]::client::WARNING] [lb]Shell] connection to '127.0.0.1:27985' failed: Lost connection to the server.

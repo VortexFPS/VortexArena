@@ -1,0 +1,34 @@
+{
+  "original_data_git": "863cd3e8456e18f577f7fe5fef857ff55ae62cc0",
+  "stock_bsp_sha256": "535aa37b230177f4f5cd204ac92df7313806fe93f4afae259a05759e0d5cd0e0",
+  "fixture_bsp_sha256": "b2323f5d1f5fec2ddab8088f738d8e809d5b7fe00ea749513912f756517719e5",
+  "external_lightmaps_sha256": {
+    "maps/runningmanctf/lm_0000.jpg": "a6c1f9e978d2338d0c5dc2d9fac6a37d900611d5ade1f345f9a75a5acb623c18",
+    "maps/runningmanctf/lm_0001.jpg": "96172ef2458cfa83606d219b4b1d5062741f3f6866117042d5152a4a9ea64504",
+    "maps/runningmanctf/lm_0002.jpg": "61af74ff3a128b489e600d49294409a5dcfb7269d294a6d43af4f28828adc33c",
+    "maps/runningmanctf/lm_0003.jpg": "786fd14a9b31a2aabd1b49e012558fd3a808dcecda8065925dcfbe0e1dd8b503",
+    "maps/runningmanctf/lm_0004.jpg": "8416bac25132577031f5d5e71c04096dfbf5cccfd1f49f9ac895278db0419e63",
+    "maps/runningmanctf/lm_0005.jpg": "9c41fc9a0e5bb23c565e4fe478fff1a81d0e97d58233acaa738f7548dce191c8"
+  },
+  "original_code_sha256": {
+    "progs.dat": "c4a5a9e85598333568183779c06446b2d03f056d2da71636b6f86150ed1202f7",
+    "csprogs.dat": "cbc9fd9a4e2c7fc8f02f4aab6e5883e549790eb24e71be2bc0b8a0b0fea89999",
+    "menu.dat": "4d502424af24f90c36c8a17a034ded536571a0d353a4192d8b332e8cc8b2d771"
+  },
+  "executables_sha256": {
+    "/tmp/vortex-parity-godot/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64": "cabf9ac16c55f8ca662da62e1f5908d3c35f765e312be62f104097bd8f78b987",
+    "/tmp/va-paired-20261119/upstream-engine/darkplaces-sdl": "cb2151fc2526fd0714e224e6b1005174a7f75b4301978e0c0224c8b55d805f0b",
+    "/tmp/va-paired-20261119/upstream-engine/darkplaces-dedicated": "b78023261571fc65f3575e9b6eb4a6cb04b9d0b43327f96b90772630f688bc12"
+  },
+  "debug_assemblies_sha256": {
+    "VortexArena.Common.dll": "deda517fed42a8d5f1ccadd0c14020ae12333e1c0b4594b9828a5e3a3aa8954a",
+    "VortexArena.Engine.dll": "7dd442522db97b229385481c9fcd6a6ab9a8518d55b0699e2145e830bb6ab752",
+    "VortexArena.Formats.dll": "f0d8baeb5b1fcbc011d50f360a6b980e26bfd3d3febbc0a99c713f4a78326631",
+    "VortexArena.Legacy.dll": "b657c8aafe962ccc76f654afda15f7085089a8b5dd42404ce9f4d832ee09e3d8",
+    "VortexArena.Modding.dll": "5f0e7d5227ad70509f54326ec2b08f2903b62c34928ccb60d17add6c81d1baf7",
+    "VortexArena.Net.dll": "586e641d28dfd99b1759feac53edb2e2ace4dd759e5543963db8110eec99835d",
+    "VortexArena.QuakeC.dll": "f0aa399d6dba5d175a06efad827ff44a0b7fe3c96359524a49353111c06931ed",
+    "VortexArena.Server.dll": "06301b72ac7b3a9f055c78b6b9ad8c7442b354d6380e046bda9e1ebc8ad8e4c9",
+    "VortexArena.dll": "07651dbac8a2e4a881f096b156e52104aa28ae020fca7ba0464c0d7b752f978b"
+  }
+}

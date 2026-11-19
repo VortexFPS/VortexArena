@@ -67,6 +67,21 @@ public class BindsTests
     }
 
     [Fact]
+    public void RadarAlias_DispatchesOppositeEdges_WhileBareAliasRunsOnce()
+    {
+        var commands = new List<string>();
+        BindTable.Bind("M", "+hud_panel_radar_maximized");
+        BindTable.Bind("N", "hud_panel_radar_maximized");
+
+        BindTable.HandleBind("M", true, commands.Add);
+        BindTable.HandleBind("M", false, commands.Add);
+        BindTable.HandleBind("N", true, commands.Add);
+        BindTable.HandleBind("N", false, commands.Add);
+
+        Assert.Equal(new[] { "+hud_panel_radar_maximized", "-hud_panel_radar_maximized", "hud_panel_radar_maximized" }, commands);
+    }
+
+    [Fact]
     public void Opposed_Strafe_Cancels_To_Zero()
     {
         BindTable.Bind("A", "+moveleft");

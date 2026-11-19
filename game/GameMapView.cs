@@ -26,6 +26,12 @@ public static class GameMapView
     /// </summary>
     public static IReadOnlySet<int>? ComputeDroppedSubmodels(BspData bsp, string gametype)
     {
+        IReadOnlySet<int> dropped = MapEntityFilter.DroppedSubmodels(bsp, GametypeContext(bsp, gametype));
+        return dropped.Count == 0 ? null : dropped;
+    }
+
+    public static MapEntityFilter.GametypeContext GametypeContext(BspData bsp, string gametype, bool embedded = false)
+    {
         string shortName = string.IsNullOrWhiteSpace(gametype) ? "dm" : gametype.Trim();
 
         // teamplay: the active gametype's team flag (QC GAMETYPE_FLAG_TEAMPLAY → teamplay). DM / unknown = FFA.
@@ -35,7 +41,8 @@ public static class GameMapView
         // have_team_spawns: does the map ship team-tagged spawn points? (QC have_team_spawns > 0 — set when any
         // info_player_* carries a non-zero "team"). Only meaningful in team games; cheap to compute regardless.
         bool haveTeamSpawns = false;
-        foreach (IReadOnlyDictionary<string, string> ent in bsp.Entities)
+        var entities = embedded ? bsp.EmbeddedEntities ?? bsp.Entities : bsp.Entities;
+        foreach (IReadOnlyDictionary<string, string> ent in entities)
         {
             if (!ent.TryGetValue("classname", out string? cn) || cn is null ||
                 !cn.StartsWith("info_player_", System.StringComparison.Ordinal))
@@ -48,8 +55,6 @@ public static class GameMapView
             }
         }
 
-        var ctx = new MapEntityFilter.GametypeContext(shortName, teamplay, haveTeamSpawns);
-        IReadOnlySet<int> dropped = MapEntityFilter.DroppedSubmodels(bsp, ctx);
-        return dropped.Count == 0 ? null : dropped;
+        return new MapEntityFilter.GametypeContext(shortName, teamplay, haveTeamSpawns);
     }
 }

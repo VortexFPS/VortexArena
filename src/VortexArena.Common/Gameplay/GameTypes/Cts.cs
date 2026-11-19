@@ -79,10 +79,14 @@ public sealed class Cts : GameType
         public bool Running;
 
         /// <summary>QC <c>.race_checkpoint</c>: index of the next checkpoint this runner must cross (-1 = none yet,
-        /// must re-cross the start). CTS in the port is a single start→stop course with no intermediate checkpoints,
-        /// so this only takes -1 (fresh attempt) / 0 (started); it mirrors race_PreparePlayer's checkpoint reset.</summary>
+        /// must cross the start).</summary>
         public int NextCheckpoint = -1;
+        internal int LastCheckpoint = -1;
+
+        public readonly Dictionary<int, CheckpointSplit> BestSplits = new();
     }
+
+    public readonly record struct CheckpointSplit(float Time, float Speed, string Name);
 
     private readonly Dictionary<Player, CtsState> _states = new();
 
@@ -108,6 +112,8 @@ public sealed class Cts : GameType
 
     /// <summary>This gametype's record-DB type segment (QC CTS_RECORD).</summary>
     public string RecordType => RaceRecords.CtsRecord;
+
+    public Func<Player, bool>? UidConsentProvider;
 
     /// <summary>
     /// The host's finish-retract hook (QC Race_FinalCheckpoint's <c>g_cts_finish_kill_delay</c> ClientKill_Silent):
@@ -137,11 +143,195 @@ public sealed class Cts : GameType
     /// <summary>The start/stop timer trigger entities on the map (QC g_race_targets).</summary>
     public readonly List<Entity> Timers = new();
 
-    public override void OnInit()
+    public readonly List<Entity> Checkpoints = new();
+    private readonly Dictionary<int, CheckpointSplit> _bestSplits = new();
+    public IReadOnlyDictionary<int, CheckpointSplit> BestSplits => _bestSplits;
+
+    public override void OnInit() => ClearCourse();
+
+    public void ClearCourse()
     {
-        // QC: the start/stop timers are spawned from the map's target_startTimer / target_stopTimer entities
-        // (see SpawnStartTimer / SpawnStopTimer). CTS_RECORD persistence is a server-DB concern.
         Timers.Clear();
+        Checkpoints.Clear();
+        _bestSplits.Clear();
+        foreach (CtsState state in _states.Values)
+        {
+            AbandonRun(state);
+            state.BestSplits.Clear();
+        }
+    }
+
+    /// <summary>Keep the authored entity so its brush volume, targetname and outgoing targets remain intact.</summary>
+    public void RegisterCourseEntity(Entity e)
+    {
+        e.GtIsStartTimer = e.ClassName == "target_startTimer";
+        e.GtIsStopTimer = e.ClassName == "target_stopTimer";
+        bool numbered = e.ClassName == "trigger_race_checkpoint";
+        e.GtCheckpointIndex = numbered ? e.Cnt : e.GtIsStartTimer ? 0 : -2;
+        if (e.GtIsStartTimer || e.GtIsStopTimer)
+            Timers.Add(e);
+        else
+            Checkpoints.Add(e);
+
+        e.Use = (self, actor) =>
+        {
+            if (MapMover.CurrentUseTrigger?.ClassName != "info_player_deathmatch" && actor is Player p && !p.IsDead)
+                PassCheckpoint(self, p);
+        };
+        MapMover.IndexRegister(e);
+        if (numbered || string.IsNullOrEmpty(e.TargetName))
+        {
+            MapMover.InitTrigger(e);
+            if (string.IsNullOrEmpty(e.Model) && e.Mins == e.Maxs)
+            {
+                var halfSize = new Vector3(48f);
+                Api.Entities.SetSize(e, -halfSize, halfSize);
+            }
+            if ((e.SpawnFlags & 1) == 0)
+                e.Touch = (self, other) =>
+                {
+                    if (other is Player p && !p.IsDead)
+                        PassCheckpoint(self, p);
+                };
+        }
+    }
+
+    /// <summary>Apply a valid Xonotic .defragcp order. Unlisted gates learn their index on first crossing.</summary>
+    public void LoadCheckpointOrder(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
+        var order = new Dictionary<string, int>(System.StringComparer.Ordinal);
+        foreach (string line in text.Split('\n'))
+        {
+            string[] fields = line.Split((char[]?)null, System.StringSplitOptions.RemoveEmptyEntries);
+            if (fields.Length == 0)
+                continue;
+            if (fields.Length != 2 || !int.TryParse(fields[1], out int index) || index is < 1 or >= 255
+                || (order.TryGetValue(fields[0], out int previous) && previous != index))
+                return;
+            order[fields[0]] = index;
+        }
+
+        foreach (Entity checkpoint in Checkpoints)
+            if (checkpoint.ClassName == "target_checkpoint" && order.TryGetValue(checkpoint.TargetName, out int index))
+                checkpoint.GtCheckpointIndex = index;
+    }
+
+    private int FinishCheckpoint()
+    {
+        int highest = 0;
+        bool defrag = Timers.Count > 0;
+        bool timed = false;
+        foreach (Entity cp in Checkpoints)
+        {
+            if (cp.IsFreed)
+                continue;
+            defrag |= cp.ClassName == "target_checkpoint";
+            if (cp.GtCheckpointIndex > highest)
+            {
+                highest = cp.GtCheckpointIndex;
+                timed = (cp.SpawnFlags & 8) != 0;
+            }
+            else if (cp.GtCheckpointIndex == highest && (cp.SpawnFlags & 8) != 0)
+                timed = true;
+        }
+        if (defrag)
+            return highest > 0 || !Checkpoints.Exists(cp => !cp.IsFreed) ? highest + 1 : 255;
+        return timed ? highest : 0;
+    }
+
+    public bool IsNextCheckpoint(Entity e, CtsState state)
+    {
+        if (e.IsFreed || e.Touch is null)
+            return false;
+        int expected = state.NextCheckpoint < 0 ? 0 : state.NextCheckpoint;
+        if (e.GtIsStopTimer)
+            return expected == FinishCheckpoint();
+        return e.GtCheckpointIndex == expected || (e.GtCheckpointIndex == -2 && expected is > 0 and < 255);
+    }
+
+    private void PassCheckpoint(Entity checkpoint, Player player)
+    {
+        CtsState state = GetState(player);
+        int expected = state.NextCheckpoint < 0 ? 0 : state.NextCheckpoint;
+        bool orderedTargets = (checkpoint.SpawnFlags & 2) != 0;
+        if (!orderedTargets)
+            FireCheckpointTargets(checkpoint, player);
+
+        int index = checkpoint.GtCheckpointIndex;
+        if (index == -2 && !checkpoint.GtIsStopTimer && state.Running && expected is > 0 and < 255)
+        {
+            index = expected;
+            if (!string.IsNullOrEmpty(checkpoint.TargetName))
+                foreach (Entity cp in Checkpoints)
+                    if (cp.ClassName == "target_checkpoint" && cp.TargetName == checkpoint.TargetName
+                        && cp.GtCheckpointIndex > 0)
+                        index = cp.GtCheckpointIndex;
+
+            checkpoint.GtCheckpointIndex = index;
+            if (!string.IsNullOrEmpty(checkpoint.TargetName))
+                foreach (Entity cp in Checkpoints)
+                    if (cp.ClassName == "target_checkpoint" && cp.TargetName == checkpoint.TargetName)
+                        cp.GtCheckpointIndex = index;
+        }
+
+        int finish = FinishCheckpoint();
+        if (checkpoint.GtIsStopTimer)
+            index = finish;
+        if (index != expected)
+        {
+            // The collision loop can touch the last gate on consecutive frames.
+            if (index != state.LastCheckpoint && (checkpoint.SpawnFlags & 4) != 0)
+                Combat.Damage(player, checkpoint, checkpoint, 10000f, DeathTypes.Void, player.Origin, Vector3.Zero);
+            return;
+        }
+
+        if (orderedTargets)
+            FireCheckpointTargets(checkpoint, player);
+        if (index == finish && state.Running)
+        {
+            FinishStage(player);
+            // On a numbered circuit checkpoint zero ends this lap and starts the next.
+            if (index == 0)
+                StartTimer(player);
+            return;
+        }
+        if (index == 0)
+        {
+            StartTimer(player);
+            return;
+        }
+
+        state.LastCheckpoint = index;
+        state.NextCheckpoint = !HasStopTimer && finish == 0 && !Checkpoints.Exists(cp => cp.GtCheckpointIndex > index)
+            ? 0
+            : index + 1;
+        float time = GS.TimeDecode(GS.TimeEncode(RunTime(state, Api.Clock.Time)));
+        if (time <= 0f)
+            return;
+        var split = new CheckpointSplit(time, new Vector2(player.Velocity.X, player.Velocity.Y).Length(), player.NetName);
+        if (!state.BestSplits.TryGetValue(index, out CheckpointSplit personalBest) || time < personalBest.Time)
+            state.BestSplits[index] = split;
+        if (!_bestSplits.TryGetValue(index, out CheckpointSplit serverBest) || time < serverBest.Time)
+            _bestSplits[index] = split;
+    }
+
+    private bool HasStopTimer => Timers.Exists(timer => timer.GtIsStopTimer && !timer.IsFreed);
+
+    private static void FireCheckpointTargets(Entity checkpoint, Player player)
+    {
+        string message = checkpoint.Message;
+        checkpoint.Message = "";
+        try
+        {
+            MapMover.UseTargets(checkpoint, player, player);
+        }
+        finally
+        {
+            checkpoint.Message = message;
+        }
     }
 
     /// <summary>
@@ -311,7 +501,9 @@ public sealed class Cts : GameType
         st.MoveTimeCount = 0f;
         st.RaceMoveTime = 0f;
         st.Running = true;
-        st.NextCheckpoint = 0; // QC: crossing the start (cp 0) advances race_checkpoint past -1.
+        st.LastCheckpoint = 0;
+        st.NextCheckpoint = Timers.Count == 0 && Checkpoints.Count > 0
+            && Checkpoints.TrueForAll(cp => cp.GtCheckpointIndex == 0) ? 0 : 1;
     }
 
     /// <summary>
@@ -322,17 +514,19 @@ public sealed class Cts : GameType
     public float FinishStage(Player p)
     {
         CtsState st = GetState(p);
-        if (st.RunStartTime <= 0f && !st.Running)
-            return 0f; // run never started
+        if (!st.Running || (Checkpoints.Count > 0 && st.NextCheckpoint != FinishCheckpoint()))
+            return 0f;
 
         float now = Api.Services is not null ? Api.Clock.Time : 0f;
         // QC race.qc:813: race_SendTime(player, cp, player.race_movetime, ...) — the run time IS the frame-accumulated
         // .race_movetime, NOT a wall-clock delta. Use it when the physics accumulator has run (the live path); fall
         // back to the wall-clock delta only when no physics frames advanced the accumulator (e.g. a unit harness that
         // touches start→stop directly without driving OnPlayerPhysics), so the existing end-to-end tests still hold.
-        float runTime = st.RaceMoveTime > 0f ? st.RaceMoveTime : now - st.RunStartTime;
+        float runTime = RunTime(st, now);
         st.RunStartTime = 0f;
         st.Running = false;
+        st.NextCheckpoint = -1;
+        st.LastCheckpoint = -1;
         if (runTime <= 0f)
             return 0f;
 
@@ -358,15 +552,28 @@ public sealed class Cts : GameType
         // matching INFO_RACE_* notification. CTS forces g_race_qualifying=1, so the QC race_SendTime finish branch
         // always runs race_setTime → race_SendStatus for a CTS finish, exactly as for a qualifying Race lap.
         string uid = p.PersistentId;
-        LastRecord = RaceRecords.SetTime(MapName, RecordType, runTime, uid, p.NetName);
         LastRecordPlayer = p;
         LastRecordTime = now;
-        SendRecordNotification(p, runTime, uid, LastRecord);
+        if (uid.Length != 0 && UidConsentProvider?.Invoke(p) == false
+            && RaceRecords.WouldBeNewRecord(MapName, RecordType, runTime, uid))
+        {
+            LastRecord = new RaceRecordResult(RaceRecordKind.Fail, 0, 0, 0f, "");
+            if (Api.Services is not null)
+                NotificationSystem.Info("RACE_NEW_MISSING_NAME", p.NetName, Scoring.GameScores.TimeEncode(runTime));
+        }
+        else
+        {
+            LastRecord = RaceRecords.SetTime(MapName, RecordType, runTime, uid, p.NetName);
+            SendRecordNotification(p, runTime, uid, LastRecord);
+        }
 
         // QC Race_FinalCheckpoint: schedule the kill-delay re-teleport back to the start.
         ScheduleRetract(p, now);
         return runTime;
     }
+
+    private static float RunTime(CtsState state, float now) =>
+        state.RaceMoveTime > 0f ? state.RaceMoveTime : now - state.RunStartTime;
 
     /// <summary>
     /// QC race_setTime's <c>showmessage</c> branch (server/race.qc:373): fire the right INFO_RACE_* line for the
@@ -456,6 +663,8 @@ public sealed class Cts : GameType
         st.MoveTimeFrac = 0f;
         st.MoveTimeCount = 0f;
         st.RaceMoveTime = 0f;
+        st.NextCheckpoint = -1;
+        st.LastCheckpoint = -1;
     }
 
     /// <summary>
@@ -469,6 +678,7 @@ public sealed class Cts : GameType
     public void ResetMapGlobal(System.Collections.Generic.IReadOnlyList<Player> players)
     {
         _retractAt.Clear(); // cancel all pending kill-delay re-teleports
+        _bestSplits.Clear();
         for (int i = 0; i < players.Count; i++)
             AbandonRun(GetState(players[i])); // QC race_PreparePlayer: no run in progress (run clock zeroed)
 
@@ -566,7 +776,7 @@ public sealed class Cts : GameType
 
             // QC race_checkAndWriteName: keep the uid→display-name DB current (gated on the consent cvars in QC;
             // the port models consent as a non-empty PersistentId).
-            if (!string.IsNullOrEmpty(p.PersistentId))
+            if (!string.IsNullOrEmpty(p.PersistentId) && UidConsentProvider?.Invoke(p) != false)
                 RaceRecords.SetName(p.PersistentId, p.NetName);
 
             // QC vdist(player.velocity - player.velocity_z * '0 0 1', >, speedaward_speed): planar speed only.
@@ -633,7 +843,6 @@ public sealed class Cts : GameType
         // QC race_PreparePlayer(player); player.race_checkpoint = -1; — drop any in-progress run + reset the checkpoint.
         CtsState st = GetState(p);
         AbandonRun(st);
-        st.NextCheckpoint = -1;
         return false;
     }
 
@@ -705,19 +914,9 @@ public sealed class Cts : GameType
         // mid-run map-weapon pickups are kept, matching Base — see ForbidThrow/Drop + FilterItem for the rest.)
         ForceShotgunOnly(player);
 
-        // QC race_PreparePlayer + `player.race_place = 0` (sv_cts.qc PlayerSpawn): a fresh stage attempt — the
-        // runner must re-cross the start timer to (re)stamp the run clock, so any stale in-progress run is dropped.
-        // (The full checkpoint bookkeeping — race_checkpoint=-1, respawn-spotref — is part of the intermediate-
-        // checkpoint subsystem CTS doesn't model; the run-timer reset is the meaningful part for a start→stop course.)
+        // QC race_PreparePlayer: start a new attempt at checkpoint zero.
         if (player is Player rp)
-        {
-            CtsState rst = GetState(rp);
-            AbandonRun(rst);
-            // QC race_PreparePlayer (race.qc:679-681): race_checkpoint = -1 — the runner must re-cross the start
-            // (cp 0) before any progress counts. CTS has no intermediate checkpoints in the port, so this is the only
-            // checkpoint state that matters; tracking it on the CTS state keeps a future checkpoint port consistent.
-            rst.NextCheckpoint = -1;
-        }
+            AbandonRun(GetState(rp));
 
         return false;
     }

@@ -1,0 +1,26 @@
+[
+  {
+    "seconds": 16.116,
+    "frame": "BlueProbe/0026.webp",
+    "sample": 15.944,
+    "label": "build"
+  },
+  {
+    "seconds": 24.623,
+    "frame": "BlueProbe/0067.webp",
+    "sample": 24.443,
+    "label": "cracked"
+  },
+  {
+    "seconds": 31.866,
+    "frame": "BlueProbe/0107.webp",
+    "sample": 31.751,
+    "label": "repaired"
+  },
+  {
+    "seconds": 36.947,
+    "frame": "BlueProbe/0130.webp",
+    "sample": 36.448,
+    "label": "neutral-reset"
+  }
+]

@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using VortexArena.Game;
+using VortexArena.Common.Gameplay;
+using VortexArena.Common.Services;
 using NVec3 = System.Numerics.Vector3;
 
 namespace VortexArena.Game.Client;
@@ -10,15 +11,14 @@ namespace VortexArena.Game.Client;
 /// Model gibs — the real limb/chunk meshes a player throws when gibbed, instead of a generic particle
 /// burst. The C# successor to CSQC's gibs.qc (the <c>net_gibsplash</c> handler + TossGib / Gib_Draw):
 /// a gib splash of "type 1" tosses an eye, a bloody skull, then per-amount a spray of arms, chests, legs and
-/// fast-flying chunks, each a bouncing MOVETYPE_BOUNCE body. Physics (gravity + ground bounce + tumble) are
-/// integrated client-side, exactly as the QC gib is a pure client drawable advanced by
-/// Movetype_Physics_MatchTicrate.
+/// fast-flying chunks, each a bouncing MOVETYPE_BOUNCE body. Model gibs and Raptor fragments advance
+/// fixed client tics against the map collision world and draw the remaining fraction separately.
 ///
 /// (zero-hitch 2026-08-03) STRUCT-ARRAY SIM + MULTIMESH RENDER — the ShellCasings recipe. The previous
 /// shape was one <c>GibBody : Node3D</c> per gib: at the 64 cap that is 64 scene nodes each with its own
 /// <c>_PhysicsProcess</c> native callback, 64 render objects/draws, and a slaughter's spawn/QueueFree churn
 /// burst (part of the draw-count spikes + unscoped/post-process hitch classes in the release captures).
-/// Now the ballistics live in ONE struct pool advanced by ONE <c>_PhysicsProcess</c>, rendered as one
+/// The ballistics advance in one render callback and draw through one
 /// fixed-capacity <see cref="MultiMesh"/> batch PER DISTINCT GIB MODEL (~10 total: the limb set, eye,
 /// skull, chunk, the raptor shellfrag) — buffers sized once and never resized, zero per-gib nodes, zero
 /// steady-state allocation.
@@ -29,25 +29,31 @@ namespace VortexArena.Game.Client;
 /// </summary>
 public sealed partial class ModelGibs : Node3D
 {
-    /// <summary>Gib lifetime seconds (DP cl_gibs_lifetime default 14, trimmed so they don't pile up).</summary>
-    [Export] public float GibLifetime { get; set; } = 8f;
+    /// <summary>Lifetime in seconds when the client has no cl_gibs_lifetime setting.</summary>
+    [Export] public float GibLifetime { get; set; } = 2.5f;
 
-    /// <summary>Hard cap on live gibs (DP cl_gibs_maxcount). Also each model batch's fixed capacity.</summary>
-    [Export] public int MaxGibs { get; set; } = 64;
+    /// <summary>Fallback live gib limit when no client cvar is available.</summary>
+    [Export] public int MaxGibs { get; set; } = 100;
+
+    internal ICvarService? Cvars { get; init; }
+    internal DebrisTrace? WorldTrace { get; set; }
 
     /// <summary>Host model loader (e.g. <c>AssetLoader.LoadModel</c>); null =&gt; generated placeholder chunks.</summary>
     public Func<string, Node3D?>? ModelLoader { get; set; }
+    internal Func<string, int, Node3D?>? SkinnedModelLoader { get; set; }
 
     // The MD3 limb models a normal (type 0x01) gib splash tosses (gibs.qc). The fast chunk.mdl is a Quake1 MDL.
-    private static readonly string[] LimbModels =
+    private static readonly (string Path, float Height, float BaseSpeed)[] LimbModels =
     {
-        "models/gibs/arm.md3",
-        "models/gibs/arm.md3",
-        "models/gibs/chest.md3",
-        "models/gibs/smallchest.md3",
-        "models/gibs/leg1.md3",
-        "models/gibs/leg2.md3",
+        ("models/gibs/arm.md3", 8f, 90f),
+        ("models/gibs/arm.md3", 8f, 90f),
+        ("models/gibs/chest.md3", 0f, 80f),
+        ("models/gibs/smallchest.md3", 0f, 80f),
+        ("models/gibs/leg1.md3", -5f, 85f),
+        ("models/gibs/leg2.md3", -5f, 85f),
     };
+    private static readonly string[] RobotFragments = Enumerable.Range(1, 8)
+        .Select(i => $"models/gibs/robo{i}.md3").ToArray();
 
     /// <summary>
     /// Every distinct gib model the client can ever spawn — the limb set plus the three
@@ -62,37 +68,35 @@ public sealed partial class ModelGibs : Node3D
     {
         var all = new List<string>(LimbModels.Length + 3);
         void Add(string p) { if (!all.Contains(p, StringComparer.OrdinalIgnoreCase)) all.Add(p); }
-        foreach (string m in LimbModels) Add(m);
+        foreach (var limb in LimbModels) Add(limb.Path);
         Add("models/gibs/eye.md3");
         Add("models/gibs/bloodyskull.md3");
         Add("models/gibs/chunk.mdl");
+        Add("models/gibs/robo.md3");
+        foreach (string m in RobotFragments) Add(m);
         return all.ToArray();
     }
 
-    private const float Gravity = 800f;       // sv_gravity; gibs use gravity 1 (full)
-    private const float BounceFactor = 0.4f;  // gib bouncefactor-ish
+    private const float BounceFactor = 0.5f;  // QC MOVETYPE_BOUNCE default
+    // Maximum gibbage on the stock wire, multiplied by EKG.
+    internal const float MaxSplashAmount = 5f * 255f / 16f;
+    private static readonly NVec3 GibHalfSize = new(8f);
     private const float SinkDepth = 16f;      // Quake units the gib settles into the floor over its fade window
 
     /// <summary>One simulated gib (pure data — no node, no allocation).</summary>
     private struct Gib
     {
-        public bool Active;
         public int BatchIdx;         // which model batch renders it
-        public uint Seq;             // spawn order (oldest = lowest; the cap evicts by this)
-        public NVec3 PosQuake;
-        public NVec3 Vel;            // Quake space
-        public Basis Rot;            // accumulated tumble (Godot space)
-        public Vector3 AngularVel;   // rad/s per local axis (QC avelocity semantics preserved below)
-        public float Lifetime, FloorZ, Age;
-        public float GravityScale;   // QC .gravity (raptor shellfrags: 0.15)
-        public float AngularJitter;  // QC RaptorCBShellfragDraw: avelocity += randomvec()*15 per draw
-        public float FadeDuration;   // the sink window before death (was the alpha-fade window)
-        public bool DestroyOnTouch;  // chunk.mdl-style: splat on first ground contact
-        public bool Resting;
+        public DebrisMotion Motion;
+        public double Age;
+        public float Lifetime, FloorZ, GravityScale;
+        public bool DestroyOnTouch;
+        public uint FragmentRandom; // Per-fragment jitter state, advanced only on committed tics.
     }
 
-    private Gib[] _pool = Array.Empty<Gib>();
-    private uint _spawnSeq;
+    private readonly RubblePool<Gib> _pool = new();
+    private readonly RubblePool<Gib> _shellfrags = new();
+    private const int ShellfragLimit = 64;
 
     /// <summary>One MultiMesh batch per distinct gib model (mesh/material resolved once via SharedMeshCache).</summary>
     private sealed class Batch
@@ -104,58 +108,89 @@ public sealed partial class ModelGibs : Node3D
     }
 
     private readonly List<Batch> _batches = new();
-    private readonly Dictionary<string, int> _batchByModel = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<(string Model, int Skin), int> _batchByModel = new();
     private int[] _packCounts = Array.Empty<int>();   // per-batch pack cursor, reused each frame
 
     /// <summary>
     /// Spawn a full gib splash at <paramref name="origin"/> (Quake space) with base <paramref name="velocity"/>,
-    /// scaled by <paramref name="amount"/> (the QC gibbage multiplier, ~1..15). Bounces off the ground plane at
-    /// <paramref name="floorZ"/>. This is the type 0x01 ("full") splash; lesser types fall out as a few chunks.
+    /// scaled by <paramref name="amount"/> after the client's gib settings. The ground plane at
+    /// <paramref name="floorZ"/> is available when there is no map tracer.
     /// </summary>
-    public void Splash(NVec3 origin, NVec3 velocity, float amount = 4f, float floorZ = float.NegativeInfinity)
+    public void Splash(NVec3 origin, NVec3 velocity, float amount = 4f, float floorZ = float.NegativeInfinity,
+        ModelSpecies species = ModelSpecies.Human)
     {
-        amount = Math.Clamp(amount, 1f, 16f);
-
-        // Always toss an eye and a bloody skull (QC tosses these unconditionally with prandom gates).
-        Toss("models/gibs/eye.md3", origin, velocity, RandomVec() * 150f, floorZ, destroyOnTouch: false);
-        Toss("models/gibs/bloodyskull.md3", origin + RandomVec() * 16f, velocity, RandomVec() * 100f, floorZ, false);
+        if (!(amount > 0f) || !float.IsFinite(amount))
+            return;
+        // The stock wire carries at most 255/16 units; EKG multiplies the received amount by five.
+        amount = Math.Min(amount, MaxSplashAmount);
+        if (GibRandom() < amount)
+            Toss("models/gibs/eye.md3", origin, velocity, RandomGibVector() * 150f, floorZ, false, origin, species);
+        if (GibRandom() < amount)
+            Toss("models/gibs/bloodyskull.md3", origin + RandomGibVector() * 16f, velocity, RandomGibVector() * 100f, floorZ, false, origin, species);
 
         // Per the QC loop: for c in 0..amount, gate each limb on (amount-c) so early iterations spawn more.
         for (int c = 0; c < amount; c++)
         {
             float randomValue = amount - c;
-            foreach (string mdl in LimbModels)
+            foreach (var limb in LimbModels)
             {
-                if (GD.Randf() < randomValue)
+                if (GibRandom() < randomValue)
                 {
-                    NVec3 jitter = RandomVec() * 16f + new NVec3(0f, 0f, 4f);
-                    Toss(mdl, origin + jitter, velocity, RandomVec() * (GD.Randf() * 120f + 85f), floorZ, false);
+                    NVec3 jitter = RandomGibVector() * 16f + new NVec3(0f, 0f, limb.Height);
+                    Toss(limb.Path, origin + jitter, velocity, RandomGibVector() * (GibRandom() * 120f + limb.BaseSpeed), floorZ, false, origin, species);
                 }
             }
             // Fast chunks that splat on impact (the real Quake1 chunk.mdl).
             for (int k = 0; k < 4; k++)
-                if (GD.Randf() < randomValue)
-                    Toss("models/gibs/chunk.mdl", origin + RandomVec() * 16f, velocity, RandomVec() * 450f, floorZ, destroyOnTouch: true);
+                if (GibRandom() < randomValue)
+                    Toss("models/gibs/chunk.mdl", origin + RandomGibVector() * 16f, velocity, RandomGibVector() * 450f, floorZ, true, origin, species);
         }
+    }
+
+    public void ImpactChunk(NVec3 origin, NVec3 velocity, float amount, ModelSpecies species)
+    {
+        // Type 3 tests probability once. EKG can make the toss certain, but never adds chunks per event.
+        if (GibRandom() < amount)
+            Toss("models/gibs/chunk.mdl", origin, velocity, RandomGibVector() * (GibRandom() * 30f + 20f),
+                float.NegativeInfinity, true, origin, species);
     }
 
     /// <summary>Toss one gib of the given model. Public so callers can drop a single gib (e.g. a chunk).
     /// Returns this node (legacy signature — gibs no longer have per-spawn nodes).</summary>
     public Node3D Toss(string modelPath, NVec3 origin, NVec3 baseVel, NVec3 randVel, float floorZ, bool destroyOnTouch)
+        => Toss(modelPath, origin, baseVel, randVel, floorZ, destroyOnTouch, origin);
+
+    private Node3D Toss(string modelPath, NVec3 origin, NVec3 baseVel, NVec3 randVel, float floorZ,
+        bool destroyOnTouch, NVec3 safeOrigin, ModelSpecies species = ModelSpecies.Human)
     {
-        // QC: velocity = vconst*velocity_scale + vrand*velocity_random + up. We fold the cvars into sane
-        // constants (scale 1, random 1, up 100) so it reads like the default config.
-        NVec3 vel = baseVel + randVel + new NVec3(0f, 0f, 100f);
-        ref Gib g = ref AllocSlot(modelPath);
-        g.PosQuake = origin;
-        g.Vel = vel;
-        g.Lifetime = GibLifetime * (1f + GD.Randf() * 0.15f);
-        g.FloorZ = floorZ;
-        g.DestroyOnTouch = destroyOnTouch;
-        g.GravityScale = 1f;
-        g.AngularJitter = 0f;
-        g.FadeDuration = 1f;   // QC gibs fade over their last second — now the sink window
-        g.AngularVel = RandomVecG() * (vel.Length() * 0.02f);
+        int limit = RubblePool<Gib>.ReadLimit(Cvars, "cl_gibs_maxcount", MaxGibs);
+        if (!_pool.TrySpawn(limit, out int slot))
+            return this;
+        NVec3 vel = baseVel * Cvar("cl_gibs_velocity_scale", 0.5f)
+            + randVel * Cvar("cl_gibs_velocity_random", 2f)
+            + NVec3.UnitZ * Cvar("cl_gibs_velocity_up", 1f);
+        if (origin != safeOrigin && WorldTrace is not null)
+            origin = WorldTrace(safeOrigin, origin, GibHalfSize).EndPos;
+
+        int skin = (int)species;
+        if ((species is ModelSpecies.RobotRusty or ModelSpecies.RobotShiny)
+            || (species == ModelSpecies.RobotSolid && modelPath == "models/gibs/chunk.mdl"))
+        {
+            modelPath = modelPath == "models/gibs/bloodyskull.md3"
+                ? "models/gibs/robo.md3"
+                : RobotFragments[GD.Randi() % (uint)RobotFragments.Length];
+            skin = species == ModelSpecies.RobotShiny ? 1 : 0;
+        }
+
+        _pool[slot] = new Gib
+        {
+            BatchIdx = EnsureBatch(modelPath, skin),
+            Motion = new DebrisMotion(origin, vel, RandomGibVector() * vel.Length() * Cvar("cl_gibs_avelocity_scale", 1f)),
+            Lifetime = Cvar("cl_gibs_lifetime", GibLifetime) * (1f + GibRandom() * 0.15f),
+            FloorZ = floorZ,
+            DestroyOnTouch = destroyOnTouch,
+            GravityScale = 1f,
+        };
         return this;
     }
 
@@ -163,7 +198,7 @@ public sealed partial class ModelGibs : Node3D
     /// Toss the raptor cluster-bomb shell-fragment gibs (QC <c>RaptorCBShellfragToss</c> /
     /// <c>RaptorCBShellfragDraw</c>, raptor_weapons.qc:244-284, dispatched from the DEATH_VH_RAPT_FRAGMENT burst
     /// FX in damageeffects.qc:353-360). Three bouncing <c>clusterbomb_fragment.md3</c> drawables thrown outward
-    /// from the burst point: gravity 0.15, an avelocity = ±|velocity| seed plus a per-frame ±15 tumble jitter,
+    /// from the burst point: gravity 0.15, a ±|velocity| spin seed and ongoing tumble jitter,
     /// a 3s lifetime that settles over its final second (QC cnt = time+2, nextthink = time+3). Pure cosmetic
     /// debris — <paramref name="origin"/>/<paramref name="bombVel"/> are Quake space (the bursting bomb's pose).
     /// </summary>
@@ -174,148 +209,112 @@ public sealed partial class ModelGibs : Node3D
             // QC damageeffects.qc: vel = normalize(w_org - (w_org + force_dir*16)) + randomvec()*128. We lack the
             // surface backoff (force_dir) headless, so seed a small outward/upward bias + the dominant random spray.
             NVec3 vel = new NVec3(0f, 0f, 0.4f) + RandomVec() * 128f;
-            ref Gib g = ref AllocSlot("models/vehicles/clusterbomb_fragment.md3");
-            g.PosQuake = origin;
-            g.Vel = vel;
-            g.GravityScale = 0.15f;                     // QC sfrag.gravity = 0.15
-            g.Lifetime = 3f;                            // QC sfrag.nextthink = time + 3
-            g.FadeDuration = 1f;                        // QC cnt = time + 2 → settles over the final second
-            g.FloorZ = float.NegativeInfinity;
-            g.DestroyOnTouch = false;
-            // QC: avelocity = prandomvec() * vlen(velocity); plus a +15/draw jitter (AngularJitter).
-            g.AngularVel = RandomVecG() * vel.Length();
-            g.AngularJitter = 15f;
+            _shellfrags.TrySpawn(ShellfragLimit, out int slot);
+            _shellfrags[slot] = new Gib
+            {
+                BatchIdx = EnsureBatch("models/vehicles/clusterbomb_fragment.md3"),
+                Motion = new DebrisMotion(origin, vel, RandomVec() * vel.Length()),
+                GravityScale = 0.15f,
+                Lifetime = 3f,
+                FloorZ = float.NegativeInfinity,
+                FragmentRandom = GD.Randi() | 1u,
+            };
         }
     }
 
-    /// <summary>Claim a pool slot for one gib of <paramref name="modelPath"/> (evicting the oldest when
-    /// full — DP cl_gibs_maxcount) and stamp the shared fields; the caller fills the rest.</summary>
-    private ref Gib AllocSlot(string modelPath)
+    public override void _Process(double delta)
     {
-        if (_pool.Length == 0)
-            _pool = new Gib[Math.Max(1, MaxGibs)];
+        double dt = delta * ClientRenderTime.Scale;
+        if (dt <= 0.0)
+            return;
 
-        int slot = -1;
-        uint oldest = uint.MaxValue; int oldestIdx = 0;
-        for (int i = 0; i < _pool.Length; i++)
-        {
-            if (!_pool[i].Active) { slot = i; break; }
-            if (_pool[i].Seq < oldest) { oldest = _pool[i].Seq; oldestIdx = i; }
-        }
-        if (slot < 0) slot = oldestIdx;
-
-        ref Gib g = ref _pool[slot];
-        g.Active = true;
-        g.Seq = ++_spawnSeq;
-        g.BatchIdx = EnsureBatch(modelPath);
-        g.Rot = Basis.Identity;
-        g.Age = 0f;
-        g.Resting = false;
-        return ref g;
-    }
-
-    /// <summary>ONE physics callback for every live gib (was one per gib). Advances the pool, then packs the
-    /// per-model MultiMesh instance transforms.</summary>
-    public override void _PhysicsProcess(double delta)
-    {
-        // #30 slowmo/pause: gib tosses are Base CSQC (cl.time-driven) — scale like the casings so gibs
-        // hang frozen at slowmo 0 instead of settling on wall clock.
-        float dt = VortexArena.Game.Client.ClientRenderTime.ScaleDelta((float)delta);
-        if (dt <= 0f)
-            return; // paused — hold everything in place
-
-        bool any = false;
-        for (int i = 0; i < _pool.Length; i++)
-            if (_pool[i].Active) { any = true; break; }
-        if (!any)
+        if (_pool.IsEmpty && _shellfrags.IsEmpty)
         {
             for (int b = 0; b < _batches.Count; b++)
                 if (_batches[b].Visible != 0) { _batches[b].Mesh.VisibleInstanceCount = 0; _batches[b].Visible = 0; }
             return;
         }
 
-        using var _scope = VortexArena.Game.Client.FrameProfiler.Scope("gibs"); // house rule: per-frame node → scoped
+        using var _scope = FrameProfiler.Scope("gibs"); // house rule: per-frame node → scoped
 
         if (_packCounts.Length < _batches.Count)
             _packCounts = new int[_batches.Count];
         Array.Clear(_packCounts, 0, _packCounts.Length);
 
-        for (int i = 0; i < _pool.Length; i++)
-        {
-            ref Gib g = ref _pool[i];
-            if (!g.Active)
-                continue;
-
-            g.Age += dt;
-            if (g.Age >= g.Lifetime) { g.Active = false; continue; }
-
-            if (!g.Resting)
-            {
-                g.Vel.Z -= Gravity * g.GravityScale * dt;
-                // QC RaptorCBShellfragDraw: avelocity += randomvec() * 15 each draw — a continuous tumble jitter.
-                if (g.AngularJitter != 0f)
-                    g.AngularVel += RandomVecG() * (g.AngularJitter * dt);
-                NVec3 posQ = g.PosQuake + g.Vel * dt;
-
-                if (!float.IsNegativeInfinity(g.FloorZ) && posQ.Z <= g.FloorZ && g.Vel.Z < 0f)
-                {
-                    if (g.DestroyOnTouch)
-                    {
-                        // chunk.mdl-style: splat on first ground contact.
-                        g.Active = false;
-                        continue;
-                    }
-                    posQ.Z = g.FloorZ;
-                    g.Vel.Z = -g.Vel.Z * BounceFactor;
-                    g.Vel.X *= 0.6f;
-                    g.Vel.Y *= 0.6f;
-                    g.AngularVel *= 0.5f;
-                    if (g.Vel.Length() < 25f)
-                    {
-                        g.Resting = true;
-                        g.Vel = default;
-                    }
-                }
-                g.PosQuake = posQ;
-                // Tumble — the exact axis/component pairing of the old RotateObjectLocal calls (Up gets the
-                // avelocity Z component, Right gets X; the QC only ever spins these two).
-                g.Rot *= new Basis(Vector3.Up, g.AngularVel.Z * dt);
-                g.Rot *= new Basis(Vector3.Right, g.AngularVel.X * dt);
-            }
-
-            Batch b = _batches[g.BatchIdx];
-            int idx = _packCounts[g.BatchIdx]++;
-            if (idx >= MaxGibs)
-                continue;
-            // End-of-life corpse sink (see the class note): settle SinkDepth into the floor over FadeDuration.
-            float remaining = g.Lifetime - g.Age;
-            float sink = remaining < g.FadeDuration
-                ? (1f - Math.Clamp(remaining / Math.Max(0.001f, g.FadeDuration), 0f, 1f)) * SinkDepth : 0f;
-            Vector3 pos = Coords.ToGodot(g.PosQuake) + new Vector3(0f, -sink, 0f);
-            b.Mesh.SetInstanceTransform(idx, new Transform3D(g.Rot, pos) * b.BaseXform);
-        }
+        DebrisTiming timing = DebrisTiming.Read(Cvars, "cl_gibs_ticrate", "cl_gibs_sloppy", 0.1f);
+        PackGibs(_pool, dt, timing, GibHalfSize, removeOnNoImpact: true);
+        PackGibs(_shellfrags, dt, timing, NVec3.Zero, removeOnNoImpact: false);
 
         for (int b = 0; b < _batches.Count; b++)
         {
-            int want = Math.Min(_packCounts[b], MaxGibs);
+            int want = _packCounts[b];
             if (_batches[b].Visible != want) { _batches[b].Mesh.VisibleInstanceCount = want; _batches[b].Visible = want; }
         }
     }
 
-    // ------------------------------------------------------------------------------------------------
-    //  Batches + meshes
-    // ------------------------------------------------------------------------------------------------
-
-    private int EnsureBatch(string modelPath)
+    private void PackGibs(RubblePool<Gib> pool, double dt, DebrisTiming timing,
+        NVec3 halfSize, bool removeOnNoImpact)
     {
-        if (_batchByModel.TryGetValue(modelPath, out int idx))
+        for (int i = 0; i < pool.Length; i++)
+        {
+            if (!pool.IsActive(i))
+                continue;
+
+            ref Gib g = ref pool[i];
+            g.Age += dt;
+            if (g.Age >= g.Lifetime) { pool.Remove(i); continue; }
+
+            float gravity = timing.Gravity * g.GravityScale;
+            int steps = g.Motion.Schedule(dt, timing.Ticrate, out double step, out double remainder);
+            for (int j = 0; j < steps && !g.Motion.Resting; j++)
+            {
+                if (!g.Motion.Step((float)step, gravity, BounceFactor, g.FloorZ, halfSize,
+                    WorldTrace, g.DestroyOnTouch, removeOnNoImpact, removeInSolid: false, out _))
+                {
+                    pool.Remove(i);
+                    break;
+                }
+
+                // QC adds angular noise per draw. Sample at committed tics so the native tumble
+                // stays consistent across render rates, with an independent sequence per fragment.
+                if (g.FragmentRandom != 0 && !g.Motion.Resting)
+                {
+                    g.Motion.AngularVelocity += new NVec3(NextJitter(ref g.FragmentRandom),
+                        NextJitter(ref g.FragmentRandom), NextJitter(ref g.FragmentRandom)) * 15f;
+                }
+            }
+            if (!pool.IsActive(i))
+                continue;
+
+            Batch b = _batches[g.BatchIdx];
+            int idx = _packCounts[g.BatchIdx]++;
+            float remaining = (float)(g.Lifetime - g.Age);
+            float sink = (1f - Math.Clamp(remaining, 0f, 1f)) * SinkDepth;
+            Transform3D pose = g.Motion.Draw((float)remainder, gravity, timing.Sloppy, g.FloorZ,
+                halfSize, WorldTrace, flattenOnGround: false, sink, out _);
+            b.Mesh.SetInstanceTransform(idx, pose * b.BaseXform);
+        }
+    }
+
+    private static float NextJitter(ref uint state)
+    {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        return (state >> 8) * (2f / 16777216f) - 1f;
+    }
+
+    private int EnsureBatch(string modelPath, int skin = 0)
+    {
+        var key = (modelPath, skin);
+        if (_batchByModel.TryGetValue(key, out int idx))
             return idx;
-        (Mesh mesh, Material? mat, Transform3D baseXf) = ResolveMesh(modelPath);
+        (Mesh mesh, Material? mat, Transform3D baseXf) = ResolveMesh(modelPath, skin);
         var mm = new MultiMesh
         {
             TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
             Mesh = mesh,
-            InstanceCount = Math.Max(1, MaxGibs),   // fixed forever — never resized (GPU realloc)
+            InstanceCount = RubblePool<Gib>.Capacity + ShellfragLimit,   // fixed forever — never resized (GPU realloc)
             VisibleInstanceCount = 0,
         };
         var node = new MultiMeshInstance3D
@@ -331,16 +330,18 @@ public sealed partial class ModelGibs : Node3D
         AddChild(node);
         _batches.Add(new Batch { Node = node, Mesh = mm, BaseXform = baseXf });
         idx = _batches.Count - 1;
-        _batchByModel[modelPath] = idx;
+        _batchByModel[key] = idx;
         return idx;
     }
 
     /// <summary>The gib mesh + material + the source node's own transform (folded into every instance).
     /// Prefers the real model via <see cref="SharedMeshCache"/> ([crash fix 2026-07-26]: one built tree per
     /// gib model EVER); generated chunk fallback when the loader is unwired or the parse fails.</summary>
-    private (Mesh, Material?, Transform3D) ResolveMesh(string modelPath)
+    private (Mesh, Material?, Transform3D) ResolveMesh(string modelPath, int skin = 0)
     {
-        if (ModelLoader is not null && SharedMeshCache.Instantiate(modelPath, () => ModelLoader(modelPath)) is { } mi)
+        string key = skin == 0 ? modelPath : $"{modelPath}#skin{skin}";
+        if (SharedMeshCache.Instantiate(key,
+                () => SkinnedModelLoader?.Invoke(modelPath, skin) ?? ModelLoader?.Invoke(modelPath)) is { } mi)
         {
             Material? mat = mi.MaterialOverride;
             if (mat is null && mi.GetSurfaceOverrideMaterialCount() > 0)
@@ -403,6 +404,21 @@ public sealed partial class ModelGibs : Node3D
     private static NVec3 RandomVec()
         => new((float)GD.RandRange(-1.0, 1.0), (float)GD.RandRange(-1.0, 1.0), (float)GD.RandRange(-1.0, 1.0));
 
-    private static Vector3 RandomVecG()
-        => new((float)GD.RandRange(-1.0, 1.0), (float)GD.RandRange(-1.0, 1.0), (float)GD.RandRange(-1.0, 1.0));
+    private float Cvar(string name, float fallback)
+    {
+        float value = Cvars?.Has(name) == true ? Cvars.GetFloat(name) : fallback;
+        return float.IsFinite(value) ? value : fallback;
+    }
+
+    // CSQC lib/random.qc uses three unsigned prandom() values, each in [0, 1).
+    // The Raptor code uses the separate, signed randomvec() distribution.
+    private static float GibRandom() => (GD.Randi() >> 16) / 65536f;
+
+    private static NVec3 RandomGibVector()
+    {
+        NVec3 vector;
+        do { vector = new NVec3(GibRandom(), GibRandom(), GibRandom()); } while (vector.LengthSquared() > 1f);
+        return vector;
+    }
+
 }

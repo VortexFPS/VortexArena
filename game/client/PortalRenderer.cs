@@ -53,14 +53,15 @@ public partial class PortalRenderer : Node3D
     private static readonly StringName ParamWzOff = "wz_off";
     private static readonly StringName ParamWzDist = "wz_dist";
     private static readonly StringName ParamWzTan = "wz_tan";
+    private static readonly StringName ParamWzUvTest = "wz_uvtest";
 
     /// <summary>Render layer 20 — portal window quads live here (in ADDITION to layer 1) so portal cameras can
     /// exclude them (no portal-in-portal feedback). The pocket DECOR nodes join the same layer. The main
     /// camera's default cull mask includes layer 20, so everything stays visible to the player.</summary>
     private const uint PortalSurfaceLayerBit = 1u << 19;
 
-    /// <summary>The ACTIVE portals' exit-side viewpoints (Quake) — one point 8qu in front of each rendering
-    /// portal's exit window. The PVS cullers (<see cref="WorldPvsCuller"/> / ClientWorld's entity cull) UNION
+    /// <summary>Active exit-side viewpoints (Quake). Linked windows contribute a point 8qu beyond the
+    /// exit plane and fixed cameras contribute their target origin. The PVS cullers (<see cref="WorldPvsCuller"/> / ClientWorld's entity cull) UNION
     /// these with the main camera's cluster: they hide nodes via <c>Visible=false</c>, which applies to EVERY
     /// viewport sharing the World3D — without the union the exit room's cells are hidden for the portal camera
     /// (the main camera can't see them) and the portal renders black. Anything visible THROUGH the window is
@@ -72,6 +73,8 @@ public partial class PortalRenderer : Node3D
     {
         public MeshInstance3D Surface = null!;
         public WarpzoneTransform Transform;
+        public Func<WarpzoneCamera.Pose?>? FixedCamera;
+        public uint OriginalLayers;
         public SubViewport Viewport = null!;
         public Camera3D Cam = null!;
         public ShaderMaterial Material = null!;
@@ -166,17 +169,20 @@ public partial class PortalRenderer : Node3D
         }
     }
 
-    /// <summary>The portal-window shader: unshaded, two-sided, PROJECTIVE sampling. The exit camera is a plain
-    /// PERSPECTIVE camera looking along the exit normal (Godot's FRUSTUM projection wrongly culls small-AABB
-    /// instances — items/players never rendered — and its light culler rejects sheared matrices outright), so
-    /// the window is an off-center subrect of the image: each fragment maps its in-plane window position through
-    /// the exit camera's projection. The horizontal axis mirrors through the seam (inRight → −outRight), folded
-    /// into the x formula. <c>source_color</c> IS required: the SubViewport target stores tonemapped
-    /// sRGB-ENCODED data — decode + the main viewport's re-encode is the identity round trip (sampling raw
-    /// double-encodes and washes the view out too bright; user-verified both ways).</summary>
-    /// <summary>The one compiled portal shader program every portal's material binds (see the loop note).</summary>
+    // Keep each feed bound to its own material while sharing compiled shader code.
     private static Shader? _sharedPortalShader;
     private static Shader SharedPortalShader => _sharedPortalShader ??= new Shader { Code = PortalShader };
+
+    private static Shader? _fixedCameraShader;
+    private static Shader FixedCameraShader => _fixedCameraShader ??= new Shader
+    {
+        Code = """
+            shader_type spatial;
+            render_mode unshaded, depth_draw_opaque;
+            uniform sampler2D portal_tex : source_color, filter_linear, repeat_disable;
+            void fragment() { ALBEDO = texture(portal_tex, UV).rgb; }
+            """,
+    };
 
     private const string PortalShader =
         "shader_type spatial;\n" +
@@ -217,7 +223,10 @@ public partial class PortalRenderer : Node3D
         {
             // The window keeps its placeholder look rather than a material pointing at a freed viewport.
             if (GodotObject.IsInstanceValid(p.Surface))
+            {
                 p.Surface.MaterialOverride = null;
+                p.Surface.Layers = p.OriginalLayers;
+            }
             if (GodotObject.IsInstanceValid(p.Notifier))
                 p.Notifier.QueueFree();
             if (GodotObject.IsInstanceValid(p.Viewport))
@@ -232,7 +241,8 @@ public partial class PortalRenderer : Node3D
 
     /// <summary>Wire the renderer: the map root (whose "Portals" child holds the window meshes) and the live
     /// first-person camera. Builds the per-portal SubViewports once; safe to call when there are no portals.</summary>
-    public void Setup(Node3D mapRoot, Camera3D mainCamera)
+    public void Setup(Node3D mapRoot, Camera3D mainCamera, WarpzoneManager? mapZones = null,
+        Func<int, WarpzoneCamera.Pose?>? remoteCameraPose = null)
     {
         _mainCamera = mainCamera;
         if (_built || mapRoot is null || mainCamera is null)
@@ -242,9 +252,7 @@ public partial class PortalRenderer : Node3D
         if (Api.Services is null || !PortalRenderEnabled())
             return; // disabled → portal surfaces keep their placeholder material
 
-        WarpzoneManager? zones = WarpzoneTrace.AmbientManager;
-        if (zones is null)
-            return; // pure remote/dedicated client: no zone transforms (listen-host-only feature)
+        WarpzoneManager? zones = mapZones ?? WarpzoneTrace.AmbientManager;
 
         Node? portalsRoot = mapRoot.GetNodeOrNull("Portals");
         if (portalsRoot is null)
@@ -278,16 +286,37 @@ public partial class PortalRenderer : Node3D
             Vector3 ng = (Vector3)surface.GetMeta("wz_normal");
             NVec3 surfNormal = new(ng.X, ng.Y, ng.Z);
 
-            if (!TryMatchZone(zones, surfOrigin, surfNormal, out WarpzoneTransform t))
-                continue; // no linked zone for this surface — keep the placeholder
+            Func<WarpzoneCamera.Pose?>? fixedCamera = null;
+            WarpzoneTransform t = default;
+            if (surface.HasMeta("wz_camera_model"))
+            {
+                int model = surface.GetMeta("wz_camera_model").AsInt32();
+                if (remoteCameraPose is not null)
+                    fixedCamera = () => remoteCameraPose(model);
+                else if (zones is not null)
+                {
+                    string modelName = "*" + model;
+                    foreach (WarpzoneCamera camera in zones.Cameras)
+                    {
+                        if (camera.Surface.IsFreed || camera.Surface.Model != modelName)
+                            continue;
+                        fixedCamera = () => camera.Surface.IsFreed ? null : camera.View;
+                        break;
+                    }
+                }
+                if (fixedCamera is null)
+                    continue;
+            }
+            else if (zones is null || !TryMatchZone(zones, surfOrigin, surfNormal, out t))
+                continue;
 
             // The window rectangle on the EXIT plane: warp the entry mesh's corners through the zone and
             // measure their spread along the exit plane's in-plane basis. (A rotation preserves extents, so
             // these also serve the entry-side shader mapping.)
-            NVec3 exitCenter = t.TransformOrigin(surfOrigin);
+            NVec3 exitCenter = t.Valid ? t.TransformOrigin(surfOrigin) : default;
             Aabb local = surface.GetAabb();
             float halfR = 1f, halfU = 1f;
-            for (int i = 0; i < 8; i++)
+            for (int i = 0; t.Valid && i < 8; i++)
             {
                 Vector3 cornerG = surface.GlobalTransform * local.GetEndpoint(i);
                 NVec3 cQ = t.TransformOrigin(Coords.ToQuake(cornerG)) - exitCenter;
@@ -295,17 +324,22 @@ public partial class PortalRenderer : Node3D
                 halfU = Mathf.Max(halfU, Mathf.Abs(NVec3.Dot(cQ, t.OutUp)));
             }
 
-            // Render-target size: fixed height, width from the WINDOW's aspect (the frustum near rect is the
-            // window, so the image aspect must match the window, not the screen).
-            // SQUARE render target (the perspective exit camera uses a symmetric cone; a square target never
-            // needs aspect-driven resizes — see the per-frame block for why resizes must stay rare).
+            // Linked windows use a square projection. Fixed monitors map a viewport with the main
+            // view's aspect through the brush UVs.
             var size = new Vector2I(384, 384);
+            if (fixedCamera is not null && mainVp is not null)
+            {
+                Vector2 screen = mainVp.GetVisibleRect().Size;
+                size.X = Mathf.RoundToInt(size.Y * screen.Aspect());
+            }
 
             var vp = new SubViewport
             {
                 Name = $"PortalView_{_portals.Count}",
                 Size = size,
-                RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+                RenderTargetUpdateMode = fixedCamera is null
+                    ? SubViewport.UpdateMode.Always
+                    : SubViewport.UpdateMode.Disabled,
                 // The portal camera hugs the exit plane from behind: occlusion culling would cull the whole
                 // room whenever a config enables it (the camera is inside the wall volume). The frustum clip
                 // does the real work.
@@ -343,19 +377,24 @@ public partial class PortalRenderer : Node3D
                 CullMask = mainCamera.CullMask & ~(PortalSurfaceLayerBit | ViewModelRenderFx.RenderLayerBit),
             };
             vp.AddChild(cam);
-            cam.GlobalBasis = basis;
+            if (t.Valid)
+                cam.GlobalBasis = basis;
 
             // One shared Shader program for every portal (the code is a constant) — each portal's MATERIAL
             // stays its own (it carries that portal's viewport texture + plane params). Previously each of the
             // up-to-6 portals compiled an identical program with its own PSO family.
-            var mat = new ShaderMaterial { Shader = SharedPortalShader };
-            mat.SetShaderParameter("portal_tex", vp.GetTexture());
-            mat.SetShaderParameter("wz_center", Coords.ToGodot(surfOrigin));
-            mat.SetShaderParameter("wz_right", Coords.ToGodot(t.InRight));
-            mat.SetShaderParameter("wz_up", Coords.ToGodot(t.InUp));
-            mat.SetShaderParameter("wz_half", new Vector2(halfR, halfU));
-            surface.MaterialOverride = mat;
-            surface.Layers |= PortalSurfaceLayerBit; // visible to the main camera, excluded from portal cameras
+            var mat = new ShaderMaterial { Shader = fixedCamera is null ? SharedPortalShader : FixedCameraShader };
+            mat.SetShaderParameter(ParamPortalTex, vp.GetTexture());
+            if (fixedCamera is null)
+            {
+                mat.SetShaderParameter("wz_center", Coords.ToGodot(surfOrigin));
+                mat.SetShaderParameter("wz_right", Coords.ToGodot(t.InRight));
+                mat.SetShaderParameter("wz_up", Coords.ToGodot(t.InUp));
+            }
+            if (fixedCamera is null || fixedCamera() is not null)
+                surface.MaterialOverride = mat;
+            uint originalLayers = surface.Layers;
+            surface.Layers = fixedCamera is null ? originalLayers | PortalSurfaceLayerBit : PortalSurfaceLayerBit;
 
             // On-screen gate: only re-render the exit view while the window itself is visible to the main
             // camera. The window mesh is a FLAT quad — grow the notifier box so the culling test never sees a
@@ -365,8 +404,10 @@ public partial class PortalRenderer : Node3D
 
             _portals.Add(new Portal
             {
-                Surface = surface, Transform = t, Viewport = vp, Cam = cam, Material = mat, Notifier = notifier,
-                InOriginQ = t.InOrigin, InForwardQ = t.InForward,
+                Surface = surface, Transform = t, FixedCamera = fixedCamera, OriginalLayers = originalLayers,
+                Viewport = vp, Cam = cam,
+                Material = mat, Notifier = notifier,
+                InOriginQ = t.Valid ? t.InOrigin : surfOrigin, InForwardQ = t.Valid ? t.InForward : surfNormal,
                 ExitCenterQ = exitCenter, OutFwdQ = t.OutForward, OutRightQ = t.OutRight, OutUpQ = t.OutUp,
                 HalfR = halfR, HalfU = halfU, ExitBasisG = basis,
                 ExitViewQuake = t.OutOrigin + t.OutForward * 8f, // just inside the exit room's airspace
@@ -424,9 +465,8 @@ public partial class PortalRenderer : Node3D
         if (_portals.Count == 0 || _mainCamera is null)
             return;
 
-        // r_warpzone: the switch for WARPZONE portal views specifically - which is all this renderer draws.
-        // Every portal here had to match a live warpzone to be built at all (see Setup's TryMatchZone), so a
-        // dpcamera mirror or water surface with no zone behind it never reaches this loop.
+        // r_warpzone controls the linked portal and fixed camera passes. Unmatched surfaces never
+        // reach this loop.
         //
         // This used to be gated on r_water, which was wrong twice over: it conflated two different features,
         // and r_water in DP means reflections/refractions - a pass this port does not have. Turning off
@@ -497,7 +537,11 @@ public partial class PortalRenderer : Node3D
             // texture — a one-frame-stale image on re-entry, imperceptible.
             bool facing = NVec3.Dot(camPosQ - p.InOriginQ, p.InForwardQ) > 0f;
             bool onScreen = p.Notifier.IsOnScreen();
-            bool visible = (facing && onScreen) || force;
+            var fixedView = p.FixedCamera?.Invoke();
+            bool hasView = p.FixedCamera is null || fixedView is not null;
+            bool visible = hasView && ((facing && onScreen) || force);
+            if (p.FixedCamera is not null && (p.Surface.MaterialOverride is not null) != hasView)
+                p.Surface.MaterialOverride = hasView ? p.Material : null;
 
             // (draws 2026-08-02) `cl_portal_update_interval N` renders each visible portal every Nth frame
             // (phase-staggered by portal index so two portals never stack on one frame); a held frame keeps
@@ -523,7 +567,8 @@ public partial class PortalRenderer : Node3D
                 // debug: paint the quad's computed UVs (1 → red=u, green=v; 2 → solid magenta) instead of the
                 // texture. Read per frame — a Setup-time read can precede the cvar-store bridge sync.
                 float uvtest = Api.Services is not null ? Api.Cvars.GetFloat("wz_portal_uvtest") : 0f;
-                p.Material.SetShaderParameter("wz_uvtest", uvtest);
+                if (p.FixedCamera is null)
+                    p.Material.SetShaderParameter(ParamWzUvTest, uvtest);
                 if (uvtest != 0f)
                     GD.Print($"[portal] uvtest={uvtest} applied to '{p.Surface.Name}' mat={p.Surface.MaterialOverride == p.Material}");
             }
@@ -535,6 +580,18 @@ public partial class PortalRenderer : Node3D
             if (!visible)
                 continue;
 
+            if (fixedView is { } pose)
+            {
+                // The target supplies the pose. The BSP face's UVs place the fixed image on the monitor.
+                Common.Math.QMath.AngleVectors(pose.Angles, out var fwd, out var right, out var up);
+                p.Cam.GlobalTransform = new Transform3D(
+                    new Basis(Coords.ToGodot(right), Coords.ToGodot(up), -Coords.ToGodot(fwd)),
+                    Coords.ToGodot(pose.Origin));
+                p.Cam.SetPerspective(main.Fov, main.Near, main.Far);
+                ActiveExitViewsQuake.Add(pose.Origin);
+                continue;
+            }
+
             ActiveExitViewsQuake.Add(p.ExitViewQuake); // PVS-union viewpoint for the cullers (see the field doc)
 
             // Window-anchored frustum: eye at the warped main-camera position; orientation fixed perpendicular
@@ -543,13 +600,11 @@ public partial class PortalRenderer : Node3D
             // entry — the facing gate guarantees that); offset = the window center's lateral offset from the
             // camera axis in camera-local X/Y (camera X == OutRight, Y == OutUp, world units carry 1:1).
             NVec3 pPos = p.Transform.TransformOrigin(camPosQ);
-            // Perpendicular distance from the (behind-plane) eye to the exit plane. In the last couple of units
-            // before the crossing the frustum's shear (lateral offset ÷ near) explodes and Godot's light culler
-            // rejects the camera ("prepare_camera: Condition !res" spam, lights fall back unculled) — freeze the
-            // viewport instead: the 1-2 frame-old image fills the screen at that range, and WarpzoneFixView owns
-            // the view the moment the eye crosses.
             float planeDist = NVec3.Dot(p.ExitCenterQ - pPos, p.OutFwdQ);
-            if (planeDist < 2f)
+            // Close to the window, render only the cone visible to the main camera. Rendering
+            // the entire aperture here would spend most texels outside the player's view.
+            float visibleCone = planeDist < 32f ? MainViewCone(main, p) : float.PositiveInfinity;
+            if (planeDist <= 0f || (planeDist < 2f && visibleCone > 10f))
             {
                 p.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
                 continue;
@@ -572,9 +627,9 @@ public partial class PortalRenderer : Node3D
             float tan = Mathf.Max(
                 (Mathf.Abs(offset.Y) + p.HalfU) * 1.04f / planeDist,
                 (Mathf.Abs(offset.X) + p.HalfR) * 1.04f / planeDist);
-            // Clamp the half-angle (grazing views otherwise explode toward 180°); the window stays covered
-            // because the facing/shear guard already freezes the viewport in the final approach.
-            tan = Mathf.Min(tan, 10f);
+            // At grazing angles the main frustum can cross the exit-plane horizon. Keep the
+            // bounded whole-window projection in that case.
+            tan = Mathf.Min(Mathf.Min(tan, visibleCone), 10f);
 
             // ADAPTIVE RESOLUTION: ≈ the window's projected on-screen pixel size (sharp close, cheap far),
             // quantized to 128px buckets with a cooldown — resizes are RARE (bucket changes only).
@@ -615,6 +670,27 @@ public partial class PortalRenderer : Node3D
             p.Material.SetShaderParameter(ParamWzDist, planeDist);
             p.Material.SetShaderParameter(ParamWzTan, new Vector2(tan, tan));
         }
+    }
+
+    private static float MainViewCone(Camera3D camera, Portal portal)
+    {
+        Vector2 size = camera.GetViewport().GetVisibleRect().Size;
+        System.ReadOnlySpan<Vector2> corners = stackalloc Vector2[]
+        {
+            Vector2.Zero, new(size.X, 0f), new(0f, size.Y), size,
+        };
+        float cone = 0f;
+        foreach (Vector2 corner in corners)
+        {
+            NVec3 ray = portal.Transform.Rotate(Coords.ToQuake(camera.ProjectRayNormal(corner)));
+            float depth = NVec3.Dot(ray, portal.OutFwdQ);
+            if (depth <= 0f)
+                return float.PositiveInfinity;
+            float right = Mathf.Abs(NVec3.Dot(ray, portal.OutRightQ));
+            float up = Mathf.Abs(NVec3.Dot(ray, portal.OutUpQ));
+            cone = Mathf.Max(cone, Mathf.Max(right, up) / depth);
+        }
+        return cone * 1.04f;
     }
 
     /// <summary>Match a portal surface to the linked warpzone whose IN plane it is: the zone's IN origin must lie

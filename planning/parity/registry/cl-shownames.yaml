@@ -1,12 +1,10 @@
 unit: cl-shownames
 category: client
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
-last_audited: "2026-06-27"
+last_audited: "2026-11-19"
 summary:
   feature_count: 13
-  worst_gaps:
-    - "LOS trace is a Fraction>=0.99 heuristic, not the QC trace_networkentity/entnum self-exclusion check (intended divergence — port can't map a remote to a trace-set entnum)"
-    - "MUTATOR_CALLHOOK(ShowNames_Draw) not invoked (stock no-op — no shipped mutator implements it; harmless today)"
+  worst_gaps: []
 features:
   - id: cl-shownames.core.master_enable
     name: "Master enable + per-client iteration"
@@ -88,6 +86,7 @@ features:
       - { kind: code, ref: "ShowNamesLayer.cs:185-195 (isViewed = netId==CurrentViewedNetId; ChaseActive gate + hud_shownames_self || grace window spectatee_status>0 && now<=changed_time+1) vs QC:42-51 — spectatee arm", result: pass }
       - { kind: code, ref: "ShowNamesLayer.cs:606-713 TryDrawSelfTag (called unconditionally from _Draw:415): synthesises the local predicted player's OWN tag from ClientNet.PredictedOrigin + live Health/Armor when ChaseActive && CurrentViewedNetId==LocalNetId && (hud_shownames_self || grace) — closes the truly-local chase-own-tag deferral the predicted player isn't in RemoteIds for", result: pass }
       - { kind: code, ref: "NetGame.cs:3066-3077 feeds CurrentViewedNetId = SpectatingNetId!=0 ? SpectatingNetId : LocalNetId; SpectateeStatus/ChangedTime/LocalIsSpectating/ChaseActive(_view.ChaseActive) from ClientNet (live per-frame in _Process)", result: pass }
+      - { kind: code, ref: "ClientNet.HandleSnapshot timestamps spectatee changes in the same time domain as ShowNamesLayer", result: pass }
     confidence: medium
     notes: "RE-VERIFIED 2026-06-27 (liveness partial->live, presentation partial->faithful — the chase own-tag deferral is CLOSED): TryDrawSelfTag now synthesises the truly-local predicted player's own tag from ClientNet.PredictedOrigin + live Health/Armor (the predicted player is never in RemoteIds), reusing the same projection/fade/distance/resize/status path the tested remote arm uses, gated by ChaseActive + CurrentViewedNetId==LocalNetId + (hud_shownames_self || 1s grace). Spectatee arm wired via CurrentViewedNetId(SpectatingNetId) with the exact 1s grace (spectatee_status>0 && now<=changed+1). Confidence MEDIUM not high: the chase own-tag path is verified by code-read (it reuses tested helpers) but has NO dedicated unit test and was NOT runtime-observed in chase this audit."
   - id: cl-shownames.los.traceline
@@ -99,22 +98,23 @@ features:
       - "game/client/ShowNamesLayer.cs:TraceVisible"
     constants:
       - { name: "trace move type", base: "MOVE_NOMONSTERS", port: "MoveFilter.NoMonsters", match: true }
-      - { name: "hit predicate", base: "!(trace_fraction<1 && trace_networkentity!=entnum && trace_ent.entnum!=entnum)", port: "Fraction>=0.99", match: false }
+      - { name: "hit predicate", base: "!(trace_fraction<1 && trace_networkentity!=entnum && trace_ent.entnum!=entnum)", port: "Fraction>=1. Native NoMonsters already excludes player bodies.", match: true }
     status:
-      logic: partial
+      logic: faithful
       values: faithful
       timing: na
-      presentation: na
+      presentation: faithful
       audio: na
       liveness: live
-    intended_divergence: true
-    divergence_rationale: "The port can't map a remote player to a trace-set entnum (the remote isn't a distinct trace edict client-side), so QC's trace_networkentity/trace_ent.entnum self-exclusion is approximated by treating Fraction>=0.99 (essentially reached the target) as clear LOS. Falls back to visible when no trace service is up, matching the radar's degrade-to-shown."
-    gaps:
-      - "Tag occlusion can flicker when thin geometry (or the target's own client-side collision) sits right at the eye-line, where QC would exclude the player edict and keep the tag."
+    intended_divergence: false
+    divergence_rationale: null
+    gaps: []
     verification:
-      - { kind: code, ref: "ShowNamesLayer.cs:598-608 (TraceVisible: Trace + Fraction>=0.99); QC Draw_ShowNames:62-63", result: fail }
+      - { kind: code, ref: "ShowNamesLayer.TraceVisible / RemoteShowNamesCollision / v31 snapshot BrushCollider / QC shownames.qc:56-63", result: pass }
+      - { kind: test, ref: "SnapshotDeltaTests.SnapshotTracksInlineBrushPoseUntilAuthoritativeRemoval", result: pass }
+      - { kind: ingame, ref: "planning/parity/shownames/follow-up.md (listen and remote blockers, removal and clear controls)", result: pass }
     confidence: high
-    notes: "Teammates skip the trace entirely when crosshairdistance==0 (ShowNamesLayer.cs:224), exactly like QC line 56-58."
+    notes: "The remote trace uses the loaded BSP and the latest accepted solid inline poses. Listen uses authoritative collision when the sim gate is available and can fall back to world-only collision under contention. Native no-monsters traces already exclude the target player. The default private-slice branch skips the trace."
   - id: cl-shownames.fade.ramp
     name: "Six-branch fade ramp (dead/blocked/offscreen/overlap/team/enemy)"
     layer: [presentation]
@@ -139,8 +139,9 @@ features:
     verification:
       - { kind: code, ref: "ShowNamesLayer.cs:277-305 (branch order dead/blocked-enemy/offscreen/overlap/sameteam/enemy + speed*frametime steps + fadedelay reset on blocked enemy) vs QC:101-130", result: pass }
       - { kind: test, ref: "ShowNamesTests.DeadBranch_FadesAtQuarterSpeed.. / BlockedEnemy.. / TeammateInView.. / Overlap.. / EnemyFadeIn.. / FadeDelay_ConstantIsZero", result: pass }
+      - { kind: ingame, ref: "planning/parity/shownames/README.md (remote enemy control)", result: pass }
     confidence: high
-    notes: "Branch order + per-frame speed*frametime steps + fadedelay reset on blocked enemy all reproduced exactly."
+    notes: "Uses ClientNet.RenderNow for enemy fade eligibility and crosshair dwell on both topologies. A pure client does not advance the trace facade clock."
   - id: cl-shownames.crosshairdistance.gate
     name: "Crosshair-distance proximity gate"
     layer: [presentation]
@@ -188,9 +189,10 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "ShowNamesLayer.cs:259-274 (box-overlap + vlen2 distance compare; QC uses all prior-frame boxes, port mixes prior-frame self box with this-frame already-processed boxes)", result: pass }
-    confidence: medium
-    notes: "Port tests the current tag's prior-frame box vs already-processed tags' current-frame boxes (QC uses all prior-frame boxes); converges within a frame — a 1-frame refinement, not a defect."
+      - { kind: code, ref: "ShowNamesLayer._Draw captures last-drawn boxes and all current projected players before updating any tag", result: pass }
+      - { kind: ingame, ref: "planning/parity/shownames/README.md", result: pass }
+    confidence: high
+    notes: "The farther tag can see a nearer box in either player order. The copy preserves each last-drawn box until that player draws again."
   - id: cl-shownames.distance.fade
     name: "Distance fade + hard cull"
     layer: [presentation]
@@ -201,7 +203,7 @@ features:
     constants:
       - { name: "hud_shownames_mindistance", base: "1000", port: "1000", match: true }
       - { name: "hud_shownames_maxdistance", base: "5000", port: "5000", match: true }
-      - { name: "max_shot_distance", base: "32768 (initial; reset by world bounds at map load)", port: "32768 (hardcoded const)", match: true }
+      - { name: "max_shot_distance", base: "32768 in CSQC; SVQC independently resets its own global from world bounds", port: "32768 (hardcoded const)", match: true }
       - { name: "ALPHA_MIN_VISIBLE", base: "0.003", port: "0.003", match: true }
     status:
       logic: faithful
@@ -213,7 +215,7 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Minor: max_shot_distance is a hardcoded 32768 const in the port; in Base it is initialised to 32768 but reset from world mins/maxs at map load (weapon.qh:245), so on maps with larger bounds the QC hard-cull ceiling differs. Negligible (both are far past hud_shownames_maxdistance's 5000 default, which is the binding limit)."
+      - "The client and server use independent globals. Common initializes max_shot_distance to 32768, and server/world.qc:731 only changes SVQC. The native client uses the same hard ceiling."
     verification:
       - { kind: code, ref: "ShowNamesLayer.cs:328-346 (a *= (f - max(0,dist-min))/f, f=max-min; min(maxdistance, max_shot_distance) ceiling) vs QC:145-160", result: pass }
       - { kind: test, ref: "ShowNamesTests.DistanceFade_ScalesLinearlyBetweenMinAndMax", result: pass }
@@ -316,7 +318,7 @@ features:
       - "game/net/ServerNet.cs:QuantizeAlpha (gameplay player.Alpha -> wire byte)"
       - "src/VortexArena.Net/NetEntity.cs:Alpha (EntityField.Alpha 1<<17, written/read)"
     constants:
-      - { name: "entcs_GetAlpha factor", base: "remote CSQC model alpha (0->1, <0->0)", port: "s.Alpha==0?1:Alpha/255, clamp 0..1", match: true }
+      - { name: "entcs_GetAlpha factor", base: "remote CSQC model alpha (0->1, <0->0)", port: "wire 0 -> 1, 255 -> 0, otherwise Alpha/255", match: true }
       - { name: "factor applies when", base: "!sameteam || sv_entnum==player_localentnum", port: "!sameteam || netId==LocalNetId", match: true }
     status:
       logic: faithful
@@ -325,17 +327,17 @@ features:
       presentation: faithful
       audio: na
       liveness: live
-    intended_divergence: false
-    divergence_rationale: null
-    gaps:
-      - "MUTATOR_CALLHOOK(ShowNames_Draw) still not invoked (no-op in stock Base — no shipped mutator implements MUTATOR_HOOKFUNCTION(*, ShowNames_Draw); confirmed by grep — but a custom mutator hooking it would not run). Harmless in stock gameplay."
+    intended_divergence: true
+    divergence_rationale: "Native gameplay is compiled C# under ADR-0001 and ADR-0011. ADR-0013 governs native extensions. ADR-0019 runs server-supplied CSQC in the separate legacy mode. The pinned stock tree has no subscriber to this event."
+    gaps: []
     verification:
-      - { kind: code, ref: "ShowNamesLayer.cs:311-320 (a = hud_shownames_alpha*tag.Alpha; then if !sameteam||netId==LocalNetId: f = s.Alpha==0?1:Alpha/255 clamp 0..1; a*=f) vs QC:131-138", result: pass }
+      - { kind: code, ref: "ShowNamesLayer.TagModelAlpha (including hidden wire sentinel 255) and TryDrawSelfTag use snapshot model alpha against QC shownames.qc:131-138", result: pass }
       - { kind: code, ref: "ServerNet.cs:2070 Alpha=QuantizeAlpha(p.Alpha) on the player entity feed; p.Alpha set live by Cloaked/RunningGuns/Powerups(invisibility)/Buffs(invisible)/Nades(veil) and reset to 1 on spawn", result: pass }
       - { kind: code, ref: "NetEntity.cs Alpha is a real networked field (delta bit EntityField.Alpha=1<<17, write/read byte); ClientNet exposes it on NetEntityState.Alpha — full produce->wire->consume chain live", result: pass }
       - { kind: code, ref: "Base grep: only events.qh hook definition + shownames.qc:139 CALLHOOK exist; zero MUTATOR_HOOKFUNCTION(*, ShowNames_Draw)", result: pass }
+      - { kind: ingame, ref: "planning/parity/shownames/README.md (Instagib and Running Guns)", result: pass }
     confidence: high
-    notes: "entcs_GetAlpha factor applied AND the producer chain is real — ServerNet quantizes the gameplay player.Alpha (Cloaked/RunningGuns/Invisibility/Buffs-invisible/Nade-veil) into the networked NetEntityState.Alpha, so a fading/cloaked model's enemy/self tag fades with the model. Mutator-hook gap remains but is a stock no-op."
+    notes: "entcs_GetAlpha factor applied AND the producer chain is real — ServerNet quantizes the gameplay player.Alpha (Cloaked/RunningGuns/Invisibility/Buffs-invisible/Nade-veil) into the networked NetEntityState.Alpha, so a fading/cloaked model's enemy/self tag fades with the model. The pinned hook has no stock subscriber. Running Guns changes SetDefaultAlpha and the generic model-alpha factor suppresses the enemy tag."
   - id: cl-shownames.entcs.private_healtharmor
     name: "entcs private-slice gating of health/armor (enemy zeroing)"
     layer: [presentation]

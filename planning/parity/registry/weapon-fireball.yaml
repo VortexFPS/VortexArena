@@ -6,7 +6,7 @@ summary:
   feature_count: 13
   worst_gaps:
     - "Shootable fireball is wired live via Projectiles.MakeShootable: the W_CheckProjectileDamage gate + RES_HEALTH subtraction + explode-on-deplete + the owner-reassign-to-attacker (gated on g_projectiles_keep_owner) are all present, and the default-0-HP no-op-on-shot matches Base exactly. Residual: the depletion explode is synchronous, not next-frame-deferred, and the PrepareExplosionByDamage mutator hook is not called (shared MakeShootable simplification; only observable when a server raises fireball_health)."
-    - "Render-side trails/visuals still deferred: plasma_prim FIREBALL flight trail, firemine trail, and the sphere.md3 BFG ball (effect EMITS are wired; the CSQC render fidelity is a separate layer, like every other weapon)."
+    - "Render-side verification remains open for the plasma_prim FIREBALL flight trail, firemine trail, and BFG per-victim particles. The expanding BFG sphere has a dedicated native render path."
     - "IS_INDEPENDENT_PLAYER(e) is checked everywhere it should be but Entity.IsIndependentPlayer is a hardcoded false stub (DamageEntityState.cs:158) — a no-op until independent-player modes are wired."
 features:
   - id: weapon-fireball.identity
@@ -176,21 +176,27 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "modeleffect_spawn(sphere.md3) BFG visual ball not produced (CSQC render layer); FIREBALL_EXPLODE + impact sound at ATTEN_NORM*0.25 are emitted."
+      - "The expanding sphere belongs to the gated BFG branch below. Visual comparison of the explosion effects remains open."
     verification:
       - { kind: codetrace, ref: "Explode -> WeaponSplash.RadiusDamage(200,50,200,Owner,RegistryId,600,directHit) + ImpactSound(AttenNorm*0.25) + FIREBALL_EXPLODE.", result: pass }
     confidence: high
     notes: "Unchanged/faithful. Touch-explode (proj.Touch=Explode) and now .Use are both wired. RadiusDamage is the faithful splash port."
 
   - id: weapon-fireball.primary.bfg
-    name: "BFG secondary blast: damage every visible enemy within bfgradius (distance-scaled, LOS-gated)"
-    layer: [authority]
+    name: "BFG secondary blast: expanding sphere and distance-scaled, LOS-gated damage"
+    layer: [authority, presentation]
     base_refs:
-      - "common/weapons/weapon/fireball.qc:W_Fireball_Explode (findradius bfgradius loop)"
+      - "common/weapons/weapon/fireball.qc:W_Fireball_Explode (modeleffect_spawn and findradius bfgradius loop)"
+      - "common/effects/qc/modeleffects.qc:modeleffect_spawn, ModelEffect_Draw, NET_HANDLE(ENT_CLIENT_MODELEFFECT)"
+      - "common/effects/qc/modeleffects.qh:modeleffect_spawn"
     port_refs:
       - "src/VortexArena.Common/Gameplay/Weapons/Fireball.cs:Explode (BFG loop)"
+      - "src/VortexArena.Common/Gameplay/Effects/FireballBlastEffect.cs"
+      - "src/VortexArena.Net/FireballBlastWire.cs"
+      - "game/client/EffectSystem.cs:Spawn(FireballBlastEffect)"
     constants:
       - { name: "bfgdamage/bfgforce/bfgradius", base: "100/0/1000", port: "100/0/1000", match: true }
+      - { name: "sphere timeline", base: "Frame/skin 0, 0.2 alpha, 0.05 s hold and 0.25 s fade, scale grows from 0 to bfgradius / maximum axis extent", port: "Same stock model, constants, 1/256 scale and visibility threshold", match: true }
       - { name: "points falloff", base: "1 - sqrt(dist/bfgradius)", port: "1 - sqrt(dist/bfgradius)", match: true }
       - { name: "owner-survived gate", base: "owner.health+armor AFTER blast >= before", port: "ownerHealthAfter >= ownerHealthBefore (re-read after RadiusDamage)", match: true }
       - { name: "cnt gate", base: "!this.cnt (skip if shot-down/timed-out)", port: "self.Cnt == 0", match: true }
@@ -207,11 +213,15 @@ features:
     divergence_rationale: null
     gaps:
       - "IS_INDEPENDENT_PLAYER(e) is checked but Entity.IsIndependentPlayer is a hardcoded stub (always false) — faithful for all non-independent (default) modes; the filter is a no-op until that mode is wired."
-      - "EFFECT_FIREBALL_BFGDAMAGE per-victim Emit is now wired, but its render fidelity (and the sphere.md3 ball) is the deferred CSQC layer."
+      - "Paired Stormkeep capture verified the normal Fireball gate, mounted model, native receipt age and fade. The native outline is faint against the darker scene and pixel equivalence remains unmeasured. Per-victim EFFECT_FIREBALL_BFGDAMAGE particles remain out of scope. Native sends once to each accepted peer and makes the event available to new accepted connections for 0.1 s from spawn in map simulation time. Stock uses a CSQC entity datagram after begin and the native event uses ordered reliable delivery. The capture set dedicated-client slowmo explicitly because live dedicated slowmo is not replicated."
     verification:
       - { kind: codetrace, ref: "Explode BFG loop (Fireball.cs:359-403): ownerHealthBefore snapshot BEFORE RadiusDamage, ownerHealthAfter re-read AFTER (RadiusDamage mutates resources synchronously via Combat.Damage), gate = after>=before && Cnt==0; per-target DIFF_TEAM + two tracelines; points=1-sqrt(dist/r); accuracy_add when good damage; Damage with HITTYPE_BOUNCE|HITTYPE_SPLASH; FIREBALL_BFGDAMAGE Emit.", result: pass }
+      - { kind: unit_test, ref: "FireballBlastEffectTests exercises live primary firing and detonation callbacks, hold/fade/scale sampling, and validated wire round trip.", result: pass }
+      - { kind: paired, ref: "planning/parity/fireball-sphere/README.md — two remote graphical clients per engine; eligible floor impact, timeout cnt branch, self-damage suppression, decoded sphere and alpha samples.", result: pass }
+      - { kind: loopback, ref: "planning/parity/fireball-sphere/availability.md — stock begin gate and native ENet auth at 98, 100 and 125 ms, repeated auth and replacement map.", result: pass }
+      - { kind: asset, ref: "Shipped sphere.md3 matches pinned Git blob 8428eb55392bd67f78f3742a53c8081a1ecd518d and has 64-unit maximum axis extent in frame bounds and mesh vertices.", result: pass }
     confidence: high
-    notes: "MAJOR FIX vs baseline (was partial/broken on 4 fronts). cnt gate now real (fed by lifetime cnt=1 + the depletion cnt=1). Owner-survived gate is now the QC after-blast health+armor compare (RadiusDamage applies self-damage synchronously, so the after-read is correct). DIFF_TEAM same-team skip added. Second LOS trace (shooter visible) added. accuracy_add hit credit + BFGDAMAGE effect added. Residual is only the independent-player stub + render visuals. CONFIRMED (2026-06-22 re-audit): the RadiusDamage attacker arg is self.Owner while the health-survival baseline uses self.RealOwner ?? self — these are IDENTICAL for the fireball because RealOwner is a computed alias of Owner (DamageEntityState.cs:135) and the primary fireball never decouples Owner (only the firemine does, and the firemine never calls Explode). So the attacker == Base's this.realowner. Faithful."
+    notes: "Ordered review against 863cd3e8456e18f577f7fe5fef857ff55ae62cc0 found Fireball as the sole live modeleffect_spawn caller. The CTF shockwave helper and capture call in sv_ctf.qc:592-597,662-664 are both under #if 0. ADR-0001 and ADR-0005 support implementing the stock visual with a typed native event, and ADR-0019 keeps legacy QuakeC separate. cnt gate now real (fed by lifetime cnt=1 + the depletion cnt=1). Owner-survived gate is now the QC after-blast health+armor compare (RadiusDamage applies self-damage synchronously, so the after-read is correct). DIFF_TEAM same-team skip added. Second LOS trace (shooter visible) added. accuracy_add hit credit + BFGDAMAGE effect added. The independent-player stub, per-victim particles, and pixel comparison remain open. CONFIRMED (2026-06-22 re-audit): the RadiusDamage attacker arg is self.Owner while the health-survival baseline uses self.RealOwner ?? self — these are IDENTICAL for the fireball because RealOwner is a computed alias of Owner (DamageEntityState.cs:135) and the primary fireball never decouples Owner (only the firemine does, and the firemine never calls Explode). So the attacker == Base's this.realowner. Faithful."
 
   - id: weapon-fireball.primary.laserscorch
     name: "Laser scorch: periodically set one nearby enemy alight (weighted nearest, prefer not-burning)"

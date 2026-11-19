@@ -1,0 +1,5 @@
+ParityOwner is now playing
+ParityGuest is now playing
+]cmd teleporttotarget parity_buff_view
+ParityOwner got the Vampire buff!
+ParityOwner lost the Vampire buff!

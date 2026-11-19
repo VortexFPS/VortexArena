@@ -58,6 +58,8 @@ public partial class Entity
     /// alternate "drift" handling. Not used by the stock 3D modes; kept for fidelity (null in normal play).
     /// </summary>
     public Entity? ViewLoc;
+    public Gameplay.ViewLocationState? PredictedViewLocation;
+    public Gameplay.ViewLocationState? ActiveViewLocation => PredictedViewLocation ?? Gameplay.ViewLocationState.FromTrigger(ViewLoc);
 
     // --- specialcommand (QC .specialcommand_pos — the xwxw... button cheat-code decoder) ---
     /// <summary>

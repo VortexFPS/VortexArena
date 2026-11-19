@@ -37,6 +37,9 @@ public sealed class ClientManager
         /// <summary>QC FL_CLIENT: the slot is occupied by a connected client.</summary>
         public bool IsConnected { get; internal set; } = true;
 
+        /// <summary>Reusable position in the server's client table (QC sv_entnum order).</summary>
+        public int ClientSlot { get; internal set; }
+
         /// <summary>QC <c>.jointime</c>: sim time the client joined as a player (0 while observing).</summary>
         public float JoinTime { get; internal set; }
 
@@ -79,6 +82,9 @@ public sealed class ClientManager
     public static bool? EditorFreeFlyNoclip { get; set; }
 
     private readonly List<ClientInfo> _clients = new();
+    private readonly SortedDictionary<int, Player> _playersByClientSlot = new();
+
+    public IEnumerable<Player> PlayersByClientSlot => _playersByClientSlot.Values;
     private readonly List<Player> _players = new();          // dense Player view (matches SimulationLoop.Clients)
     private readonly SimulationLoop _sim;
     private readonly Scores _scores;
@@ -142,6 +148,7 @@ public sealed class ClientManager
     /// <summary>QC <c>warmup_stage</c> query (wired by <see cref="GameWorld"/> to the WarmupController): when true,
     /// <see cref="Spawn"/> gives the warmup loadout (100/100/all-guns) instead of the live start loadout.</summary>
     public Func<bool>? IsWarmup { get; set; }
+    internal Func<bool>? RestartAfterCountdown { get; set; }
 
     /// <summary>
     /// On a single-player listen server hosting a campaign level, let the local host auto-spawn instead of
@@ -174,7 +181,7 @@ public sealed class ClientManager
 
     /// <summary>Fired AFTER a client is fully removed from the roster (QC the tail of ClientDisconnect, e.g.
     /// <c>TeamBalance_RemoveExcessPlayers(this)</c> at client.qc:3057) — the leaver is already out of the roster.</summary>
-    public Action? OnAfterClientDisconnect { get; set; }
+    public Action<Player>? OnAfterClientDisconnect { get; set; }
 
     /// <summary>
     /// QC <c>anticheat_spectatecopy</c> (the last line of server/client.qc <c>SpectateCopy</c>, client.qc:1837):
@@ -200,17 +207,22 @@ public sealed class ClientManager
     /// spawn it via <see cref="Spawn"/> (which fires the PlayerSpawn hook). Returns the new client's info.
     /// <paramref name="isBot"/> sets the simple bot-vs-human flag (QC IS_BOT_CLIENT).
     /// </summary>
-    public ClientInfo ClientConnect(bool isBot = false, string? netName = null)
+    public ClientInfo ClientConnect(bool isBot = false, string? netName = null, string? netAddress = null,
+        string persistentId = "")
     {
         // Build the player edict through the engine entity table so it gets a slot/index, then re-tag it as
         // a Player (the table's Spawn() yields a bare Entity; in this port a client IS a Player subclass, so
         // we construct the Player and register it into the same dense list the table manages).
-        Player p = new() { NetName = netName ?? (isBot ? "bot" : "player") };
+        Player p = new() { NetName = netName ?? (isBot ? "bot" : "player"), PersistentId = persistentId };
         p.PlayerId = _nextPlayerId++;        // QC .playerid: a per-match unique id for the event log / stats
-        if (isBot) p.NetAddress = "bot";
+        p.NetAddress = isBot ? "bot" : netAddress ?? "";
         RegisterEntity(p);
 
-        var info = new ClientInfo(p, isBot);
+        int clientSlot = 1;
+        while (_playersByClientSlot.ContainsKey(clientSlot))
+            clientSlot++;
+        _playersByClientSlot.Add(clientSlot, p);
+        var info = new ClientInfo(p, isBot) { ClientSlot = clientSlot };
         _clients.Add(info);
         _players.Add(p);
         RefreshPlayersSnapshot();
@@ -302,8 +314,10 @@ public sealed class ClientManager
     /// observer phase + join intent. Team selection / queue balancing is deferred; the core path autoselects the
     /// team (already assigned at connect for a team game) and spawns. Returns whether the spawn succeeded.
     /// </summary>
-    public bool Join(Player p)
+    public bool Join(Player p, bool clanArenaRoundReset = false)
     {
+        if (!clanArenaRoundReset && ClanArenaRoundInProgress)
+            return false;
         // QC Join: TRANSMUTE(Player, this) — leave the observer phase. Spawn() (PutPlayerInServer) resets MoveType
         // WALK / Solid SLIDEBOX / DAMAGE_AIM, so we only need to clear the observer marker + intent here.
         p.IsObserver = false;
@@ -317,13 +331,14 @@ public sealed class ClientManager
         // 0 = no-op; 1 = always clear; -1 = clear unless PreferPlayerScore_Clear hook vetoes). This is the live
         // arm of the resetonjoin feature: at the default (0) it is a no-op, so joiners keep their score; only
         // diverges when an admin explicitly sets 1 or -1.
-        VortexArena.Common.Gameplay.Scoring.GameScores.ClearPlayerOnJoin(p);
+        if (!clanArenaRoundReset)
+            VortexArena.Common.Gameplay.Scoring.GameScores.ClearPlayerOnJoin(p);
 
         // QC the gametype PutClientInServer / lms_AddPlayer seed: register the joiner with the gametype (LMS seeds
         // its lives column + clamps a late joiner to the lowest life count) BEFORE the spawn loadout is applied.
         GametypeOnJoin?.Invoke(p);
 
-        bool spawned = Spawn(p); // QC PutClientInServer
+        bool spawned = Spawn(p, clanArenaRoundReset); // QC PutClientInServer
         if (!spawned)
         {
             // no spawnpoint yet (Spawn armed a retry); fall back to the observer phase so the player isn't a
@@ -331,6 +346,8 @@ public sealed class ClientManager
             p.IsObserver = true;
             return false;
         }
+        if (clanArenaRoundReset)
+            return true;
 
         // QC Join tail (server/client.qc:2135-2149): once the client is a live player, announce the join. FFA
         // broadcasts INFO_JOIN_PLAY ("<name> is now playing"); a team game centerprints CENTER_JOIN_PLAY_TEAM_<col>
@@ -413,6 +430,9 @@ public sealed class ClientManager
     /// the gametype gate returned false.
     /// </summary>
     public Action<Player>? GametypeOnJoinRefused { get; set; }
+
+    internal ClanArena? Arena { get; set; }
+    internal bool ClanArenaRoundInProgress => Arena is { SpawnBlocked: true };
 
     /// <summary>
     /// QC the gametype's <c>PutClientInServer</c> / lms_AddPlayer seed: called when an observer successfully joins
@@ -503,6 +523,14 @@ public sealed class ClientManager
             else
                 SpectateCopy(p, spec);
         }
+        if (p.Spectatee is null && Arena is { SpectateEnemies: SpectatorRules.SpectateBlocked }
+            && ClanArena.IsParticipant(p))
+        {
+            SpectateNext(p);
+            if (p.Spectatee is null)
+                p.MoveType = MoveType.None;
+            return;
+        }
 
         // QC PlayerPreThink free-fly branch (server/client.qc:2588-2593): a NOT-following (free-fly) spectator's
         // movetype is recomputed each tick from its per-client cl_clippedspectating preference —
@@ -559,16 +587,12 @@ public sealed class ClientManager
 
     /// <summary>
     /// QC <c>MUTATOR_HOOKFUNCTION(ca, ClientCommand_Spectate)</c> (sv_clanarena.qc): intercept the <c>spectate</c>
-    /// command for an in-game CA player. CA force-spectates them (MUT_SPECCMD_FORCE) and sends INFO_CA_LEAVE; the
-    /// gametype records the leave so they re-enter next round. Returns true if CA consumed the command (so the
-    /// generic spectate path doesn't also run its default notice). No-op (returns false) for non-CA gametypes or a
-    /// client that is already spectating. Call from the spectate-command handler BEFORE the generic force-observe.
+    /// command for a CA participant. A participating observer can withdraw with this command and gets the
+    /// CA_LEAVE notice. Pure spectators and other modes skip this hook.
     /// </summary>
     public bool GametypeSpectateCommand(Player p)
     {
-        if (_match.GameType is ClanArena ca)
-            return ca.OnSpectateCommand(p);
-        return false;
+        return Arena?.OnSpectateCommand(p) ?? false;
     }
 
     /// <summary>
@@ -621,20 +645,22 @@ public sealed class ClientManager
         p.FixAngleAngles = angles;
     }
 
-    public void PutObserverInServer(Player p)
+    public void PutObserverInServer(Player p, bool clanArenaElimination = false)
     {
         // QC PutObserverInServer (server/client.qc:268-273): if it WAS a live player with health, puff a despawn
         // EFFECT_SPAWN at its body before stripping it. Snapshot the prior state before we flip IsObserver below.
         // (VoteCount/ReadyCount recount on demote stays deferred — owned by the vote/ready subsystem.)
-        if (!p.IsObserver && p.GetResource(ResourceType.Health) >= 1f)
+        bool wasPlayer = !p.IsObserver;
+        if (wasPlayer && p.GetResource(ResourceType.Health) >= 1f)
             EffectEmitter.Emit("SPAWN", p.Origin, Vector3.Zero, 1);
 
         // QC status_effects MakePlayerObserver hook (sv_status_effects.qc:94-112): drop the demoted player's
         // own status effects (NORMAL removal for the removal sounds) then CLEAR the leftover state. The port has
         // no separate statuseffects_store entity for spectators, so the SpectateCopy effect-aliasing is N/A.
         StatusEffectsCatalog.RemoveAll(p, StatusEffectRemoval.Normal);
-        StatusEffectsCatalog.ClearAll(p);
+        StatusEffectsCatalog.ClearAll(p, releaseStore: true);
 
+        Arena?.PrepareObserverTransition(p, clanArenaElimination);
         p.IsObserver = true;
         ApplyObserverHull(p);
 
@@ -654,7 +680,7 @@ public sealed class ClientManager
         // default sentinel — CTS/Race set FRAGS_PLAYER_OUT_OF_GAME for an observer who already holds a ranked
         // time (Cts.OnMakePlayerObserver, sv_cts.qc:194). The default must therefore precede the hook call;
         // otherwise the later assignment clobbers the hook's override and the ranked-observer flag is dead.
-        p.FragsStatus = Player.FragsSpectator;   // QC RES_HEALTH/.frags = FRAGS_SPECTATOR (scoreboard sentinel)
+        p.FragsStatus = clanArenaElimination ? Player.FragsOutOfGame : Player.FragsSpectator;
 
         var observerArgs = new MutatorHooks.MakePlayerObserverArgs(p);
         MutatorHooks.MakePlayerObserver.Call(ref observerArgs);
@@ -678,6 +704,7 @@ public sealed class ClientManager
         p.Solid = Solid.Not;
         p.TakeDamage = DamageMode.No;
         p.Flags = EntFlags.Client | EntFlags.NoTarget;
+        PlayerFrameLogic.PlayerPowerupsRemoveAll(p, allowPoweroffSound: wasPlayer);
         p.CanPickupItems = false;                // QC drops FL_PICKUPITEMS
         p.Velocity = Vector3.Zero;
         p.AVelocity = Vector3.Zero;
@@ -730,9 +757,13 @@ public sealed class ClientManager
     public void SpectateNext(Player p, bool forward = true)
     {
         if (!p.IsObserver) return;
-        int mode = SpectatorRules.SpectateEnemiesMode(_match.GameType?.NetName);
+        int mode = Arena?.SpectateEnemies ?? SpectatorRules.SpectateEnemiesMode(_match.GameType?.NetName);
+        bool clanParticipant = Arena is not null && ClanArena.IsParticipant(p);
+        if (clanParticipant && mode == SpectatorRules.SpectateBlocked)
+            mode = SpectatorRules.SpectateTeammatesOnly; // CA -1 restricts free-fly, not following teammates.
         Player? next = SpectatorRules.CycleSpectatee(
-            p, _players, p.Spectatee, spectatorInGame: false, mode, _teamplay.IsTeamGame, forward);
+            p, _players, p.Spectatee, clanParticipant, mode, _teamplay.IsTeamGame, forward,
+            skipObservers: Arena is not null);
         if (next is not null)
             Spectate(p, next);
     }
@@ -741,6 +772,11 @@ public sealed class ClientManager
     /// via <see cref="SpectateCopy"/> each tick) and mark this observer as following it.</summary>
     public void Spectate(Player p, Player target)
     {
+        if (Arena is { } ca
+            && (target.IsObserver || target.IsDead || target == p
+                || (ClanArena.IsParticipant(p) && ca.SpectateEnemies != SpectatorRules.SpectateAnyone
+                    && !Teams.SameTeam(p, target))))
+            return;
         p.Spectatee = target;
         p.MoveType = MoveType.None;   // QC SpectateSet: MOVETYPE_NONE — the spectator is glued to the spectatee
         p.Velocity = Vector3.Zero;
@@ -824,8 +860,10 @@ public sealed class ClientManager
     /// <see cref="MutatorHooks.PlayerSpawn"/>. Used for both the first spawn and every respawn. On a map with
     /// no spawnpoints, arms a short retry (QC: retry once a second) and returns false.
     /// </summary>
-    public bool Spawn(Player p)
+    public bool Spawn(Player p, bool clanArenaRoundReset = false)
     {
+        if (!clanArenaRoundReset && ClanArenaRoundInProgress)
+            return false;
         // QC SelectSpawnPoint(this, false): the player's team (set at connect via TeamBalance_JoinBestTeam) drives
         // the team-spawn filter — SelectSpawnPoint derives teamcheck from p.Team + the have_team_spawns globals, so
         // a team player spawns on a spawnpoint tagged with their own team, while an FFA player uses any spot.
@@ -854,7 +892,8 @@ public sealed class ClientManager
         // re-assigns the offhand + nade_refire), matching the QC PutClientInServer→PlayerSpawn order.
         VortexArena.Common.Gameplay.Nades.NadesMutator.OnPutClientInServer(p);
 
-        SpawnSystem.PutPlayerInServer(p, sp.Value, warmup: IsWarmup?.Invoke() ?? false);
+        SpawnSystem.PutPlayerInServer(p, sp.Value, warmup: IsWarmup?.Invoke() ?? false,
+            restartAfterCountdown: RestartAfterCountdown?.Invoke());
 
         // A (re)spawned player is ALIVE and no longer awaiting respawn — clear the dead-state respawn fields so the
         // networked STAT(RESPAWN_TIME) reads 0 (alive). DeadPlayerThink stops running once the player is alive, so
@@ -929,7 +968,7 @@ public sealed class ClientManager
         // status effects (NORMAL removal — fires the removal sounds, "just to get rid of the pickup sound")
         // so a stale burning/superweapon timer doesn't survive on a recycled player object.
         StatusEffectsCatalog.RemoveAll(p, StatusEffectRemoval.Normal);
-        StatusEffectsCatalog.ClearAll(p);
+        StatusEffectsCatalog.ClearAll(p, releaseStore: true);
 
         // QC ClientDisconnect (client.qc:1305): if (this.vehicle) vehicles_exit(this.vehicle, VHEF_RELEASE) — a
         // disconnecting pilot is ejected so the vehicle is freed for others (and the leaving player's object
@@ -938,10 +977,9 @@ public sealed class ClientManager
         if (p.Vehicle is not null)
             VehicleBoarding.Exit(p);
 
-        // QC ClientDisconnect (client.qc:1335): player_powerups_remove_all(this, IS_PLAYER(this)) — strip the
-        // superweapon / unlimited item bits and play the power-off sound only if the leaver was a live player
-        // (an observer carries no powerups). Mirrors the death-time strip so a recycled player object is clean.
-        PlayerFrameLogic.PlayerPowerupsRemoveAll(p, !p.IsObserver);
+        // QC clears FL_CLIENT before powerup cleanup. Keep the roster flags through the native callbacks
+        // and suppress only the item-bit cue here. Normal status removal above can still play its own cue.
+        PlayerFrameLogic.PlayerPowerupsRemoveAll(p, allowPoweroffSound: false);
 
         // QC ClientDisconnect (client.qc:1318-1319): RemoveGrapplingHooks(this); Portal_ClearAll(this). A leaving
         // player must drop any in-flight grappling-hook chain and tear down every portal they placed so neither
@@ -958,6 +996,7 @@ public sealed class ClientManager
         // below, so the drop can still see the player. Default is a no-op for non-objective modes.
         _match.GameType?.OnPlayerRemoved(p);
 
+        _playersByClientSlot.Remove(info.ClientSlot);
         _clients.RemoveAt(idx);
         _players.Remove(p);
         RefreshPlayersSnapshot();
@@ -979,7 +1018,7 @@ public sealed class ClientManager
 
         // QC ClientDisconnect tail (client.qc:3057): TeamBalance_RemoveExcessPlayers(this) — re-check 2-team
         // balance now that this player has left (the leaver is already out of the roster above, so no ignore arg).
-        OnAfterClientDisconnect?.Invoke();
+        OnAfterClientDisconnect?.Invoke(p);
         return true;
     }
 

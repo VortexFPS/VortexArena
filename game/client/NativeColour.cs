@@ -81,6 +81,9 @@ public static class NativeColour
     /// </summary>
     public static void Frame(double delta, Node? world = null)
     {
+        // Entity-specific DarkPlaces materials can use this clock in either colour mode.
+        s_clock += delta;
+        RenderingServer.GlobalShaderParameterSet(DpSurfaceShader.TimeUniform, (float)s_clock);
         if (!Enabled) return;
         if (!s_sunChecked && world is not null && world.IsInsideTree())
         {
@@ -91,8 +94,6 @@ public static class NativeColour
             if (world.GetTree().Root.FindChild("Sun", true, false) is DirectionalLight3D sun) sun.Visible = SunWanted;
         }
         ShadowSettings.PollModelShadows(world);
-        s_clock += delta;
-        RenderingServer.GlobalShaderParameterSet(DpSurfaceShader.TimeUniform, (float)s_clock);
     }
 
     /// <summary>

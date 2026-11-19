@@ -1,0 +1,26 @@
+{
+  "original_archive_sha256": "41bffcf03211a475127ce4d5191d6852ea5d1826d1ba3fab0975e5d112c758f4",
+  "matching_map_members_sha256": {
+    "maps/stormkeep.bsp": "20b1aae86c9e1d4d08fa02cc7ebf6894578c4fd8680af586cfaaafed96127ca1",
+    "maps/stormkeep/lm_0000.jpg": "28ce5c5d399c98722061f9791e93640681791b910b02b3de639daf6f946270f3",
+    "maps/stormkeep/lm_0001.jpg": "b467f48ab9894646c862c51743d31cbbd61492d1174aeef976177e2b01eeeab0"
+  },
+  "original_code_sha256": {
+    "progs.dat": "c4a5a9e85598333568183779c06446b2d03f056d2da71636b6f86150ed1202f7",
+    "csprogs.dat": "cbc9fd9a4e2c7fc8f02f4aab6e5883e549790eb24e71be2bc0b8a0b0fea89999",
+    "menu.dat": "4d502424af24f90c36c8a17a034ded536571a0d353a4192d8b332e8cc8b2d771"
+  },
+  "fixture_sha256": "f7f2d633d020682267ae30ce659f2395f4ea7130e0cc6e79d289118bc56dcf03",
+  "fixture_bsp_sha256": "6d77199cdc1514c3047373401932af2fe913ec6b195f89f6acacc811541451a7",
+  "xonotic_data_revision": "863cd3e8456e18f577f7fe5fef857ff55ae62cc0",
+  "runtime_sha256": {
+    "godot": "cabf9ac16c55f8ca662da62e1f5908d3c35f765e312be62f104097bd8f78b987",
+    "xonotic_client": "cb2151fc2526fd0714e224e6b1005174a7f75b4301978e0c0224c8b55d805f0b",
+    "xonotic_server": "b78023261571fc65f3575e9b6eb4a6cb04b9d0b43327f96b90772630f688bc12"
+  },
+  "native_build_sha256": {
+    "VortexArena.dll": "cc6231e33157c760b7dab1127b4fbeae5f448b045f50fece7857bb69d4f30461",
+    "VortexArena.Common.dll": "aead55b849d95c7ca3ba28ca042e2d0f40511935c51088e0bfd70040ec1bc945",
+    "VortexArena.Server.dll": "be6b01ea1c84857a3cca6de90443689a23a678a79a7736211d576f62e37b7e45"
+  }
+}

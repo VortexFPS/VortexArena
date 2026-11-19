@@ -288,8 +288,8 @@ public static class Triggers
     //  trigger_hurt
     // ===================================================================
 
-    /// <summary>QC hurt.qh <c>SPAWNFLAG_HURT_SLOW</c> = BIT(0): keep the 1s creature cooldown even under q3compat.</summary>
-    public const int HurtSlow = 1 << 0; // SPAWNFLAG_HURT_SLOW
+    /// <summary>QC hurt.qh <c>HURT_SLOW</c> = BIT(4): keep the 1s creature cooldown even under q3compat.</summary>
+    public const int HurtSlow = 1 << 4;
 
     /// <summary><c>spawnfunc(trigger_hurt)</c> — damages anything damageable that touches it.</summary>
     public static void HurtSetup(Entity this_)
@@ -335,7 +335,7 @@ public static class Triggers
         if (MapMover.IsCreature(toucher))
         {
             // QC throttles creatures to one hit per `gametime` cooldown (per toucher): 1s on stock Xonotic,
-            // but a fast 0.05s under q3compat UNLESS SPAWNFLAG_HURT_SLOW is set (hurt.qc creature branch). A
+            // but a fast 0.05s under q3compat unless HURT_SLOW is set (hurt.qc creature branch). A
             // q3 trigger_hurt is a low-damage volume that bites rapidly; HURT_SLOW restores the 1s cadence.
             float cooldown = (CompatRemaps.IsQ3Compat && (self.SpawnFlags & HurtSlow) == 0) ? 0.05f : 1f;
             if (MapMover.Now() >= toucher.TriggerHurtTime + cooldown)
@@ -347,11 +347,9 @@ public static class Triggers
                 Combat.Damage(toucher, self, attacker, self.Dmg, DeathTypes.Void, toucher.Origin, Vector3.Zero);
             }
         }
-        else if (MapMover.IsPushable(toucher))
+        else if (toucher.DamagedByTriggers)
         {
-            // QC gates non-creatures on toucher.damagedbytriggers (projectiles/loot/bodies); the port has no
-            // such field, so IsPushable stands in for it (same set, matching the TargetUtilities convention).
-            // Those take damage every touch.
+            // Eligible non-creatures take damage on every touch, credited to the hurt volume itself.
             Combat.Damage(toucher, self, self, self.Dmg, DeathTypes.Void, toucher.Origin, Vector3.Zero);
         }
     }

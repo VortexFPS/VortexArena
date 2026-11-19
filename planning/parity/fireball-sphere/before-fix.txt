@@ -1,0 +1,25 @@
+RedProbe
+FIREBALL_MODEL receipt origin=<1220.0979, 339.93307, -15.968751> radius=96 model=Md3Morph wall_ms=75837
+FIREBALL_MODEL material=StandardMaterial3D texture=1x1 extent=64 final_scale=1.5 wall_ms=75837
+FIREBALL_MODEL receipt origin=<1220.0979, 339.93307, -15.968751> radius=96 model=Md3Morph wall_ms=75840
+FIREBALL_MODEL material=StandardMaterial3D texture=1x1 extent=64 final_scale=1.5 wall_ms=75841
+FIREBALL_MODEL sample age=0.767988026 scale=1.5 alpha=0 lingering=False wall_ms=75842
+FIREBALL_MODEL sample age=0.767988026 scale=1.5 alpha=0 lingering=False wall_ms=75842
+FIREBALL_MODEL receipt origin=<1220.0979, 339.93307, -15.968751> radius=96 model=Md3Morph wall_ms=79387
+FIREBALL_MODEL material=StandardMaterial3D texture=1x1 extent=64 final_scale=1.5 wall_ms=79387
+FIREBALL_MODEL sample age=0.168011993 scale=0.840059876 alpha=0.105590403 lingering=True wall_ms=79388
+FIREBALL_MODEL sample age=0.336703986 scale=1.5 alpha=0 lingering=False wall_ms=79556
+
+BlueProbe
+FIREBALL_MODEL receipt origin=<1220.0979, 339.93307, -15.968751> radius=96 model=Md3Morph wall_ms=72926
+FIREBALL_MODEL material=StandardMaterial3D texture=1x1 extent=64 final_scale=1.5 wall_ms=72928
+FIREBALL_MODEL sample age=0.271840006 scale=1.3592 alpha=0.0225279927 lingering=True wall_ms=72935
+FIREBALL_MODEL receipt origin=<1220.0979, 339.93307, -15.968751> radius=96 model=Md3Morph wall_ms=75220
+FIREBALL_MODEL material=StandardMaterial3D texture=1x1 extent=64 final_scale=1.5 wall_ms=75220
+FIREBALL_MODEL sample age=0.793233991 scale=1.5 alpha=0 lingering=False wall_ms=75221
+FIREBALL_MODEL sample age=1.06507397 scale=1.5 alpha=0 lingering=False wall_ms=75222
+FIREBALL_MODEL receipt origin=<1220.0979, 339.93307, -15.968751> radius=96 model=Md3Morph wall_ms=79200
+FIREBALL_MODEL material=StandardMaterial3D texture=1x1 extent=64 final_scale=1.5 wall_ms=79201
+FIREBALL_MODEL sample age=0.128893003 scale=0.64446497 alpha=0.136885598 lingering=True wall_ms=79201
+FIREBALL_MODEL sample age=0.29580301 scale=1.47901499 alpha=0.00335758924 lingering=True wall_ms=79367
+FIREBALL_MODEL sample age=0.450949013 scale=1.5 alpha=0 lingering=False wall_ms=79522

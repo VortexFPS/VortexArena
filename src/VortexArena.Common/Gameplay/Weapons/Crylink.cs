@@ -16,7 +16,7 @@ namespace VortexArena.Common.Gameplay;
 /// Identity/attributes from crylink.qh; balance from bal-wep-xonotic.cfg (g_balance_crylink_*).
 /// This port covers the multi-spike fan-out (circular pattern + secondary linear fan), per-spike
 /// bounce/lifetime, the over-lifetime fade-damage scaling, the link-join "converge on release" mechanic,
-/// and the link-explode chain detonation. Only client projectile networking/effects are left out.
+/// and the link-explode chain detonation.
 /// </summary>
 [Weapon]
 public sealed class Crylink : Weapon
@@ -230,7 +230,7 @@ public sealed class Crylink : Weapon
     // W_Crylink_Attack / W_Crylink_Attack2 — spray `shots` spikes in a spread, linked into a converge group.
     private void Attack(Entity actor, WeaponSlot slot, WeaponSlotState st, ModeBalance bal, bool secondary)
     {
-        actor.TakeResource(AmmoType, bal.Ammo);
+        DecreaseAmmo(actor, slot, bal.Ammo);
 
         QMath.AngleVectors(actor.Angles, out Vector3 forward, out Vector3 right, out Vector3 up);
 
@@ -285,7 +285,7 @@ public sealed class Crylink : Weapon
                 Vector3 s = WeaponFiring.CalculateSpreadPattern(i, shots) * (bal.Spread * WeaponFiring.WeaponSpreadFactor);
                 dir = QMath.Normalize(shot.Dir + right * s.Y + up * s.Z);
             }
-            proj.Velocity = WeaponFiring.ProjectileVelocity(dir, up, bal.Speed);
+            proj.Velocity = WeaponFiring.ProjectileVelocity(actor, dir, up, bal.Speed);
             proj.Angles = QMath.VecToAngles(proj.Velocity);
 
             // QC crylink.qc:306-307,405-406 — flag each spike as a dodgeable hazard (rating = per-mode spike damage).
@@ -329,6 +329,26 @@ public sealed class Crylink : Weapon
             st.CrylinkWaitRelease = secondary ? 2 : 1;
             _groups[group[0]] = new GroupInfo(group, actor, bal, secondary, baseDeathType);
         }
+    }
+
+    /// <summary>Resolve the visible fade independently of the spike's damage fade.</summary>
+    public static float ProjectileRenderAlpha(Entity projectile, float now, float tickSeconds)
+    {
+        if (projectile.ClassName != "spike" || projectile.NetName != "crylink"
+            || projectile.Health <= 0f || tickSeconds <= 0f || now < projectile.MaxHealth)
+            return projectile.Alpha;
+
+        // CSQCProjectile_SendEntity sets the fade bit only when the start delay and duration fit.
+        // Use the group spawn time for the initial send on the shared snapshot path.
+        // Stock Xonotic's five-second duration is 320 ticks at 64 Hz, so its spikes stay opaque.
+        float durationTicks = (1f / projectile.Health) / tickSeconds;
+        float startDelayTicks = (projectile.MaxHealth - projectile.LTime) / tickSeconds;
+        if (startDelayTicks > 255f || !(durationTicks >= 1f && durationTicks <= 255f))
+            return projectile.Alpha;
+
+        float duration = (int)durationTicks * tickSeconds;
+        float alpha = projectile.Alpha * (1f - (now - projectile.MaxHealth) / duration);
+        return alpha > 0f ? alpha : -1f; // Existing snapshot alpha uses -1 for fully hidden.
     }
 
     /// <summary>The per-group bookkeeping a registered link-group needs after Attack returns: the spike list,

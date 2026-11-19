@@ -47,6 +47,8 @@ public static class MenuDialogRegistry
         ["MonsterTools"] = () => new DialogMonsterTools(),          // QC dialog_monstertools (menu_showmonstertools)
         ["Uid2Name"]     = () => new DialogUid2Name(),              // QC dialog_uid2name
         ["TermsOfService"] = () => new DialogTermsOfService(),      // QC dialog_termsofservice
+        ["FirstRun"]     = () => new DialogFirstRun(),              // QC dialog_firstrun
+        ["Welcome"]      = () => new DialogWelcome(),               // QC dialog_welcome
         // XonoticWinnerDialog has no QC .name (main.winnerDialog is opened by reference); "Winner" is the port's.
         ["Winner"]       = () => new DialogWinner(),
         ["BotPolicies"] = () => new DialogBotPolicies(),            // Vortex bot movement laboratory (F11)

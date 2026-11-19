@@ -348,9 +348,9 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No async HTTP facility exists in the port (grep urllib/HttpClient/WebRequest/crypto_uri in src+game: only comments). Everything that rides urllib in Base is therefore inert: XonStat game-report POST, playerbasic skill GET, playerdetail profile POST/read, and sv_weaponstats_file uploads (weaponstats — outside this unit, same dependency)."
+      - "XonStat report submission, skill retrieval and profile lookup lack the pinned urllib request and failover behavior. The dedicated Matrix client has its own HTTP transport. Local weaponstats exports are implemented."
     verification:
-      - { kind: code, ref: "grep -rn 'urllib|HttpClient|crypto_uri|WebRequest' src game: comment hits only (DialogMultiplayerProfile.cs:136, DialogServerInfo.cs:185)", result: fail }
+      - { kind: code, ref: "DialogMultiplayerProfile calls playerstats_update without a profile-fetch backend. MatrixChatBridge and WeaponStats implement separate consumers.", result: fail }
     confidence: high
     notes: "A port would sensibly implement the CONTRACT (async open -> CANWRITE -> fclose commits POST -> CANREAD lines -> CLOSED, plus multi-URI failover and the 422 abort) on System.Net.Http rather than the buffer/slot mechanism — the slot-pool internals are engine workarounds, the callback state machine and failover semantics are the ported surface."
 

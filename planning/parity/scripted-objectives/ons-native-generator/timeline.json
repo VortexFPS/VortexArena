@@ -1,0 +1,232 @@
+[
+  {
+    "seconds": 0.0,
+    "event": "both graphical clients connected",
+    "port": 26813
+  },
+  {
+    "seconds": 2.002,
+    "client": "RedProbe",
+    "command": "cmd selectteam red"
+  },
+  {
+    "seconds": 3.386,
+    "client": "RedProbe",
+    "command": "cmd join"
+  },
+  {
+    "seconds": 4.768,
+    "client": "BlueProbe",
+    "command": "cmd selectteam blue"
+  },
+  {
+    "seconds": 6.137,
+    "client": "BlueProbe",
+    "command": "cmd join"
+  },
+  {
+    "seconds": 7.528,
+    "server": "status"
+  },
+  {
+    "seconds": 7.528,
+    "server": "g_weaponarena"
+  },
+  {
+    "seconds": 7.529,
+    "server": "g_balance_vortex_charge"
+  },
+  {
+    "seconds": 7.529,
+    "server": "g_balance_vortex_primary_damage"
+  },
+  {
+    "seconds": 7.529,
+    "server": "g_balance_vortex_primary_refire"
+  },
+  {
+    "seconds": 7.529,
+    "server": "g_balance_vortex_primary_force"
+  },
+  {
+    "seconds": 7.529,
+    "server": "g_onslaught_warmup"
+  },
+  {
+    "seconds": 7.529,
+    "server": "g_onslaught_round_timelimit"
+  },
+  {
+    "seconds": 7.529,
+    "server": "g_onslaught_cp_buildtime"
+  },
+  {
+    "seconds": 7.529,
+    "server": "g_onslaught_cp_health"
+  },
+  {
+    "seconds": 7.529,
+    "server": "g_onslaught_cp_buildhealth"
+  },
+  {
+    "seconds": 7.529,
+    "server": "g_onslaught_cp_regen"
+  },
+  {
+    "seconds": 7.529,
+    "server": "g_onslaught_gen_health"
+  },
+  {
+    "seconds": 9.529,
+    "client": "BlueProbe",
+    "command": "cmd teleporttotarget probe_blueview"
+  },
+  {
+    "seconds": 10.927,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_bluegen"
+  },
+  {
+    "seconds": 13.312,
+    "phase": "shielded generator shot"
+  },
+  {
+    "seconds": 13.312,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 14.37,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 15.17,
+    "phase": "initial build touch"
+  },
+  {
+    "seconds": 15.17,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_point_drop"
+  },
+  {
+    "seconds": 16.554,
+    "server": "status"
+  },
+  {
+    "seconds": 17.454,
+    "server": "status"
+  },
+  {
+    "seconds": 18.355,
+    "server": "status"
+  },
+  {
+    "seconds": 19.255,
+    "server": "status"
+  },
+  {
+    "seconds": 20.155,
+    "server": "status"
+  },
+  {
+    "seconds": 21.055,
+    "server": "status"
+  },
+  {
+    "seconds": 21.956,
+    "client": "RedProbe",
+    "verified_score": 10
+  },
+  {
+    "seconds": 21.956,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_bluegen"
+  },
+  {
+    "seconds": 25.56,
+    "phase": "exposed generator damage"
+  },
+  {
+    "seconds": 25.56,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 26.641,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 28.091,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 29.151,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 30.603,
+    "phase": "destroy generator"
+  },
+  {
+    "seconds": 30.603,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 31.668,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 31.668,
+    "phase": "repeat exposed shot if the round is still active"
+  },
+  {
+    "seconds": 33.319,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 34.38,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 35.181,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 36.249,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 37.049,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 38.13,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 38.931,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 39.994,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 46.801,
+    "server": "status"
+  }
+]

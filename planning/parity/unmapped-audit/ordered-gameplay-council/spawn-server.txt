@@ -1,0 +1,27 @@
+[lb]S1Probe spawn] Alpha slot=-1 team=13 spawn=<1040, 240, 0>
+[S1Probe] Alpha slot=-1 net=1 team=13 spectatee=1 region=-1 pref=False origin=<1040, 240, 0> serverTime=7.81
+[lb]S1Probe live-spawn] Alpha slot=-1 team=13 origin=<-1040, -448, 9>
+[S1Probe] Alpha slot=-1 net=1 team=13 spectatee=0 region=-1 pref=False origin=<-1040, -448, 9> serverTime=8.80
+[lb]S1Probe spawn] Beta slot=-2 team=4 spawn=<464, 528, 0>
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=False origin=<464, 528, 0> serverTime=15.25
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=True origin=<464, 528, 0> serverTime=16.00
+[lb]S1Probe live-spawn] Beta slot=-2 team=4 origin=<-1184, 1248, 1>
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=True origin=<-1184, 1248, 1> serverTime=16.23
+[S1Probe] Alpha slot=-1 net=1 team=4 spectatee=0 region=-1 pref=False origin=<-1040, -448, -7.9687495> serverTime=16.41
+[lb]S1Probe live-spawn] Alpha slot=-1 team=4 origin=<-736, 1152, 161>
+[S1Probe] Alpha slot=-1 net=1 team=4 spectatee=0 region=282 pref=False origin=<-224, -88, -45> serverTime=19.80
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=True origin=<-1184, 1248, -7.968749> serverTime=20.19
+[lb]S1Probe live-spawn] Beta slot=-2 team=4 origin=<-208, 880, 1>
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=True origin=<-208, 880, 0.8264111> serverTime=22.59
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=False origin=<-208, 880, -7.9687495> serverTime=23.00
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=False origin=<-208, 880, -7.9687495> serverTime=23.41
+[lb]S1Probe live-spawn] Beta slot=-2 team=4 origin=<-256, -288, 1>
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=False origin=<-256, -288, 0.8264111> serverTime=25.81
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=True origin=<-256, -288, -7.9687495> serverTime=26.22
+:part:2
+[lb]S1Probe spawn] Gamma slot=-3 team=13 spawn=<1760, 336, 0>
+[S1Probe] Gamma slot=-3 net=3 team=13 spectatee=3 region=-1 pref=False origin=<1760, 336, 0> serverTime=36.19
+[S1Probe] Gamma slot=-3 net=3 team=4 spectatee=3 region=-1 pref=False origin=<1760, 336, 0> serverTime=38.39
+[lb]S1Probe live-spawn] Gamma slot=-3 team=4 origin=<-256, -288, 1>
+[S1Probe] Gamma slot=-3 net=3 team=4 spectatee=0 region=-1 pref=False origin=<-256, -288, 0.8263944> serverTime=38.80
+gametype: tdm  time: 39.2

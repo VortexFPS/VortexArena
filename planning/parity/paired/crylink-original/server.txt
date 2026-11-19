@@ -1,0 +1,189 @@
+DarkPlaces Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+Game is Xonotic using gamedir data
+gamename for server filtering: Xonotic
+Package /tmp/va-paired-20261119/published-crylink-original/original/data/shared.pk3 contains the file models/xonotic_jumppad01/xonotic_jumppads01_readme.txt several times
+Package /tmp/va-paired-20261119/published-crylink-original/original/data/shared.pk3 contains the file textures/phillipk1x/_GPL.txt several times
+Package /tmp/va-paired-20261119/published-crylink-original/original/data/shared.pk3 contains the file textures/phillipk1x/_readme.txt several times
+Package /tmp/va-paired-20261119/published-crylink-original/original/data/shared.pk3 contains the file textures/phillipk2x/_GPL.txt several times
+Package /tmp/va-paired-20261119/published-crylink-original/original/data/shared.pk3 contains the file textures/phillipk2x/_readme.txt several times
+Current nice level is below the soft limit - cannot use niceness
+-ip option used, setting net_address to "127.0.0.1"
+-port option used, setting port cvar to 28074
+Loaded library "libcurl.so.4"
+Skeletal animation uses SSE code path
+execing quake.rc
+execing default.cfg
+execing xonotic-common.cfg
+Unknown command "r_textbrightness"
+Unknown command "r_textcontrast"
+execing commands.cfg
+execing help.cfg
+execing xonotic-server.cfg
+"maxplayers" set to "16"
+execing testing.cfg
+execing balance-xonotic.cfg
+execing bal-wep-xonotic.cfg
+execing physicsX.cfg
+execing turrets.cfg
+execing vehicles.cfg
+execing gametypes-server.cfg
+execing ctfscoring-samual.cfg
+execing mutators.cfg
+execing randomitems-xonotic.cfg
+execing monsters.cfg
+execing minigames.cfg
+execing physics.cfg
+execing help-xonotic.cfg
+couldn't exec cdtracks.cfg
+execing notifications.cfg
+execing data/campaign.cfg
+execing autoexec/empty.cfg
+execing autoexec.cfg
+SpawnServer: stormkeep
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Server listening on address 127.0.0.1:28074
+Server listening on address [0:0:0:0:0:0:0:0]:28074
+server: program loaded (crc 51381, size 6720K)
+[::SVQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+:gamestart:dm_stormkeep:0.1795052001.782491
+:gameinfo:mutators:LIST:crylink arena:norecoil
+:gameinfo:end
+Server spawned.
+Unknown command "crypto_keygen"
+execing post-config.cfg
+ParityProbe is connecting...
+ParityProbe connected
+:join:1:1:127.0.0.1:ParityProbe
+ParityProbe connected
+:team:1:-1:4
+[BOT]Pegasus connected
+:join:2:2:bot:[BOT]Pegasus
+:team:2:-1:4
+[BOT]Pegasus is now playing
+Server lag report: 10.0% CPU, 3.91% lost, offset avg 1.0ms, max 100.0ms, sdev 5.8ms
+saved 847 waypoint links to maps/stormkeep.waypoints.cache
+ParityProbe is now playing
+:startdelay_ended
+host:     Xonotic git Server
+version:  Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+protocol: 3504 (DP7)
+map:      stormkeep
+timing:   5.5% CPU, 0.00% lost, offset avg 1.1ms, max 11.7ms, sdev 1.4ms
+players:  2 active (16 max)
+
+#1   ParityProbe         0   0:00:20
+   127.0.0.1:34843
+#2   [BOT]Pegasus        0   0:00:12
+   botclient
+ParityProbe felt the strong pull of their Crylink
+:kill:suicide:1:1:type=1031:items=7-1
+bot_nofire is "1" ["0"] when set, bots never fire. mainly for testing in g_waypointeditor mode
+g_balance_crylink_primary_middle_fadetime is "1.5" ["5"] custom cvar
+g_balance_crylink_primary_middle_lifetime is "2" ["5"] custom cvar
+g_balance_crylink_primary_other_fadetime is "1.5" ["5"] custom cvar
+g_balance_crylink_primary_other_lifetime is "2" ["5"] custom cvar
+g_balance_crylink_primary_refire is "3" ["0.7"] custom cvar
+g_balance_crylink_primary_speed is "100" ["2000"] custom cvar
+g_balance_crylink_primary_spread is "0.12" ["0.08"] custom cvar
+g_buffs is "0" ["-1"] enable buffs; \"-1\" = enabled but no auto location or replacing powerups, \"1\" = enabled and can replace them
+g_buffs_random_location is "0" ["0"] randomize buff location on start and when reset
+g_buffs_randomize is "0" ["0"] randomize buff type when a player drops the buff and when initially spawning it; "1" = randomize in non-team gametypes, "2" = randomize in team gametypes, "3" = randomize in both
+g_spawnshieldtime is "0" ["1"] number of seconds players are invincible after they spawn. this shield is lost after they fire
+g_warmup is "0" ["0"] splits the game into warmup and match stages; "1" = the match starts when g_warmup_majority_factor of players are ready OR g_warmup_limit is hit; >1 also requires at least g_warmup players (including bots) to join; "-1" = that minimum player requrement is set by the map (lower bound of 2 or 2 per team)
+g_weaponarena is "crylink" ["0"] put in a list of weapons to enable a weapon arena mode, or try "all", "most", "all_available", or "most_available" (available only gives the weapon if the map normally has it as a pickup item)
+skill is "5" ["8"] difficulty level of game, affects monster layouts in levels, 0 = easy, 1 = normal, 2 = hard, 3 = nightmare (same layout as hard but monsters fire twice)
+sv_cheats is "1" ["0"] enables cheat commands in any game, and cheat impulses in dpmod
+sv_eventlog is "1" ["0"] enable event logging
+sv_public is "0" ["1"] 1: advertises this server on the master server (so that players can find it in the server browser); 0: allow direct queries only; -1: do not respond to direct queries; -2: do not allow anyone to connect; -3: already block at getchallenge level
+host:     Xonotic git Server
+version:  Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+protocol: 3504 (DP7)
+map:      stormkeep
+timing:   5.3% CPU, 0.00% lost, offset avg 0.9ms, max 6.0ms, sdev 1.0ms
+players:  2 active (16 max)
+
+#1   ParityProbe        -1   0:00:48
+   127.0.0.1:34843
+#2   [BOT]Pegasus        0   0:00:40
+   botclient
+Client "ParityProbe" dropped (Disconnect by user)
+:part:1
+ParityProbe disconnected
+:anticheat:_time:1:49.168850
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+ParityProbe left the game (Disconnect by user)
+Client "[BOT]Pegasus" dropped (Client dropped)
+:part:2
+[BOT]Pegasus disconnected
+:anticheat:_time:2:49.184475
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+bot_nofire is "1" ["0"] when set, bots never fire. mainly for testing in g_waypointeditor mode
+g_balance_crylink_primary_middle_fadetime is "1.5" ["5"] custom cvar
+g_balance_crylink_primary_middle_lifetime is "2" ["5"] custom cvar
+g_balance_crylink_primary_other_fadetime is "1.5" ["5"] custom cvar
+g_balance_crylink_primary_other_lifetime is "2" ["5"] custom cvar
+g_balance_crylink_primary_refire is "3" ["0.7"] custom cvar
+g_balance_crylink_primary_speed is "100" ["2000"] custom cvar
+g_balance_crylink_primary_spread is "0.12" ["0.08"] custom cvar
+g_buffs is "0" ["-1"] enable buffs; \"-1\" = enabled but no auto location or replacing powerups, \"1\" = enabled and can replace them
+g_buffs_random_location is "0" ["0"] randomize buff location on start and when reset
+g_buffs_randomize is "0" ["0"] randomize buff type when a player drops the buff and when initially spawning it; "1" = randomize in non-team gametypes, "2" = randomize in team gametypes, "3" = randomize in both
+g_spawnshieldtime is "0" ["1"] number of seconds players are invincible after they spawn. this shield is lost after they fire
+g_warmup is "0" ["0"] splits the game into warmup and match stages; "1" = the match starts when g_warmup_majority_factor of players are ready OR g_warmup_limit is hit; >1 also requires at least g_warmup players (including bots) to join; "-1" = that minimum player requrement is set by the map (lower bound of 2 or 2 per team)
+g_weaponarena is "crylink" ["0"] put in a list of weapons to enable a weapon arena mode, or try "all", "most", "all_available", or "most_available" (available only gives the weapon if the map normally has it as a pickup item)
+skill is "5" ["8"] difficulty level of game, affects monster layouts in levels, 0 = easy, 1 = normal, 2 = hard, 3 = nightmare (same layout as hard but monsters fire twice)
+sv_cheats is "1" ["0"] enables cheat commands in any game, and cheat impulses in dpmod
+sv_eventlog is "1" ["0"] enable event logging
+sv_public is "0" ["1"] 1: advertises this server on the master server (so that players can find it in the server browser); 0: allow direct queries only; -1: do not respond to direct queries; -2: do not allow anyone to connect; -3: already block at getchallenge level

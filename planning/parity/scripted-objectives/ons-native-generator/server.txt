@@ -1,0 +1,182 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: The separate rendering thread feature is experimental. Feel free to try it since it will eventually become a stable feature.
+However, bear in mind that at the moment it can lead to project crashes or instability.
+So, unless you want to test the engine, set the "rendering/driver/threads/thread_model" project setting to 'Safe'.
+     at: setup2 (main/main.cpp:3415)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Enabled maxfps=0 refresh=-1Hz cpu=6c gpu=
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag]
+=== VortexArena boot ===
+Weapons:   27
+Items:     21
+Mutators:  46
+GameTypes: 21
+Sounds:    223
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).
+[lb]MenuState] user gamedir mounted: /tmp/va-script-ons-native-gen13/server-user/data (drop .pk3 packs in its maps/ subfolder).
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"
+"maxplayers" set to "32"
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).
+[lb]MenuState] cvar help: 1386 engine descriptions.
+[lb]shell] --cvar sv_public = "0"
+[lb]shell] --cvar sv_cheats = "1"
+[lb]shell] --cvar sv_eventlog = "1"
+[lb]shell] --cvar g_start_delay = "0"
+[lb]shell] --cvar g_warmup = "0"
+[lb]shell] --cvar g_spawnshieldtime = "0"
+[lb]shell] --cvar g_balance_teams_prevent_imbalance = "0"
+[lb]shell] --cvar bot_number = "0"
+[lb]shell] --cvar g_weaponarena = "vortex"
+[lb]shell] --cvar g_balance_vortex_charge = "0"
+[lb]shell] --cvar g_balance_vortex_primary_damage = "62"
+[lb]shell] --cvar g_balance_vortex_primary_refire = "1.6"
+[lb]shell] --cvar g_balance_vortex_primary_force = "0"
+[lb]shell] --cvar g_onslaught_warmup = "0"
+[lb]shell] --cvar g_onslaught_round_timelimit = "1800"
+[lb]shell] --cvar g_onslaught_cp_buildtime = "4"
+[lb]shell] --cvar g_onslaught_cp_health = "200"
+[lb]shell] --cvar g_onslaught_cp_buildhealth = "80"
+[lb]shell] --cvar g_onslaught_cp_regen = "90"
+[lb]shell] --cvar g_onslaught_gen_health = "180"
+[lb]shell] --cvar cl_frameprofiler = "0"
+[lb]shell] --cvar bot_neural_bake = "0"
+[lb]video] vid_vsync 0 → requested Disabled, actual Enabled (off — uncapped, may tear)
+[lb]video] cl_maxfps 256 -> Engine.MaxFps 144 (auto: nothing set a cap, using max(144, refresh); refresh -1Hz)
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)
+[lb]video] process priority boost unavailable: Permission denied
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] hosting listen server: gametype=ons map=runningmanctf bots=0 skill=-1 timelimit=0 fraglimit=0
+[NetGame] dedicated slim: headless host — client render/audio asset loads are skipped (server keeps collision, entities, muzzle tags, waypoints). `sv_dedicated_slim 0` restores the full load.
+[NetGame] DEDICATED: no local client — no loopback connection, carrier, camera, HUD or prediction. All player slots are available to real clients.
+[lb]GameWorld] tick rate: sys_ticrate=0.015625 -> 64 Hz [lb]sharedStore=True, cfgLoaded=False]
+[NetGame] dedicated loop cap: Engine.MaxFps 64 (sim tickrate 64 Hz).
+[NetTransport.Server] listening on UDP 26813 (max 32).
+[ServerNet] LAN discovery: answering getinfo on UDP 26814 (game port 26813).
+[ServerConsole] reading commands from stdin (type 'status', 'help', 'quit'; --no-console to disable).
+[NetGame] precached 0 weapon models, skipped 24 (lazy), 24 muzzle tags.
+[NetGame] listen server on 127.0.0.1:26813 (map 'runningmanctf', ons, 0 bots) — self-connecting.
+[LoadTimeline] host runningmanctf — load begin → ready, 448 ms total
+    textures.compress: nothing compressed (gl_texturecompression 1, no eligible textures)
+    bsp.parse             28.2 ms    6.3 %
+    collision.build      104.2 ms   23.2 %
+    world.boot           118.6 ms   26.5 %
+  server.start           279.3 ms   62.3 %
+  precache.weapons       124.2 ms   27.7 %
+  (unaccounted: yields, present, unmeasured)       44.6 ms
+[ServerNet] peer 1704874594 connected (awaiting handshake).
+:connect:1:-1:
+:join:1:-1::BlueProbe
+[ServerNet] peer 1704874594 accepted as 'BlueProbe' (netId 1704874594, id e3ae094b).
+[ServerNet] peer 1819496147 connected (awaiting handshake).
+:connect:2:-2:
+:join:2:-2::RedProbe
+[ServerNet] peer 1819496147 accepted as 'RedProbe' (netId 1819496147, id 209277ab).
+gametype: ons  time: 20.6
+players: 2 (0 bots)
+  BlueProbe        score    0  k/d 0/0
+  RedProbe         score    0  k/d 0/0
+"g_weaponarena" is "vortex"
+"g_balance_vortex_charge" is "0"
+"g_balance_vortex_primary_damage" is "62"
+"g_balance_vortex_primary_refire" is "1.6"
+"g_balance_vortex_primary_force" is "0"
+"g_onslaught_warmup" is "0"
+"g_onslaught_round_timelimit" is "1800"
+"g_onslaught_cp_buildtime" is "4"
+"g_onslaught_cp_health" is "200"
+"g_onslaught_cp_buildhealth" is "80"
+"g_onslaught_cp_regen" is "90"
+"g_onslaught_gen_health" is "180"
+[lb]wf] first attack this session: vortex
+gametype: ons  time: 29.6
+players: 2 (0 bots)
+  BlueProbe        score    0  k/d 0/0
+  RedProbe         score    0  k/d 0/0
+gametype: ons  time: 30.5
+players: 2 (0 bots)
+  BlueProbe        score    0  k/d 0/0
+  RedProbe         score    0  k/d 0/0
+gametype: ons  time: 31.4
+players: 2 (0 bots)
+  BlueProbe        score    0  k/d 0/0
+  RedProbe         score    0  k/d 0/0
+gametype: ons  time: 32.3
+players: 2 (0 bots)
+  BlueProbe        score    0  k/d 0/0
+  RedProbe         score    0  k/d 0/0
+gametype: ons  time: 33.2
+players: 2 (0 bots)
+  BlueProbe        score    0  k/d 0/0
+  RedProbe         score    0  k/d 0/0
+gametype: ons  time: 34.1
+players: 2 (0 bots)
+  RedProbe         score   10  k/d 0/0
+  BlueProbe        score    0  k/d 0/0
+:scores:ons_runningmanctf:44
+:labels:player:score!!,caps!,takes,kills,deaths<,teamkills<,suicides<
+:player:see-labels:0,0,0,0,0,0,0:32:14:1:BlueProbe
+:player:see-labels:110,1,0,0,0,0,0:32:5:2:RedProbe
+:labels:teamscores:generators!!,score
+:teamscores:see-labels:1,0:4
+:teamscores:see-labels:0,0:13
+:end
+:gameover
+gametype: ons  time: 59.8
+players: 2 (0 bots)
+  RedProbe         score  110  k/d 0/0
+  BlueProbe        score    0  k/d 0/0
+** intermission **
+:part:1
+:anticheat:_time:1:48.5
+:anticheat:speedhack:0.129989:-
+:anticheat:speedhack_m1:0.797736:-
+:anticheat:speedhack_m2:0.817183:-
+:anticheat:speedhack_m3:0.835632:-
+:anticheat:speedhack_m4:0.852679:-
+:anticheat:speedhack_m5:0.868099:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0.143308:-
+:anticheat:div0_evade:0.277176:-
+:anticheat:idle_snapaim:9.333446:-
+:anticheat:idle_snapaim_signal:9.409156:-
+:anticheat:idle_snapaim_noise:0.07571:-
+:anticheat:idle_snapaim_m2:1.54224:-
+:anticheat:idle_snapaim_m3:4.211963:-
+:anticheat:idle_snapaim_m4:6.960667:-
+:anticheat:idle_snapaim_m7:13.278544:-
+:anticheat:idle_snapaim_m10:17.192945:-
+:anticheat:div0_snapback:0:-
+[ServerNet] peer 1704874594 disconnected (BlueProbe).
+:part:2
+:anticheat:_time:2:49.6875
+:anticheat:speedhack:0.00118:-
+:anticheat:speedhack_m1:0.652646:-
+:anticheat:speedhack_m2:0.660766:-
+:anticheat:speedhack_m3:0.669463:-
+:anticheat:speedhack_m4:0.679003:-
+:anticheat:speedhack_m5:0.68958:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0.153811:-
+:anticheat:div0_evade:0.15217:-
+:anticheat:idle_snapaim:20.856224:-
+:anticheat:idle_snapaim_signal:20.954275:-
+:anticheat:idle_snapaim_noise:0.098052:-
+:anticheat:idle_snapaim_m2:2.780487:-
+:anticheat:idle_snapaim_m3:8.539398:-
+:anticheat:idle_snapaim_m4:14.965135:-
+:anticheat:idle_snapaim_m7:30.785715:-
+:anticheat:idle_snapaim_m10:41.082483:-
+:anticheat:div0_snapback:0:-
+[ServerNet] peer 1819496147 disconnected (RedProbe).
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+=== frame profiler session summary (64s, 4016 frames) ===
+  fps: avg 63.7  1%low 64  0.1%low 58  (median 15.6ms, worst 283.5ms)
+  hitches: 0 total — 0 primaries: no hitches
+  gc: g0+22 g1+12 g2+4, total pause 95ms
+  alloc: 195.5MB total, 0MB/s recent, peak 88.3MB in one frame @ t=1.3s, heap 54.5MB
+  note: DEBUG build — frame times and the hitch census are NOT release-representative (run the release export via tools/perf-run.ps1 for real numbers)
+  [lb]vram census] 0 resident textures, est 0 MB (textures only; Godot's vram monitor adds mesh/render-target buffers)
+    compression: mode 1, s3tc unprobed (nothing compressed this session), ok 0, bc7-fallback 0, failed 0
+    top 0:

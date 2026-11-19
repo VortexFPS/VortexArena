@@ -2,6 +2,8 @@ using System.Numerics;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Services;
+using VortexArena.Common.Math;
+using VortexArena.Engine.Simulation;
 
 namespace VortexArena.Server;
 
@@ -19,11 +21,7 @@ namespace VortexArena.Server;
 /// <see cref="Player"/>-level <c>maycheat</c> override); dead players can't cheat unless <paramref name="ignoreDead"/>;
 /// at <c>sv_cheats &gt;= 2</c> non-players (observers) may cheat too. A refused cheat command broadcasts the QC
 /// "Player ... tried to use cheat '...'" notice (QC <c>CheatsAllowed</c>'s <c>logattempt</c> branch). The
-/// emergency <see cref="Teleport"/> impulse (info_autoscreenshot, else a random map location). The
-/// remaining cheats — the clone/copybody clones, the speedrun personal-waypoint snapshot/restore, and the
-/// drag object-carry subsystem + race map-editor tooling — depend on engine services (CopyBody, a per-frame
-/// cheat hook, te_lightning1, file I/O) outside this Godot-free core and are not part of it; the
-/// gameplay-state cheats above are complete.
+/// emergency <see cref="Teleport"/> and <see cref="Clone"/> impulses also use this shared gate.
 /// </summary>
 public sealed class Cheats
 {
@@ -73,11 +71,10 @@ public sealed class Cheats
         // QC CheatsAllowed returns 0 SILENTLY on the dead-player and observer guards; only the
         // final sv_cheats==0 fall-through logs the attempt. Match that placement.
         if (!ignoreDead && p.IsDead) return false;
-        if (GameStartCheats < 2 && (p.Flags & EntFlags.Client) == 0) return false; // observer guard
+        if (GameStartCheats < 2 && (p.IsObserver || (p.Flags & EntFlags.Client) == 0)) return false; // observer guard
         // QC cheats.qc:66-68 — the CLONE_MOVING/CLONE_STANDING impulses are permitted INDEPENDENTLY of sv_cheats
-        // while the player is still under their per-life clone budget (this.lip < sv_clones). lip counts the clones
-        // already spawned this life.
-        if (cloneImpulse && p.Lip < Cvars.Int("sv_clones")) return true;
+        // while the player is still under their clone allowance (this.lip < sv_clones).
+        if (cloneImpulse && p.Lip < Cvars.Float("sv_clones")) return true;
         if (p.MayCheat) return true;
         if (GameStartCheats != 0 && Cvars.Int("sv_cheats") != 0) return true;
         return Refuse(p, logAttempt, cheatName);
@@ -220,6 +217,26 @@ public sealed class Cheats
             default:
                 return false;
         }
+    }
+
+    /// <summary>QC CHIMPULSE_CLONE_MOVING and CHIMPULSE_CLONE_STANDING.</summary>
+    public void Clone(Player p, bool moving, float now)
+    {
+        if (!Allowed(p, cloneImpulse: true, logAttempt: true,
+            cheatName: moving ? "impulse 140" : "impulse 142"))
+            return;
+
+        Vector3 velocity = moving ? p.Velocity + QMath.Forward(p.ViewAngles) * 300f : Vector3.Zero;
+        if (PlayerBody.Copy(p, velocity) is { } body)
+        {
+            body.BodyCloneLocomotion = (int)LocomotionBlend.SelectLegsDirectional(
+                p.Velocity, new Vector3(0f, p.Angles.Y, 0f), p.OnGround, p.IsDucked, dead: false);
+            var (action, _) = AnimDecide.GetUpperAnim(p.AnimUpperAction, p.AnimActionStart, now);
+            body.AnimUpperAction = action;
+            body.AnimActionStart = MathF.Max(0f, now - p.AnimActionStart);
+        }
+        p.Lip++;
+        AddCheats(p, 1);
     }
 
     /// <summary>

@@ -1,0 +1,7 @@
+Before the native dispatch and line-count fixes, Darkzone dedicated stdin:
+$ sv_cmd bot_cmd load cues.bot
+Unknown command "sv_cmd"
+After fixing the wrapper alone, the same newline-terminated script:
+26 commands read
+Pinned original on the same script:
+25 commands read

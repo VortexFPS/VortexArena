@@ -1,0 +1,53 @@
+Gameplay-generated snapshots. Fixture UID values replaced with placeholders.
+
+[Race-Lap]
+No record file before startup
+R	leave_em_behind/race100record/speed/speed	360
+R	leave_em_behind/race100record/speed/crypto_idfp	<fixture-uid>
+R	leave_em_behind/race100record/time1	1.0000001
+R	leave_em_behind/race100record/uid1	<fixture-uid>
+N	<fixture-uid>	Race-Lap
+
+[Race-Readback]
+R	leave_em_behind/race100record/speed/speed	360
+R	leave_em_behind/race100record/speed/crypto_idfp	<fixture-uid>
+R	leave_em_behind/race100record/time1	1.0000001
+R	leave_em_behind/race100record/uid1	<fixture-uid>
+N	<fixture-uid>	Race-Lap
+
+[CTS-Course]
+No record file before startup
+R	leave_em_behind/cts100record/speed/speed	360
+R	leave_em_behind/cts100record/speed/crypto_idfp	<fixture-uid>
+R	leave_em_behind/cts100record/time1	1.0000001
+R	leave_em_behind/cts100record/uid1	<fixture-uid>
+N	<fixture-uid>	CTS-Course
+
+[CTS-Readback]
+R	leave_em_behind/cts100record/speed/speed	360
+R	leave_em_behind/cts100record/speed/crypto_idfp	<fixture-uid>
+R	leave_em_behind/cts100record/time1	1.0000001
+R	leave_em_behind/cts100record/uid1	<fixture-uid>
+N	<fixture-uid>	CTS-Course
+
+[CTF-EarnedPrivate]
+No record file before startup
+R	leave_em_behind/captimerecord/time	9.703125
+R	leave_em_behind/captimerecord/netname	CTF-EarnedPrivate
+
+[CTF-EarnedNamed]
+R	leave_em_behind/captimerecord/time	8.03125
+R	leave_em_behind/captimerecord/netname	CTF-EarnedNamed
+R	leave_em_behind/ctf100record/time1	8.03
+R	leave_em_behind/ctf100record/uid1	<fixture-uid>
+N	<fixture-uid>	CTF-EarnedNamed
+
+[CTF-EarnedReadback]
+R	leave_em_behind/captimerecord/time	8.03125
+R	leave_em_behind/captimerecord/netname	CTF-EarnedNamed
+R	leave_em_behind/ctf100record/time1	8.03
+R	leave_em_behind/ctf100record/uid1	<fixture-uid>
+N	<fixture-uid>	CTF-EarnedNamed
+Race-Lap → Race-Readback: byte-identical before and after restart.
+CTS-Course → CTS-Readback: byte-identical before and after restart.
+CTF-EarnedNamed → CTF-EarnedReadback: byte-identical before and after restart.

@@ -1,0 +1,21 @@
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+]cl_cmd hud configure
+HUD_CHECK_ON 1
+]cl_cmd hud configure
+HUD_CHECK_OFF 0
+]cl_cmd hud save "parity probe"
+]cl_cmd localprint "Map vote; starts soon" ignored
+]disconnect
+HUD_AFTER_MATCH
+_hud_configure is "0" [lb]"0"] configure the HUD
+hud_luma_parityprobe.cfg
+seta hud_configure_grid_xsize "0.123"
+Export SHA-256 0742856cc98ff7d62dcd5796423cbb4954d0f5025621ae9ba9a6c7877373e653
+
+Second-match repeat
+_hud_configure is "0" [lb]"0"] configure the HUD
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+HUD_REENTERED
+_hud_configure is "1" [lb]"0"] configure the HUD

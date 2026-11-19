@@ -6,6 +6,8 @@ using VortexArena.Common.Config;
 using VortexArena.Common.Diagnostics;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Damage;
+using VortexArena.Common.Menu;
 using VortexArena.Common.Physics;
 using VortexArena.Common.Services;
 using VortexArena.Engine.Collision;
@@ -289,6 +291,201 @@ public sealed class GameWorld
     /// </summary>
     public Func<string, string?>? ConfigReader { get; set; }
 
+    public MapInfo? AuthoredMapInfo { get; private set; }
+
+    public MapClientVisualSettings MapVisualSuggestions { get; private set; }
+
+    /// <summary>The effective map fog for local rendering and the typed client-init field.</summary>
+    public string MapFog { get; private set; } = MapFogSettings.None;
+    public IReadOnlyDictionary<string, string>? MatchLimitOverrides { get; set; }
+    public bool? HasQ3MapCompanion { get; set; }
+    private readonly HashSet<string> _mapMatchCvars = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _originalMapMatchCvars = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _mapTempCvars = new(StringComparer.Ordinal);
+
+    public bool HasMapMatchSetting(string name) => _mapMatchCvars.Contains(name);
+    public bool HasMapTempSetting(string name) => _mapTempCvars.Contains(name);
+    public static bool IsMatchLimitCvar(string name) => name is "timelimit" or "fraglimit" or "leadlimit"
+        or "g_tdm_teams" or "g_tdm_teams_override"
+        or "g_keyhunt_point_limit" or "g_keyhunt_point_leadlimit" or "g_keyhunt_teams" or "g_keyhunt_teams_override"
+        or "g_mayhem_point_limit" or "g_mayhem_point_leadlimit" or "g_tmayhem_point_limit"
+        or "g_tmayhem_point_leadlimit" or "g_tmayhem_teams" or "g_tmayhem_teams_override"
+        or "timelimit_override" or "fraglimit_override" or "leadlimit_override" or "g_race_laps_limit"
+        or "g_race_teams" or "g_race_qualifying_timelimit" or "g_race_qualifying_timelimit_override";
+
+    private void ApplyMapMatchDefaults(string mode)
+    {
+        AuthoredMapInfo = null;
+        MapVisualSuggestions = default;
+        _mapMatchCvars.Clear();
+        if (MatchLimitOverrides is { } bootOverrides)
+            foreach (var (name, value) in bootOverrides)
+                if (MapTempDirective.IsGameplaySetting(name) && !IsMatchLimitCvar(name) && Services.Cvars.Has(name))
+                {
+                    Services.Cvars.Set(name, value);
+                    _mapMatchCvars.Add(name);
+                }
+        if (GameType is Mayhem mayhem)
+            mayhem.UseMatchLimits = true;
+        if (GameType is TeamMayhem teamMayhem)
+            teamMayhem.UseMatchLimits = true;
+        if (GameType is KeyHunt keyHunt)
+            keyHunt.UseMatchLimits = true;
+        if (GameType is Race raceMode)
+            raceMode.MapLapLimit = null;
+        MapMatchDefaults limits = default;
+        bool hasDeclaredDefaults = false;
+        string map = MapName.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase) ? MapName[..^4] : MapName;
+        if (map.StartsWith("maps/", StringComparison.OrdinalIgnoreCase))
+            map = map["maps/".Length..];
+        if (map.Length != 0 && ConfigReader is not null)
+        {
+            // Only the authored sidecar supplies native map-local settings.
+            var parser = new MapInfoBackend(path => path == $"maps/{map}.mapinfo" ? ConfigReader(path) : null, _ => false);
+            try
+            {
+                MapInfo info = parser.Parse(map);
+                if (info.HasMapInfoFile)
+                    AuthoredMapInfo = info;
+                hasDeclaredDefaults = info.MatchDefaults.TryGetValue(mode, out limits);
+                ApplyMapTemporarySettings(info, mode);
+                MapVisualSuggestions = MapClientVisualSettings.Resolve(info, mode,
+                    Services.Cvars.GetString(MapClientVisualSettings.AclCvar), ReadMapSettingsInclude);
+            }
+            catch (VortexArena.Formats.AssetParseException) { /* unreadable sidecar */ }
+        }
+        if (Cvars.Bool("g_campaign"))
+            return;
+
+        if (mode == "tdm")
+        {
+            Apply("g_tdm_teams", hasDeclaredDefaults ? limits.Teams ?? 2 : null);
+            Apply("g_tdm_teams_override", null);
+        }
+
+        PointLimitSettings? pointSettings = PointLimitSettings.For(mode);
+        if (pointSettings is not null)
+        {
+            Apply(pointSettings.PointCvar, null);
+            Apply(pointSettings.LeadCvar, null);
+            if (pointSettings.MapTeamsCvar is { } teamCount && pointSettings.TeamsCvar is { } teamsOverride)
+            {
+                Apply(teamCount, hasDeclaredDefaults || mode == "kh" ? limits.Teams ?? pointSettings.DefaultTeams : null);
+                Apply(teamsOverride, null);
+            }
+        }
+
+        // Set the race selectors before choosing the limit and before ActivateGameType sets up qualifying.
+        if (mode == "rc")
+        {
+            Apply("g_race_teams", null);
+            Apply("g_race_laps_limit", null);
+            Apply("g_race_qualifying_timelimit_override", null);
+            Apply("g_race_qualifying_timelimit", limits.QualifyingTime);
+            if (_usingSharedStore)
+            {
+                Remember("timelimit");
+                Remember("fraglimit");
+                Remember("leadlimit");
+                Remember("g_race_qualifying");
+            }
+        }
+        Apply("timelimit", limits.Time ?? pointSettings?.DefaultMinutes, "timelimit_override");
+        Apply("fraglimit", GameType is Race { RaceTeams: >= 2 } ? limits.TeamScore : limits.Score ?? pointSettings?.DefaultPoints,
+            mode == "rc" ? null : "fraglimit_override", pointSettings?.PointCvar);
+        Apply("leadlimit", limits.Lead ?? (pointSettings is null ? null : 0f), "leadlimit_override", pointSettings?.LeadCvar);
+        if (GameType is Race race)
+            race.MapLapLimit = HasMapMatchSetting("fraglimit") ? Cvars.Int("fraglimit") : null;
+
+        void Apply(string name, float? value, string? overrideName = null, string? modeOverrideName = null)
+        {
+            // GameRules_limit_score/lead initializes the mode-specific setting before the generic fallbacks.
+            if (modeOverrideName is not null && Services.Cvars.Has(modeOverrideName)
+                && ParseOverride(Services.Cvars.GetString(modeOverrideName)) is float modeLimit)
+            {
+                SetMapValue(name, modeLimit);
+                return;
+            }
+            if (MatchLimitOverrides?.TryGetValue(name, out string? overridden) == true)
+            {
+                _mapMatchCvars.Add(name);
+                Services.Cvars.Set(name, overridden);
+            }
+            else
+            {
+                if (overrideName is not null)
+                {
+                    string? explicitOverride = MatchLimitOverrides?.GetValueOrDefault(overrideName);
+                    string? configuredOverride = value.HasValue && Services.Cvars.Has(overrideName)
+                        ? Services.Cvars.GetString(overrideName) : null;
+                    if (ParseOverride(explicitOverride ?? configuredOverride) is float limit)
+                    {
+                        value = limit;
+                        SetMapValue(name, value.Value);
+                        return;
+                    }
+                }
+                if (!value.HasValue || HasMapTempSetting(name))
+                    return;
+                SetMapValue(name, value.Value);
+            }
+        }
+
+        static float? ParseOverride(string? text) =>
+            float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture,
+                out float limit) && float.IsFinite(limit) && limit >= 0f ? limit : null;
+
+        void SetMapValue(string name, float value)
+        {
+            _mapMatchCvars.Add(name);
+            if (_usingSharedStore) Remember(name);
+            Services.Cvars.Set(name, value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        void Remember(string name) => _originalMapMatchCvars.TryAdd(name, Services.Cvars.GetString(name));
+    }
+
+    private void ApplyMapTemporarySettings(MapInfo info, string mode)
+    {
+        var cvars = Services.CvarsImpl;
+        string userAcl = cvars.GetString(MapClientVisualSettings.AclCvar);
+        int declarationLine = info.ModeDeclarationLines.GetValueOrDefault(mode);
+        foreach (MapTempDirective directive in info.ServerTempDirectives)
+        {
+            if (directive.Mode != "all" && !mode.Equals(directive.Mode, StringComparison.OrdinalIgnoreCase))
+                continue;
+            foreach (var (name, value) in directive.ReadAssignments(ReadMapSettingsInclude))
+            {
+                if (!MapTempDirective.IsSafeValue(name) || !MapTempDirective.IsSafeValue(value)
+                    || !MapTempDirective.Allows(MapTempDirective.SystemAcl, name)
+                    || !MapTempDirective.Allows(userAcl, name)
+                    || !MapTempDirective.IsGameplaySetting(name)
+                    || MatchLimitOverrides?.ContainsKey(name) == true)
+                    continue;
+                // A later declaration resets the raw match limits. Generic and mode-specific
+                // override cvars are resolved afterwards by ApplyMapMatchDefaults.
+                if (directive.Line < declarationLine && name is "timelimit" or "fraglimit" or "leadlimit")
+                    continue;
+                if (!cvars.SetMapTemporary(name, value))
+                    continue;
+                _mapTempCvars.Add(name);
+                _mapMatchCvars.Add(name);
+            }
+        }
+
+        if (_weaponBalanceDirty)
+        {
+            Weapons.ConfigureAll(); // entity and start-weapon setup need the new balance at boot, before tick 1
+            _weaponBalanceDirty = false;
+        }
+    }
+
+    private string? ReadMapSettingsInclude(string path)
+    {
+        try { return ConfigReader?.Invoke(path); }
+        catch (VortexArena.Formats.AssetParseException) { return null; }
+    }
+
     /// <summary>Diagnostics from the last config load (null until <see cref="Boot"/> runs with a <see cref="ConfigReader"/>).</summary>
     public VortexArena.Common.Config.ConfigInterpreter? LoadedConfig { get; private set; }
 
@@ -320,8 +517,8 @@ public sealed class GameWorld
 
     /// <summary>
     /// True once the active gametype's win condition has tripped (QC the gametype's checkrules latch). Wired
-    /// across every bundled gametype that exposes a <c>MatchEnded</c> latch; the round-based-only modes
-    /// (e.g. Survival) report their state through the round handler instead.
+    /// across the gametypes that expose a <c>MatchEnded</c> latch. Survival's round handler resolves rounds
+    /// and <see cref="RunCheckRulesWorld"/> resolves the match directly into intermission.
     /// </summary>
     public bool MatchEnded => GameType switch
     {
@@ -431,7 +628,9 @@ public sealed class GameWorld
     /// passes false; the lock-fallback host (one shared world) keeps the default true. Inert for every current
     /// caller (defaults to the old behavior: install and leave installed).
     /// </param>
-    public void Boot(string? gameTypeName = null, bool installAmbient = true)
+    /// <param name="applyStartupOverrides">Copies startup cvars after the stock config loads and before gameplay initialization.</param>
+    public void Boot(string? gameTypeName = null, bool installAmbient = true,
+        Action<CvarService>? applyStartupOverrides = null)
     {
         if (Booted)
             return;
@@ -491,6 +690,8 @@ public sealed class GameWorld
             loadedTree = true;
         }
 
+        applyStartupOverrides?.Invoke(Services.CvarsImpl);
+
         // Apply sys_ticrate AT BOOT, not just per-frame (ServerNet.StepWorld re-reads it live): the very
         // first things that consume the tick length — the handshake's tick-rate stamp (which the client's
         // reconciler + legacy input pacing latch for the whole session) and tick 0 itself — run BEFORE the
@@ -505,7 +706,7 @@ public sealed class GameWorld
         // Re-derive the cached weapon-balance block whenever the store holds authentic g_balance_* values: either
         // we just loaded the cfg tree, or we're on the shared store the menu already loaded it into. (A private
         // store with no ConfigReader — most tests — keeps the registration-time fallback balance, as before.)
-        if (loadedTree || _usingSharedStore)
+        if (loadedTree || _usingSharedStore || applyStartupOverrides is not null)
             Weapons.ConfigureAll();
 
         // QC autocvars are read live; our weapons cache their balance block in a struct (Weapon.Configure), so a
@@ -583,6 +784,10 @@ public sealed class GameWorld
 
         // 2) resolve + activate the gametype (QC MapInfo_LoadedGametype → REGISTER_GAMETYPE singleton).
         GameType = ResolveGameType(gameTypeName);
+        CatalogGametype = GameType?.NetName ?? DefaultGameType;
+        // sv_lms.qc ReadLevelCvars overrides the level flag, leaving the server's configured value intact.
+        Warmup.AllowDeferredReset = GameType is not LastManStanding;
+        ApplyMapMatchDefaults(GameType?.NetName ?? DefaultGameType);
         GameType?.OnInit();
 
         // [T52] wire the CTS gate the Q3-compat target_score / target_fragsFilter spawnfuncs read (QC g_cts):
@@ -595,13 +800,9 @@ public sealed class GameWorld
         PlayerFrameLogic.IsCtsGametype = () => GameType is Cts;
 
         // QC the global `q3compat` int (server/compat/quake3.qh:3), set during worldspawn from
-        // _MapInfo_FindArenaFile(mapname, ".arena"/".defi") (world.qc:964-965) — i.e. the existence of a sibling
-        // .arena/.defi file in the map pack. We probe the same companion files through the map ConfigReader so a
-        // Q3/Q3DF import flips q3compat on for the spawnfuncs that read it (func_plat defaults, plat_target_use, the
-        // CompatRemaps target_print Q3DF spawnflag reading). Computed once and cached for this boot; a stock map (no
-        // companion file, or no ConfigReader at all) leaves it false — matching QC's q3compat==0 default.
-        bool q3compat = ConfigReader is not null && !string.IsNullOrEmpty(MapName)
-            && (ConfigReader($"maps/{MapName}.arena") is not null || ConfigReader($"maps/{MapName}.defi") is not null);
+        // _MapInfo_FindArenaFile scans scripts/ and the BSP's own pack (world.qc:964-965).
+        bool q3compat = HasQ3MapCompanion ?? (ConfigReader is not null && !string.IsNullOrEmpty(MapName)
+            && (ConfigReader($"maps/{MapName}.arena") is not null || ConfigReader($"maps/{MapName}.defi") is not null));
         CompatRemaps.Q3CompatProvider = () => q3compat;
         // The items layer reads the same global q3compat flag (item-origin sits mid-bbox on Q3 maps, items.qc:1133).
         VortexArena.Common.Gameplay.StartItem.Q3CompatProvider = () => q3compat;
@@ -691,8 +892,7 @@ public sealed class GameWorld
         //    game_starttime) so powerups don't spawn during the countdown.
         //  - TargetUtilities.GiveItemHandler routes target_give's "hand item N to the player" through the
         //    canonical Item_GiveTo (QC ITEM_HANDLE(Pickup,…)); the SUB_UseTargets tail stays in TargetUtilities.
-        // (CanPickupItems is tagged on each (re)spawn in ClientManager.Spawn; buff pickups self-spawn via the
-        //  BuffsMutator hook in MutatorActivation.Apply above — no extra wiring needed here.)
+        // CanPickupItems is tagged on each (re)spawn in ClientManager.Spawn.
         VortexArena.Common.Gameplay.StartItem.GameStartTimeProvider = () => GameStartTime;
         // SV_CheckVelocity's universal speed limit (DP sv_maxvelocity). The DP ENGINE default is 2000, but
         // xonotic-server.cfg:325 sets 1000000000 — so the shipped game has no clamp. Seed the sim from the live
@@ -868,7 +1068,7 @@ public sealed class GameWorld
         VortexArena.Common.Gameplay.CampcheckMutator.CampaignBotHold = () => Cvars.Bool("g_campaign") && !Campaign.BotsMayStart;
 
         // 6) spawn the map's entities (QC the BSP entity-lump loop → spawnfunc_CLASSNAME).
-        SpawnMapEntities();
+        MapObjectsRegistry.SpawnMapLump(SpawnMapEntities);
 
         // 6a′) [T36] post-spawn pass once the whole BSP entity lump has spawned (QC the INITPRIO_LINKDOORS /
         //      INITPRIO_FINDTARGET deferred-init batch that DP runs after every spawnfunc). This was previously
@@ -878,6 +1078,9 @@ public sealed class GameWorld
         //   - Assault.ResolveObjectiveGraph(): resolve the staged decreaser→objective + destructible→decreaser
         //     links by name (QC assault_setenemytoobjective) and arm the first objective (QC roundstart).
         MapObjectsRegistry.RunPostSpawn();
+        if (GameType is Race raceMap)
+            raceMap.ValidateMapSpawns(MapName);
+        BuffsMutator.SpawnInitialBuffs();
         if (GameType is Assault assaultMode)
         {
             assaultMode.ResolveObjectiveGraph();
@@ -968,10 +1171,7 @@ public sealed class GameWorld
         // After step 8, because Commands does not exist until WireCommandsWarmupVoting constructs it.
         Commands.NeuralStatusHandler = () => NeuralBots?.StatusLine;
 
-        // [T56] Precompute the common-command reply caches at world init (QC server/world.qc:1022-1038:
-        // maplist_reply/lsmaps_reply/monsterlist_reply/…). The reply commands also recompute lazily on read,
-        // so this is a faithful warm-up matching QC's "precompute once".
-        Commands.Replies.Recompute();
+        Commands.Replies.BuildCvarChanges();
 
         // S5: the two-world prediction split wants the MAIN thread's ambient left untouched — restore the value
         // we captured before GameInit.Boot clobbered it. No-op for every current caller (installAmbient defaults
@@ -1043,8 +1243,26 @@ public sealed class GameWorld
         Minigames.PlayBanned = p => Bans.PlayerInList(p, "g_playban_list");
 
         // Warmup: the ready-majority is computed over the live roster, and a restart re-runs reset_map.
-        Warmup.Roster = () => Clients.Players;
-        Warmup.ResetMap = ResetMap;
+        Warmup.Roster = () => GameType is Race { QualifyingThenRace: true }
+            ? Clients.Players.Where(p => !p.IsObserver).ToArray()
+            : Clients.Players;
+        Warmup.OnMatchRestart = () =>
+        {
+            if (GameType is KeyHunt or LastManStanding or Survival or Race { QualifyingThenRace: true })
+                GameStartTime = Warmup.GameStartTime;
+            if (GameType is not Race { QualifyingThenRace: true }) return;
+            OverTime.Reset();
+            Voting.Stop();
+            NotificationSystem.Info("COUNTDOWN_RESTART");
+        };
+        Warmup.ResetMap = fakeRoundStart =>
+        {
+            // ReadyRestart can reset immediately, before the frame loop mirrors the new countdown.
+            GameStartTime = Warmup.GameStartTime;
+            // A deferred restart can cross the scheduled game-start boundary by a fraction of a tick.
+            ResetMap(fakeRoundStart, clearScores: Time <= GameStartTime
+                || GameType is Survival or Race { QualifyingThenRace: true });
+        };
         Warmup.OnCountdownTick = BroadcastGameStartCountdown; // [T40] game-start countdown announcer/center
 
         // QC readlevelcvars/ReadyCount seams that were coded-but-dead: wire them to the live host state so the
@@ -1065,7 +1283,13 @@ public sealed class GameWorld
         // moveplayer/shuffleteams go through even with teams locked. Wire the lock get/set to the live state.
         Teamplay.LockTeamsGet = () => TeamsLocked;
         Teamplay.LockTeamsSet = locked => TeamsLocked = locked;
-        Clients.OnAfterClientDisconnect = () => Teamplay.RemoveExcessPlayers(Clients.Players, Cvars.Bool("g_campaign"));
+        Clients.OnAfterClientDisconnect = player =>
+        {
+            Commands.ForgetPlayer(player);
+            // QC ClientDisconnect recounts after clearing FL_CLIENT, even when the leaver had no ballot.
+            Voting.RemoveVoter(player);
+            Teamplay.RemoveExcessPlayers(Clients.Players, Cvars.Bool("g_campaign"));
+        };
         // QC SetPlayerTeam tail (teamplay.qc:293,309): LogTeamChange emits the :team: event-log line (gated on
         // sv_eventlog + a valid playerid inside GameLog.TeamChange), and a warmup join re-runs ReadyCount so the
         // nagger/badteams hold releases once teams balance. Both fire from Teamplay.SetTeam on a real change.
@@ -1116,6 +1340,7 @@ public sealed class GameWorld
         // drives the spoken kill announcer + the CENTER_TEAMCHANGE countdown print. The death itself is the same
         // self-kill the old instant CmdKill ran (QC ClientKill_Now → Damage(this,this,this,100000,DEATH_KILL)).
         KillCountdown.Now = () => Time;
+        KillCountdown.Entities = () => Services.EntityTable.All;
         KillCountdown.KillDelay = () => Cvars.FloatOr("g_balance_kill_delay", 2f);
         // QC xonotic-server.cfg:447 g_balance_kill_antispam (default 5, XPM/XDF 0): the repeat-`kill` carry-forward.
         KillCountdown.KillAntispam = () => Cvars.FloatOr("g_balance_kill_antispam", 5f);
@@ -1205,10 +1430,12 @@ public sealed class GameWorld
         // Honor a host-set start time: if the host raised GameStartTime before Boot (a custom countdown) or
         // warmup is enabled, run the warmup/countdown flow; otherwise keep the immediate-start default (0) so
         // headless callers that step the sim straight away aren't frozen by a default countdown.
-        if (Cvars.WarmupStage || GameStartTime > 0f)
+        bool qualifyingRace = GameType is Race { QualifyingThenRace: true };
+        bool keyHuntStartDelay = GameType is KeyHunt && Cvars.FloatOr("g_start_delay", 0f) > 0f;
+        if (qualifyingRace || keyHuntStartDelay || Cvars.WarmupStage || GameStartTime > 0f)
         {
             Warmup.GameStartTime = GameStartTime;
-            Warmup.Begin();                       // enter warmup (if g_warmup) or arm the start countdown
+            Warmup.Begin(suppressWarmup: qualifyingRace);                       // enter warmup (if g_warmup) or arm the start countdown
             GameStartTime = Warmup.GameStartTime; // mirror onto the world's start time (gates movement/scoring)
         }
 
@@ -1250,7 +1477,7 @@ public sealed class GameWorld
         Voting.ValidateMap = (string map, bool fromConsole, out string error) =>
         {
             error = "";
-            if (string.IsNullOrEmpty(map) || !Rotation.MapExists(map))
+            if (string.IsNullOrEmpty(map) || !Rotation.MapExists(map) || !Rotation.CanListMap(map))
             { error = "This map is not available on this server."; return null; }
             if (!fromConsole && !Cvars.Bool("sv_vote_override_mostrecent") && MapRotation.IsRecent(map))
             { error = "This server does not allow for recent maps to be played again. Please be patient for some rounds."; return null; }
@@ -1416,6 +1643,7 @@ public sealed class GameWorld
         // "found" team-spawn latch / request flag from a prior match could leak across a map change that reuses
         // the same gametype object. (The forteams mask is recomputed from the live spots each selection.)
         SpawnSystem.ResetTeamSpawns();
+        (GameType as Race)?.BindSpawnSelection();
 
         // Demo: drive the engine recorder via the host hooks (left null until a host wires them).
         if (Cvars.Bool("sv_autodemo"))
@@ -1424,6 +1652,7 @@ public sealed class GameWorld
         // Client lifecycle: feed the connect/spawn/disconnect hooks into the §5 systems.
         Clients.OnClientConnect = InfraClientConnect;
         Clients.OnClientSpawn = InfraClientSpawn;
+        Clients.RestartAfterCountdown = () => Warmup.RestartAfterCountdown;
         Clients.IsWarmup = () => Warmup.WarmupStage; // QC warmup_stage → the warmup gear-up loadout (SPAWN3)
         Clients.OnClientDisconnect = InfraClientDisconnect;
         // QC anticheat_spectatecopy (server/client.qc:1837): a following observer's body angle inherits the
@@ -1444,12 +1673,16 @@ public sealed class GameWorld
             // this assignment runs after it and would otherwise clobber a per-gametype gate.
             GameType is not EditorMode
             && (GameType is not LastManStanding lms || lms.CanJoin(p, LmsPreStart))
+            && GameType is not ClanArena { SpawnBlocked: true }
             && GametypeHasFreeSlot(p);
         Clients.GametypeOnJoin = p => { if (GameType is LastManStanding lms) lms.AddPlayer(p, !LmsPreStart); };
     }
 
     /// <summary>QC the LMS pre-start window (<c>warmup_stage || time &lt;= game_starttime</c>): before this passes,
     /// LMS treats joins as free (full starting lives, no lockout) and disconnects as a no-op rank-wise.</summary>
+    // Stock starts KeyHunt rounds during warmup. The host's warmup-limit deadline is not a match countdown.
+    private float KeyHuntGameStartTime => Warmup.WarmupStage ? 0f : GameStartTime;
+
     private bool LmsPreStart => Warmup.WarmupStage || Time <= GameStartTime;
 
     /// <summary>
@@ -1496,7 +1729,7 @@ public sealed class GameWorld
             Player it = roster[i];
             if (ReferenceEquals(it, joiner)) // QC FOREACH_CLIENT(it != this, …)
                 continue;
-            if (!it.IsObserver) // QC IS_PLAYER(it) || INGAME(it)
+            if (GameType is ClanArena ? ClanArena.IsParticipant(it) : !it.IsObserver)
                 currentlyPlaying++;
         }
         return currentlyPlaying < limit;
@@ -1545,6 +1778,9 @@ public sealed class GameWorld
     {
         AntiCheat.Init(p, Time);
         Timeout.ResetAllowance(p);
+        // DecodeLevelParms gives a fresh connection at least 60 seconds before an idle kick.
+        PlayerStates.Of(p).IdleSince = MathF.Max(Time, Time - Services.Cvars.GetFloat("sv_maxidle") + 60f);
+        (GameType as Race)?.AddPlayer(p);
 
         // QC Ban_MaybeEnforceBanOnce: a banned client is dropped on connect.
         if (Bans.MaybeEnforceBan(p))
@@ -1575,20 +1811,10 @@ public sealed class GameWorld
         // (s1 = name); the NotificationSystem NET sink broadcasts it (it was registered but never emitted).
         NotificationSystem.Info("CHAT_CONNECT", p.NetName);
 
-        // QC SendWelcomeMessage (server/client.qc:1077, sent per-client from scores.qc:229): when g_campaign the
-        // welcome channel carries Campaign_GetLevelNum() (campaign_level + 1) and the CSQC builds the "Level N:"
-        // line for the Welcome dialog. On the in-process listen server the equivalent is to surface that line to
-        // the connecting real client; a bot has no CSQC/dialog so it's skipped (matches the human-only effect).
-        if (!p.IsBot && Cvars.Bool("g_campaign"))
+        // Native sign-on delivers the per-player Welcome. Non-network GameWorld hosts retain their text sink.
+        if (!JoinWelcomeInSignon && !p.IsBot && Cvars.Bool("g_campaign"))
             SendCampaignWelcome(p);
-        // QC SendWelcomeMessage (non-campaign branch, server/client.qc:1107): MUTATOR_CALLHOOK(BuildMutatorsPrettyString,
-        // "") builds the human-readable active-mutators "modifications" line (e.g. "Stale-move negation, Vampire"),
-        // networked to the joining client and rendered in its Welcome dialog. The port has no networked CSQC welcome
-        // channel, so — exactly as the campaign branch and the hook/offhand gameplay tips above do — surface the line
-        // to the connecting real client via the per-client chat sink. This is the LIVE consumer of the
-        // BuildMutatorsPrettyString chain (the prior code only wrote it to a never-read "modifications" cvar). Computed
-        // per-join (QC does the same; mutators don't change mid-match), skipped for bots (no Welcome dialog).
-        else if (!p.IsBot)
+        else if (!JoinWelcomeInSignon && !p.IsBot)
             SendMutatorsWelcome(p);
 
         // QC cl_hook.qc:MUTATOR_HOOKFUNCTION(cl_hook, BuildGameplayTipsString) (cl_hook.qc:6-13): when the
@@ -1625,6 +1851,7 @@ public sealed class GameWorld
         if (PlayerStats.Enabled)
             PlayerStats.AddEvent($"kills-{p.PlayerId}"); // QC the per-player kills-<id> event slot
         Demo.OnClientConnect(p, MapName, GameType?.NetName ?? DefaultGameType);
+        OpenHitPlot(p);
 
         // QC MUTATOR_HOOKFUNCTION(superspec, ClientConnect): seed the connect defaults, schedule the missing-UID
         // hello, and load the per-client options file. Gated on the mutator being added (g_superspectate on).
@@ -1655,19 +1882,24 @@ public sealed class GameWorld
     /// QC the campaign branch of <c>SendWelcomeMessage</c> (server/client.qc:1079) + the CSQC build in
     /// <c>net_handle_ServerWelcome</c> (client/main.qc:1384): in a campaign the welcome message is just the
     /// 1-based level number (<see cref="Campaign.LevelNum"/> = <c>Campaign_GetLevelNum</c> = campaign_level + 1)
-    /// rendered as "Level N:". The in-process listen server has no networked CSQC welcome channel, so the line is
-    /// surfaced to the connecting real client through the same print path the rest of the campaign uses
-    /// (<see cref="Campaign.Log"/> → ChatBroadcast). This is the live reader of <see cref="Campaign.LevelNum"/>.
+    /// rendered as "Level N:". Hosts without native sign-on deliver the same briefing through their print sink.
     /// </summary>
     private void SendCampaignWelcome(Player p)
+    {
+        string line = BuildCampaignWelcomeLine();
+        if (Commands.ChatToPlayer is not null)
+            Commands.ChatToPlayer.Invoke(p, line);
+        else
+            Campaign.Log?.Invoke(line);
+    }
+
+    private string BuildCampaignWelcomeLine()
     {
         // QC SendWelcomeMessage (campaign branch) networks Campaign_GetLevelNum() to the connecting CLIENT, whose
         // CSQC net_handle_ServerWelcome (client/main.qc:1379) builds the Welcome dialog string
         //   strcat(CCR("^F1"), sprintf(_("Level %d:"), n), sprintf(CCR(" ^BG%s\n\n"), "_LEVEL_DESC"),
         //          sprintf(CCR(_("^BGPress ^F2%s^BG to enter the game")), getcommandkey(_("jump"), "+jump")))
-        // where "_LEVEL_DESC" is a placeholder the MENU then substitutes with this level's per-level DESCRIPTION
-        // (the shortdesc column, which the SVQC campaign slice drops). The port has no CSQC Welcome dialog; it
-        // surfaces the same string as a per-client chat line. Faithful pieces reproduced here:
+        // where "_LEVEL_DESC" is a placeholder the menu substitutes with the level description.
         //   1. the per-level description (was wrongly the player's own name) — sourced from the all-levels
         //      catalogue (the menu's CampaignFile_Load complement) keyed by the absolute level index;
         //   2. the +jump keybind resolved exactly like Base's getcommandkey (the hook/offhand tips above do the
@@ -1680,54 +1912,52 @@ public sealed class GameWorld
         // chat line; the description is shown only when the level actually carries one (QC's _LEVEL_DESC is the
         // shortdesc, which can be empty).
         string descPart = string.IsNullOrEmpty(desc) ? "" : $" ^BG{desc}";
-        string line = $"^F1Level {Campaign.LevelNum}:{descPart}^7 — ^BGPress ^F2{jumpKey}^BG to enter the game";
-        if (Commands.ChatToPlayer is not null)
-            Commands.ChatToPlayer.Invoke(p, line);
-        else
-            Campaign.Log?.Invoke(line); // bare host / test fallback (no per-client sink wired)
+        return $"^F1Level {Campaign.LevelNum}:{descPart}^7 — ^BGPress ^F2{jumpKey}^BG to enter the game";
     }
 
     /// <summary>
     /// QC the non-campaign branch of <c>SendWelcomeMessage</c> (server/client.qc:1107): build the human-readable
     /// active-mutators "modifications" line via the <c>BuildMutatorsPrettyString</c> hook chain and surface it to the
-    /// connecting client. In Base this string is networked and rendered in the CSQC Welcome dialog; the port has no
-    /// networked welcome channel, so — like <see cref="SendCampaignWelcome"/> and the hook/offhand gameplay tips — it
-    /// goes to the one connecting client via the per-client chat sink. This is the sole LIVE consumer of the
-    /// <c>BuildMutatorsPrettyString</c> chain. The leading ", " the per-mutator hooks prepend is stripped once here
-    /// (QC: <c>substring(s, 2, strlen(s) - 2)</c>). When no mutator contributes, the line is empty and nothing is sent.
-    /// (The non-mutator modifications QC also appends — "No start weapons", "Low gravity", "Weapons stay", "Jetpack" —
-    /// are owned by their own units, not this mutator-string chain, so they are intentionally not added here.)
+    /// connecting client. Hosts without native sign-on use the per-client chat sink.
     /// </summary>
     private void SendMutatorsWelcome(Player p)
     {
         if (Commands.ChatToPlayer is null)
             return;
+        foreach (string line in WelcomeDetails(motdHeading: false))
+            Commands.ChatToPlayer.Invoke(p, line);
+    }
 
+    /// <summary>The transport delivers the briefing to the player during sign-on.</summary>
+    public bool JoinWelcomeInSignon { get; set; }
+
+    public string BuildJoinWelcomeDetails() => Cvars.Bool("g_campaign")
+        ? BuildCampaignWelcomeLine() : string.Join("\n\n", WelcomeDetails(motdHeading: true));
+
+    private IEnumerable<string> WelcomeDetails(bool motdHeading)
+    {
         string prettyRaw = MutatorActivation.BuildMutatorsPrettyString("");
         string modifications = prettyRaw.Length > 2 ? prettyRaw.Substring(2) : "";
         if (!string.IsNullOrEmpty(modifications))
         {
             // QC client/main.qc:1438 renders it as strcat(_("Active modifications:"), " ^3", modifications) in
             // the Welcome dialog (the ^3 color is Base's, verbatim).
-            Commands.ChatToPlayer.Invoke(p, $"Active modifications: ^3{modifications}");
+            yield return $"Active modifications: ^3{modifications}";
         }
 
         // QC SendWelcomeMessage (server/client.qc:1124-1132): the server mutator message (g_mutatormsg) and the
         // MOTD (sv_motd, with "\n" escapes expanded to real newlines) are appended to the networked welcome blob
-        // and rendered in the CSQC Welcome dialog. Both default empty. The port has no networked welcome channel,
-        // so they are surfaced to the connecting client via the same per-client chat sink as the rest of the
-        // welcome (campaign line / mutators / gameplay tips). Sent only when non-empty so a stock server stays
-        // silent (matching Base, where an empty blob renders nothing).
+        // and rendered in the CSQC Welcome dialog. Both default empty.
         string mutatorMsg = Api.Cvars.GetString("g_mutatormsg") ?? "";
         if (!string.IsNullOrEmpty(mutatorMsg))
-            Commands.ChatToPlayer.Invoke(p, mutatorMsg);
+            yield return mutatorMsg;
 
         string motd = Api.Cvars.GetString("sv_motd") ?? "";
         if (!string.IsNullOrEmpty(motd))
         {
             // QC: strreplace("\\n", "\n", autocvar_sv_motd) — config stores literal "\n" sequences.
             motd = motd.Replace("\\n", "\n");
-            Commands.ChatToPlayer.Invoke(p, motd);
+            yield return motdHeading ? $"^9↓ Server's message ↓^7\n{motd}" : motd;
         }
     }
 
@@ -1798,11 +2028,29 @@ public sealed class GameWorld
             Bots.OnBotSpawned(p);
         else
             Campaign.BotsMayStart = true;
+
+        UpdatePlayerSpecies(p);
+    }
+
+    internal void UpdatePlayerSpecies(Player p)
+    {
+        // FixPlayermodel reads the final model and skin, including a bot's selected appearance.
+        string model = p.Model;
+        int extension = model.LastIndexOf('.');
+        if (extension >= 5 && (model.AsSpan(extension - 5, 5).SequenceEqual("_lod1")
+            || model.AsSpan(extension - 5, 5).SequenceEqual("_lod2")))
+            model = model.Remove(extension - 5, 5);
+        int skin = (int)p.Skin;
+        string? modelInfo = model.Length == 0 ? null : ConfigReader?.Invoke($"{model}_{skin}.txt");
+        if (modelInfo is null && model.Length != 0 && skin != 0)
+            modelInfo = ConfigReader?.Invoke($"{model}_0.txt");
+        p.Species = ModelSpeciesEffects.Parse(VortexArena.Formats.Sidecars.ModelInfoParser.Parse(modelInfo ?? "").Species);
     }
 
     /// <summary>QC the ClientDisconnect head: finalize stats, log :part:, and drop the client from the subsystems.</summary>
     private void InfraClientDisconnect(Player p)
     {
+        (GameType as Race)?.RemovePlayer(p);
         // QC ClientDisconnect: if (IS_PLAYER(this)) Send_Effect(EFFECT_SPAWN, this.origin, '0 0 0', 1) — the
         // teleport-out puff at the live player's position (server/client.qc:1292). Only a JOINED player (not an
         // observer) has a body to vanish; the EffectEmitter NET sink networks the EFFECT_SPAWN ("SPAWN") burst.
@@ -1832,9 +2080,9 @@ public sealed class GameWorld
             AntiCheat.ReportToEventLog(p, Time, GameLog.Echo);
         AntiCheat.Remove(p);
         Timeout.Remove(p);
-        Voting.RemoveVoter(p);
         MapVote.RemoveVoter(p);
         Demo.OnClientDisconnect(p);
+        _hitPlots?.Close(p);
 
         // QC MUTATOR_HOOKFUNCTION(superspec, ClientDisconnect) → superspec_save_client_conf: persist this client's
         // superspec/autospec flags + itemfilter to its options file. Gated on the mutator being added.
@@ -1963,8 +2211,8 @@ public sealed class GameWorld
     /// <c>serverflags</c> bits this unit owns — <see cref="ServerFlags.AllowFullbright"/> from
     /// <c>sv_allow_fullbright</c> and <see cref="ServerFlags.ForbidPickupTimer"/> from <c>sv_forbid_pickuptimer</c>.
     /// The value is mirrored into the <c>serverflags</c> cvar so a shared-store listen-server client reads the
-    /// same flags its server set (the client gates fullbright player rendering, client/view.qc:1115, and the
-    /// HUD pickup timer, client/hud/panel/pickup.qc:91, off these bits). The warmup/limit half of readlevelcvars
+    /// same flags its server set for the HUD pickup timer (client/hud/panel/pickup.qc:91). Native clients
+    /// receive the flags in ClientInit for the night-vision gate (client/view.qc:1115). The warmup/limit half
     /// lives in <see cref="WarmupController.Begin"/>.
     /// </summary>
     private void ReadLevelCvars()
@@ -1993,6 +2241,11 @@ public sealed class GameWorld
     /// </summary>
     public void Shutdown()
     {
+        Commands?.ShutdownMatrix();
+        _hitPlots?.Dispose();
+        _hitPlots = null;
+        FlushWeaponStats();
+
         // QC server/world.qc:2631 (SV_Shutdown): Ban_SaveBans() — re-persist the ban store at session end so the
         // saved seconds-remaining are refreshed against the final clock (the per-Insert/Delete save keeps the list
         // current, but a long session's remaining-time would otherwise be stale by the session length on next load).
@@ -2012,6 +2265,12 @@ public sealed class GameWorld
             PlayerStats.GameReport(finished: false, Clients.Players, Time, Teamplay.IsTeamGame);
 
         Services.CvarsImpl.Changed -= OnServerCvarChanged;
+        foreach (var (name, value) in _originalMapMatchCvars)
+            Services.Cvars.Set(name, value);
+        _originalMapMatchCvars.Clear();
+        foreach (string name in _mapTempCvars)
+            Services.CvarsImpl.RestoreMapTemporary(name);
+        _mapTempCvars.Clear();
 
         // Detach the score table from the PROCESS-WIDE obituary bus and the accuracy events.
         //
@@ -2030,6 +2289,51 @@ public sealed class GameWorld
         // builds a world per EPISODE: about 1.6 MB retained each time, a managed heap climbing through
         // gen2, and an out-of-memory kill on every training run at every host count tried.
         Scores.UnsubscribeFromDeaths();
+        if (GameType is Race or KeyHunt)
+            GameType.Deactivate();
+    }
+
+    private HitPlots? _hitPlots;
+
+    public void StartHitPlots(Func<string, string> resolveUserPath)
+    {
+        if (_hitPlots is not null)
+            return;
+        _hitPlots = new HitPlots(resolveUserPath, GameLog.MatchId);
+        foreach (Player player in Clients.Players)
+            OpenHitPlot(player);
+    }
+
+    private void OpenHitPlot(Player player) =>
+        _hitPlots?.Open(player, Services.Cvars.GetFloat("g_hitplots") != 0f,
+            Services.Cvars.GetString("g_hitplots_individuals"));
+
+    private WeaponStats? _weaponStats;
+    private DamageSystem? _weaponStatsDamageSystem;
+
+    /// <summary>Initialize the map's local stats after the host has applied its startup cvars.</summary>
+    public void StartWeaponStats(Func<string, string> resolveUserPath)
+    {
+        if (_weaponStats is not null || Combat.System is not DamageSystem damageSystem
+            || Services.Cvars.GetString(WeaponStats.FileCvar).Length == 0)
+            return;
+
+        var replies = Commands.Replies;
+        replies.BuildCvarChanges();
+        _weaponStats = new WeaponStats(this, resolveUserPath, replies.CvarPurechanges, replies.CvarPurechangesCount);
+        _weaponStatsDamageSystem = damageSystem;
+        damageSystem.WeaponStatsSink = _weaponStats;
+    }
+
+    private void FlushWeaponStats()
+    {
+        if (_weaponStatsDamageSystem is { } damageSystem)
+        {
+            damageSystem.WeaponStatsSink = null;
+            _weaponStatsDamageSystem = null;
+        }
+
+        _weaponStats?.Flush();
     }
 
     /// <summary>Cached deferred-command executor (see OnStartFrame — avoids a per-tick closure).</summary>
@@ -2037,6 +2341,8 @@ public sealed class GameWorld
 
     private void OnStartFrame()
     {
+        Commands.PumpMatrix();
+
         // Apply any runtime balance change (g_balance_* set via console/script/vote) before the tick reads weapon
         // stats: re-seed every weapon's cached balance block from the now-current cvars (QC autocvars are live).
         if (_weaponBalanceDirty)
@@ -2136,6 +2442,7 @@ public sealed class GameWorld
         var killCountdownPlayers = Clients.Players;
         for (int i = 0; i < killCountdownPlayers.Count; i++)
             KillCountdown.Tick(killCountdownPlayers[i]);
+        KillCountdown.TickClones();
 
         // QC PlayerFrame per-client once-per-server-frame block (server/client.qc:2852-3092):
         // alivetime AFK-gate + sv_maxidle idle-kick / move-to-spec.
@@ -2601,7 +2908,8 @@ public sealed class GameWorld
         // Dead players don't move (QC: PlayerThink bails for IS_DEAD); they await the respawn driver. The
         // pre-match countdown freezes players (QC: time < game_starttime) — but WARMUP is freely playable, so
         // movement is allowed during warmup even though scoring/creature-damage are off.
-        bool preMatchFreeze = Time < GameStartTime && !Warmup.WarmupStage;
+        bool qualifyingUntilDeferredReset = GameType is Race { QualifyingThenRace: true } && Warmup.HasDeferredReset;
+        bool preMatchFreeze = Time < GameStartTime && !Warmup.WarmupStage && !qualifyingUntilDeferredReset;
         // QC: an un-joined observer/spectator never runs PM_Main — its hull isn't simulated (no gravity).
         // (The connect-as-observer lifecycle sets MOVETYPE_NONE too, but gate movement explicitly.)
         // [T44] spectator free-flight: a free-fly spectator (MOVETYPE_NOCLIP/FLY, as QC PutSpectatorInServer)
@@ -2645,7 +2953,8 @@ public sealed class GameWorld
                         | (input.ButtonAttack2 ? 0x04 : 0)
                         | (input.ButtonUse     ? 0x08 : 0)
                         | (input.ButtonHook    ? 0x10 : 0)
-                        | (input.Typing        ? 0x20 : 0);
+                        | (input.Typing        ? 0x20 : 0)
+                        | (input.ButtonDrag    ? 0x40 : 0);
             // QC: skip the update when typing (PHYS_INPUT_BUTTON_CHAT — typing locks out the movement buttons
             // in PM_UpdateButtons, so keeping parm_idlesince from advancing while chatting is intentional).
             if (!input.Typing &&
@@ -2659,7 +2968,7 @@ public sealed class GameWorld
             st.MovementOld = input.MoveValues;
             st.VAngleOld   = input.ViewAngles;
             // Initialise IdleSince on the very first tick (when it is still 0) so the idle clock starts from
-            // connect time rather than the epoch (matches QC DecodeLevelParms: initialise to time on first use).
+            // connect time rather than the epoch. A first tick at epoch can still leave a zero timestamp.
             if (st.IdleSince == 0f)
                 st.IdleSince = Time;
         }
@@ -2680,6 +2989,8 @@ public sealed class GameWorld
         // (or is force-respawned with g_forced_respawn). The input was already dequeued/acked above.
         if (p.IsDead && !p.IsObserver)
         {
+            if (Mutators.ByName("sandbox") is SandboxMutator { Added: true } sandbox)
+                sandbox.DriveDrag(p, held: false, Simulation.FrameTime);
             DeadPlayerThink(p, input);
             return; // dead players don't run movement/PostThink (PostThink is a no-op while dead anyway)
         }
@@ -2696,6 +3007,10 @@ public sealed class GameWorld
             p.Angles = input.ViewAngles;
             p.ViewAngles = input.ViewAngles;
         }
+
+        if (Mutators.ByName("sandbox") is SandboxMutator { Added: true } sandboxDrag)
+            sandboxDrag.DriveDrag(p, !p.IsBot && !p.IsObserver && canMove && p.Vehicle is null && input.ButtonDrag,
+                Simulation.FrameTime);
 
         // [T37] Seated-in-a-vehicle drive gate (QC: PlayerPhysplug = veh.PlayerPhysplug replaces SV_PlayerPhysics).
         // Stash the resolved input on BOTH the player (gunner: GunnerFrame reads gunner.VehInput) and the body
@@ -2957,7 +3272,10 @@ public sealed class GameWorld
             VortexArena.Common.Gameplay.Damage.DamageSystem.StampHitSoundStats(p, source, Time);
         }
         foreach (Player p in Clients.Players)
+        {
             VortexArena.Common.Gameplay.Damage.DamageSystem.ClearHitSoundAccumulators(p);
+            PlayerBody.FinishDeathFrame(p);
+        }
 
         // 5) the post-resolution server hook (QC the tail of the server frame).
         ServerHooks.FireEndFrame(Time);
@@ -3125,6 +3443,7 @@ public sealed class GameWorld
         // Clear CA's join-refused hook so a gametype switch away from CA doesn't leave mid-round join
         // notifications firing for the new mode (mirrors the GametypeJoinGate/GametypeOnJoin clears below).
         Clients.GametypeOnJoinRefused = null;
+        Clients.Arena = null;
         // Clear the round-grace weapon-fire block (QC round_handler_IsActive => round_handler != NULL): only a
         // round-based gametype's EnableRounds re-installs it, so a non-round mode never forbids fire. (This is a
         // PROCESS-WIDE static, so it leaks across the fresh GameWorld each match/level boots — unlike the instance
@@ -3197,6 +3516,7 @@ public sealed class GameWorld
                 break;
             case ClanArena ca:
                 ca.Activate();
+                Clients.Arena = ca;
                 Scores.TeamScoreSource = ca.GetTeamRounds;   // CA's "team score" is its round wins
                 // QC round_handler_Spawn(CA_CheckTeams, CA_CheckWinner, CA_RoundStart): drive the LIVE handler off
                 // CA's real predicates (CheckTeams gate, CheckWinner → round-timelimit stalemate via PreventStalemate)
@@ -3205,7 +3525,11 @@ public sealed class GameWorld
                     RoundHandler caRounds = EnableRounds(
                         ca.CheckTeams,
                         () => ca.CheckWinner() != 0,
-                        onRoundStart: null,
+                        onRoundStart: () =>
+                        {
+                            if (!Warmup.WarmupStage)
+                                ca.SnapshotRoundTeams();
+                        },
                         endDelay: Cvars.FloatOr("g_ca_round_enddelay", 5f),
                         countdown: Cvars.FloatOr("g_ca_warmup", 5f),
                         roundTimeLimit: Cvars.FloatOr("g_ca_round_timelimit", 180f));
@@ -3222,14 +3546,19 @@ public sealed class GameWorld
                 // live, no client may spawn — refuse the join (force-observe) and mark the would-be joiner
                 // INGAME_STATUS_JOINING + send INFO_CA_JOIN_LATE so they enter next round. Mirrors the Survival gate
                 // install below. Keep the free-slot cap like the default/LMS gate (inert for CA's open team game).
-                Clients.GametypeJoinGate = p => ca.CanJoin(p, Rounds is { IsRoundStarted: true }) && GametypeHasFreeSlot(p);
+                ca.RoundSpawnsBlocked = () => !Warmup.WarmupStage
+                    && (Rounds is { IsRoundStarted: true } or { AwaitingNextRound: true });
                 // QC MUTATOR_HOOKFUNCTION(ca, PutClientInServer): when a mid-round join is REFUSED by CanJoin
                 // (round is live), mark the would-be joiner INGAME_STATUS_JOINING + send INFO_CA_JOIN_LATE.
                 // GametypeOnJoinRefused fires in JoinAllowed exactly when GametypeJoinGate returns false, which
                 // is the only condition under which OnJoinLate should notify. The old wiring used GametypeOnJoin
                 // (fired only on SUCCESSFUL joins) with an IsRoundStarted guard — mutually exclusive, so
                 // OnJoinLate was permanently unreachable.
-                Clients.GametypeOnJoinRefused = p => { if (Rounds is { IsRoundStarted: true }) ca.OnJoinLate(p); };
+                Clients.GametypeOnJoinRefused = p =>
+                {
+                    if (ca.SpawnBlocked && GametypeHasFreeSlot(p))
+                        ca.OnJoinLate(p);
+                };
                 Clients.GametypeOnJoin = null; // CA has no successful-join hook (LMS/Survival use this, CA does not)
                 break;
 
@@ -3355,7 +3684,7 @@ public sealed class GameWorld
                 // default to a 20-minute defender timelimit. The port reads the live `timelimit` cvar in DriveFrame,
                 // so if nothing configured one the defender-timelimit win could never fire (the round would be
                 // decidable only by core destruction). Assert the Base default when no timelimit is set.
-                if (Cvars.FloatOr("timelimit", 0f) <= 0f)
+                if (!HasMapMatchSetting("timelimit") && Cvars.FloatOr("timelimit", 0f) <= 0f)
                     Cvars.Set("timelimit", 20f);
                 // QC Assault has NO generic round_handler: it runs entirely off WinningCondition_Assault() called
                 // per-frame from CheckRules_World (driven below in DriveGametypeFrame → aslt.DriveFrame). It manages
@@ -3407,7 +3736,7 @@ public sealed class GameWorld
                 // 10-minute clock and is decided by time (pointlimit=0 / leadlimit=0, both already the generic
                 // defaults Duel.FragLimit/leadlimit read). Assert the Base mapinfo default for the one divergent
                 // limit when nothing configured it (same pattern as the Assault/Survival timelimit defaults above).
-                if (Cvars.FloatOr("timelimit", 0f) <= 0f)
+                if (!HasMapMatchSetting("timelimit") && Cvars.FloatOr("timelimit", 0f) <= 0f)
                     Cvars.Set("timelimit", 10f);   // QC timelimit=10 (minutes); pointlimit=0/leadlimit=0 are the generic defaults
                 break;
             // QC LMS is NOT round-based (sv_lms.qc has no round_handler): it is a SINGLE continuous match where
@@ -3424,9 +3753,9 @@ public sealed class GameWorld
                 // mapinfo registration defaults a Survival match to a 20-minute timelimit and a 12-point limit.
                 // Like Assault's timelimit default above, assert the Base mapinfo defaults when nothing configured
                 // one (the shipped cfg/menu may set them, but an unconfigured boot would otherwise run unlimited).
-                if (Cvars.FloatOr("timelimit", 0f) <= 0f)
+                if (!HasMapMatchSetting("timelimit") && Cvars.FloatOr("timelimit", 0f) <= 0f)
                     Cvars.Set("timelimit", 20f);
-                if (Cvars.FloatOr("fraglimit", 0f) <= 0f)
+                if (!HasMapMatchSetting("fraglimit") && Cvars.FloatOr("fraglimit", 0f) <= 0f)
                     Cvars.Set("fraglimit", 12f); // QC mapinfo pointlimit=12 → GameRules_limit_score (fraglimit)
                 // QC surv_Initialize round_handler_Spawn(Surv_CheckPlayers, Surv_CheckWinner, Surv_RoundStart):
                 // drive the LIVE (map-reset/respawn-gate/countdown) handler off Survival's OWN predicates — the
@@ -3492,7 +3821,6 @@ public sealed class GameWorld
                     (targ.Flags & VortexArena.Common.Framework.EntFlags.Monster) == 0;
                 break;
             case Race race:
-                race.Activate();
                 // QC race.qh CLASS(Race) gametype_init default args "timelimit=20 qualifying_timelimit=5
                 // laplimit=7 teamlaplimit=15 leadlimit=0": a Race map defaults to a 20-minute timelimit. The port
                 // reads the live `timelimit` cvar in DriveFrame, so an unconfigured boot would otherwise run
@@ -3500,7 +3828,7 @@ public sealed class GameWorld
                 // time out). Assert the Base mapinfo default when nothing configured one — same pattern as the
                 // Cts/Duel/Assault/Survival arms below. NB: do this BEFORE the qualifying-timelimit swap block
                 // (which stashes + replaces `timelimit`), so the stashed value is the faithful 20-minute default.
-                if (Cvars.FloatOr("timelimit", 0f) <= 0f)
+                if (!HasMapMatchSetting("timelimit") && Cvars.FloatOr("timelimit", 0f) <= 0f)
                     Cvars.Set("timelimit", "20");   // QC gametype_init timelimit=20 (minutes)
                 // QC the finish kill-delay re-teleport: re-place the racer at a (race-start) spawn point so they
                 // run again. Clients.Spawn goes through PutPlayerInServer, the host analogue of race_PreparePlayer.
@@ -3514,36 +3842,25 @@ public sealed class GameWorld
                 race.UidConsentProvider = p =>
                     Commands.GetClientCvarFloat(p, "cl_allow_uidtracking", 1f) == 1f
                     && Commands.GetClientCvarFloat(p, "cl_allow_uid2name", -1f) == 1f;
-                // QC trigger_race_checkpoint_spawn_evalfunc / race_respawn_spotref (server/race.qc:1055/808): a
-                // respawning racer is returned to the checkpoint they last passed, not a random grid start. Race
-                // sets the one-shot forced spawn (Player.SpawnPointTarg) here, before SelectSpawnPoint reads it.
-                Clients.OnPreSpawn = p => race.ApplyRespawnSpot(p);
-                // QC rc_SetLimits (sv_race.qc:407-438): the qualifying-then-race mode is DERIVED from the
-                // qualifying-timelimit cvar — if g_race_qualifying_timelimit(_override) > 0 the session becomes
-                // g_race_qualifying = 2, the real fraglimit/leadlimit/timelimit are STASHED, and the ACTIVE
-                // timelimit is replaced by the qualifying timelimit (so the warmup-qualifying phase runs on the
-                // qualifying clock; when it elapses TransitionQualifyingToRace restores the stashed limits).
+                // rc_SetLimits selects the map/override qualifying clock and saves the effective main limits.
                 {
                     float qOverride = Cvars.FloatOr("g_race_qualifying_timelimit_override", -1f);
                     float qBase = Cvars.FloatOr("g_race_qualifying_timelimit", 0f);
-                    float qTimelimit = qOverride >= 0f ? qOverride : qBase; // minutes
-                    if (qTimelimit > 0f)
+                    float qTimelimit = qOverride >= 0f ? qOverride : qBase;
+                    if (Cvars.Bool("g_campaign"))
+                        Cvars.Set("g_race_qualifying", "1");
+                    else if (qTimelimit > 0f || race.QualifyingThenRace)
                     {
-                        // QC: g_race_qualifying = 2; stash the real limits; active timelimit := qualifying timelimit.
+                        int lapLimit = race.LapLimit;
+                        race.SaveRaceLimits(lapLimit, Cvars.FloatOr("leadlimit", 0f), Cvars.FloatOr("timelimit", 20f));
                         Cvars.Set("g_race_qualifying", "2");
-                        race.SaveRaceLimits(Cvars.FloatOr("fraglimit", -1f), Cvars.FloatOr("leadlimit", -1f),
-                            Cvars.FloatOr("timelimit", -1f));
-                        Cvars.Set("timelimit",
-                            qTimelimit.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                    }
-                    else if (Cvars.FloatOr("g_race_qualifying", 0f) == 2f)
-                    {
-                        // g_race_qualifying was set to 2 directly (no qualifying-timelimit source): still stash the
-                        // live limits so the transition can restore them when the plain timelimit elapses.
-                        race.SaveRaceLimits(Cvars.FloatOr("fraglimit", -1f), Cvars.FloatOr("leadlimit", -1f),
-                            Cvars.FloatOr("timelimit", -1f));
+                        Cvars.Set("fraglimit", "0");
+                        Cvars.Set("leadlimit", "0");
+                        if (qTimelimit > 0f)
+                            Cvars.Set("timelimit", qTimelimit.ToString(System.Globalization.CultureInfo.InvariantCulture));
                     }
                 }
+                race.Activate();
                 break;
             case Cts cts:
                 cts.Activate();
@@ -3551,7 +3868,7 @@ public sealed class GameWorld
                 // ONLY by the time limit (no frag/lead win; cts.Activate cleared fraglimit/leadlimit to 0 per the
                 // MUTATOR_ONADD GameRules_limit_score/lead(0)). Assert the Base mapinfo timelimit default when
                 // nothing configured one, same pattern as the Duel/Survival arms above.
-                if (Cvars.FloatOr("timelimit", 0f) <= 0f)
+                if (!HasMapMatchSetting("timelimit") && Cvars.FloatOr("timelimit", 0f) <= 0f)
                     Cvars.Set("timelimit", 20f);   // QC gametype_init timelimit=20 (minutes)
                 // QC Race_FinalCheckpoint (sv_cts.qc:342) → ClientKill_Silent(player, g_cts_finish_kill_delay):
                 // the finish retract is a real *silent* self-kill (DEATH_KILL), not a teleport-respawn — so it
@@ -3597,6 +3914,12 @@ public sealed class GameWorld
         // objectives simply fall through to RetirePlaceholder.
         GametypeObjectiveSpawns.Sink = GameType switch
         {
+            Tdm => (Action<Entity>?)(e =>
+            {
+                // The native team value is already the scoreboard color (QC's cnt + 1 minus its SVQC offset).
+                if (e.ClassName != "tdm_team" || e.Cnt == 0)
+                    RetirePlaceholder(e);
+            }),
             Ctf ctf => (Action<Entity>?)(e =>
             {
                 switch (e.ClassName)
@@ -3625,15 +3948,18 @@ public sealed class GameWorld
             },
             Race race => e =>
             {
-                if (e.ClassName == "trigger_race_penalty")
-                    race.SpawnPenaltyZone(e.Origin, e.Count > 0 ? e.Count : 5f);
-                else if (e.ClassName == "trigger_race_checkpoint")
-                    // QC spawnfunc(trigger_race_checkpoint): .cnt → race_checkpoint index (0 = start line);
-                    // spawnflag 4 kills a wrong-order crossing (DEATH_HURTTRIGGER 10000); spawnflag 8 on the
-                    // highest CP marks the timed finish line (race_timed_checkpoint) for start!=finish tracks.
-                    race.SpawnCheckpoint(e.Origin, e.Count,
-                        punishWrongWay: (e.SpawnFlags & 4) != 0,
-                        timed: (e.SpawnFlags & 8) != 0);
+                switch (e.ClassName)
+                {
+                    case "info_player_race":
+                        race.RegisterRaceSpawn(e);
+                        return;
+                    case "trigger_race_checkpoint":
+                        race.RegisterMapCheckpoint(e);
+                        return;
+                    case "trigger_race_penalty":
+                        race.SpawnPenaltyZone(e.Origin, e.Count > 0 ? e.Count : 5f);
+                        break;
+                }
                 RetirePlaceholder(e);
             },
             Onslaught ons => e =>
@@ -3643,7 +3969,11 @@ public sealed class GameWorld
                     case "onslaught_generator":
                         // QC spawnfunc(onslaught_generator): the node is indexed by its .targetname so an
                         // onslaught_link can resolve it in the post-spawn pass (ons.ResolveLinks below).
-                        ons.CpCombat.SpawnGenerator((int)e.Team, e.Origin, e.TargetName);
+                        // BSP generator teams use Xonotic's server numbering (palette index + 1).
+                        // Keep the conversion at map ingestion so the graph uses native player team IDs.
+                        int mapTeam = (int)e.Team;
+                        int team = Array.IndexOf(Teams.All, mapTeam - 1) >= 0 ? mapTeam - 1 : mapTeam;
+                        ons.CpCombat.SpawnGenerator(team, e.Origin, e.TargetName);
                         break;
                     case "onslaught_controlpoint":
                         // QC: .targetname → graph node name (link resolution); .target → fired on capture
@@ -3790,19 +4120,20 @@ public sealed class GameWorld
                 }
                 RetirePlaceholder(e);
             },
-            // [T36] CTS start/stop timers (server/race.qc target_checkpoint_setup, gated !g_race && !g_cts).
             Cts cts => e =>
             {
                 switch (e.ClassName)
                 {
+                    case "info_player_race":
+                        // Keep the preexisting CTS marker behavior. CTS course placement is handled separately.
+                        MapMover.IndexRegister(e);
+                        return;
                     case "target_startTimer":
-                        cts.SpawnStartTimer(e.Origin); // QC race_checkpoint = 0 (start); touch begins the run
-                        break;
                     case "target_stopTimer":
-                        cts.SpawnStopTimer(e.Origin);  // QC race_checkpoint = -2 (finish); touch folds the run time
-                        break;
-                    // target_checkpoint (defrag intermediate) + trigger_race_checkpoint are Race features; the port's
-                    // CTS is a single start→stop course, so they're consumed as no-ops here (recon: LOW priority).
+                    case "target_checkpoint":
+                    case "trigger_race_checkpoint" when e.Cnt is >= 0 and < 255:
+                        cts.RegisterCourseEntity(e);
+                        return;
                 }
                 RetirePlaceholder(e);
             },
@@ -3887,7 +4218,7 @@ public sealed class GameWorld
                 ons.GameStartTime = GameStartTime;                      // sync game_starttime for the overtime gate
                 ons.Tick();                                             // QC: drive the round handler + overtime generator-decay
                 break;
-            case KeyHunt kh: kh.Tick(); break;
+            case KeyHunt kh: kh.Tick(KeyHuntGameStartTime, GameStopped); break;
             case FreezeTag ft:
                 // QC PlayerPreThink revive loop: feed the live roster, then accumulate/decay revive progress and
                 // auto-thaw frozen players each frame (without this the thaw ring never fills + nobody is revived).
@@ -3968,7 +4299,14 @@ public sealed class GameWorld
         // the Assault inter-round freeze via GameStopped).
         if (GameStopped)
             return;
-        if (Rounds is { IsRoundStarted: true })
+        if (GameType is ClanArena)
+        {
+            foreach (Player p in Clients.Players)
+                if (!p.IsObserver && p.IsDead && (p.RespawnFlags & RespawnFlag.Silent) != 0
+                    && p.RespawnTime > 0f && Time >= p.RespawnTime)
+                    Clients.PutObserverInServer(p, clanArenaElimination: true);
+        }
+        if (Clients.ClanArenaRoundInProgress || (GameType is not (ClanArena or Onslaught) && Rounds is { IsRoundStarted: true }))
             return; // round-based: no mid-round respawns
 
         float now = Time;
@@ -4003,8 +4341,10 @@ public sealed class GameWorld
         // Don't respawn while the match is over / between rounds (QC game_stopped + round gate). The kill-cam
         // still holds; STAT(RESPAWN_TIME) is suppressed so the client doesn't show a bogus countdown.
         // GameStopped now also covers the Assault inter-round freeze (the 5s AS_ROUND_DELAY window).
-        bool respawnAllowed = !GameStopped && !(Rounds is { IsRoundStarted: true });
-        if (!respawnAllowed)
+        bool respawnAllowed = !GameStopped && (GameType is ClanArena
+            ? !Clients.ClanArenaRoundInProgress
+            : GameType is Onslaught || Rounds is not { IsRoundStarted: true });
+        if (!respawnAllowed || (GameType is ClanArena && (p.RespawnFlags & RespawnFlag.Silent) != 0))
         {
             p.RespawnTimeStat = 0f;
             return;
@@ -4131,6 +4471,12 @@ public sealed class GameWorld
     // QC gametypevote_finished: true once the gametype vote has been resolved and its switch applied.
     private bool _gametypeVoteApplied;
 
+    /// <summary>The selected map-catalog mode can change between a gametype vote and the next world boot.</summary>
+    public string CatalogGametype { get; private set; } = "";
+
+    /// <summary>Checks whether a different gametype has any maps that meet hosted catalog rules.</summary>
+    public Func<string, bool>? HasMapsForGametype { get; set; }
+
     /// <summary>The map the end-of-match flow selected to switch to (QC the changelevel target), or "" until chosen.</summary>
     public string SelectedNextMap { get; private set; } = "";
 
@@ -4202,17 +4548,21 @@ public sealed class GameWorld
         }
         else if (timelimit != 0f && Time >= timelimit)
         {
-            // QC CheckRules_World rc hook (sv_race.qc:360-378): in the "qualifying THEN race" mode the elapsed
-            // qualifying timelimit does NOT end the match — it CONVERTS the warmup-qualifying session into a real
-            // race (WinningCondition_QualifyingThenRace → reset_map → reset_map_global). Drive that transition
-            // here: TransitionQualifyingToRace clears g_race_qualifying, restores the stashed race limits, re-runs
-            // the score rules and resets every racer; then re-arm the match clock from now so the race phase runs
-            // its restored timelimit. Returns false (and falls through) when it's not a qualifying==2 race.
-            if (GameType is Race rcQual && rcQual.TransitionQualifyingToRace())
+            // world.qc:1783-1806: a ready racer or two finished racers start the countdown.
+            // Otherwise qualifying uses the usual overtime/terminal score path.
+            if (GameType is Race { QualifyingThenRace: true } && timelimit > 0f)
             {
-                GameStartTime = Time;          // the race phase starts now (re-offsets the restored timelimit)
-                Warmup.GameStartTime = Time;
-                return;                        // skip the overtime/intermission cascade this tick
+                var fastest = GameScores.Field("RACE_FASTEST")!;
+                int finished = 0;
+                foreach (Player player in Clients.Players)
+                {
+                    if (player.IsObserver) continue;
+                    if (Warmup.IsReady(player) || (GameScores.Get(player, fastest) != 0 && ++finished >= 2))
+                    {
+                        Warmup.ReadyRestart(forceWarmupEnd: true);
+                        return;
+                    }
+                }
             }
             // QC: otherwise the time limit elapsed with no latched winner → try to add an overtime (true) or arm
             // sudden death (false).
@@ -4220,9 +4570,13 @@ public sealed class GameWorld
         }
 
         // QC: sudden death ran out → the match is decided; end it now.
-        if (OverTime.InSuddenDeath && Time >= OverTime.SuddenDeathEnd)
+        if (OverTime.InSuddenDeath && Time >= OverTime.SuddenDeathEnd
+            && GameType is not Race { QualifyingThenRace: true })
         {
-            EnterIntermissionWithLeader();
+            if (GameType is Survival survivalMode)
+                EnterIntermission(survivalMode.GetMatchStanding(Clients.Players).Winner, Teams.None);
+            else
+                EnterIntermissionWithLeader();
             return;
         }
 
@@ -4239,6 +4593,19 @@ public sealed class GameWorld
             winnerTeam = spawnsWinnerTeam;
             status = WinningCode.Yes;
         }
+        else if (GameType is Survival survival)
+        {
+            // Survival banks points at round end. QC leaves the match decision to WinningCondition_Scores.
+            bool preMatch = Warmup.WarmupStage || Time <= GameStartTime;
+            float limit = Cvars.FragLimit;
+            if (preMatch && limit > 0f) limit = 0f;
+            float leadLimit = preMatch ? 0f : MathF.Max(0f, Cvars.Float("leadlimit"));
+            var result = survival.CheckMatchScores(Clients.Players, limit, leadLimit,
+                Cvars.Bool("leadlimit_and_fraglimit"));
+            (winner, _checkRulesEquality) = (result.Winner, result.Tied);
+            winnerTeam = Teams.None;
+            status = OverTimeManager.ResolveWinningCode(result.LimitReached, result.Tied);
+        }
         else
         {
             // QC WinningCondition_Scores: limit_reached (the gametype's MatchEnded latch) × equality (its tie
@@ -4249,6 +4616,11 @@ public sealed class GameWorld
             // CampaignPreIntermission can deny a campaign win on a tie at the limit; carry it here.
             _checkRulesEquality = equality;
             status = OverTimeManager.ResolveWinningCode(limitReached, equality);
+            if (GameType is Race { QualifyingThenRace: true } && !equality)
+            {
+                winnerTeam = Teamplay.IsTeamGame ? GameScores.LeaderTeam() : Teams.None;
+                winner = winnerTeam == Teams.None ? GameScores.Leader(Clients.Players.Where(p => !p.IsObserver)) as Player : null;
+            }
         }
 
         // QC world.qc:1827-1832: a tie AT the limit starts sudden-death overtime now.
@@ -4310,8 +4682,8 @@ public sealed class GameWorld
             return false;
 
         // QC: zero every team score, then mark "1" for any team with a living player or a remaining spawnpoint.
-        int teamCount = TeamCountFor(GameType);
-        foreach (int t in Teams.Active(teamCount))
+        IEnumerable<int> activeTeams = GameType is Tdm ? Teamplay.ActiveTeams : Teams.Active(TeamCountFor(GameType));
+        foreach (int t in activeTeams)
             GameScores.SetTeamScore(t, GameScores.TeamSlotScore, 0);
 
         // QC: FOREACH_CLIENT(IS_PLAYER(it) && !IS_DEAD(it)) → presence from living players.
@@ -4333,7 +4705,7 @@ public sealed class GameWorld
 
         // QC: sum the four indexed team scores; 0 → draw, 1 → that team wins, >1 → keep playing.
         int present = 0, survivor = Teams.None;
-        foreach (int t in Teams.Active(teamCount))
+        foreach (int t in activeTeams)
         {
             if (GameScores.TeamScore(t, GameScores.TeamSlotScore) != 0)
             {
@@ -4354,7 +4726,7 @@ public sealed class GameWorld
         {
             // QC: penalise every OTHER allowed team's scores by -1000 across both score fields, then AddWinners.
             for (int slot = 0; slot < GameScores.MaxTeamScore; slot++)
-                foreach (int t in Teams.Active(teamCount))
+                foreach (int t in activeTeams)
                     if (t != survivor)
                         GameScores.AddToTeam(t, slot, -1000);
 
@@ -4422,6 +4794,7 @@ public sealed class GameWorld
 
         // QC PlayerStats_GameReport(true): build the per-player/per-team report (upload is an engine concern).
         PlayerStats.GameReport(finished: true, Clients.Players, Time, Teamplay.IsTeamGame);
+        FlushWeaponStats();
 
         // QC Kill_Notification(NOTIF_ALL, NULL, MSG_CENTER, CPID_Null): retract every lingering centerprint so the
         // scoreboard isn't covered by stale center text (a null cpid clears every group).
@@ -4611,13 +4984,23 @@ public sealed class GameWorld
                 realType = aliasType;
         }
 
-        // QC MapInfo_SwitchGameType: set the gametype cvar for the next level boot (the resolved real type).
-        Cvars.Set("gametype", realType);
+        bool available = string.Equals(realType, CatalogGametype, StringComparison.OrdinalIgnoreCase)
+            || HasMapsForGametype?.Invoke(realType) != false;
+        if (available)
+        {
+            // Match gameplay stays in the old mode through intermission. Map selection uses the voted mode.
+            CatalogGametype = realType;
+            Cvars.Set("gametype", realType);
+        }
 
-        // QC localcmd(sv_vote_gametype_hook_all) + localcmd(sv_vote_gametype_hook_<name>): run the hooks if wired.
-        // Base keys the per-gametype hook off voted_gametype_string (the ballot name / alias).
         Commands.GameTypeVoteHookHandler?.Invoke("all");
         Commands.GameTypeVoteHookHandler?.Invoke(gt);
+
+        if (!available)
+        {
+            Commands.ChatBroadcast?.Invoke("Cannot use this gametype: no map for it found");
+            return;
+        }
 
         // QC sv_vote_gametype_maplist_reset: optionally rewrite g_maplist for the new gametype.
         // Per-gametype maplist: sv_vote_gametype_<name>_maplist (a custom maplist for that specific gametype).
@@ -4641,10 +5024,11 @@ public sealed class GameWorld
     /// </summary>
     private void StartMapVoteOrRotation()
     {
-        if (Cvars.Int("g_maplist_votable") > 0 && Clients.PlayerCount > 0)
+        int requestedMaps = Cvars.Int("g_maplist_votable");
+        if (requestedMaps > 0 && Clients.PlayerCount > 0)
         {
             Rotation.Init(MapName);
-            var ballot = Rotation.BuildBallot(Cvars.Int("g_maplist_votable"));
+            var ballot = Rotation.BuildBallot(MapVoting.MapSlotLimit(requestedMaps, Cvars.Bool("g_maplist_votable_abstain")));
             if (ballot.Count > 1)
             {
                 // QC MapVote_AddVotableMaps seeds player suggestions ahead of the rotation maps; each carries
@@ -4771,8 +5155,15 @@ public sealed class GameWorld
     /// </summary>
     private readonly List<Entity> _spawnedMapEntities = new();
 
+    /// <summary>Map weapon pickups after gametype filtering and spawn-function processing.</summary>
+    public ulong MapWeaponBits { get; private set; }
+
     private void SpawnMapEntities()
     {
+        MapFog = AuthoredMapInfo?.Fog ?? MapFogSettings.None;
+        Cts? cts = GameType as Cts;
+        cts?.ClearCourse();
+        (GameType as Race)?.ClearMapSpawns();
         SpawnedEntityCount = 0;
         _unhandledClasses.Clear();
         _spawnedMapEntities.Clear();
@@ -4833,6 +5224,36 @@ public sealed class GameWorld
                     _unhandledClasses.Add(cls);
             }
         }
+        MapWeaponBits = 0;
+        foreach (Entity entity in _spawnedMapEntities)
+            if (!entity.IsFreed && entity.Pickup is { IsWeaponPickup: true })
+                MapWeaponBits |= entity.OwnedWeaponSet.Bits;
+
+        if (cts is not null && !string.IsNullOrEmpty(MapName))
+            cts.LoadCheckpointOrder(ConfigReader?.Invoke($"maps/{MapName}.defragcp"));
+        if (GameType is Tdm tdm)
+            FinishTdmTeamSetup(tdm);
+    }
+
+    private void FinishTdmTeamSetup(Tdm tdm)
+    {
+        var declared = Api.Entities.FindByClass("tdm_team").Select(entity => entity.Team).ToHashSet();
+        int[] mapTeams = Teams.All.Where(team => declared.Contains(team)).ToArray();
+        int[] active = mapTeams.Length == 0 ? Teams.Active(tdm.ConfiguredTeamCount).ToArray() : mapTeams;
+        tdm.SetMapTeams(active);
+        Teamplay.SetActiveTeams(active);
+
+        if (mapTeams.Length != 0)
+            return;
+        foreach (int team in active)
+        {
+            Entity fallback = Api.Entities.Spawn();
+            fallback.ClassName = "tdm_team";
+            fallback.NetName = Teams.Name(team);
+            fallback.Cnt = team;
+            fallback.Team = team;
+            _spawnedMapEntities.Add(fallback);
+        }
     }
 
     /// <summary>
@@ -4875,6 +5296,8 @@ public sealed class GameWorld
 
         _mapEntities = entities;
         SpawnMapEntities();
+        if (GameType is Race raceMap)
+            raceMap.ValidateMapSpawns(MapName);
 
         if (all is null)
             return;
@@ -4912,7 +5335,7 @@ public sealed class GameWorld
     }
 
     /// <summary>Copy the recognized map-dict fields onto the edict (origin/angles + a few common keys).</summary>
-    private static void ApplyDictFields(Entity e, EntityDict dict)
+    private void ApplyDictFields(Entity e, EntityDict dict)
     {
         e.Origin = dict.Origin;
         e.OldOrigin = dict.Origin;
@@ -4931,6 +5354,15 @@ public sealed class GameWorld
         if (e.Angles == Vector3.Zero && f.TryGetValue("angle", out var angleStr) && float.TryParse(angleStr,
                 System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float yaw))
             e.Angles = new Vector3(0f, yaw, 0f);
+
+        if (f.TryGetValue("race_place", out var place)
+            && float.TryParse(place, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float racePlace) && float.IsFinite(racePlace))
+            e.RaceSpawnPlace = racePlace;
+        if ((dict.ClassName == "info_player_race" || (GameType is Race && dict.ClassName == "info_player_deathmatch"))
+            && f.TryGetValue("restriction", out var restriction)
+            && int.TryParse(restriction, out int spawnRestriction))
+            e.SpawnRestriction = spawnRestriction;
 
         if (f.TryGetValue("targetname", out var tn)) e.TargetName = tn;
         if (f.TryGetValue("target", out var tg)) e.Target = tg;
@@ -4960,6 +5392,9 @@ public sealed class GameWorld
             e.Skin = skf;
         if (f.TryGetValue("spawnmob", out var smb)) e.Spawnmob = smb;
         if (f.TryGetValue("count", out var cnt) && int.TryParse(cnt, out int cnti)) e.Count = cnti;
+        if (f.TryGetValue("buffs_finished", out var bf) && float.TryParse(bf,
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float bff))
+            e.BuffsFinished = bff;
         if (f.TryGetValue("monster_moveflags", out var mmf) && int.TryParse(mmf, out int mmfi)) e.MonsterMoveFlags = mmfi;
 
         // [T36] objective-mode keys read off the placeholder edict by the GametypeObjectiveSpawns sink (the sink
@@ -4967,6 +5402,14 @@ public sealed class GameWorld
         // distinct from `count` → e.Count), .health (target_objective / func_assault_destructible objective health),
         // and .dmg (target_objective_decrease damage per activation; QC defaults it to 101 when unset/0).
         if (f.TryGetValue("cnt", out var cv) && int.TryParse(cv, out int cvi)) e.Cnt = cvi;
+        if (e.ClassName == "tdm_team")
+        {
+            if (f.TryGetValue("netname", out string? name))
+                e.NetName = name;
+            if (float.TryParse(cv, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture,
+                    out float color) && color == (int)color)
+                e.Cnt = (int)color;
+        }
         if (f.TryGetValue("health", out var hp) && float.TryParse(hp,
                 System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float hpf))
             e.Health = hpf;
@@ -5023,8 +5466,7 @@ public sealed class GameWorld
     /// QC the <c>worldspawn</c> spawnfunc globals (server/world.qc): a map's worldspawn entity carries
     /// world-wide settings as fields. The Godot-free, gameplay-relevant slice is applied here — the
     /// <c>gravity</c> override (QC <c>cvar_set("sv_gravity")</c> / the per-map gravity), and any
-    /// <c>{cvar} {value}</c>-style overrides the map ships. Visual-only keys (fog/skybox/sky) are recorded as
-    /// cvars for the host/renderer; nothing here blocks the headless sim.
+    /// <c>{cvar} {value}</c>-style overrides the map ships. Presentation keys have no simulation effect.
     /// </summary>
     private void ApplyWorldspawn(EntityDict dict)
     {
@@ -5044,8 +5486,9 @@ public sealed class GameWorld
             Simulation.Gravity = Cvars.Gravity;
         }
 
-        // QC: worldspawn may carry presentation keys; stash them as cvars for the host (no sim effect).
-        if (f.TryGetValue("fog", out var fog)) Cvars.Set("sv_fog", fog);
+        // QC world.qc: a mapinfo fog value overrides worldspawn, including an explicit "none".
+        if (AuthoredMapInfo?.Fog is null && f.TryGetValue("fog", out var fog) && MapFogSettings.TryParse(fog, out _))
+            MapFog = fog;
         if (f.TryGetValue("message", out var title)) Cvars.Set("sv_worldmessage", title);
         if (f.TryGetValue("author", out var author)) Cvars.Set("sv_worldauthor", author);
 
@@ -5076,9 +5519,10 @@ public sealed class GameWorld
         OverTime.Reset(); // [T42] clear the overtime / sudden-death checkrules state for the fresh match
         // re-arm the end-of-match flow + the per-match infrastructure so a fresh match runs clean.
         _nextLevelFired = _mapFlowStarted = _mapChangeApplied = _gametypeVoteApplied = false;
+        CatalogGametype = GameType?.NetName ?? DefaultGameType;
         _checkRulesEquality = false; // QC: the checkrules_equality global is re-derived each CheckRules_World pass
         SelectedNextMap = "";
-        PlayerStats.ResetAll(Clients.Players, Teamplay.IsTeamGame ? Teams.Active(Teamplay.TeamCount) : null);
+        PlayerStats.ResetAll(Clients.Players, Teamplay.IsTeamGame ? Teamplay.ActiveTeams : null);
         Warmup.ReadyRestart(forceWarmupEnd: true);   // ends warmup, arms the countdown, runs ResetMap
         GameStartTime = Warmup.GameStartTime;
     }
@@ -5114,10 +5558,25 @@ public sealed class GameWorld
     /// <see cref="WarmupController.ResetMap"/> so a ready-restart performs a full map reset.
     /// </summary>
     /// <param name="fakeRoundStart">QC <c>is_fake_round_start</c>: a round re-arm that must NOT wipe scores.</param>
-    public void ResetMap(bool fakeRoundStart)
+    public void ResetMap(bool fakeRoundStart) => ResetMap(fakeRoundStart, clearScores: Time <= GameStartTime);
+
+    private void ResetMap(bool fakeRoundStart, bool clearScores)
     {
-        if (Time <= GameStartTime && !fakeRoundStart)
-            Scores.ClearAll();                       // QC Score_ClearAll on a real restart
+        if (clearScores && !fakeRoundStart)
+        {
+            Scores.ClearAll();                       // QC Score_ClearAll precedes reset_map_global
+            if (GameType is Survival survival)
+            {
+                GameScores.ClearAll(Clients.Players);
+                survival.ResetMatch();
+            }
+            if (GameType is Race race)
+            {
+                GameScores.ClearAll(Clients.Players);
+                race.ClearMatchScores();
+                PlayerStats.ResetAll(Clients.Players, Teamplay.IsTeamGame ? Teams.Active(Teamplay.TeamCount) : null);
+            }
+        }
 
         // QC mayhem/tmayhem reset_map_players: zero each player's .total_damage_dealt on a round/map reset
         // (Score_ClearAll wipes SP_SCORE, but the damage accrual is a plain field). The other modes have no
@@ -5126,16 +5585,18 @@ public sealed class GameWorld
         {
             case Mayhem m: m.ResetMapPlayers(Clients.Players); break;
             case TeamMayhem tm: tm.ResetMapPlayers(Clients.Players); break;
-            // QC MUTATOR_HOOKFUNCTION(ca, reset_map_players) (sv_clanarena.qc): on each round reset, clear the
-            // INGAME_STATUS_JOINING set so mid-round joiners can participate next round, zero each player's
-            // killcount, and snapshot prev_team for the MatchEnd status restore. ResetMapPlayers was implemented
-            // in Wave-16/17 but lacked this caller, leaving it permanently dead.
+            // CA keeps observer participation until the per-client spawn below succeeds.
             case ClanArena ca: ca.ResetMapPlayers(Clients.Players); break;
             // QC MUTATOR_HOOKFUNCTION(cts, reset_map_global) → race_ClearRecords + race_PreparePlayer per client:
             // re-prepare every CTS runner (drop any in-progress run so they restart from the start timer). The
             // persistent top-99 records survive (QC keeps the ServerProgsDB table); only the in-memory run state
             // is cleared. The qualifying==2→race collapse is moot (CTS pins g_race_qualifying=1).
             case Cts c: c.ResetMapGlobal(Clients.Players); break;
+            case Race race:
+                if (!race.TransitionQualifyingToRace())
+                    race.PrepareStartGrid();
+                break;
+            case Onslaught ons: ons.CpCombat.ClearGeneratorDestruction(); break;
             // QC MUTATOR_HOOKFUNCTION(lms, reset_map_players) + reset_map_global (sv_lms.qc:217-243): on a map/match
             // restart, re-liven every eliminated player (FRAGS_PLAYER_OUT_OF_GAME → FRAGS_PLAYER), zero + re-seed
             // LMS_RANK/LMS_LIVES, clear the leader flag/waypoint, and reset lms_lowest_lives=999. Without this the
@@ -5165,9 +5626,14 @@ public sealed class GameWorld
         ResetMapObjects();
 
         var players = Clients.Players;
+        if (GameType is KeyHunt keyHunt)
+            keyHunt.ResetMap(KeyHuntGameStartTime);
+
         for (int i = 0; i < players.Count; i++)
         {
             Player p = players[i];
+            if (GameType is ClanArena && !ClanArena.IsParticipant(p) && !p.IsBot)
+                continue;
             p.Velocity = System.Numerics.Vector3.Zero;
             p.AVelocity = System.Numerics.Vector3.Zero;
             // QC reset_map (server/command/vote.qc:377-385): for each IS_PLAYER, player_powerups_remove_all(it, true)
@@ -5186,7 +5652,24 @@ public sealed class GameWorld
             // following Clients.Spawn -> PutClientInServer also clearall's, but Base plays the removal sounds here.)
             StatusEffectsCatalog.RemoveAll(p, StatusEffectRemoval.Normal);
             PlayerStates.Of(p).OnSpawn();            // clear the regen/air/contents timers
-            Clients.Spawn(p);                        // QC PutClientInServer per client
+            if (GameType is ClanArena ca)
+            {
+                if (p.IsObserver)
+                {
+                    if (Clients.ForcedSpectate?.Invoke(p) == true || Teamplay.GetForcedTeam(p) == Teamplay.TeamForceSpectator)
+                    {
+                        Clients.PutObserverInServer(p);
+                        continue;
+                    }
+                    if (ca.IsJoiningMidRound(p) && (Clients.TeamsLocked || !GametypeHasFreeSlot(p)))
+                        continue;
+                    Clients.Join(p, clanArenaRoundReset: true);
+                }
+                else
+                    Clients.Spawn(p, clanArenaRoundReset: true);
+            }
+            else if (GameType is not Race || !p.IsObserver)
+                Clients.Spawn(p);                    // QC PutClientInServer for the active racers
         }
 
         // [T38] QC end_minigames(): drop any live minigame sessions on a full map reset (not a fake round-start),
@@ -5365,6 +5848,7 @@ public sealed class GameWorld
         Domination dom => dom.TeamCount,
         KeyHunt kh => kh.TeamCount,
         FreezeTag ft => ft.TeamCount,
+        Race race when race.TeamGame => race.RaceTeams,
         _ => 2,
     };
 
@@ -5393,7 +5877,7 @@ public sealed class GameWorld
         if (!Teamplay.IsTeamGame)
             return Clients.PlayerCount >= 2;
         int teamsWithPlayers = 0;
-        foreach (int team in Teams.Active(Teamplay.TeamCount))
+        foreach (int team in Teamplay.ActiveTeams)
             if (Teamplay.CountTeam(team, Clients.Players) > 0)
                 teamsWithPlayers++;
         return teamsWithPlayers >= 2;
@@ -5403,7 +5887,7 @@ public sealed class GameWorld
     private bool DefaultCanRoundEnd()
     {
         int aliveTeams = 0;
-        foreach (int team in Teams.Active(Teamplay.TeamCount))
+        foreach (int team in Teamplay.ActiveTeams)
         {
             bool anyAlive = false;
             var players = Clients.Players;

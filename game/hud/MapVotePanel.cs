@@ -88,7 +88,7 @@ public partial class MapVotePanel : HudPanel
     /// <summary>QC <c>mv_timeout</c>: absolute time the vote closes; the countdown is <c>mv_timeout - now</c>.</summary>
     public double Timeout { get; set; }
 
-    /// <summary>QC <c>mv_ownvote</c>: index of the candidate the local player voted for (-1 = none).</summary>
+    /// <summary>QC <c>mv_ownvote</c>: 0-based choice, including the last abstain row (-1 = none).</summary>
     public int OwnVote { get; set; } = -1;
 
     /// <summary>QC <c>mv_selection</c>: index of the cell currently under the cursor/keyboard (-1 = none).</summary>
@@ -97,6 +97,7 @@ public partial class MapVotePanel : HudPanel
     /// <summary>QC <c>mv_num_maps</c>: the number of map cells on the grid (excludes the abstain row). Stamped
     /// each frame by <see cref="DrawPanel"/> so the input handler (QC <c>MapVote_Move*</c>) can navigate.</summary>
     public int MapCount => _candidates.Count;
+    private int ChoiceCount => MapCount + (Abstain ? 1 : 0);
 
     /// <summary>QC <c>mv_columns</c>: the grid column count chosen by the best-aspect layout, stamped each frame
     /// by <see cref="DrawPanel"/> so the keyboard up/down navigation matches what's drawn.</summary>
@@ -239,6 +240,11 @@ public partial class MapVotePanel : HudPanel
         Abstain = abstain;
         Winner = 0;
         WinnerTime = 0.0;
+        OwnVote = -1;
+        Selection = -1;
+        _firstDigit = 0;
+        _cellSize = Vector2.Zero;
+        _abstainRect = default;
         // Reset the per-cell fade state for the new ballot (QC zeroes mv_select_lasttime / the reduce + suggester
         // caches when a fresh mapvote entity arrives).
         System.Array.Clear(_selectLastTime, 0, _selectLastTime.Length);
@@ -306,6 +312,7 @@ public partial class MapVotePanel : HudPanel
 
     protected override void DrawPanel()
     {
+        _abstainRect = default;
         if (!Active || _candidates.Count == 0) return;
 
         DrawBackground();
@@ -411,7 +418,8 @@ public partial class MapVotePanel : HudPanel
             float abstainAlpha = (Winner > 0 ? winnerAlpha : 1f) * LiveFgAlpha;
             Color rgb = AbstainColor(abstainId, abstainAlpha);
             string label = FormatMapItem(abstainId, "Don't care", abstainVotes, false, -1);
-            DrawTextCentered(new Vector2(pad, Size2.Y - pad - abstainSize), w, label, rgb, abstainSize);
+            _abstainRect = new Rect2(pad, Size2.Y - pad - abstainSize, w, abstainSize);
+            DrawTextCentered(_abstainRect.Position, w, label, rgb, abstainSize);
         }
 
         // --- "Suggested by: <name>" line (QC MapVote_DrawSuggester), centered at the very bottom ---
@@ -573,16 +581,15 @@ public partial class MapVotePanel : HudPanel
             if (tex is not null) { DrawTextureRect(tex, box, false, white); return; }
 
             // QC: a known-but-not-yet-downloaded preview draws the "nopreview_map" placeholder art.
-            if (DrawSkinPicFirst(box, white,
-                    $"gfx/hud/{HudSkin.SkinName}/nopreview_map",
-                    "gfx/hud/default/nopreview_map",
-                    $"gfx/menu/{HudSkin.SkinName}/nopreview_map",
-                    "gfx/menu/luma/nopreview_map",
-                    "gfx/menu/default/nopreview_map"))
+            Texture2D? placeholder = VortexArena.Game.Menu.MenuSkin.SkinImage("nopreview_map");
+            if (placeholder is not null)
+            {
+                DrawTextureRect(placeholder, box, false, white);
                 return;
+            }
         }
 
-        // Empty pic or no art at all: a grey backing + a small colored corner swatch so it reads as a cell.
+        // Empty pic or no art at all: the stock gray fill.
         DrawRect(box, new Color(0.5f, 0.5f, 0.5f, 0.7f * alpha));
     }
 
@@ -799,70 +806,69 @@ public partial class MapVotePanel : HudPanel
     public System.Action<int>? CastChoice { get; set; }
 
     /// <summary>True when this option index is available (QC <c>mv_flags[i] &amp; GTV_AVAILABLE</c>).</summary>
-    private bool IsAvailable(int i) => i >= 0 && i < _candidates.Count && _candidates[i].Available;
+    private bool IsAvailable(int i) => i >= 0 && i < ChoiceCount
+        && (i == MapCount || _candidates[i].Available);
 
-    // QC MapVote_MoveLeft/Right/Up/Down: move the selection, skipping unavailable cells (except the own vote).
-    private int MoveLeft(int pos)
+    // QC MapVote_MoveLeft/Right: the abstain row is the last choice.
+    private int MoveHorizontal(int pos, int step)
     {
-        int n = MapCount;
-        if (n <= 0) return -1;
-        int imp = pos < 0 ? n - 1 : (pos < 1 ? n - 1 : pos - 1);
-        if (!IsAvailable(imp) && imp != OwnVote) imp = MoveLeft(imp);
-        return imp;
+        int count = ChoiceCount;
+        if (pos < 0 || pos >= count)
+            pos = step > 0 ? count - 1 : 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            pos = (pos + step + count) % count;
+            if (IsAvailable(pos) || pos == OwnVote)
+                return pos;
+        }
+        return -1;
     }
-    private int MoveRight(int pos)
+
+    private int MoveUp(int pos, int visited = 0)
     {
         int n = MapCount;
-        if (n <= 0) return -1;
-        int imp = pos < 0 ? 0 : (pos >= n - 1 ? 0 : pos + 1);
-        if (!IsAvailable(imp) && imp != OwnVote) imp = MoveRight(imp);
-        return imp;
-    }
-    private int MoveUp(int pos)
-    {
-        int n = MapCount;
-        if (n <= 0) return -1;
+        if (n == 0 || visited >= n) return -1;
+        if (pos < 0 && Abstain) return n;
+        if (pos == n) return MoveHorizontal(pos, -1);
+
         int cols = System.Math.Max(1, Columns);
-        int imp;
-        if (pos < 0) imp = n - 1;
-        else
+        int imp = n - 1;
+        if (pos >= 0)
         {
             imp = pos - cols;
             if (imp < 0)
             {
                 int rows = Mathf.CeilToInt(n / (float)cols);
-                imp = imp == -cols ? cols * rows - 1 : imp + cols * rows - 1; // pos == 0 wraps to last cell
+                imp = imp == -cols ? cols * rows - 1 : imp + cols * rows - 1;
             }
         }
-        if (imp >= n) imp = n - 1; // a ragged last row can leave imp past the cells
-        if (!IsAvailable(imp) && imp != OwnVote) imp = MoveUp(imp);
-        return imp;
+        if (imp >= n) imp = n - 1;
+        return IsAvailable(imp) || imp == OwnVote ? imp : MoveUp(imp, visited + 1);
     }
-    private int MoveDown(int pos)
+
+    private int MoveDown(int pos, int visited = 0)
     {
         int n = MapCount;
-        if (n <= 0) return -1;
+        if (n == 0 || visited >= n) return -1;
+        if (pos == n) return MoveHorizontal(pos, 1);
+
         int cols = System.Math.Max(1, Columns);
-        int imp;
-        if (pos < 0) imp = 0;
-        else
+        int imp = pos < 0 ? 0 : pos + cols;
+        if (imp >= n)
         {
-            imp = pos + cols;
-            if (imp >= n)
-            {
-                int col = imp % cols;
-                imp = col == cols - 1 ? 0 : col + 1; // wrap to the next column's top
-            }
+            if (Abstain) return n;
+            int col = imp % cols;
+            imp = col == cols - 1 ? 0 : col + 1;
         }
         if (imp >= n) imp = 0;
-        if (!IsAvailable(imp) && imp != OwnVote) imp = MoveDown(imp);
-        return imp;
+        return IsAvailable(imp) || imp == OwnVote ? imp : MoveDown(imp, visited + 1);
     }
 
     /// <summary>QC <c>MapVote_SendChoice(index)</c>: cast the 0-based ballot option (forwarded as impulse N+1).</summary>
     private void SendChoice(int index)
     {
-        if (index < 0 || index >= MapCount) return;
+        if (!IsAvailable(index)) return;
         CastChoice?.Invoke(index);
     }
 
@@ -881,8 +887,8 @@ public partial class MapVotePanel : HudPanel
 
         switch (key)
         {
-            case Key.Right: Selection = MoveRight(Selection); return true;
-            case Key.Left:  Selection = MoveLeft(Selection);  return true;
+            case Key.Right: Selection = MoveHorizontal(Selection, 1); return true;
+            case Key.Left:  Selection = MoveHorizontal(Selection, -1);  return true;
             case Key.Down:  Selection = MoveDown(Selection);  return true;
             case Key.Up:    Selection = MoveUp(Selection);    return true;
             case Key.Enter:
@@ -904,7 +910,7 @@ public partial class MapVotePanel : HudPanel
             _firstDigit = 0;
         }
 
-        if (imp <= MapCount)
+        if (imp <= ChoiceCount)
             SendChoice(imp - 1); // QC localcmd impulse imp (1-based) → 0-based choice
         return true;
     }
@@ -924,8 +930,7 @@ public partial class MapVotePanel : HudPanel
     public void HandleVoteHover(Vector2 localPos)
     {
         if (!Active || MapCount <= 0 || Winner > 0) return;
-        int hit = CellAt(localPos);
-        if (hit >= 0) Selection = hit;
+        Selection = CellAt(localPos);
     }
 
     /// <summary>Map a digit/keypad key to its 1-based ballot impulse (QC the '1'..'0' / K_KP_* cases).</summary>
@@ -947,11 +952,13 @@ public partial class MapVotePanel : HudPanel
     // Cached grid geometry from the last DrawPanel so a click can be hit-tested against the drawn cells.
     private Vector2 _gridOrigin;
     private Vector2 _cellSize;
+    private Rect2 _abstainRect;
     private int _gridColumns = 1;
 
-    /// <summary>Hit-test a panel-local point against the drawn candidate grid; returns the 0-based cell index or -1.</summary>
+    /// <summary>Hit-test the candidate grid and abstain row using their drawn panel-local bounds.</summary>
     private int CellAt(Vector2 localPos)
     {
+        if (Abstain && _abstainRect.HasPoint(localPos)) return MapCount;
         if (_cellSize.X <= 0f || _cellSize.Y <= 0f) return -1;
         float rx = localPos.X - _gridOrigin.X;
         float ry = localPos.Y - _gridOrigin.Y;

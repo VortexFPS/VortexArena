@@ -1,0 +1,3 @@
+cabf9ac16c55f8ca662da62e1f5908d3c35f765e312be62f104097bd8f78b987  /tmp/vortex-parity-godot/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64
+3f639ae7133074a9647d12265c2fada6dcdf61dfa4ba4b4f3db5403dae90dc70  /home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/.godot/mono/temp/bin/Debug/VortexArena.dll
+82fc9be11f6a9765fc69b987d6982d5a555acb7c4eefbf75e9cd9259e60dfb46  /home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/data/core.pk3dir/common.zh_CN.po

@@ -8,6 +8,7 @@ using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Physics;
 using VortexArena.Common.Services;
+using VortexArena.Formats.Vfs;
 using VortexArena.Net;
 using VortexArena.Server;
 using NVec3 = System.Numerics.Vector3;
@@ -81,6 +82,7 @@ public sealed class ServerNet : IDisposable
     // Reused writers (the networking spec's allocation discipline: one writer per send path, reset+refilled).
     private readonly BitWriter _snapshotWriter = new(2048);
     private readonly BitWriter _eventWriter = new(1024);
+    private readonly BitWriter _effectRecordsWriter = new(1024);
     private readonly BitWriter _reliableWriter = new(1024);
     private readonly BitWriter _scratchWriter = new(512);
 
@@ -138,13 +140,13 @@ public sealed class ServerNet : IDisposable
     // #22: last roster/status signature — a change bumps the score version so the row set re-sends on join/leave.
     private long _lastRosterSig = long.MinValue;
     private readonly List<(int team, int score)> _scoreTeams = new();
-    // QC the race/CTS rankings table (Scoreboard_Rankings_Draw): best-first (time, holder) for this map,
-    // captured from the persistent RaceRecords DB; empty in non-race modes.
+    // QC Scoreboard_Rankings_Draw records for this map, in best-first order.
     private readonly List<(int timeEncoded, string holder)> _scoreRankings = new();
     // QC the CTS/race speed award (race_send_speedaward / _best): the round-best + persisted all-time best planar
     // speed (qu/s, rounded) + holder names, captured from the live Cts gametype; zeroed in non-CTS modes.
     private (int speed, string holder, int best, string bestHolder) _scoreSpeedAward;
     private int _scoreVersion;
+    private int _lastRankingsHash;
     // this tick's score-LAYOUT generation (the active label/flag set + gametype/teamplay): the ScoreInfo block
     // (QC ENT_CLIENT_SCORES_INFO) is sent per-client only when this changed since they last got it (a mode
     // switch). Distinct from _scoreVersion, which gates the per-VALUE scoreboard block.
@@ -202,8 +204,17 @@ public sealed class ServerNet : IDisposable
     /// otherwise make the rewind depth (and thus hit registration) flicker.</summary>
     private const float RttSmoothing = 0.25f;
 
+    /// <summary>Monitor poses both peers can resolve from the embedded map entities.</summary>
+    public IReadOnlyDictionary<int, WarpzoneCamera.Pose>? BakedWarpzoneCameras { get; set; }
+    private readonly SortedDictionary<int, WarpzoneCamera.Pose?> _cameraPoseOverrides = new();
+
     /// <summary>Per-frame captured fire-and-forget effects (broadcast unreliable in the event bundle).</summary>
-    private readonly List<CapturedEffect> _effectQueue = new();
+    private readonly List<EffectRequest> _effectQueue = new();
+    private readonly List<EncodedEffect> _encodedEffects = new();
+    private const float FireballAvailabilitySeconds = 0.1f;
+    private readonly record struct LinkedFireballBlast(FireballBlastEffect Effect, float ExpiresAt, bool Published = false);
+    private readonly List<LinkedFireballBlast> _fireballBlasts = new();
+    private readonly List<(AttachedDamageHit Hit, bool SpawnParity)> _attachedDamageHits = new();
 
     /// <summary>Per-frame captured notifications (broadcast reliable in the reliable bundle).</summary>
     private readonly List<CapturedNotification> _notifyQueue = new();
@@ -212,12 +223,25 @@ public sealed class ServerNet : IDisposable
     private readonly List<CapturedSound> _soundQueue = new();
 
     /// <summary>One connected client: its peer id, its player, the input ring + ack cursor.</summary>
+    private readonly record struct CasingDelivery(int QueueIndex, bool FirstPerson);
+
     private sealed class PeerState
     {
+        public string Address = "";
         public int PeerId;
         public int NetId;               // the small stable entity id sent on the wire (not the raw ENet peer id)
         public Player? Player;          // null until the handshake completes
         public bool Accepted;
+        public bool SentVisibleWaypoints;
+        public uint WaypointSequence;
+        // Session-owned and naturally ordered by effect index. Reused after each send.
+        public List<CasingDelivery>? CasingDeliveries;
+        public int LastServerFlags;
+        public bool AcceptsMapVisualSuggestions;
+        public float? JoinNoticeAt;
+        public OnslaughtDestruction? LastOnslaughtDestruction;
+        public bool LastOnslaughtCamera;
+        public WarpzoneCameraWire.Entry[] LastWarpzoneCameraPoses = Array.Empty<WarpzoneCameraWire.Entry>();
         public uint LastProcessedSeq;   // servercommandframe: the highest input seq applied
         public uint HighestQueuedSeq;   // highest seq currently queued (dedup of the redundant tail)
         public readonly Queue<InputCommand> Pending = new();
@@ -289,6 +313,7 @@ public sealed class ServerNet : IDisposable
         /// <summary>Hash of the item-pickup tally last sent to this peer inside the scoreboard block (QC's
         /// Inventory entity is per-viewer, so the tally can change without any score changing).</summary>
         public uint LastItemStatsHash;
+        public readonly HashSet<int> LastScoreboardIgnores = new();
 
         /// <summary>The accuracy-change generation last sent to this client (T57, QC ENT_CLIENT_ACCURACY's
         /// per-weapon SendFlags change detection): the owner's per-weapon accuracy byte array is re-sent only
@@ -334,6 +359,8 @@ public sealed class ServerNet : IDisposable
         _transport = transport;
         _world = world;
         _serverName = serverName;
+        if (_world.GameType is Onslaught ons)
+            ons.RadarRequested += SendOnslaughtRadar;
 
         _transport.PeerConnected += OnPeerConnected;
         _transport.PeerDisconnected += OnPeerDisconnected;
@@ -354,6 +381,7 @@ public sealed class ServerNet : IDisposable
         // grabs exactly what the sim emits; flushed each frame in FlushSounds() like the effect bundle. A NAMED
         // method (not a lambda) so Dispose() can unsubscribe and a re-host on a reused world won't double-subscribe.
         _world.Services.SoundImpl.Broadcast += OnSoundEmitted;
+        _world.Services.SoundImpl.SamplePrecached += OnSoundPrecached;
 
         // Install the lag-compensation hook so hitscan weapon traces rewind other players to the shooter's view
         // time (antilag.qc). Weapons call LagComp.Begin/End ambiently; this routes it to our rewind/restore.
@@ -560,12 +588,12 @@ public sealed class ServerNet : IDisposable
             // WS1 stage 2: process the transport events main marshaled over (connect → handshake → input, in
             // arrival order), THEN the main→server command actions (chat / bot_add / changelevel), so this
             // thread is the only one that ever touches peers/world.
-            while (_inboundNet.TryDequeue(out (InboundKind Kind, int Peer, int Channel, byte[]? Data) ev))
+            while (_inboundNet.TryDequeue(out var ev))
             {
                 switch (ev.Kind)
                 {
                     case InboundKind.Packet: OnPacketCore(ev.Peer, ev.Channel, ev.Data!); break;
-                    case InboundKind.Connected: OnPeerConnectedCore(ev.Peer); break;
+                    case InboundKind.Connected: OnPeerConnectedCore(ev.Peer, ev.Address!); break;
                     case InboundKind.Disconnected: OnPeerDisconnectedCore(ev.Peer); break;
                 }
             }
@@ -867,10 +895,14 @@ public sealed class ServerNet : IDisposable
     private void EncodeGameState()
     {
         BroadcastSnapshots();
+        SendChangedServerFlags();
+        SendScoreboardIgnores();
         SendMinigameState(); // [T38] push per-peer minigame session snapshots (reliable channel)
         SendMatchState();    // global match clock (GAMESTARTTIME/TIMELIMIT/warmup) → TIMER panel
         SendMapVote();       // per-peer end-of-match map/gametype ballot (QC ENT_CLIENT_MAPVOTE) → MapVotePanel
         SendWaypoints(); // per-peer waypoint sprites (CTF flags + player pings…) → 3D markers + radar icons
+        SendOnslaughtDestruction();
+        SendWarpzoneCameraPoses();
         SendRadarLinks(); // Onslaught control-point/generator connection lines (QC ENT_CLIENT_RADARLINK) → radar
         SendItemsTime(); // per-peer item respawn-time table (QC itemstime IT_Write) → ItemsTimePanel countdowns
         FlushEventBundles();
@@ -1182,7 +1214,8 @@ public sealed class ServerNet : IDisposable
                 {
                     // Audit EVERY authenticated rcon command with its source (DP logs the same). Runs before the
                     // command so a command that quits/rehosts is still attributed.
-                    GD.Print($"[rcon] {from.Address}: {cmd}");
+                    string audit = Commands.IsMatrixTokenCommand(cmd) ? "mx token [redacted]" : cmd;
+                    GD.Print($"[rcon] {from.Address}: {audit}");
                     return _world.Commands.Execute(cmd, isServerConsole: true, caller: null).Output;
                 },
                 send: pkt => _master!.SendRaw(from, pkt));
@@ -1341,7 +1374,7 @@ public sealed class ServerNet : IDisposable
     // connect → handshake → input ordering). Replies those handlers send route through SendPacket, which is
     // already worker-aware (stage 1). Unthreaded: handlers run inline exactly as before.
     private enum InboundKind : byte { Packet, Connected, Disconnected }
-    private readonly System.Collections.Concurrent.ConcurrentQueue<(InboundKind Kind, int Peer, int Channel, byte[]? Data)> _inboundNet = new();
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(InboundKind Kind, int Peer, int Channel, byte[]? Data, string? Address)> _inboundNet = new();
 
     // MAIN-thread-owned view of which ENet peer ids are currently live — maintained in the connect/disconnect
     // handlers (which always fire on main, BEFORE marshaling), consumed by DrainOutbox to drop worker-staged
@@ -1354,22 +1387,23 @@ public sealed class ServerNet : IDisposable
     private void OnPeerConnected(int peerId)
     {
         _livePeerIds.Add(peerId); // main-thread view for the outbox drain filter
-        if (MarshalInbound) { _inboundNet.Enqueue((InboundKind.Connected, peerId, 0, null)); return; }
-        OnPeerConnectedCore(peerId);
+        string address = _transport.RemoteAddress(peerId);
+        if (MarshalInbound) { _inboundNet.Enqueue((InboundKind.Connected, peerId, 0, null, address)); return; }
+        OnPeerConnectedCore(peerId, address);
     }
 
-    private void OnPeerConnectedCore(int peerId)
+    private void OnPeerConnectedCore(int peerId, string address)
     {
         // ENet-level connect only — we wait for the client's HandshakeRequest (build-parity) before admitting
         // it as a player. Track the slot so we can attach the player on accept.
-        _peers[peerId] = new PeerState { PeerId = peerId };
+        _peers[peerId] = new PeerState { PeerId = peerId, Address = address };
         GD.Print($"[ServerNet] peer {peerId} connected (awaiting handshake).");
     }
 
     private void OnPeerDisconnected(int peerId)
     {
         _livePeerIds.Remove(peerId); // main-thread view for the outbox drain filter
-        if (MarshalInbound) { _inboundNet.Enqueue((InboundKind.Disconnected, peerId, 0, null)); return; }
+        if (MarshalInbound) { _inboundNet.Enqueue((InboundKind.Disconnected, peerId, 0, null, null)); return; }
         OnPeerDisconnectedCore(peerId);
     }
 
@@ -1383,7 +1417,6 @@ public sealed class ServerNet : IDisposable
             _lastSnapOrigin.Remove(st.Player);
             _statusBlob.Remove(st.Player);
             _playerNetIds.TryRemove(st.Player, out _);
-            _world.Commands.ForgetPlayer(st.Player); // drop the per-client replicated-cvar/autoswitch tables
             _world.Clients.ClientDisconnect(st.Player);
             GD.Print($"[ServerNet] peer {peerId} disconnected ({st.Player.NetName}).");
         }
@@ -1391,14 +1424,13 @@ public sealed class ServerNet : IDisposable
 
     private void OnPacket(int from, int channel, byte[] data)
     {
-        if (MarshalInbound) { _inboundNet.Enqueue((InboundKind.Packet, from, channel, data)); return; }
+        if (MarshalInbound) { _inboundNet.Enqueue((InboundKind.Packet, from, channel, data, null)); return; }
         OnPacketCore(from, channel, data);
     }
 
     private void OnPacketCore(int from, int channel, byte[] data)
     {
-        // A peer that has been told why it is being dropped is only waiting for its link to close
-        // (RejectAndDropLater). The list is empty on a server without a mod, so this costs it nothing.
+        // A rejected peer is only waiting for its link to close (RejectAndDropLater).
         if (_pendingDrops.Count > 0 && _peers.TryGetValue(from, out PeerState? sender) && sender.Rejected)
             return;
         var r = new BitReader(data);
@@ -1419,6 +1451,10 @@ public sealed class ServerNet : IDisposable
                 break;
             case NetControl.ModFrame:
                 HandleModFrame(from, data);
+                break;
+            case NetControl.MapVisualSubscription:
+                if (channel == NetProtocol.ReliableChannel)
+                    HandleMapVisualSubscription(from, ref r);
                 break;
             default:
                 // unknown / not-server-bound control byte — ignore (a malformed or out-of-phase packet).
@@ -1501,7 +1537,22 @@ public sealed class ServerNet : IDisposable
         string output = ctx.Output;
         if (string.IsNullOrEmpty(output))
             return;
-        SendPrint(peerId, output.TrimEnd('\n', '\r'));
+        output = output.TrimEnd('\n', '\r');
+        // A report can span ten catalog pages, exceeding WriteString's UInt16 byte length.
+        // Keep chunks on line boundaries where possible and preserve UTF-16 pairs on long lines.
+        const int printChunkChars = 8192;
+        for (int start = 0; start < output.Length;)
+        {
+            int end = Math.Min(start + printChunkChars, output.Length);
+            if (end < output.Length)
+            {
+                int newline = output.LastIndexOf('\n', end - 1, end - start);
+                if (newline >= start) end = newline + 1;
+                else if (char.IsHighSurrogate(output[end - 1])) end--;
+            }
+            SendPrint(peerId, output[start..end].TrimEnd('\n', '\r'));
+            start = end;
+        }
     }
 
     /// <summary>The lowercased first whitespace-delimited token of <paramref name="line"/> (QC <c>strtolower(argv(0))</c>).</summary>
@@ -1646,6 +1697,31 @@ public sealed class ServerNet : IDisposable
     /// ignore list? Delegates to the chat engine's PersistentId-keyed check.</summary>
     public static bool IgnorePlayerInList(Player self, Player other) => Chat.IgnorePlayerInList(self, other);
 
+    private readonly HashSet<int> _scoreboardIgnores = new();
+
+    private void SendScoreboardIgnores()
+    {
+        foreach (PeerState st in _peers.Values)
+        {
+            if (st.Player is not { } viewer) continue;
+            _scoreboardIgnores.Clear();
+            if (viewer.IgnoreList.Count != 0)
+                foreach (Player target in _world.Clients.Players)
+                    if (Chat.IgnorePlayerInList(viewer, target))
+                        _scoreboardIgnores.Add(NetIdFor(target));
+
+            if (st.LastScoreboardIgnores.SetEquals(_scoreboardIgnores)) continue;
+            _scratchWriter.Reset();
+            _scratchWriter.WriteByte((byte)NetControl.ScoreboardIgnores);
+            _scratchWriter.WriteByte(_scoreboardIgnores.Count);
+            foreach (int id in _scoreboardIgnores)
+                _scratchWriter.WriteUShort(id);
+            SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+            st.LastScoreboardIgnores.Clear();
+            st.LastScoreboardIgnores.UnionWith(_scoreboardIgnores);
+        }
+    }
+
     /// <summary>
     /// QC <c>soundto(MSG_ONE, emitter, channel, sample, volume, atten, 0)</c>: send one positional sound to a
     /// single client only (the <c>target_speaker ACTIVATOR</c> BIT3 per-client sound). Encodes a one-record
@@ -1746,8 +1822,18 @@ public sealed class ServerNet : IDisposable
         // smallest diff that reaches every accepted peer); the changed value is part of the dedup key below so a
         // re-roll forces an immediate re-send instead of waiting for the ~1×/s heartbeat.
         int randomSeed = _world.RandomSeed.Current;
+        int monstersTotal = MonsterAI.MonstersTotal;
+        int monstersKilled = MonsterAI.MonstersKilled;
+        if (_world.GameType is Invasion { Type: Invasion.InvasionType.Round } invasion)
+        {
+            monstersTotal = invasion.Wave.MaxSpawned;
+            monstersKilled = invasion.Wave.Killed;
+        }
+        int secretsTotal = MapObjectsState.SecretsTotal;
+        int secretsFound = MapObjectsState.SecretsFound;
+        ulong mapWeapons = _world.MapWeaponBits;
 
-        string key = $"{gameStart:F2}|{timeLimitSec:F1}|{(warmup ? 1 : 0)}|{warmupLimit:F1}|{(intermission ? 1 : 0)}|{nextMap}|{overtimes}|{randomSeed}";
+        string key = $"{gameStart:F2}|{timeLimitSec:F1}|{(warmup ? 1 : 0)}|{warmupLimit:F1}|{(intermission ? 1 : 0)}|{nextMap}|{overtimes}|{randomSeed}|{monstersTotal}|{monstersKilled}|{secretsTotal}|{secretsFound}|{mapWeapons}";
         if (key == _lastMatchStateKey && _world.Time < _nextMatchStateSend)
             return;
         _lastMatchStateKey = key;
@@ -1766,6 +1852,12 @@ public sealed class ServerNet : IDisposable
         // unaffected; ClientNet.HandleMatchState reads it in this same trailing position). Reserve a comment for any
         // future trailing match-state field: it MUST go AFTER this and be read in the same order.
         _scratchWriter.WriteUShort(randomSeed);
+        _scratchWriter.WriteLong(monstersTotal);
+        _scratchWriter.WriteLong(monstersKilled);
+        _scratchWriter.WriteLong(secretsTotal);
+        _scratchWriter.WriteLong(secretsFound);
+        _scratchWriter.WriteULong((uint)mapWeapons);
+        _scratchWriter.WriteULong((uint)(mapWeapons >> 32));
 
         foreach (PeerState st in _peers.Values)   // real network peers (matches BroadcastSnapshots; excludes bots)
             if (st.Accepted && st.Player is not null)
@@ -1803,9 +1895,10 @@ public sealed class ServerNet : IDisposable
         }
 
         IReadOnlyList<MapVoteCandidate> cands = vote.Candidates;
-        // QC mv_timeout: send SECONDS-REMAINING (not absolute server time) so the client converts it against its own
-        // sim clock — the listen/remote clocks differ, and the panel counts down vs Api.Clock.Time.
-        float remaining = vote.Timeout > 0f ? System.Math.Max(0f, vote.Timeout - _world.Time) : -1f;
+        // The reliable ballot can arrive independently of the unreliable movement snapshot.
+        // Send its server-time sample and absolute timeout on the same simulation clock.
+        float serverTime = _world.Time;
+        float deadline = vote.Timeout > 0f ? vote.Timeout : -1f;
         // QC mv_winner (1-based, 0 = not yet): the ballot index of the chosen map among the non-abstain options.
         int winner1Based = 0;
         if (vote.Finished && !string.IsNullOrEmpty(vote.WinningMap))
@@ -1830,12 +1923,11 @@ public sealed class ServerNet : IDisposable
             _scratchWriter.WriteBool(vote.Finished);
             _scratchWriter.WriteBool(vote.IsGametypeVote);
             _scratchWriter.WriteBool(_world.Services.Cvars.GetFloat("sv_vote_gametype_detail") != 0f); // QC mv_detail
-            _scratchWriter.WriteFloat(remaining);
+            _scratchWriter.WriteFloat(serverTime);
+            _scratchWriter.WriteFloat(deadline);
             _scratchWriter.WriteShort(winner1Based);
-            // QC mv_ownvote: this peer's own selection (-1 = none / abstain), so the panel highlights the right cell.
-            int own = vote.SelectionOf(st.Player);
-            bool ownAbstain = own >= 0 && own < cands.Count && cands[own].IsAbstain;
-            _scratchWriter.WriteShort(ownAbstain ? -1 : own);
+            // QC mv_ownvote: this peer's choice, including the appended abstain row (-1 = none).
+            _scratchWriter.WriteShort(vote.BallotSelectionOf(st.Player));
             // QC mv_abstain: the appended "Don't care" slot is present on the ballot.
             bool abstain = false;
             foreach (MapVoteCandidate c in cands) if (c.IsAbstain) { abstain = true; break; }
@@ -1859,12 +1951,32 @@ public sealed class ServerNet : IDisposable
         }
     }
 
+    private void HandleMapVisualSubscription(int peerId, ref BitReader reader)
+    {
+        if (!_peers.TryGetValue(peerId, out PeerState? peer) || !peer.Accepted || reader.Remaining != 1)
+            return;
+        int choice = reader.ReadByte();
+        if (choice > 1 || peer.AcceptsMapVisualSuggestions == (choice == 1))
+            return;
+
+        peer.AcceptsMapVisualSuggestions = choice == 1;
+        SendClientInit(peer);
+    }
+
+    private void SendChangedServerFlags()
+    {
+        int flags = VortexArena.Common.Gameplay.ServerFlags.Value;
+        foreach (PeerState peer in _peers.Values)
+            if (peer.Accepted && peer.LastServerFlags != flags)
+                SendClientInit(peer);
+    }
+
     /// <summary>
-    /// [W14a-QW4] QC <c>ClientInit_misc</c> (server/client.qc:907) — the one-shot per-server gameplay-constant bundle
+    /// [W14a-QW4] QC <c>ClientInit_misc</c> (server/client.qc:907) — the per-server gameplay-constant bundle
     /// sent once to a joining client right after <see cref="NetControl.HandshakeAccept"/> (the welcome/accept
     /// handshake leg). Carries the constants a pure remote client needs at session init: the hook muzzle shot origin,
     /// <c>g_trueaim_minrange</c>, <c>g_balance_damagepush_speedfactor</c>, <c>g_balance_armor_blockpercent</c>, the
-    /// networked <c>serverflags</c>, the map fog string, and <c>g_nexball_meter_period</c>. Field order mirrors
+    /// networked <c>serverflags</c>, the map fog string, <c>g_nexball_meter_period</c>, and map visual suggestions. Field order mirrors
     /// <see cref="ClientNet.HandleClientInit"/>.
     ///
     /// Port divergence vs Base: QC sends FOUR hook + four arc shot origins (one per cl_gunalign side) compressed via
@@ -1872,7 +1984,7 @@ public sealed class ServerNet : IDisposable
     /// the arc muzzle inline (no stored arc_shotorigin), so only the single hook origin is networked here as a raw
     /// vector. The per-align arc array is RESERVED for a later wave if/when the port models it server-side.
     /// </summary>
-    private void SendClientInit(int peerId)
+    private void SendClientInit(PeerState peer)
     {
         var cvars = _world.Services.Cvars;
         _scratchWriter.Reset();
@@ -1886,13 +1998,15 @@ public sealed class ServerNet : IDisposable
         _scratchWriter.WriteFloat(cvars.GetFloat("g_balance_damagepush_speedfactor"));
         _scratchWriter.WriteFloat(cvars.GetFloat("g_balance_armor_blockpercent"));
         // QC serverflags (the networked SERVERFLAG_* bitmap — fullbright/forbid-pickuptimer/teamplay).
-        _scratchWriter.WriteLong(VortexArena.Common.Gameplay.ServerFlags.Value);
-        // QC: if (autocvar_sv_foginterval && world.fog != "") WriteString(world.fog) else WriteString("").
-        string fog = cvars.GetFloat("sv_foginterval") != 0f ? cvars.GetString("sv_fog") : "";
-        _scratchWriter.WriteString(fog ?? "");
+        peer.LastServerFlags = VortexArena.Common.Gameplay.ServerFlags.Value;
+        _scratchWriter.WriteLong(peer.LastServerFlags);
+        // Both QC sv_foginterval branches deliver the initial fog. Native uses this typed field for both.
+        _scratchWriter.WriteString(_world.MapFog);
         // QC g_nexball_meter_period (the nexball powershot meter cycle period).
         _scratchWriter.WriteFloat(cvars.GetFloat("g_nexball_meter_period"));
-        SendPacket(peerId, _scratchWriter.WrittenSpan, reliable: true);
+        if (peer.AcceptsMapVisualSuggestions && _world.MapVisualSuggestions != default)
+            MapVisualSuggestionsWire.Write(_scratchWriter, _world.MapVisualSuggestions);
+        SendPacket(peer.PeerId, _scratchWriter.WrittenSpan, reliable: true);
     }
 
     /// <summary>Push the item respawn-time table to each peer — the C# port of QC's CSQC <c>itemstime</c> net
@@ -1954,24 +2068,91 @@ public sealed class ServerNet : IDisposable
 
     private readonly System.Collections.Generic.List<VortexArena.Common.Gameplay.Waypoints.WaypointSprite> _wpScratch = new();
     private readonly System.Collections.Generic.List<VortexArena.Common.Gameplay.Waypoints.WaypointSprite> _wpVisible = new();
-    private bool _wpWasNonEmpty;
+
+    private void SendWarpzoneCameraPoses(PeerState? joiningPeer = null)
+    {
+        var baked = BakedWarpzoneCameras;
+        if (baked is null)
+            return;
+
+        var overrides = _cameraPoseOverrides;
+        overrides.Clear();
+        foreach (int model in baked.Keys)
+            if (model <= ushort.MaxValue)
+                overrides[model] = null;
+        foreach (WarpzoneCamera camera in _world.Warpzones.Cameras)
+        {
+            if (camera.Surface.IsFreed
+                || !VortexArena.Engine.Collision.BspWarpzoneViews.TryInlineModel(camera.Surface.Model, out int model)
+                || model > ushort.MaxValue)
+                continue;
+            var pose = camera.View;
+            if (pose is not null && WarpzoneCameraWire.IsFinite(pose.Origin) && WarpzoneCameraWire.IsFinite(pose.Angles))
+            {
+                if (baked.TryGetValue(model, out var authored) && pose == authored)
+                    overrides.Remove(model);
+                else
+                    overrides[model] = pose;
+            }
+        }
+
+        if (overrides.Count == 0 && !_peers.Values.Any(peer => peer.LastWarpzoneCameraPoses.Length > 0))
+            return;
+
+        var entries = overrides.Select(entry => new WarpzoneCameraWire.Entry(entry.Key, entry.Value)).ToArray();
+        foreach (PeerState peer in _peers.Values)
+        {
+            if (!peer.Accepted || (joiningPeer is not null && joiningPeer != peer)
+                || entries.AsSpan().SequenceEqual(peer.LastWarpzoneCameraPoses))
+                continue;
+
+            int start = 0;
+            do
+            {
+                _scratchWriter.Reset();
+                _scratchWriter.WriteByte((byte)NetControl.WarpzoneCameraPoses);
+                WarpzoneCameraWire.WriteChunk(_scratchWriter, entries, start);
+                SendPacket(peer.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+                start += WarpzoneCameraWire.EntriesPerChunk;
+            } while (start < entries.Length);
+            peer.LastWarpzoneCameraPoses = entries;
+
+            if (_world.Services.Cvars.GetFloat("sv_warpzone_trace") != 0f)
+                GD.Print($"[warpzone] sent {entries.Length} monitor pose override(s) to {peer.NetId}");
+        }
+    }
+
+    private void SendOnslaughtDestruction()
+    {
+        OnslaughtDestruction? state = (_world.GameType as Onslaught)?.CpCombat.GeneratorDestruction;
+        foreach (PeerState peer in _peers.Values)
+        {
+            if (!peer.Accepted || peer.Player is not { } player)
+                continue;
+            // ROUNDLOST is assigned to players and inherited by spectators following them.
+            bool showCamera = state is not null && !(player.Spectatee ?? player).IsObserver;
+            if (peer.LastOnslaughtDestruction == state && peer.LastOnslaughtCamera == showCamera)
+                continue;
+            peer.LastOnslaughtDestruction = state;
+            peer.LastOnslaughtCamera = showCamera;
+            _scratchWriter.Reset();
+            _scratchWriter.WriteByte((byte)NetControl.OnslaughtDestruction);
+            OnslaughtDestructionWire.Write(_scratchWriter, state, showCamera);
+            SendPacket(peer.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+        }
+    }
 
     /// <summary>Push the live waypoint sprites (QC the networked ENT_CLIENT_WAYPOINT entities) to each peer,
     /// filtered to what that peer may see (team/rule/predicate). The set is the persistent
     /// <see cref="VortexArena.Common.Gameplay.Waypoints.WaypointSprites"/> manager (player pings, deployed
     /// markers) merged with the gametype's per-tick objective rebuild (flags/points/keys via
-    /// <c>GameType.CollectWaypoints</c>). Unreliable + small (positions move with carriers). Skipped for
-    /// waypoint-less modes except the single clearing message when a mode that HAD waypoints drops to none.</summary>
+    /// <c>GameType.CollectWaypoints</c>). Moving markers use best-effort snapshots. A peer's transition
+    /// to no visible waypoints is reliable, including when team or visibility rules hide the last marker.</summary>
     private void SendWaypoints()
     {
         var mgr = VortexArena.Common.Gameplay.Waypoints.WaypointSprites.Active;
         _wpScratch.Clear();
         _world.GameType?.CollectWaypoints(_wpScratch);
-
-        int total = mgr.Count + _wpScratch.Count;
-        if (total == 0 && !_wpWasNonEmpty)
-            return; // waypoint-less mode: never spam empty messages
-        _wpWasNonEmpty = total > 0;
 
         float now = _world.Time;
         foreach (PeerState st in _peers.Values)
@@ -1985,8 +2166,15 @@ public sealed class ServerNet : IDisposable
             foreach (var wp in mgr) if (WaypointVisible(wp, peer) && _wpVisible.Count < 255) _wpVisible.Add(wp);
             foreach (var wp in _wpScratch) if (WaypointVisible(wp, peer) && _wpVisible.Count < 255) _wpVisible.Add(wp);
 
+            bool hasVisible = _wpVisible.Count != 0;
+            if (!hasVisible && !st.SentVisibleWaypoints)
+                continue;
+            st.SentVisibleWaypoints = hasVisible;
+
             _scratchWriter.Reset();
             _scratchWriter.WriteByte((byte)NetControl.Waypoints);
+            _scratchWriter.WriteLong(unchecked((int)++st.WaypointSequence));
+            _scratchWriter.WriteFloat(now);
             _scratchWriter.WriteByte((byte)_wpVisible.Count);
             foreach (var wp in _wpVisible)
             {
@@ -2003,10 +2191,10 @@ public sealed class ServerNet : IDisposable
                 _scratchWriter.WriteString(spriteFor);
                 // QC packs the radar-icon byte: low 7 bits = m_radaricon (0/1), bit 7 = "ping now" (cnt|BIT(7)),
                 // which the client turns into an expanding gfx/teamradar_ping ring. waypointsprites.qc:187-192.
-                int radarByte = (wp.RadarIcon & 0x7F);
-                if (VortexArena.Common.Gameplay.Waypoints.WaypointSprites.IsPinging(wp))
-                    radarByte |= 0x80;
-                _scratchWriter.WriteByte((byte)radarByte);
+                bool pinging = VortexArena.Common.Gameplay.Waypoints.WaypointSprites.IsPinging(wp);
+                _scratchWriter.WriteByte((byte)((wp.RadarIcon & 0x7F) | (pinging ? 0x80 : 0)));
+                if (pinging)
+                    _scratchWriter.WriteLong(unchecked((int)wp.PingSequence));
                 _scratchWriter.WriteByte(Clamp255(wp.Color.X));
                 _scratchWriter.WriteByte(Clamp255(wp.Color.Y));
                 _scratchWriter.WriteByte(Clamp255(wp.Color.Z));
@@ -2016,19 +2204,18 @@ public sealed class ServerNet : IDisposable
                 _scratchWriter.WriteFloat(wp.MaxDistance);
                 _scratchWriter.WriteBool(wp.Hideable);
             }
-            SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: false);
+            SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: !hasVisible);
         }
     }
 
     private readonly System.Collections.Generic.List<VortexArena.Common.Gameplay.Onslaught.RadarLinkSegment> _radarLinkScratch = new();
     private bool _radarLinksWasNonEmpty;
+    private uint _radarLinkSequence;
 
     /// <summary>Push the live Onslaught radar links (QC the networked ENT_CLIENT_RADARLINK entities) to every
     /// accepted peer so the team radar can draw the control-point/generator connection lines (QC
-    /// draw_teamradar_link). Only Onslaught produces links; other modes never send (and send one clearing message
-    /// when a mode that HAD links drops to none, mirroring SendWaypoints). The set is identical for every peer
-    /// (links are not team-filtered — QC draws all of them), so it is encoded once and broadcast. Unreliable
-    /// (positions/ownership change as points are captured).</summary>
+    /// draw_teamradar_link). The same graph is sent to every peer. Ordinary updates are best effort.
+    /// The last empty graph is reliable so a peer can clear its HUD even after packet loss.</summary>
     private void SendRadarLinks()
     {
         _radarLinkScratch.Clear();
@@ -2042,6 +2229,7 @@ public sealed class ServerNet : IDisposable
         int count = System.Math.Min(_radarLinkScratch.Count, 255);
         _scratchWriter.Reset();
         _scratchWriter.WriteByte((byte)NetControl.RadarLinks);
+        _scratchWriter.WriteLong(unchecked((int)++_radarLinkSequence));
         _scratchWriter.WriteByte((byte)count);
         for (int i = 0; i < count; i++)
         {
@@ -2056,7 +2244,7 @@ public sealed class ServerNet : IDisposable
 
         foreach (PeerState st in _peers.Values)
             if (st.Accepted && st.Player is not null)
-                SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: false);
+                SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: count == 0);
     }
 
     private static byte Clamp255(float c) => (byte)System.Math.Clamp((int)(c * 255f), 0, 255);
@@ -2129,7 +2317,6 @@ public sealed class ServerNet : IDisposable
         _antilag.Remove(p);
         _lastSnapOrigin.Remove(p);
         _statusBlob.Remove(p);
-        _world.Commands.ForgetPlayer(p); // per-client replicated-cvar/autoswitch tables
     }
 
     /// <summary>Send a reject reason and drop the peer (build mismatch / failed auth / full).</summary>
@@ -2155,9 +2342,7 @@ public sealed class ServerNet : IDisposable
     /// reason is sent now and the link is closed <see cref="RejectLingerSeconds"/> later; until then nothing
     /// the peer sends is acted on.
     ///
-    /// The handshake's own rejects still go through <see cref="Reject"/> unchanged - this change was made for
-    /// the mod offer, and a server without a mod must behave as it did. They very probably lose their reason
-    /// the same way (it is the same two calls); that was not tested, and moving them here is a one-line change.
+    /// Build-parity rejections also use this path so the mismatched client receives the reason.
     /// </summary>
     private void RejectAndDropLater(int peerId, string reason)
     {
@@ -2180,8 +2365,7 @@ public sealed class ServerNet : IDisposable
     // Owned by the thread that owns _peers (Reject and PumpPendingDrops both run there).
     private readonly List<(int Peer, double At)> _pendingDrops = new();
 
-    /// <summary>Once per host step: close the links of peers whose reason has had time to arrive. Nothing is
-    /// ever queued on a server without a mod.</summary>
+    /// <summary>Once per host step: close the links of peers whose reason has had time to arrive. Only peers waiting for rejection are queued.</summary>
     private void PumpPendingDrops()
     {
         if (_pendingDrops.Count == 0) return;
@@ -2213,7 +2397,7 @@ public sealed class ServerNet : IDisposable
         if (clientParity != serverParity)
         {
             // build-parity gate: mismatched content/protocol — reject with a reason and drop.
-            Reject(peerId, $"build mismatch (server 0x{serverParity:X8}, client 0x{clientParity:X8})");
+            RejectAndDropLater(peerId, $"build mismatch (server 0x{serverParity:X8}, client 0x{clientParity:X8})");
             GD.Print($"[ServerNet] peer {peerId} REJECTED: parity {clientParity:X8} != {serverParity:X8}.");
             return;
         }
@@ -2258,12 +2442,23 @@ public sealed class ServerNet : IDisposable
         }
 
         // admit: create the player on the world's client roster (spawns it via PutClientInServer).
-        ClientManager.ClientInfo info = _world.Clients.ClientConnect(isBot: false, netName: string.IsNullOrEmpty(st.PendingName) ? null : st.PendingName);
+        ClientManager.ClientInfo info = _world.Clients.ClientConnect(isBot: false,
+            netName: string.IsNullOrEmpty(st.PendingName) ? null : st.PendingName,
+            netAddress: st.IsLocalHost ? "local" : st.Address,
+            persistentId: st.IdentityFingerprint);
+        if (!info.IsConnected)
+        {
+            string reason = _world.Services.Cvars.GetFloat("g_ban_telluser") != 0f
+                ? "You are banned from this server."
+                : "banned";
+            RejectAndDropLater(peerId, reason);
+            return;
+        }
         st.Player = info.Player;
-        // QC .crypto_idfp: the stable identity used to key race/CTS records (anonymous bots keep "").
-        info.Player.PersistentId = st.IdentityFingerprint;
         st.NetId = NetIdFor(info.Player);
         st.Accepted = true;
+        if (_world.Services.Cvars.GetString("sv_join_notices").Length > 0)
+            st.JoinNoticeAt = _world.Time + 1f;
         _byPlayer[info.Player] = st;
 
         // the client's stable network entity id is a small allocated id (NOT the large ENet peer id). The owner
@@ -2278,17 +2473,44 @@ public sealed class ServerNet : IDisposable
         // these two strings in this exact order, right after the server name.
         _scratchWriter.WriteString(_world.Services.Cvars.GetString("mapname"));
         _scratchWriter.WriteString(_world.GameType?.RegistryName ?? "dm");
+        // Presentation only, in the same per-peer reliable accept as the map and server name.
+        WelcomeBriefing.Write(_scratchWriter, _world.BuildJoinWelcomeDetails());
         SendPacket(peerId, _scratchWriter.WrittenSpan, reliable: true);
+        SendActiveFireballBlasts(peerId);
 
-        // [W14a-QW4] QC ClientInit_misc (server/client.qc:907): right after the accept, send the one-shot per-server
+        // [W14a-QW4] QC ClientInit_misc (server/client.qc:907): right after the accept, send the per-server
         // gameplay-constant bundle (the welcome/accept handshake leg) so a pure remote client has the constants the
         // hook/arc/trueaim/damagepush/armor/fog paths read.
-        SendClientInit(peerId);
+        SendClientInit(st);
+        SendQuickMenuFile(peerId);
+        foreach (string sample in _world.Services.SoundImpl.PrecachedSamples)
+            SendSoundPrecache(peerId, sample);
+        SendWarpzoneCameraPoses(st);
 
         // Offer this server's mod, if it has one. The offer itself goes out on the next PumpMods.
         _mods?.PeerAccepted(peerId, WallSeconds);
 
         GD.Print($"[ServerNet] peer {peerId} accepted as '{info.Player.NetName}' (netId {peerId}, id {st.IdentityFingerprint[..8]}).");
+    }
+
+    internal VirtualFileSystem? ContentVfs { get; set; }
+
+    private void SendQuickMenuFile(int peerId)
+    {
+        string file = _world.Services.Cvars.GetString("sv_quickmenu_file");
+        if (!VortexArena.Legacy.Csqc.LegacyQcHost.IsSafePath(file) || ContentVfs?.Exists(file) != true)
+            return;
+
+        _scratchWriter.Reset();
+        _scratchWriter.WriteByte((byte)NetControl.QuickMenuFile);
+        _scratchWriter.WriteString(file);
+        SendPacket(peerId, _scratchWriter.WrittenSpan, reliable: true);
+    }
+
+    private void SendOnslaughtRadar(Player player)
+    {
+        if (_byPlayer.TryGetValue(player, out PeerState? peer) && peer.Accepted)
+            SendPacket(peer.PeerId, stackalloc byte[] { (byte)NetControl.OnslaughtRadar }, reliable: true);
     }
 
     private void HandleInputFrame(int peerId, ref BitReader r)
@@ -2573,7 +2795,7 @@ public sealed class ServerNet : IDisposable
         // of every drained command's buttons, at the tick frametime (the weapon driver/regen run once per tick).
         // Drives p.Angles, the dead-respawn buttons, the vehicle input and W_WeaponFrame.
         InputCommand mergedCmd = last;
-        mergedCmd.Buttons = (int)mergedButtons;
+        mergedCmd.Buttons = (int)((mergedButtons & ~InputButtons.Drag) | (last.TypedButtons & InputButtons.Drag));
         mergedCmd.Impulse = 0;
         mergedCmd.DeltaTime = _world.Simulation.TickSeconds;   // one merged command spans exactly this tick
         IMovementInput merged = ToMovementInput(mergedCmd);
@@ -2655,6 +2877,7 @@ public sealed class ServerNet : IDisposable
             ButtonAttack1 = (b & InputButtons.Attack) != 0,
             ButtonAttack2 = (b & InputButtons.Attack2) != 0,
             ButtonUse = (b & InputButtons.Use) != 0,
+            ButtonDrag = (b & InputButtons.Drag) != 0,
             // PHYS_INPUT_BUTTON_HOOK — the +hook / offhand-fire button, driving the offhand-weapon think
             // (grapple hook, offhand blaster, nade prime/throw) in WeaponFireDriver.Frame.
             ButtonHook = (b & InputButtons.Hook) != 0,
@@ -2728,6 +2951,27 @@ public sealed class ServerNet : IDisposable
                 continue;
 
             Player owner = st.Player;
+            if (st.JoinNoticeAt is float noticeAt && now >= noticeAt)
+            {
+                st.JoinNoticeAt = null;
+                var cvars = _world.Services.Cvars;
+                if (JoinNotice.Create(cvars.GetFloat("sv_join_notices_time"), cvars.GetString("sv_join_notices")) is { } notice)
+                {
+                    _scratchWriter.Reset();
+                    _scratchWriter.WriteByte((byte)NetControl.JoinNotice);
+                    notice.Write(_scratchWriter);
+                    SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+                }
+            }
+            if (!st.IsLocalHost && owner.FixAngle)
+            {
+                _scratchWriter.Reset();
+                _scratchWriter.WriteByte((byte)NetControl.FixAngle);
+                _scratchWriter.WriteFloat(owner.FixAngleAngles.X);
+                _scratchWriter.WriteFloat(owner.FixAngleAngles.Y);
+                SendPacket(st.PeerId, _scratchWriter.WrittenSpan, reliable: true);
+                owner.FixAngle = false;
+            }
             _snapshotWriter.Reset();
             _snapshotWriter.WriteByte((byte)NetControl.Snapshot);
             _snapshotWriter.WriteFloat(now);
@@ -2837,10 +3081,53 @@ public sealed class ServerNet : IDisposable
             // unreliable packet is lossy (fragmented, any lost fragment drops the whole frame) — so a dropped
             // baseline would leave the client missing static items until they next change (rare). Promote any
             // over-MTU snapshot to the reliable channel (ENet fragments it losslessly); the client dispatches by
-            // the leading control byte regardless of channel, so this is transparent. Steady-state deltas stay
-            // unreliable, so this adds no head-of-line blocking once the first ack shrinks the frame.
+            // the leading control byte regardless of channel. Scoreboard/layout changes also ride the reliable
+            // channel: the next delta omits their payload, so losing this one can freeze a joined player's old row.
             ReadOnlySpan<byte> snapshot = _snapshotWriter.WrittenSpan;
-            SendPacket(st.PeerId, snapshot, reliable: snapshot.Length > NetProtocol.MaxUnreliablePayload);
+            SendPacket(st.PeerId, snapshot,
+                reliable: sendScoreInfo || sendScores || snapshot.Length > NetProtocol.MaxUnreliablePayload);
+            SendAttachedDamage(st, sendSet, now);
+        }
+        _attachedDamageHits.Clear();
+    }
+
+    private void SendAttachedDamage(PeerState peer, IReadOnlyDictionary<int, NetEntityState> visible, float now)
+    {
+        if (_attachedDamageHits.Count == 0)
+            return;
+
+        _eventWriter.Reset();
+        _eventWriter.WriteByte((byte)NetControl.EventBundle);
+        int countPosition = ReserveCount(_eventWriter);
+        int count = 0;
+        foreach (var (hit, spawnParity) in _attachedDamageHits)
+        {
+            if (hit.Target.IsFreed || hit.Target is Player player && player.SpawnParity != spawnParity)
+                continue;
+
+            int targetId = NetIdForEntity(hit.Target);
+            if (!visible.TryGetValue(targetId, out NetEntityState state)
+                || (state.ModelIndex == 0 && string.IsNullOrEmpty(state.Model))
+                || state.Alpha == 255 || state.Kind == NetEntityKind.Projectile)
+                continue;
+
+            new AttachedDamageWire(targetId, hit.WeaponId, hit.HitOffset, hit.Damage, now,
+                (state.Flags & NetEntityFlags.SpawnParity) != 0).Write(_eventWriter);
+            count++;
+            if (_eventWriter.Length + 4 + AttachedDamageWire.BodyLength > NetProtocol.MaxUnreliablePayload)
+            {
+                PatchCount(_eventWriter, countPosition, count);
+                SendPacket(peer.PeerId, _eventWriter.WrittenSpan, reliable: false);
+                _eventWriter.Reset();
+                _eventWriter.WriteByte((byte)NetControl.EventBundle);
+                countPosition = ReserveCount(_eventWriter);
+                count = 0;
+            }
+        }
+        if (count > 0)
+        {
+            PatchCount(_eventWriter, countPosition, count);
+            SendPacket(peer.PeerId, _eventWriter.WrittenSpan, reliable: false);
         }
     }
 
@@ -2860,6 +3147,8 @@ public sealed class ServerNet : IDisposable
         return combined;
     }
 
+    private readonly Dictionary<int, Entity> _onslaughtShields = new();
+
     /// <summary>
     /// Build this tick's networked entity set (keyed by net id) from the player roster, stamping the teleport
     /// bit on any entity whose one-tick origin jump exceeds <see cref="TeleportTickDistance"/> (a teleport or
@@ -2869,6 +3158,7 @@ public sealed class ServerNet : IDisposable
     {
         _entityScratch.Clear();
         _entityBounds.Clear();
+        _onslaughtShields.Clear();
         _scratchHasOwnerPrivate = false;
 
         // QC world.qc:EndFrame records antilag history at `altime` (time + frametime*(1+g_antilag_nudge)), NOT at
@@ -2929,6 +3219,7 @@ public sealed class ServerNet : IDisposable
                 EntNum = netId,
                 Kind = NetEntityKind.Player,
                 ModelIndex = p.ModelIndex,
+                CountdownIndicator = _world.PlayerStates.Of(p).VisibleCountdown,
                 Frame = (int)p.Frame,
                 Skin = (int)p.Skin,
                 Origin = p.Origin,
@@ -2964,6 +3255,7 @@ public sealed class ServerNet : IDisposable
                 Weapon = HeldWeaponId(p),
                 Model = p.Model,           // QC .model (playermodel) — the client loads the skeletal IQM by name
                 Flags = (p.OnGround ? NetEntityFlags.OnGround : 0)
+                      | (p.SpawnParity ? NetEntityFlags.SpawnParity : 0)
                       | (p.IsDead ? NetEntityFlags.Dead : 0)
                       | (p.IsDucked ? NetEntityFlags.Crouched : 0) // QC FL_DUCKED → remote crouch anim/hull
                         // QC common/physics/player.qc:878 — csqcmodel_modelflags |= MF_ROCKET when
@@ -3074,8 +3366,8 @@ public sealed class ServerNet : IDisposable
 
         // non-player networked entities: projectiles, items, gibs, monsters/turrets/vehicles — everything with a
         // model the client must render (CSQCProjectile + the general CSQC entity stream). Keyed in a high net-id
-        // range so they never collide with the small ENet peer ids; inline brush models ("*N") are skipped (the
-        // client renders those from the map). Delta-compression makes a static item nearly free after its spawn.
+        // range so they never collide with the small ENet peer ids. Solid inline models carry collision poses.
+        // The client renders their map geometry separately.
         IReadOnlyList<Entity> all = _world.Services.EntityTable.All;
         for (int i = 0; i < all.Count; i++)
         {
@@ -3083,12 +3375,28 @@ public sealed class ServerNet : IDisposable
             if (e is null || e.IsFreed || e is Player)
                 continue;
             if (!string.IsNullOrEmpty(e.Model) && e.Model.StartsWith('*'))
-                continue;                          // inline brush model — drawn by the map, not networked
+            {
+                int brushId = EntityNetBase + e.Index;
+                if (e.Solid == Solid.Bsp && brushId <= ushort.MaxValue)
+                {
+                    NetEntityState brush = NetEntityState.Empty(brushId);
+                    brush.Kind = NetEntityKind.BrushCollider;
+                    brush.Model = e.Model;
+                    brush.Origin = e.Origin;
+                    brush.Angles = e.Angles;
+                    // A blocking brush can cross the segment even when the brush origin is outside the PVS.
+                    _entityScratch[brushId] = brush;
+                }
+                continue;
+            }
             if (e.PhysNetSuppressed)
                 continue;                          // QC setSendEntity(func_null): physical_items hid this item
                                                    // behind its ghost — the real edict no longer networks
             NetEntityKind kind = Classify(e);
             if (kind == NetEntityKind.None)
+                continue;
+            // A gibbed clone retains an edict for cleanup, but has no drawable body.
+            if (kind == NetEntityKind.Body && e.Alpha < 0f)
                 continue;
             // Projectiles carry NO server-side .model (QC sets the model client-side via CSQCProjectile); the
             // client renders them procedurally (ProjectileRenderer + ProjectileCatalog). So a projectile networks
@@ -3125,11 +3433,14 @@ public sealed class ServerNet : IDisposable
             int netId = EntityNetBase + e.Index;
             if (netId > ushort.MaxValue)
                 continue;
+            if (e.ClassName == OnslaughtControlPoint.ShieldClassName)
+                _onslaughtShields[netId] = e;
             _entityScratch[netId] = new NetEntityState
             {
                 EntNum = netId,
                 Kind = kind,
                 ModelIndex = e.ModelIndex,
+                CountdownIndicator = e.CountdownIndicator,
                 // [W14a-wepent] non-player entities carry no exterior-weapon block; default the switch ids to the
                 // -1 "none" sentinel so they MATCH the NetEntityState.Empty baseline and the EntityField.Wepent bit
                 // stays clear (a non-player entity costs nothing for the wepent group on the wire).
@@ -3140,8 +3451,12 @@ public sealed class ServerNet : IDisposable
                 // from this id instead of guessing from the model filename (which a mapper can override).
                 Weapon = e.Pickup is VortexArena.Common.Gameplay.WeaponPickup wpk ? wpk.Weapon.RegistryId + 1 : 0,
                 Model = netModel,                  // QC .model (or, for a projectile, its catalog key) — resolved by name
-                Frame = (int)e.Frame,
+                Frame = kind == NetEntityKind.Body && e.Model.EndsWith(".iqm", StringComparison.OrdinalIgnoreCase)
+                    ? e.BodyCloneLocomotion : (int)e.Frame,
                 Skin = (int)e.Skin,
+                Colors = kind == NetEntityKind.Body ? e.Colors : 0,
+                UpperAction = kind == NetEntityKind.Body ? (byte)e.AnimUpperAction : (byte)0,
+                AnimActionTime = kind == NetEntityKind.Body ? e.AnimActionStart : 0f,
                 Origin = e.Origin,
                 Angles = e.Angles,
                 Velocity = e.Velocity,             // static entities keep 0 → the delta never sends it
@@ -3155,7 +3470,9 @@ public sealed class ServerNet : IDisposable
                 // survive the wire. 0 on the overwhelming majority of entities → the delta bit stays clear.
                 ColorMapOverride = e.ColorMapOverride & 0xFFFF,
                 Health = (int)e.Health,
-                Alpha = QuantizeAlpha(e.Alpha), // [W1-alpha-net] per-entity render transparency (e.g. Cloaked items)
+                Alpha = QuantizeAlpha(kind == NetEntityKind.Projectile
+                    ? Crylink.ProjectileRenderAlpha(e, _world.Time, _world.Simulation.TickSeconds)
+                    : e.Alpha),
                 Owner = (e.Owner is Player op && _byPlayer.TryGetValue(op, out PeerState? ops)) ? ops.PeerId : 0,
                 // QC ItemStatus bits (items.qc). ITS_EXPIRING: a loot item in its despawn-fx window — set the
                 // frame it flips so the client starts the despawn animation. ITS_ANIMATE1/2: the item's static
@@ -3164,7 +3481,8 @@ public sealed class ServerNet : IDisposable
                 // ITS_AVAILABLE: a picked-up item awaiting respawn keeps its model (Item_Show(e,0) only clears
                 // availability + solidity, it does NOT null the model) — networked as ItemGhost so the client
                 // renders it faded instead of opaque. Item-only: non-items never clear ItemAvailable (default true).
-                Flags = (e.ItemExpiringFx ? NetEntityFlags.ItemExpiring : NetEntityFlags.None)
+                Flags = (kind == NetEntityKind.Body && e.DeadState != DeadFlag.No ? NetEntityFlags.Dead : NetEntityFlags.None)
+                        | (e.ItemExpiringFx ? NetEntityFlags.ItemExpiring : NetEntityFlags.None)
                         | (e.ItemAnimate == 1 ? NetEntityFlags.ItemAnimate1 : NetEntityFlags.None)
                         | (e.ItemAnimate == 2 ? NetEntityFlags.ItemAnimate2 : NetEntityFlags.None)
                         | (kind == NetEntityKind.Item && !e.ItemAvailable ? NetEntityFlags.ItemGhost : NetEntityFlags.None),
@@ -3304,7 +3622,7 @@ public sealed class ServerNet : IDisposable
         bool havePvsCull = cullPvs && _world.Pvs is { HasVis: true } && !owner.IsDead && !owner.IsObserver;
 
         // Fast path: neither filter narrows the set → send the shared scratch as-is.
-        if (!havePvsCull && !applyPrivacy && !_scratchHasOwnerPrivate)
+        if (!havePvsCull && !applyPrivacy && !_scratchHasOwnerPrivate && _onslaughtShields.Count == 0)
             return _entityScratch;
 
         int viewerCluster = -1;
@@ -3312,7 +3630,8 @@ public sealed class ServerNet : IDisposable
         if (havePvsCull)
         {
             pvs = _world.Pvs;
-            NVec3 eye = owner.Origin + owner.ViewOfs;
+            NVec3 eye = ViewLocationState.FromTrigger(owner.ViewLoc)?.CameraOrigin(owner.Origin)
+                ?? (owner.Origin + owner.ViewOfs);
             viewerCluster = pvs!.LeafCluster(pvs.FindLeaf(eye));
             if (viewerCluster < 0)
                 havePvsCull = false; // eye in solid / outside the tree → conservatively send all (no PVS cull)
@@ -3343,7 +3662,7 @@ public sealed class ServerNet : IDisposable
         }
 
         // Privacy still applies even with PVS culling off, so if neither now narrows the set, take the fast path.
-        if (!havePvsCull && !applyPrivacy && !_scratchHasOwnerPrivate)
+        if (!havePvsCull && !applyPrivacy && !_scratchHasOwnerPrivate && _onslaughtShields.Count == 0)
             return _entityScratch;
 
         int ownerTeam = (int)owner.Team;
@@ -3353,9 +3672,16 @@ public sealed class ServerNet : IDisposable
         // spectatee's entity instead; keep the block on that ONE entity for this recipient only.
         int spectateeNetId = owner.Spectatee is { } sp ? NetIdFor(sp) : 0;
 
+        var onslaught = _world.GameType as Onslaught;
+        int shieldViewerTeam = (int)(owner.Spectatee ?? owner).Team;
+
         _relevantScratch.Clear();
         foreach (KeyValuePair<int, NetEntityState> kv in _entityScratch)
         {
+            if (onslaught is not null && _onslaughtShields.TryGetValue(kv.Key, out Entity? shield)
+                && !onslaught.CpCombat.CaptureShieldVisibleTo(shield, shieldViewerTeam))
+                continue;
+
             bool isOwn = kv.Key == ownNetId;
 
             // PVS cull: never cull the recipient's own entity (it ships as the client's LocalState slice); keep anything
@@ -3524,7 +3850,7 @@ public sealed class ServerNet : IDisposable
 
         // mirror gametype-owned team totals into the score table (bumps Version on a team-score change).
         if (_world.Teamplay is { IsTeamGame: true })
-            foreach (int t in VortexArena.Common.Gameplay.Teams.Active(_world.Teamplay.TeamCount))
+            foreach (int t in _world.Teamplay.ActiveTeams)
                 VortexArena.Common.Gameplay.Scoring.GameScores.SetTeamScore(t, _world.Scores.TeamScore(t));
 
         IReadOnlyList<Player> players = _world.Clients.Players;
@@ -3534,11 +3860,15 @@ public sealed class ServerNet : IDisposable
         // switch, a disconnect — forces a re-send. Without this the row set is rebuilt below but the per-client send
         // stays gated on the score-only Version, so the client's board sat at the pre-join state ("you're a
         // spectator, no bots") until the first frag bumped it.
+        bool clanArena = _world.GameType is ClanArena;
+        bool IsSpectatorRow(Player p) => clanArena
+            ? !ClanArena.IsParticipant(p)
+            : p.IsObserver || p.FragsStatus == Player.FragsSpectator;
         long rosterSig = players.Count;
         for (int i = 0; i < players.Count; i++)
         {
             Player rp = players[i];
-            int status = (rp.IsObserver || rp.FragsStatus == Player.FragsSpectator) ? 1 : 0;
+            int status = IsSpectatorRow(rp) ? 1 : 0;
             rosterSig = unchecked(rosterSig * 31 + NetIdFor(rp));
             rosterSig = unchecked(rosterSig * 31 + status);
             rosterSig = unchecked(rosterSig * 31 + (int)rp.Team);
@@ -3549,14 +3879,13 @@ public sealed class ServerNet : IDisposable
             VortexArena.Common.Gameplay.Scoring.GameScores.MarkDirty();
         }
 
-        _scoreVersion = VortexArena.Common.Gameplay.Scoring.GameScores.Version;
         _scoreInfoGen = VortexArena.Common.Gameplay.Scoring.GameScores.LayoutGeneration;
         _scoreInfoHash = VortexArena.Net.ScoreInfoBlock.Hash();
 
+        // Wire order supplies the QC client-slot tiebreak without changing stable entity IDs.
         _scoreRows.Clear();
-        for (int i = 0; i < players.Count; i++)
+        foreach (Player p in _world.Clients.PlayersByClientSlot)
         {
-            Player p = players[i];
             // QC ping_packetloss (server/world.qc:74): a connected human's measured ENet packet loss, quantized
             // to a 0..255 byte (min(ceil(loss*255),255)); bots and unmapped players send 0.
             int plByte = 0;
@@ -3579,28 +3908,34 @@ public sealed class ServerNet : IDisposable
                 VortexArena.Common.Gameplay.Scoring.GameScores.CaptureColumns(p), p.NetName, (int)p.Team,
                 // QC pl.team == NUM_SPECTATOR: an observer is listed in the scoreboard spectator block, not the
                 // score table. The port keeps the observer's last team color, so flag it explicitly here.
-                isSpectator: p.IsObserver || p.FragsStatus == Player.FragsSpectator,
+                isSpectator: IsSpectatorRow(p),
                 packetLossByte: plByte,
                 pingMs: pingMs)); // QC SP_PING: the human's ENet RTT (-1 for bots / unmapped)
         }
 
         _scoreTeams.Clear();
         if (_world.Teamplay is { IsTeamGame: true })
-            foreach (int t in VortexArena.Common.Gameplay.Teams.Active(_world.Teamplay.TeamCount))
+            foreach (int t in _world.Teamplay.ActiveTeams)
                 _scoreTeams.Add((t, _world.Scores.TeamScore(t)));
 
-        // QC the race/CTS rankings table (Scoreboard_Rankings_Draw): in race modes, snapshot the persistent
-        // RaceRecords DB's best-first ranked times for this map so the client scoreboard's rankings block has
-        // data (the C# stand-in for RACE_NET_SERVER_RANKINGS). Non-race modes leave it empty (one byte on the wire).
         _scoreRankings.Clear();
         _scoreSpeedAward = default;
-        string gt = _world.GameType?.NetName ?? "";
-        if (gt == "rc" || gt == "cts")
+        string? recordType = _world.GameType switch
         {
+            Race => RaceRecords.RaceRecord,
+            Cts => RaceRecords.CtsRecord,
+            Ctf ctf when ctf.LeaderboardEnabled => RaceRecords.CtfRecord,
+            _ => null,
+        };
+        if (recordType is not null)
+        {
+            // QC CTF GetPressedKeys refreshes the alias for a client who opted in.
+            if (recordType == RaceRecords.CtfRecord)
+                foreach (Player player in _world.Clients.Players)
+                    if (player.PersistentId.Length != 0 && _world.Commands.RankingIdentityAllowed(player))
+                        RaceRecords.SetName(player.PersistentId, player.NetName);
+
             string map = _world.Services.Cvars.GetString("mapname");
-            string recordType = gt == "cts"
-                ? VortexArena.Common.Gameplay.RaceRecords.CtsRecord
-                : VortexArena.Common.Gameplay.RaceRecords.RaceRecord;
             // QC race_send_rankings_cnt: m = min(RANKINGS_CNT, autocvar_g_cts_send_rankings_cnt) — the number of
             // ranked records networked for display. Base default g_cts_send_rankings_cnt = 15 (gametypes-server.cfg),
             // hard-capped at RANKINGS_CNT (99). Read the cvar live so a server config edit takes effect.
@@ -3636,6 +3971,19 @@ public sealed class ServerNet : IDisposable
                                     SpeedRound(raceGt.SpeedAwardBest), raceGt.SpeedAwardBestHolder);
             }
         }
+
+        // Rankings and speed records can change without any player score changing.
+        var rankings = new System.HashCode();
+        rankings.Add(_scoreRankings.Count);
+        foreach (var record in _scoreRankings) rankings.Add(record);
+        rankings.Add(_scoreSpeedAward);
+        int rankingsHash = rankings.ToHashCode();
+        if (rankingsHash != _lastRankingsHash)
+        {
+            _lastRankingsHash = rankingsHash;
+            VortexArena.Common.Gameplay.Scoring.GameScores.MarkDirty();
+        }
+        _scoreVersion = VortexArena.Common.Gameplay.Scoring.GameScores.Version;
     }
 
     /// <summary>Net-id base for non-player entities, above the small ENet peer ids (so the two id spaces can't collide).</summary>
@@ -3665,6 +4013,9 @@ public sealed class ServerNet : IDisposable
     private static NetEntityKind Classify(Entity e)
     {
         string cn = e.ClassName.ToLowerInvariant();
+
+        if (cn == PlayerBody.ClassName)
+            return NetEntityKind.Body;
 
         // Pickups (map items, weapon/ammo boxes, dropped loot) rest with MOVETYPE_TOSS but are NOT projectiles —
         // they must render their item MODEL via an EntityNode, not the procedural projectile visual. Match them by
@@ -3843,6 +4194,7 @@ public sealed class ServerNet : IDisposable
             spec = 0;                    // a live player
         p.SpectateeStatus = spec;
         w.WriteShort(spec);
+        ViewLocationWire.Write(w, ViewLocationState.FromTrigger((spec == 0 ? p : spec == st.NetId ? null : p.Spectatee)?.ViewLoc));
 
         // QC STAT(PRESSED_KEYS) (server/client.qc GetPressedKeys :2840 / SpectateCopy :1820): the owner's held-key
         // bitset (KEY_FORWARD/BACK/LEFT/RIGHT/JUMP/CROUCH/ATCK/ATCK2, bits 0..7 — the layout PressedKeysPanel reads).
@@ -3954,28 +4306,26 @@ public sealed class ServerNet : IDisposable
     /// <see cref="ILagCompensation.Begin"/>: rewind every OTHER antilagged entity — players PLUS monsters PLUS
     /// nades — to where <paramref name="shooter"/> saw them at fire time (<c>antilag_takeback_all</c>), sampled
     /// from each recorded <see cref="AntilagBuffer"/> at the shooter's measured view-time
-    /// (<c>time - ANTILAG_LATENCY</c>, <see cref="LagCompensation.ComputeTakebackTime"/>). No-op unless server-side
-    /// rewind is active (<c>autocvar_g_antilag == 2</c>; mode 1 is client-verified hitscan with no takeback), for a
-    /// non-client shooter (bot/monster: no remote latency to compensate), or when already active (a multi-pellet
-    /// shot won't nest). The shooter itself is the <c>ignore</c> entity.
+    /// (<c>time - ANTILAG_LATENCY</c>, <see cref="LagCompensation.ComputeTakebackTime"/>). Hitplot traces force
+    /// the bracket for a network player with measurable latency. Gameplay traces honor the mode and the client's
+    /// opt-out. The shooter is excluded from takeback, and active brackets do not nest.
     /// </summary>
-    public void BeginLagComp(Entity shooter)
+    public void BeginLagComp(Entity shooter, bool force = false)
     {
-        // QC's hitscan path only rewinds at g_antilag == 2 (traceline_antilag: autocvar_g_antilag != 2 → lag = 0);
-        // g_antilag == 1 is client-verified hitscan with NO server takeback. The cvar-unset fallback is 2 (stock).
-        if (_lagCompActive || _antilagMode != 2 || shooter is not Player sp || !_byPlayer.ContainsKey(sp))
+        if (_lagCompActive || shooter is not Player sp || !_byPlayer.ContainsKey(sp))
             return;
-        // Per-shooter opt-out (T54): QC forces lag = 0 for a shooter whose replicated cl_noantilag is set
-        // (antilag.qc:154,205-230 — antilag_takeback_all's `if (noantilag(ignore)) lag = 0`; same gate in
-        // tracing.qc:115 for fireBullet). Zero lag == no rewind, so skipping Begin entirely is equivalent
-        // (EndLagComp no-ops via _lagCompActive). The restore path is untouched.
-        if (_world.Commands.GetClientCvarBool(sp, "cl_noantilag"))
+
+        // The stock hitplot eye trace uses traceline_antilag_force, with its own 1 ms threshold.
+        // The gameplay bracket still checks g_antilag and the shooter's replicated opt-out.
+        float latency = EstimatedPing(sp);
+        if (force ? latency < 0.001f :
+            _antilagMode != 2 || _world.Commands.GetClientCvarBool(sp, "cl_noantilag"))
             return;
         _lagCompActive = true;
         // Rewind depth is the shooter's measured latency alone: ANTILAG_LATENCY(e) = min(0.4, ping) (antilag.qh),
         // with NO added ticrate (the "add one ticrate?" there is a commented-out musing). The single frame-of-lag
         // compensation QC applies is on the RECORD side (altime = time + frametime*(1+nudge), see RecordTime).
-        float t = LagCompensation.ComputeTakebackTime(_world.Time, EstimatedPing(sp), 0f);
+        float t = LagCompensation.ComputeTakebackTime(_world.Time, latency, 0f);
 
         // players (FOREACH_CLIENT IS_PLAYER && it != ignore → antilag_takeback(it, CS(it), time - lag)).
         _antilagRestore.Clear();
@@ -4025,6 +4375,7 @@ public sealed class ServerNet : IDisposable
         private readonly ServerNet _net;
         public LagCompProvider(ServerNet net) => _net = net;
         public void Begin(Entity shooter) => _net.BeginLagComp(shooter);
+        public void BeginForced(Entity shooter) => _net.BeginLagComp(shooter, force: true);
         public void End() => _net.EndLagComp();
     }
 
@@ -4038,13 +4389,6 @@ public sealed class ServerNet : IDisposable
     //  Effect + notification NET sinks (resolves the EffectEmitter / NotificationSystem TODOs)
     // =====================================================================================
 
-    private readonly struct CapturedEffect
-    {
-        public readonly EffectRequest Request;
-        public readonly Entity? Except;
-        public CapturedEffect(in EffectRequest req) { Request = req; Except = req.Except; }
-    }
-
     private readonly struct CapturedNotification
     {
         public readonly NotificationDispatch Dispatch;
@@ -4057,11 +4401,57 @@ public sealed class ServerNet : IDisposable
         public CapturedSound(in VortexArena.Engine.Simulation.SoundEvent e) { Event = e; }
     }
 
-    internal void CaptureEffect(in EffectRequest request) => _effectQueue.Add(new CapturedEffect(request));
+    internal void CaptureEffect(in EffectRequest request)
+    {
+        if (request.CasingOwner is { } shooter)
+        {
+            // Stock selects recipients inside SpawnCasing. Later movement, observer transitions and catch-up
+            // ticks may change the scene before EncodeGameState flushes the frame.
+            int queueIndex = _effectQueue.Count;
+            bool hasRecipient = false;
+            foreach (PeerState peer in _peers.Values)
+            {
+                if (!peer.Accepted || peer.Player is not { } recipient
+                    || !_world.Commands.GetClientCvarBool(recipient, "cl_casings", fallback: true))
+                    continue;
+
+                bool firstPerson = ReferenceEquals(recipient, shooter)
+                    || (recipient.IsObserver && ReferenceEquals(recipient.Spectatee, shooter));
+                if (firstPerson
+                    ? (int)_world.Commands.GetClientCvarFloat(recipient, "r_drawviewmodel", fallback: 1f) == 0
+                    : !CasingShooterInPvs(recipient, shooter))
+                    continue;
+
+                (peer.CasingDeliveries ??= new()).Add(new CasingDelivery(queueIndex, firstPerson));
+                hasRecipient = true;
+            }
+            if (!hasRecipient)
+                return;
+        }
+        _effectQueue.Add(request);
+    }
+
     internal void CaptureNotification(in NotificationDispatch d) => _notifyQueue.Add(new CapturedNotification(d));
 
     /// <summary>SoundService.Broadcast handler — queue a server-emitted sound for this frame's sound bundle.</summary>
     private void OnSoundEmitted(VortexArena.Engine.Simulation.SoundEvent e) => _soundQueue.Add(new CapturedSound(e));
+
+    private void OnSoundPrecached(string sample)
+    {
+        foreach (PeerState peer in _peers.Values)
+            if (peer.Accepted)
+                SendSoundPrecache(peer.PeerId, sample);
+    }
+
+    private void SendSoundPrecache(int peerId, string sample)
+    {
+        if (!VortexArena.Legacy.Csqc.LegacyQcHost.IsSafePath(sample))
+            return;
+        _scratchWriter.Reset();
+        _scratchWriter.WriteByte((byte)NetControl.SoundPrecache);
+        _scratchWriter.WriteString(sample);
+        SendPacket(peerId, _scratchWriter.WrittenSpan, reliable: true);
+    }
 
     /// <summary>
     /// Flush the per-frame captured effects + notifications to clients. Effects go in an unreliable
@@ -4072,57 +4462,162 @@ public sealed class ServerNet : IDisposable
     private void FlushEventBundles()
     {
         FlushEffects();
+        FlushFireballBlasts();
         FlushSounds();
         FlushNotifications();
     }
+
+    private void CaptureFireballBlast(FireballBlastEffect effect)
+        => _fireballBlasts.Add(new LinkedFireballBlast(effect, Api.Clock.Time + FireballAvailabilitySeconds));
+
+    private void DiscardExpiredFireballBlasts()
+    {
+        float now = _world.Time;
+        _fireballBlasts.RemoveAll(blast => blast.ExpiresAt <= now);
+    }
+
+    private void FlushFireballBlasts()
+    {
+        if (_fireballBlasts.Count == 0)
+            return;
+
+        DiscardExpiredFireballBlasts();
+        for (int i = 0; i < _fireballBlasts.Count; i++)
+        {
+            LinkedFireballBlast blast = _fireballBlasts[i];
+            if (blast.Published)
+                continue;
+
+            WriteFireballBlast(blast.Effect);
+            foreach (PeerState peer in _peers.Values)
+                if (peer.Accepted)
+                    SendPacket(peer.PeerId, _eventWriter.WrittenSpan, reliable: true);
+
+            _fireballBlasts[i] = blast with { Published = true };
+        }
+    }
+
+    private void SendActiveFireballBlasts(int peerId)
+    {
+        if (_fireballBlasts.Count == 0)
+            return;
+
+        DiscardExpiredFireballBlasts();
+        foreach (LinkedFireballBlast blast in _fireballBlasts)
+        {
+            // Unpublished blasts will go to this peer on their first flush, alongside other accepted peers.
+            if (!blast.Published)
+                continue;
+            WriteFireballBlast(blast.Effect);
+            SendPacket(peerId, _eventWriter.WrittenSpan, reliable: true);
+        }
+    }
+
+    private void WriteFireballBlast(FireballBlastEffect effect)
+    {
+        _eventWriter.Reset();
+        _eventWriter.WriteByte((byte)NetControl.FireballBlast);
+        FireballBlastWire.Write(_eventWriter, effect);
+    }
+
+    private readonly record struct EncodedEffect(Entity? Except, int CasingQueueIndex,
+        int Offset, int FirstPersonOffset, int Length);
 
     private void FlushEffects()
     {
         if (_effectQueue.Count == 0)
             return;
 
-        // Build one bundle per recipient only when an exclusion is in play; otherwise broadcast a shared one.
-        // Simple + correct: broadcast the bundle to all, but encode each effect once; the rare "except" case
-        // is handled by sending that effect only to the non-excluded peers (a per-peer pass).
-        _eventWriter.Reset();
-        _eventWriter.WriteByte((byte)NetControl.EventBundle);
-        int countPos = ReserveCount(_eventWriter);
-        int n = 0;
-        bool anyExcept = false;
-        for (int i = 0; i < _effectQueue.Count; i++)
+        if (_effectQueue.Exists(static request => request.Except is not null || request.CasingOwner is not null))
         {
-            CapturedEffect ce = _effectQueue[i];
-            if (ce.Except is not null) { anyExcept = true; continue; } // handled per-peer below
-            if (WriteEffect(_eventWriter, ce.Request)) n++;
-        }
-        PatchCount(_eventWriter, countPos, n);
-        if (n > 0)
-            BroadcastPacket(_eventWriter.WrittenSpan, reliable: false);
-
-        // per-peer pass for excluded effects (each goes to everyone but the excluded player).
-        if (anyExcept)
-        {
-            foreach (PeerState st in _peers.Values)
+            // Encode once, then filter in queue order so casings stay in sequence with shared gib splashes.
+            _effectRecordsWriter.Reset();
+            for (int i = 0; i < _effectQueue.Count; i++)
             {
-                if (!st.Accepted || st.Player is null) continue;
-                _eventWriter.Reset();
-                _eventWriter.WriteByte((byte)NetControl.EventBundle);
-                int cpos = ReserveCount(_eventWriter);
-                int m = 0;
-                for (int i = 0; i < _effectQueue.Count; i++)
-                {
-                    CapturedEffect ce = _effectQueue[i];
-                    if (ce.Except is null) continue;
-                    if (ReferenceEquals(ce.Except, st.Player)) continue; // excluded recipient
-                    if (WriteEffect(_eventWriter, ce.Request)) m++;
-                }
-                PatchCount(_eventWriter, cpos, m);
-                if (m > 0)
-                    SendPacket(st.PeerId, _eventWriter.WrittenSpan, reliable: false);
+                EffectRequest request = _effectQueue[i];
+                int offset = _effectRecordsWriter.Length;
+                if (!WriteEffect(_effectRecordsWriter, request))
+                    continue;
+                int length = _effectRecordsWriter.Length - offset;
+                int viewOffset = _effectRecordsWriter.Length;
+                if (request.CasingOwner is not null)
+                    WriteEffect(_effectRecordsWriter, request, firstPersonCasing: true);
+                int casingQueueIndex = request.CasingOwner is not null ? i : -1;
+                _encodedEffects.Add(new EncodedEffect(request.Except, casingQueueIndex, offset, viewOffset, length));
             }
+
+            foreach (PeerState peer in _peers.Values)
+            {
+                if (peer.Accepted && peer.Player is { } player && WriteRecipientEffects(player, peer.CasingDeliveries))
+                    SendPacket(peer.PeerId, _eventWriter.WrittenSpan, reliable: false);
+                peer.CasingDeliveries?.Clear();
+            }
+            _encodedEffects.Clear();
+        }
+        else
+        {
+            _eventWriter.Reset();
+            _eventWriter.WriteByte((byte)NetControl.EventBundle);
+            int countPosition = ReserveCount(_eventWriter);
+            int count = 0;
+            foreach (EffectRequest request in _effectQueue)
+            {
+                if (WriteEffect(_eventWriter, request))
+                    count++;
+            }
+            PatchCount(_eventWriter, countPosition, count);
+            if (count > 0)
+                BroadcastPacket(_eventWriter.WrittenSpan, reliable: false);
         }
 
         _effectQueue.Clear();
+    }
+
+    private bool WriteRecipientEffects(Player recipient, List<CasingDelivery>? casingDeliveries)
+    {
+        _eventWriter.Reset();
+        _eventWriter.WriteByte((byte)NetControl.EventBundle);
+        int countPosition = ReserveCount(_eventWriter);
+        int count = 0;
+        int deliveryIndex = 0;
+        foreach (EncodedEffect effect in _encodedEffects)
+        {
+            if (ReferenceEquals(effect.Except, recipient))
+                continue;
+
+            int offset = effect.Offset;
+            if (effect.CasingQueueIndex >= 0)
+            {
+                if (casingDeliveries is null)
+                    continue;
+                while (deliveryIndex < casingDeliveries.Count
+                    && casingDeliveries[deliveryIndex].QueueIndex < effect.CasingQueueIndex)
+                    deliveryIndex++;
+                if (deliveryIndex == casingDeliveries.Count
+                    || casingDeliveries[deliveryIndex].QueueIndex != effect.CasingQueueIndex)
+                    continue;
+                if (casingDeliveries[deliveryIndex++].FirstPerson)
+                    offset = effect.FirstPersonOffset;
+            }
+
+            _eventWriter.WriteBytes(_effectRecordsWriter.WrittenSpan.Slice(offset, effect.Length));
+            count++;
+        }
+
+        PatchCount(_eventWriter, countPosition, count);
+        return count > 0;
+    }
+
+    private bool CasingShooterInPvs(Player recipient, Entity shooter)
+    {
+        if (_world.Pvs is not { HasVis: true } pvs)
+            return true;
+
+        // SpawnCasing tests the recipient's eye against the firing player's linked bounds.
+        NVec3 eye = recipient.Origin + recipient.ViewOfs;
+        int cluster = pvs.LeafCluster(pvs.FindLeaf(eye));
+        return cluster >= 0 && pvs.BoxAnyClusterVisibleFrom(cluster,
+            shooter.Origin + shooter.Mins - NVec3.One, shooter.Origin + shooter.Maxs + NVec3.One);
     }
 
     /// <summary>
@@ -4130,7 +4625,7 @@ public sealed class ServerNet : IDisposable
     /// <see cref="EffectNetProtocol.Encode"/> (the faithful QC Net_Write_Effect layout). Returns false for a
     /// non-networkable request (no registered effect / count-0 point effect) so the count stays accurate.
     /// </summary>
-    private bool WriteEffect(BitWriter w, in EffectRequest r)
+    private bool WriteEffect(BitWriter w, in EffectRequest r, bool firstPersonCasing = false)
     {
         // Engine-fallback by-name path (QC Send_Effect_ → __pointparticles(_particleeffectnum(name))): no registered
         // Effect carries the name, so write the ByNameSentinelId + the effectinfo NAME and let the client resolve it
@@ -4153,7 +4648,7 @@ public sealed class ServerNet : IDisposable
             return true;
         }
 
-        byte[]? regBody = EffectNetProtocol.Encode(r);
+        byte[]? regBody = EffectNetProtocol.Encode(r, firstPersonCasing);
         if (regBody is null)
             return false;
         w.WriteUShort(r.Effect.RegistryId);
@@ -4222,7 +4717,7 @@ public sealed class ServerNet : IDisposable
     /// the entity is null or the id would overflow the ushort wire field — the loop then simply doesn't follow
     /// (it still plays at its emit origin).
     /// </summary>
-    private int NetIdForEntity(Entity? e)
+    internal int NetIdForEntity(Entity? e)
     {
         if (e is null) return 0;
         if (e is Player p) return NetIdFor(p);
@@ -4324,6 +4819,9 @@ public sealed class ServerNet : IDisposable
         private readonly ServerNet _net;
         public EffectNetSink(ServerNet net) => _net = net;
         public void Emit(in EffectRequest request) => _net.CaptureEffect(request);
+        public void Emit(FireballBlastEffect effect) => _net.CaptureFireballBlast(effect);
+        public void Emit(AttachedDamageHit hit)
+            => _net._attachedDamageHits.Add((hit, hit.Target is Player p && p.SpawnParity));
     }
 
     private sealed class NotificationNetSink : INotificationSink
@@ -4335,10 +4833,14 @@ public sealed class ServerNet : IDisposable
 
     public void Dispose()
     {
+        _fireballBlasts.Clear();
+        if (_world.GameType is Onslaught ons)
+            ons.RadarRequested -= SendOnslaughtRadar;
         // restore the default recording sinks so a torn-down server doesn't leave dangling net sinks.
         if (EffectEmitter.Sink is EffectNetSink) EffectEmitter.Sink = EffectEmitter.Recorder;
         if (NotificationSystem.Sink is NotificationNetSink) NotificationSystem.Sink = NotificationSystem.Recorder;
         _world.Services.SoundImpl.Broadcast -= OnSoundEmitted; // drop the sound capture (avoid a re-host double-subscribe)
+        _world.Services.SoundImpl.SamplePrecached -= OnSoundPrecached;
         if (LagComp.Provider is LagCompProvider) LagComp.Provider = null;
         // drop the per-player physics resolver only if it is still OURS (a re-host may have installed a new one).
         if (ReferenceEquals(MovementParameters.PresetProvider, _presetProvider))

@@ -6,9 +6,9 @@ summary:
   feature_count: 17
   worst_gaps:
     - "func_clientwall distance-fade not rendered: fade_start/fade_end/alpha_max/alpha_min/fade_vertical_offset + PVS alpha-cull (Ent_Wall_PreDraw) are stored on the entity but no renderer applies them (the antiwall solid-toggle relay g_clientmodel_use IS now ported+live; only the client distance-fade render half remains)"
-    - "bgmscript ADSR not ported: func_clientwall/func_pointparticles never animate alpha/position/emission to the map music"
+    - "bgmscript ADSR runs on native local matches. Standalone native remote clients lack the live map-entity state for scripted models and emitters."
     - "models.qc colormap value is stored on Entity.ColorMapOverride (RENDER_COLORMAPPED bit set) but no renderer team-tints the prop on screen yet"
-    - "func_pointparticles client emission is an approximation: ONE persistent GpuParticles3D per emitter (first effectinfo block only) instead of per-frame __pointparticles respawn; per-emission .noise sound missing; movedir projected with a single center trace; no round-restart reset hook server-side"
+    - "func_pointparticles emits full effectinfo bursts and positional .noise in native local matches. Remaining gaps include standalone remote binding and rotated-brush containment."
     - "wall/prop LOD unported: lodmodel1/lodmodel2 map keys (subs.qc LODmodel_attach -> lodmodelindex0..2/loddistance1..2 -> CSQCModel_LOD_Apply in Ent_Wall_Draw) have no port counterpart — props always render full-detail (perf-only)"
 features:
   - id: mapobject-misc.laser.server_logic
@@ -82,7 +82,7 @@ features:
       - "common/mapobjects/misc/follow.qc:follow_init"
       - "common/mapobjects/misc/follow.qc:spawnfunc(misc_follow)"
       - "common/mapobjects/misc/follow.qh:FOLLOW_ATTACH"
-      - "lib/util.qc:attach_sameorigin"
+      - "common/util.qc:attach_sameorigin"
     port_refs:
       - "src/VortexArena.Common/Gameplay/MapObjects/Follow.cs:FollowInit"
       - "src/VortexArena.Common/Gameplay/MapObjects/Follow.cs:FollowSetup"
@@ -319,35 +319,50 @@ features:
     notes: "Re-audited 2026-06-27 (post Waves 16/17). Used by every door/plat/train/button — the most-live feature in the unit; timing/values-faithful. A mapper-set platmovetype key flows through SetPlatMoveType (see corner.path_corner). Wave-17 added the SUB_CalcMovePause eased-mover blocked-pause (live via Doors.cs:700), strengthening completeness; status already faithful/live, unchanged."
 
   - id: mapobject-misc.bgmscript.adsr
-    name: "bgmscript map-music ADSR animation (func_clientwall / func_pointparticles)"
+    name: "bgmscript map-music ADSR animation (client models / point particles)"
     layer: [presentation]
     base_refs:
-      - "client/bgmscript.qc:doBGMScript"
-      - "client/bgmscript.qc:BGMScript_InitEntity"
+      - "common/mapobjects/bgmscript.qh:classfield(BGMScript) .float bgmscriptattack"
       - "client/bgmscript.qh:doBGMScript"
+      - "client/bgmscript.qc:BGMScript_InitEntity"
+      - "client/bgmscript.qc:doBGMScript"
       - "common/mapobjects/models.qc:Ent_Wall_Draw"
-    port_refs: []
+      - "common/mapobjects/func/pointparticles.qc:Draw_PointParticles"
+      - "common/mapobjects/target/music.qc:TargetMusic_Advance"
+      - "client/view.qc:CSQC_UpdateView"
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectFieldsExtra.cs:Apply"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapBgmScript.cs:Playback"
+      - "game/net/NetGame.cs:SetupMapBgm"
+      - "game/client/MusicPlayer.cs:PlaybackPosition"
+      - "game/client/MapBgmModels.cs:_Process"
+      - "game/client/MapParticleEmitters.cs:_Process"
+      - "src/VortexArena.Engine/Particles/PointParticleEmitter.cs:Step"
     constants:
-      - { name: "bgmscriptsustain default", base: "1", port: "n/a", match: false }
-      - { name: "alpha drive (lip<0)", base: "alpha = 1 + lip*f", port: "n/a", match: false }
-      - { name: "alpha drive (lip>0)", base: "alpha = 1 - lip*(1-f)", port: "n/a", match: false }
-      - { name: "position/angle drive", base: "(fld) += movedir*f", port: "n/a", match: false }
-      - { name: "gate", base: "autocvar_bgmvolume>0 && bgmtime>=0", port: "n/a", match: false }
+      - { name: "bgmscriptsustain default", base: "1", port: "1", match: true }
+      - { name: "alpha drive (lip<0)", base: "alpha = 1 + lip*f", port: "alpha = 1 + lip*f", match: true }
+      - { name: "alpha drive (lip>0)", base: "alpha = 1 - lip*(1-f)", port: "alpha = 1 - lip*(1-f)", match: true }
+      - { name: "position/angle drive", base: "(fld) += movedir*f", port: "render pose += movedir*f", match: true }
+      - { name: "gate", base: "autocvar_bgmvolume>0 && bgmtime>=0", port: "bgmvolume>0 && selected music playback position>=0", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
+      logic: faithful
+      values: partial
+      timing: partial
+      presentation: partial
       audio: na
-      liveness: na
-    intended_divergence: false
-    divergence_rationale: null
+      liveness: partial
+    intended_divergence: true
+    open_dimensions: [timing, presentation, liveness]
+    divergence_rationale: "Native listen matches read map-authored float fields and animate client-owned presentation nodes. Native snapshots carry no QC entity fields, and the native path avoids running the QC VM."
     gaps:
-      - "No bgmscript ADSR envelope: a func_clientwall / func_pointparticles carrying a .bgmscript key does not animate its alpha / origin / angles / emission to the map's .bgs music script — the prop is static instead of pulsing to the soundtrack. doBGMScript / BGMScript_InitEntity / the .bgs loader are absent."
+      - "Scope is the native local/listen match. Pure native remote and native demo playback lack these map-entity bindings."
+      - "Native uses raw authored ADSR and signed lip values. QC transmits quantized ADSR and a ReadByte lip."
+      - "Wall distance fade, QC wall PVS masks, and LOD remain separate parity gaps. Numeric timing may vary with audio backend, audio buffering, and render frames."
     verification:
-      - { kind: code, ref: "grep bgmscript/doBGMScript/Ent_Wall_PreDraw across game/ + src/: only documented as out-of-scope (MapModels.cs:11-14, MapParticleEmitters.cs, PointParticles.cs); no consumer added by Wave-8", result: fail }
+      - { kind: test, ref: "tests/VortexArena.Tests/MapBgmScriptTests.cs", result: pass }
+      - { kind: manual, ref: "planning/parity/bgmscript/README.md", result: pass }
     confidence: high
-    notes: "STILL OPEN (re-audited 2026-06-28, parity-port-waves branch). Explicitly scoped out in the MapModels.cs:15/69 / PointParticles.cs:14 / MapParticleEmitters.cs:19 headers as a documented residual ('bgmscript ADSR is out of scope — no bgmtime music-position clock; no shipped stock map depends on it'). grep bgmscript/doBGMScript/.bgs across game/+src/ finds only those out-of-scope comments — no consumer added this wave. All dimensions remain missing."
+    notes: "QC is reachable through compiled NET_HANDLE registration and g_drawables. GMQCC return assignment in the receive handlers continues into draw setup. Courtfun ships 36 scripted func_pointparticles and no scripted models. Wall translation, signed opacity, angular motion, and mute were exercised in a local Stormkeep-derived fixture. See the linked evidence for measured results."
 
   - id: mapobject-misc.models.props_walls
     name: "models.qc decoration props + static walls (spawn/solid/drop/colormap)"
@@ -416,79 +431,80 @@ features:
     notes: "Re-audited 2026-06-28 (parity-port-waves branch). The SERVER-side antiwall solid-toggle relay (g_clientmodel_use) is ported and LIVE on this branch — this wave wired it cleanly through a clientModel flag in GModelInit (ent.Use=ClientModelUse + ent.DefaultSolid recorded) for func_clientwall/func_clientillusionary/misc_clientmodel; the trigger's antiwall_flag is threaded via MapMover.CurrentUseTrigger on the SUB_UseTargets path. logic/values/liveness = partial: the authority half (solid toggle + .inactive + DefaultSolid restore + colormap re-apply) is faithful+live; the CLIENT render half (Ent_Wall_PreDraw distance-fade alpha formula, PVS alpha-cull, alpha-0-when-inactive) is STILL missing — no wall renderer consumes the stored fade fields (a func_clientwall's faces bake into the static map mesh; ClientWorld.cs:1486 ItemDistanceAlpha is the unrelated item-despawn fade; WeatherSystem reads FadeEndDist only for rain/snow drawdist). presentation stays missing. NOT closed this wave. No shipped stock map is known to depend on the render fade; severity low for stock content."
 
   - id: mapobject-misc.pointparticles.server_logic
-    name: "func_pointparticles / func_sparks server state (spawn defaults, box anchor, toggle/use)"
+    name: "func_pointparticles / func_sparks server state (spawn defaults, box anchor, toggle/use, round reset)"
     layer: [authority]
     base_refs:
       - "common/mapobjects/func/pointparticles.qc:spawnfunc(func_pointparticles)"
       - "common/mapobjects/func/pointparticles.qc:spawnfunc(func_sparks)"
-      - "common/mapobjects/func/pointparticles.qh:PARTICLES_IMPULSE"
+      - "common/mapobjects/func/pointparticles.qc:pointparticles_think"
+      - "common/mapobjects/triggers.qc:generic_netlinked_reset"
     port_refs:
       - "src/VortexArena.Common/Gameplay/MapObjects/PointParticles.cs:PointParticlesSetup"
       - "src/VortexArena.Common/Gameplay/MapObjects/PointParticles.cs:SparksSetup"
       - "src/VortexArena.Common/Gameplay/MapObjects/PointParticles.cs:LegacyUse"
+      - "src/VortexArena.Common/Gameplay/MapObjects/PointParticles.cs:Reset"
+      - "src/VortexArena.Server/GameWorld.cs:ResetMapObjects"
     constants:
       - { name: "atten default", base: "ATTEN_NORM (0.5); <0 -> 0 (global)", port: "0.5f; <0 -> 0f", match: true }
       - { name: "volume/count/impulse defaults", base: "1 / 1 / 1", port: "1f / 1f / 1f", match: true }
       - { name: "no-model box re-anchor", base: "setorigin(origin+mins); setsize('0 0 0', maxs-mins)", port: "SetOrigin(Origin+Mins); SetSize(0, Maxs-Mins)", match: true }
-      - { name: "func_sparks defaults", base: "count 25, impulse 2.5, velocity '0 0 -1', mdl TE_SPARK", port: "25f / 2.5f / (0,0,-1) / \"TE_SPARK\"", match: true }
-      - { name: "PARTICLES_IMPULSE / PARTICLES_VISCULLING", base: "BIT(1)/BIT(2)", port: "1<<1 / 1<<2", match: true }
-      - { name: "reset rule (generic_netlinked_reset)", base: "reset hook re-arms each round: targetname => active iff START_ON, else on", port: "applied inline ONCE at spawn; no Entity.Reset hook installed", match: false }
+      - { name: "func_sparks defaults", base: "count 25, impulse 2.5, velocity (0,0,-1), mdl TE_SPARK", port: "25f / 2.5f / (0,0,-1) / TE_SPARK", match: true }
+      - { name: "reset rule", base: "targeted active iff START_ENABLED; untargeted always active", port: "same rule at spawn and through Entity.Reset on normal round re-arm", match: true }
     status:
-      logic: partial
+      logic: faithful
       values: faithful
       timing: na
       presentation: na
       audio: na
       liveness: live
     intended_divergence: true
-    divergence_rationale: "pointparticles_SendEntity/Net_LinkEntity and the per-frame pointparticles_think (which only nets origin moves via SendFlags) are dropped — the client reads the shared entity off the ambient facade, the established port seam (documented in PointParticles.cs header). .mdl stays a NAME on Entity.Mdl instead of resolving to a QC effect number (cnt=0 'use a good handler')."
+    divergence_rationale: "Native listen clients consume the shared entity's state and live origin directly. This replaces Net_LinkEntity, SendFlags and pointparticles_think for the local path. The server stores the effect name and authored noise parameters. The client resolves assets on demand and emits the sound."
     gaps:
-      - "No round-restart re-arm: QC sets this.reset = generic_netlinked_reset so a toggled emitter returns to its START_ON state each round; the port applies that rule inline once at spawn and never installs Entity.Reset (grep PointParticles.cs: no this_.Reset assignment, unlike Doors/Buttons/DynamicLight) — an emitter toggled off stays off after round restart."
+      - "Native standalone clients lack the point-particle entity stream. The server also omits QC's sound precache and separate numeric effect-id field on this path."
     verification:
-      - { kind: code, ref: "PointParticles.cs:31-104 vs pointparticles.qc:93-146 — defaults (atten/volume/count/impulse), box re-anchor, SetActive=GenericSetActive, targetname legacy_use, sparks chain keeps classname; MapObjectsRegistry.cs:181-182 registers func_pointparticles + func_sparks (live spawn path)", result: pass }
-      - { kind: code, ref: "grep '.Reset =' in PointParticles.cs: absent (Breakable/Buttons/Doors/DynamicLight all install one) — reset-hook gap confirmed", result: fail }
+      - { kind: test, ref: "MusicSystemTests.LivePath_PointParticlesRearmWhenTheNextRoundBegins (registered func_pointparticles and func_sparks, live round-handler transition via GameWorld.Frame)", result: pass }
     confidence: high
-    notes: "added 2026-07-02 (coverage fold). bgmscriptsustain clamp (qc:99-100) is server-side prep for the CSQC ADSR — not ported, tracked under mapobject-misc.bgmscript.adsr. Emission itself is the client half (see pointparticles.client_emit)."
+    notes: "Map objects created by the registered spawn routines re-arm through the normal post-round reset sweep. Reset restores the active state and leaves position untouched, as in the pinned QC."
 
   - id: mapobject-misc.pointparticles.client_emit
-    name: "func_pointparticles client emission (Draw_PointParticles continuous/burst particles)"
+    name: "func_pointparticles client emission (Draw_PointParticles continuous/burst particles and positional noise)"
     layer: [presentation]
     base_refs:
       - "common/mapobjects/func/pointparticles.qc:Draw_PointParticles"
       - "common/mapobjects/func/pointparticles.qc:NET_HANDLE(ENT_CLIENT_POINTPARTICLES)"
       - "common/mapobjects/func/pointparticles.qh:SF_POINTPARTICLES_IMPULSE"
     port_refs:
-      - "game/client/MapParticleEmitters.cs:Build"
       - "game/client/MapParticleEmitters.cs:_Process"
+      - "game/client/MapParticleEmitters.cs:Place"
+      - "game/client/MapParticleEmitters.cs:Emit"
+      - "game/client/ClientWorld.cs:PlayRawSound"
+      - "src/VortexArena.Engine/Particles/PointParticleEmitter.cs:Step"
     constants:
-      - { name: "relative density decode", base: "impulse<0: *= -vol/(64**3) particles per 64^3 cube", port: "rate = -rate * vol / 64^3 (Build, MapParticleEmitters.cs:173-178)", match: true }
-      - { name: "ABSOLUTE_ONLY_SPAWN_AT_TOGGLE burst", base: "PARTICLES_IMPULSE => n = impulse only when just_toggled", port: "ImpulseMode one-shot burst of .impulse on rising edge (_Process:75-83)", match: true }
-      - { name: "steady rate", base: "n = doBGMScript * impulse * drawframetime emissions/frame, each __pointparticles(cnt, p, vel+randomvec*waterlevel, count)", port: "one persistent GpuParticles3D, Amount = pps*lifetime (pps = rate * (countabsolute + count*block.count))", match: false }
-      - { name: "brush containment", base: "WarpZoneLib_BoxTouchesBrush retry per random point", port: "not ported — emits across whole bbox", match: false }
-      - { name: "movedir surface projection", base: "per-point traceline along movedir 4096, emit at trace_endpos with plane_normal*|movedir|", port: "ONE center trace at Build time", match: false }
-      - { name: "per-emission noise", base: "_sound(CH_AMBIENT, noise, VOL_BASE*volume, atten) at each emission point", port: "none", match: false }
-      - { name: "port-only cap", base: "n/a (fail<=64*n loop guard)", port: "MaxAmountPerEmitter = 1500", match: false }
+      - { name: "relative density decode", base: "impulse < 0: multiply by -vol/(64^3)", port: "PointParticleEmitter.Configure uses box volume over 64^3", match: true }
+      - { name: "toggle burst / continuous edge", base: "PARTICLES_IMPULSE: impulse at note or active edge; continuous minimum one at edge", port: "PointParticleEmitter.Step uses JustToggled, including ADSR note-on and unavailable-clock fallback", match: true }
+      - { name: "steady rate", base: "n = doBGMScript * impulse * drawframetime; random starting fraction", port: "ADSR amplitude × rate × scaled frame time; random starting fraction", match: true }
+      - { name: "brush containment", base: "WarpZoneLib_BoxTouchesBrush; absolute retries while fail <= 64*n", port: "unrotated brush-plane check; same retry rule; rotated brush uses box", match: false }
+      - { name: "movedir projection", base: "trace 4096 per sampled point; add normal × |movedir|", port: "world-only trace 4096 per sampled point; add normal × |movedir|", match: false }
+      - { name: "per-emission noise", base: "CH_AMBIENT (-9), VOL_BASE (0.7) × volume, authored attenuation at emitted point", port: "local raw one-shot uses channel -9, 0.7 × volume, attenuation and resolved world point", match: true }
     status:
       logic: partial
       values: partial
       timing: partial
       presentation: partial
-      audio: missing
+      audio: partial
       liveness: partial
     intended_divergence: true
-    divergence_rationale: "Deliberate architecture swap documented in the MapParticleEmitters.cs header: DP respawns particles every draw frame via __pointparticles; doing that through EffectSystem.Spawn would churn a transient GpuParticles3D per frame per emitter (courtfun has 44), so each map entity gets ONE long-lived continuous GpuParticles3D with Amount sized so steady-state particles-per-second matches DP's formula. The listed approximations (single effectinfo block, bbox containment, single movedir trace) ride that decision; the missing .noise / bgmscript / reset-follow are residual gaps, not part of the intent."
+    open_dimensions: [timing, presentation, liveness]
+    divergence_rationale: "The native local renderer samples the live emitter once per frame, rebuilds placement when it moves, and forwards each accepted emission to EffectSystem.Spawn for the selected particle backend. It plays authored noise directly at the emission point on the existing client audio path."
     gaps:
-      - "Per-emission positional .noise sound never plays (Base _sound at CH_AMBIENT per emission) — a sound-annotated emitter is silent."
-      - "bgmscript ADSR modulation of the emission rate (n = doBGMScript(this) * ...) missing — tracked under mapobject-misc.bgmscript.adsr."
-      - "Emitter position is fixed at Build time: Base re-nets origin moves (pointparticles_think SF_TRIGGER_RESET) and Draw uses live origin; a func_pointparticles moved after spawn keeps emitting at its old spot."
-      - "Only the FIRST defined dry-land effectinfo block is approximated (color/size/velocity midpoints); multi-block effects lose their secondary layers."
-      - "just_toggled minimum-one-emission rule (n<1 => n=1 on toggle) not reproduced for continuous emitters."
-      - "Live on listen-server/demo only (ambient facade scan); a pure --connect client has no facade and shows no map emitters."
+      - "Rotated or unresolved brush volumes use the bounding box. Movedir projection uses world collision. Emission delta is capped at 0.05 seconds and native PVS behavior is controlled by r_pvs_cull_emitters."
+      - "Standalone native clients load the BSP and resolve the default music track but lack replicated point-particle identity, active/reset transitions, origin updates, and removal. Current generic snapshots omit inline and model-less emitters. Native demos also lack the live bindings."
+      - "The local native path uses named effects and unquantized authored sound fields. QC sends effect IDs and packs volume and attenuation. The Godot fallback uses the existing Ambient bus."
     verification:
-      - { kind: code, ref: "MapParticleEmitters.cs:53-89 (_Process toggle/burst) + 132-285 (Build: rate decode, block resolve, box extents, velocity jitter, gravity, color ramp) vs Draw_PointParticles pointparticles.qc:166-233; ClientWorld.cs:448-449 news + AddChilds MapParticleEmitters on the live client path", result: pass }
-      - { kind: code, ref: "grep noise/_sound in MapParticleEmitters.cs: none — per-emission sound confirmed absent (also listed as a documented residual in the file header)", result: fail }
+      - { kind: test, ref: "ParticleDarkPlacesTests.Map_Emitter_* and MapBgmScriptTests", result: pass }
+      - { kind: manual, ref: "planning/parity/bgmscript/README.md (Courtfun and Glow Plant native listen-session traces)", result: pass }
     confidence: high
-    notes: "added 2026-07-02 (coverage fold). The SF_POINTPARTICLES_* wire sendflags (qh:8-11) are the dropped Net_LinkEntity stream's delta bits — subsumed by the shared-entity facade divergence; the wire's relative-impulse decode and toggle-burst semantics ARE reproduced facade-side. presentation:partial rests on code-read, not an A/B capture."
+    notes: "The persistent GPU-first-block approximation was superseded by per-emission effectinfo dispatch. Installed map packs contain 63 emitter entities, and the only noise-authored instance is Glow Plant's brush spark source. Courtfun exercises ADSR and both emission modes."
 
   - id: mapobject-misc.laser.wire_contract
     name: "misc_laser net-link stream (SF_LASER_* delta sendflags, ENT_CLIENT_LASER)"

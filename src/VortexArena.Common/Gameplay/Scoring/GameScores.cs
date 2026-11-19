@@ -547,6 +547,20 @@ public static class GameScores
             SeedTeam(t);
     }
 
+    /// <summary>Replace the team slots with the active map colors while preserving their scores and schema.</summary>
+    public static void SetActiveTeams(IReadOnlyCollection<int> teams)
+    {
+        foreach (int team in TeamScores.Keys.Where(team => !teams.Contains(team)).ToArray())
+        {
+            for (int slot = 0; slot < MaxTeamScore; slot++)
+                _teamScores[slot].Remove(team);
+            _teamDirty.Remove(team);
+        }
+        foreach (int team in teams)
+            SeedTeam(team);
+        Bump();
+    }
+
     /// <summary>Ensure a single team colour has a zeroed slot in BOTH score slots (used when the team set is derived
     /// from map entities, e.g. Nexball's per-goal team seeding, rather than a fixed count).</summary>
     public static void SeedTeam(int team)

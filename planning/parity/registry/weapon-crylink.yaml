@@ -1,7 +1,7 @@
 unit: weapon-crylink
 category: weapon
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
-last_audited: "2026-06-27"  # re-audit (post Wave-16/17): port files (Crylink.cs/WeaponSplash.cs) UNCHANGED since Wave-13 — Wave-16/17 touched only this yaml's last_audited comment. All 13 rows re-verified line-by-line vs current code; no status drift. (BotBrain dispatch line drifted to :447.)
+last_audited: "2026-11-19"
 summary:
   feature_count: 13
   worst_gaps:
@@ -62,6 +62,7 @@ features:
       - { name: "primary_speed", base: "2000", port: "2000", match: true }
       - { name: "primary_spread", base: "0.08", port: "0.08", match: true }
       - { name: "primary_ammo", base: "3", port: "3", match: true }
+      - { name: "primary ammo consumption", base: "W_DecreaseAmmo", port: "DecreaseAmmo honors unlimited cells and configured clips", match: true }
       - { name: "primary_bounces", base: "1", port: "1", match: true }
       - { name: "primary_bouncedamagefactor", base: "1", port: "1", match: true }
       - { name: "recoil/punchangle", base: "2", port: "recoil:2f", match: true }
@@ -77,6 +78,7 @@ features:
     gaps: []
     verification:
       - { kind: value_diff, ref: "bal-wep-xonotic.cfg:273-296 vs Crylink.Configure — all 18 primary defaults match line-for-line", result: pass }
+      - { kind: unit_test, ref: "CrylinkLinkJoinTests.Firing_ConsumesCellsOnlyWhenAmmoIsLimited (primary)", result: pass }
       - { kind: code_read, ref: "crylink.qc:281-378 vs Crylink.cs:Attack — circular spread (CalculateSpreadPattern shot 0 centered), ProjectileVelocity, MoveType.BounceMissile, fire sound + muzzleflash all faithful; primary middle-spike index 0 matches QC (counter==0)", result: pass }
       - { kind: code_read, ref: "SetupShot accuracy 'fired' denominator now seeded: Crylink.cs:223-225 computes maxDmg = damage*shots*(1+bouncedamagefactor*bounces)[+joinexplode_damage] and calls WeaponFiring.SetupShot(actor, forward, wep:this, maxDamage:maxDmg, recoil:2f) — matches crylink.qc:285-291 W_SetupShot maxdamage arg", result: pass }
     confidence: high
@@ -99,6 +101,7 @@ features:
       - { name: "secondary_spread", base: "0.01", port: "0.01", match: true }
       - { name: "secondary_spreadtype", base: "1", port: "1 (circular)", match: true }
       - { name: "secondary_ammo", base: "3", port: "3", match: true }
+      - { name: "secondary ammo consumption", base: "W_DecreaseAmmo", port: "DecreaseAmmo honors unlimited cells and configured clips", match: true }
       - { name: "secondary_bounces", base: "0", port: "0", match: true }
       - { name: "secondary_bouncedamagefactor", base: "0.5", port: "0.5", match: true }
       - { name: "deathtype HITTYPE_SECONDARY bit", base: "m_id | HITTYPE_SECONDARY", port: "string deathTag carries Secondary bit (WithHitType)", match: true }
@@ -115,6 +118,7 @@ features:
       - "spreadtype 0 (linear horizontal fan) IS implemented (Crylink.cs:239-243) but unreachable at the stock default spreadtype 1. Not a defect — full parity coverage."
     verification:
       - { kind: value_diff, ref: "bal-wep-xonotic.cfg:300-324 vs Crylink.Configure", result: pass }
+      - { kind: unit_test, ref: "CrylinkLinkJoinTests.Firing_ConsumesCellsOnlyWhenAmmoIsLimited (secondary)", result: pass }
       - { kind: code_read, ref: "crylink.qc:380-483 vs Crylink.cs:Attack(secondary=true) — circular + linear-fan branches present; deathtype Secondary bit carried via string deathTag (WithHitType, Crylink.cs:216, DeathTypes.Secondary verified present); middle-spike index (shots-1)*0.5 for secondary (Crylink.cs:221) matches crylink.qc:448 (counter==(shots-1)*0.5); per-spike fadetime read individually (MiddleFadeTime/OtherFadeTime, Crylink.cs:256-257)", result: pass }
     confidence: high
     notes: "RE-VERIFIED 2026-06-22 (Wave-2 fixes confirmed in place): (1) deathtype carries HITTYPE_SECONDARY via DeathTypes.WithHitType(...,Secondary); (2) secondary middle-lifetime spike is the CENTER spike index (shots-1)*0.5; (3) per-spike *_middle_fadetime/*_other_fadetime feed fade_rate individually. Strong negative force (pull) faithful. weapons/crylink_fire2.wav played; impact fx via the `secondary` bool. No change vs baseline."

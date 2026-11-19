@@ -20,6 +20,8 @@ public interface IQcDialog
     /// <summary>QC <c>closable</c>: false for the first-run, terms-of-service and uid2name dialogs, which have no
     /// close button and must be answered.</summary>
     bool QcClosable => true;
+    bool QcTitleAllowsColors => false;
+    bool QcCloseOnOutsideRelease => false;
 }
 
 /// <summary>A dialog with a QC <c>focusEnter</c>: told when it gets the focus, i.e. when the nexposee has finished
@@ -39,6 +41,7 @@ public interface IQcFocusEnter
 public partial class QcDialogFrame : Control
 {
     private readonly IQcDialog _dialog;
+    private readonly System.Action _closeDialog;
     private readonly Panel _border = new() { Name = "Border", MouseFilter = MouseFilterEnum.Stop };
     private readonly QcLabel _title;
     private readonly Button _close = new() { Name = "Close", Flat = true, FocusMode = FocusModeEnum.None };
@@ -47,13 +50,18 @@ public partial class QcDialogFrame : Control
     public QcDialogFrame(Control screen, IQcDialog dialog, System.Action close)
     {
         _dialog = dialog;
+        _closeDialog = close;
         Name = "QcDialogFrame";
         MouseFilter = MouseFilterEnum.Stop;
         SetAnchorsPreset(LayoutPreset.FullRect);
 
         _border.SelfModulate = dialog.QcBorderColor;
         AddChild(_border);
-        _title = new QcLabel(dialog.QcTitle, 0.5f) { Bold = true, FontSize = MenuMetrics.FontTitle, MouseFilter = MouseFilterEnum.Ignore };
+        _title = new QcLabel(dialog.QcTitle, 0.5f)
+        {
+            Bold = true, FontSize = MenuMetrics.FontTitle,
+            MouseFilter = MouseFilterEnum.Ignore, AllowColors = dialog.QcTitleAllowsColors,
+        };
         AddChild(_title);
 
         if (MenuSkin.CloseButton is { } icon)
@@ -78,6 +86,16 @@ public partial class QcDialogFrame : Control
     }
 
     public override void _Ready() => Layout();
+
+    public override void _GuiInput(InputEvent e)
+    {
+        if (_dialog.QcCloseOnOutsideRelease && e is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false } click
+            && !_border.GetRect().HasPoint(click.Position))
+        {
+            AcceptEvent();
+            _closeDialog();
+        }
+    }
 
     // A dialog's title can change while it is open (the screenshot viewer names the picture it shows).
     public override void _Process(double delta)

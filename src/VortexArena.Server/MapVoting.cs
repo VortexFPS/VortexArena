@@ -64,6 +64,7 @@ public sealed class MapVoteCandidate
 /// </summary>
 public sealed class MapVoting
 {
+    private const int MaxBallotEntries = 20;
     private readonly List<MapVoteCandidate> _candidates = new();
     private readonly Dictionary<object, int> _votes = new(); // voter key -> candidate index
     private readonly HashSet<object> _abstained = new();     // voters who explicitly abstained
@@ -138,6 +139,12 @@ public sealed class MapVoting
 
     public MapVoting(int seed = 0x5EED) => _rng = new Random(seed);
 
+    internal static int MapSlotLimit(int requested, bool abstain)
+    {
+        int availableSlots = MaxBallotEntries - (abstain ? 1 : 0);
+        return requested > 0 ? System.Math.Min(requested, availableSlots) : availableSlots;
+    }
+
     /// <summary>Reseed the tiebreak RNG (determinism support for headless runs).</summary>
     public void Reseed(int seed) => _rng = new Random(seed);
 
@@ -176,9 +183,7 @@ public sealed class MapVoting
         bool abstain = Cvars.Bool("g_maplist_votable_abstain");
         int votable = Cvars.Int("g_maplist_votable");
         // QC nmax = min(MAPVOTE_COUNT-(abstain?1:0), g_maplist_votable): leave room for the abstain slot.
-        int nmax = votable > 0 ? votable : int.MaxValue;
-        if (abstain && nmax != int.MaxValue)
-            nmax = System.Math.Max(nmax - 1, 0);
+        int nmax = MapSlotLimit(votable, abstain);
         bool showSuggester = Cvars.FloatOr("g_maplist_votable_show_suggester", 1f) != 0f;
 
         // QC MapVote_AddVotableMaps: seed the suggested maps first (limited by g_maplist_votable_suggestions),
@@ -276,14 +281,13 @@ public sealed class MapVoting
 
         // QC: mapvote_abstain = false (gametype vote never has the abstain slot).
         // QC: parse sv_vote_gametype_options space-separated, cap at MAPVOTE_COUNT (20).
-        const int MapvoteCount = 20;
         string options = Cvars.String("sv_vote_gametype_options");
         bool defaultCurrent = Cvars.Bool("sv_vote_gametype_default_current");
         int reallyAvailable = 0;
 
         foreach (string name in options.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
-            if (_candidates.Count >= MapvoteCount)
+            if (_candidates.Count >= MaxBallotEntries)
                 break;
             if (string.IsNullOrEmpty(name))
                 continue;
@@ -380,6 +384,12 @@ public sealed class MapVoting
     /// voted (or abstained). Surfaced for the client map-vote HUD's own-vote highlight (QC <c>mv_ownvote</c>).</summary>
     public int SelectionOf(object? voter)
         => voter is not null && _votes.TryGetValue(voter, out int idx) ? idx : -1;
+
+    /// <summary>The HUD selection includes the appended abstain option.</summary>
+    public int BallotSelectionOf(object? voter) =>
+        voter is not null && _candidates.Count > 0 && _candidates[^1].IsAbstain && _abstained.Contains(voter)
+            ? _candidates.Count - 1
+            : SelectionOf(voter);
 
     /// <summary>Withdraw a voter (e.g. on disconnect) so their vote no longer counts.</summary>
     public void RemoveVoter(object voter)

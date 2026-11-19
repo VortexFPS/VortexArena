@@ -1,0 +1,215 @@
+Native checkout base: 43e4b7d91db9267916500e5fbea85414d2d279a6 (working tree build)
+Xonotic source: 863cd3e8456e18f577f7fe5fef857ff55ae62cc0
+
+[Race-Lap]
+Server PID 242918
+UNCONN 0      0               127.0.0.1:28972 0.0.0.0:*
+UNCONN 0      0      [::ffff:127.0.0.1]:28971       *:*
+server
+[shell] --cvar sv_public = "0"
+[shell] --cvar g_playerstats_gamereport_uri = ""
+[shell] --cvar g_playerstats_playerbasic_uri = ""
+[shell] --cvar g_playerstats_playerdetail_uri = ""
+[shell] --cvar g_ctf_leaderboard = "1"
+[shell] --cvar sv_cheats = "0"
+[NetGame] listen server on 127.0.0.1:28971 (map 'leave_em_behind', rc, 0 bots) — self-connecting.
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+[RaceRecords] Saved <temporary run>/server-rc/race-records.tsv.
+client
+[shell] --cvar cl_allow_uidtracking = "1"
+[shell] --cvar cl_allow_uid2name = "1"
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+[NetGame] client loaded map 'leave_em_behind' (rc) for render + prediction collision.
+joined the game
+]cmd records 1
+                 leave_em_behind 0:01.00  Race-Lap
+]cmd rankings
+Records for leave_em_behind:
+     1st 0:01.00  Race-Lap
+]cmd ladder
+Top 30 ladder rankings:
+ 1st|     110|    1|    0|    0|    0|    0|    0|    0|    0|    0|     0|             1| Race-Lap
+
+[Race-Readback]
+Server PID 245310
+UNCONN 0      0               127.0.0.1:28972 0.0.0.0:*
+UNCONN 0      0      [::ffff:127.0.0.1]:28971       *:*
+server
+[shell] --cvar sv_public = "0"
+[shell] --cvar g_playerstats_gamereport_uri = ""
+[shell] --cvar g_playerstats_playerbasic_uri = ""
+[shell] --cvar g_playerstats_playerdetail_uri = ""
+[shell] --cvar g_ctf_leaderboard = "1"
+[shell] --cvar sv_cheats = "0"
+[RaceRecords] Loaded <temporary run>/server-rc/race-records.tsv.
+[NetGame] listen server on 127.0.0.1:28971 (map 'leave_em_behind', rc, 0 bots) — self-connecting.
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+[RaceRecords] Saved <temporary run>/server-rc/race-records.tsv.
+client
+[shell] --cvar cl_allow_uidtracking = "0"
+[shell] --cvar cl_allow_uid2name = "0"
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+[NetGame] client loaded map 'leave_em_behind' (rc) for render + prediction collision.
+]cmd records 1
+                 leave_em_behind 0:01.00  Race-Lap
+]cmd rankings
+Records for leave_em_behind:
+     1st 0:01.00  Race-Lap
+]cmd ladder
+Top 30 ladder rankings:
+ 1st|     110|    1|    0|    0|    0|    0|    0|    0|    0|    0|     0|             1| Race-Lap
+
+[CTS-Course]
+Server PID 240549
+UNCONN 0      0               127.0.0.1:28972 0.0.0.0:*
+UNCONN 0      0      [::ffff:127.0.0.1]:28971       *:*
+server
+[shell] --cvar sv_public = "0"
+[shell] --cvar g_playerstats_gamereport_uri = ""
+[shell] --cvar g_playerstats_playerbasic_uri = ""
+[shell] --cvar g_playerstats_playerdetail_uri = ""
+[shell] --cvar g_ctf_leaderboard = "1"
+[shell] --cvar sv_cheats = "0"
+[NetGame] listen server on 127.0.0.1:28971 (map 'leave_em_behind', cts, 0 bots) — self-connecting.
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+[RaceRecords] Saved <temporary run>/server-cts/race-records.tsv.
+client
+[shell] --cvar cl_allow_uidtracking = "1"
+[shell] --cvar cl_allow_uid2name = "1"
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+[NetGame] client loaded map 'leave_em_behind' (cts) for render + prediction collision.
+joined the game
+]cmd records 1
+                 leave_em_behind 0:01.00  CTS-Course
+]cmd rankings
+Records for leave_em_behind:
+     1st 0:01.00  CTS-Course
+]cmd ladder
+Top 30 ladder rankings:
+ 1st|     110|    1|    0|    0|    0|    0|    0|    0|    0|    0|     0|             1| CTS-Course
+
+[CTS-Readback]
+Server PID 246629
+UNCONN 0      0               127.0.0.1:28972 0.0.0.0:*
+UNCONN 0      0      [::ffff:127.0.0.1]:28971       *:*
+server
+[shell] --cvar sv_public = "0"
+[shell] --cvar g_playerstats_gamereport_uri = ""
+[shell] --cvar g_playerstats_playerbasic_uri = ""
+[shell] --cvar g_playerstats_playerdetail_uri = ""
+[shell] --cvar g_ctf_leaderboard = "1"
+[shell] --cvar sv_cheats = "0"
+[RaceRecords] Loaded <temporary run>/server-cts/race-records.tsv.
+[NetGame] listen server on 127.0.0.1:28971 (map 'leave_em_behind', cts, 0 bots) — self-connecting.
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+[RaceRecords] Saved <temporary run>/server-cts/race-records.tsv.
+client
+[shell] --cvar cl_allow_uidtracking = "0"
+[shell] --cvar cl_allow_uid2name = "0"
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+[NetGame] client loaded map 'leave_em_behind' (cts) for render + prediction collision.
+]cmd records 1
+                 leave_em_behind 0:01.00  CTS-Course
+]cmd rankings
+Records for leave_em_behind:
+     1st 0:01.00  CTS-Course
+]cmd ladder
+Top 30 ladder rankings:
+ 1st|     110|    1|    0|    0|    0|    0|    0|    0|    0|    0|     0|             1| CTS-Course
+
+[CTF-EarnedPrivate]
+Server PID 252875
+UNCONN 0      0               127.0.0.1:28962 0.0.0.0:*
+UNCONN 0      0      [::ffff:127.0.0.1]:28961       *:*
+server
+[shell] --cvar sv_public = "0"
+[shell] --cvar g_playerstats_gamereport_uri = ""
+[shell] --cvar g_playerstats_playerbasic_uri = ""
+[shell] --cvar g_playerstats_playerdetail_uri = ""
+[shell] --cvar g_ctf_leaderboard = "1"
+[shell] --cvar sv_cheats = "0"
+[NetGame] listen server on 127.0.0.1:28961 (map 'leave_em_behind', ctf, 0 bots) — self-connecting.
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+[RaceRecords] Saved <temporary run>/server-ctf-verified/race-records.tsv.
+client
+[shell] --cvar cl_allow_uidtracking = "1"
+[shell] --cvar cl_allow_uid2name = "0"
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+[NetGame] client loaded map 'leave_em_behind' (ctf) for render + prediction collision.
+joined the game
+]cmd selectteam red
+changing to Red
+]cmd records 1
+                 leave_em_behind 9.70   CTF-EarnedPrivate
+]cmd rankings
+No records are available for the map: leave_em_behind
+]cmd ladder
+No ladder on this server!
+
+[CTF-EarnedNamed]
+Server PID 254889
+UNCONN 0      0               127.0.0.1:28962 0.0.0.0:*
+UNCONN 0      0      [::ffff:127.0.0.1]:28961       *:*
+server
+[shell] --cvar sv_public = "0"
+[shell] --cvar g_playerstats_gamereport_uri = ""
+[shell] --cvar g_playerstats_playerbasic_uri = ""
+[shell] --cvar g_playerstats_playerdetail_uri = ""
+[shell] --cvar g_ctf_leaderboard = "1"
+[shell] --cvar sv_cheats = "0"
+[RaceRecords] Loaded <temporary run>/server-ctf-verified/race-records.tsv.
+[NetGame] listen server on 127.0.0.1:28961 (map 'leave_em_behind', ctf, 0 bots) — self-connecting.
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+[RaceRecords] Saved <temporary run>/server-ctf-verified/race-records.tsv.
+client
+[shell] --cvar cl_allow_uidtracking = "1"
+[shell] --cvar cl_allow_uid2name = "1"
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+[NetGame] client loaded map 'leave_em_behind' (ctf) for render + prediction collision.
+joined the game
+]cmd selectteam red
+changing to Red
+]cmd records 1
+                 leave_em_behind 8.03   CTF-EarnedNamed
+]cmd rankings
+Records for leave_em_behind:
+     1st 0:08.03  CTF-EarnedNamed
+]cmd ladder
+Top 30 ladder rankings:
+ 1st|     100|    1|    0|    0|    0|    0|    0|    0|    0|    0|     0|             0| CTF-EarnedNamed
+
+[CTF-EarnedReadback]
+Server PID 257847
+UNCONN 0      0               127.0.0.1:28962 0.0.0.0:*
+UNCONN 0      0      [::ffff:127.0.0.1]:28961       *:*
+server
+[shell] --cvar sv_public = "0"
+[shell] --cvar g_playerstats_gamereport_uri = ""
+[shell] --cvar g_playerstats_playerbasic_uri = ""
+[shell] --cvar g_playerstats_playerdetail_uri = ""
+[shell] --cvar g_ctf_leaderboard = "1"
+[shell] --cvar sv_cheats = "0"
+[RaceRecords] Loaded <temporary run>/server-ctf-verified/race-records.tsv.
+[NetGame] listen server on 127.0.0.1:28961 (map 'leave_em_behind', ctf, 0 bots) — self-connecting.
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+[RaceRecords] Saved <temporary run>/server-ctf-verified/race-records.tsv.
+client
+[shell] --cvar cl_allow_uidtracking = "0"
+[shell] --cvar cl_allow_uid2name = "0"
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+[NetGame] client loaded map 'leave_em_behind' (ctf) for render + prediction collision.
+]cmd records 1
+                 leave_em_behind 8.03   CTF-EarnedNamed
+]cmd rankings
+Records for leave_em_behind:
+     1st 0:08.03  CTF-EarnedNamed
+]cmd ladder
+Top 30 ladder rankings:
+ 1st|     100|    1|    0|    0|    0|    0|    0|    0|    0|    0|     0|             0| CTF-EarnedNamed

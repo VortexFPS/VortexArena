@@ -1,0 +1,15 @@
+va-crosshair-stock-repeat
+reticle          262  385,285 to 414,314; normal-blend RMSE 0.41
+ring only        687  377,277 to 422,322; 0 darkened pixels; additive-diamond RMSE 0.47
+va-crosshair-native-clock
+reticle          347  385,285 to 415,314; normal-blend RMSE 0.41
+ring only       1340  367,267 to 432,332; 33 darkened pixels; additive-diamond RMSE 14.08
+va-crosshair-native-material-full
+reticle          347  385,285 to 415,314; normal-blend RMSE 0.41
+ring only        679  377,277 to 422,322; 0 darkened pixels; additive-diamond RMSE 0.51
+va-crosshair-stock-material-partial
+reticle          262  385,285 to 414,314; normal-blend RMSE 0.41
+ring only        428  377,285 to 422,322; 0 darkened pixels; additive-diamond RMSE 0.48
+va-crosshair-native-material-partial
+reticle          347  385,285 to 415,314; normal-blend RMSE 0.41
+ring only        424  377,285 to 422,322; 0 darkened pixels; additive-diamond RMSE 0.52

@@ -41,9 +41,12 @@ public static class TeamBalance
     /// <see cref="Entity.Team"/> and returns the chosen team color code.
     /// </summary>
     public static int JoinSmallestTeam(Player joiner, IReadOnlyList<Player> roster, int teamCount)
+        => JoinSmallestTeam(joiner, roster, Teams.Active(teamCount));
+
+    internal static int JoinSmallestTeam(Player joiner, IReadOnlyList<Player> roster, IEnumerable<int> activeTeams)
     {
         int bestTeam = Teams.None, bestCount = int.MaxValue;
-        foreach (int team in Teams.Active(teamCount))
+        foreach (int team in activeTeams)
         {
             int c = CountTeam(team, roster, joiner);
             if (c < bestCount) { bestCount = c; bestTeam = team; }
@@ -74,8 +77,7 @@ public static class TeamBalance
 ///  - point-limit + lead-limit end-of-match check (GameRules_limit_score/lead).
 ///
 /// Deferred (NOTE — cross-boundary): skill-weighted balancing, bot autobalance, team-spawn selection
-/// (GameRules_spawning_teams / info_player_team*), score networking/HUD, leadlimit announcer,
-/// tdm_team map entities (custom team colors), and warmup.
+/// (GameRules_spawning_teams / info_player_team*), score networking/HUD, leadlimit announcer, and warmup.
 /// </summary>
 [GameType]
 public sealed class Tdm : GameType
@@ -119,10 +121,8 @@ public sealed class Tdm : GameType
 
     public override void OnInit()
     {
-        // QC INIT(TeamDeathmatch): the gametype-relevant flags (TeamGame) are set in the ctor; team-count is
-        // read on demand from g_tdm_teams (TeamCount). GameRules_teams(true) / GameRules_spawning_teams and
-        // the tdm_team map-entity team colors are engine-side registration the host performs from TeamGame +
-        // TeamCount.
+        _mapTeams = Array.Empty<int>();
+        // GameWorld resolves the team declarations after spawning the new map.
         //
         // QC sv_tdm.qc tdm_Initialize seeds the engine limit cvars from the gametype defaults:
         //   GameRules_limit_score(g_tdm_point_limit)  -> cvar_set("fraglimit", limit) UNLESS limit < 0
@@ -179,8 +179,10 @@ public sealed class Tdm : GameType
     /// </summary>
     public override bool RequestsTeamSpawns => TryCvar("g_tdm_team_spawns", out float v) ? v != 0f : false;
 
-    /// <summary>Number of teams in play (g_tdm_teams_override if &gt;= 2, else g_tdm_teams), clamped to 2..4.</summary>
-    public int TeamCount
+    /// <summary>Number of active map colors, or the configured fallback before map entities have spawned.</summary>
+    public int TeamCount => _mapTeams.Length != 0 ? _mapTeams.Length : ConfiguredTeamCount;
+
+    public int ConfiguredTeamCount
     {
         get
         {
@@ -189,6 +191,14 @@ public sealed class Tdm : GameType
             else if (TryCvar(CvarTeams, out float t)) n = (int)t;
             return System.Math.Clamp(n, 2, 4);
         }
+    }
+
+    private int[] _mapTeams = Array.Empty<int>();
+
+    public void SetMapTeams(int[] mapTeams)
+    {
+        _mapTeams = mapTeams;
+        Scoring.GameScores.SetActiveTeams(mapTeams);
     }
 
     /// <summary>The point limit in force (g_tdm_point_limit, else fraglimit, else 50). 0 == unlimited.
@@ -262,7 +272,7 @@ public sealed class Tdm : GameType
     /// Returns the chosen team color code, which is also written to <see cref="Entity.Team"/>.
     /// </summary>
     public int AssignTeam(Player joiner, IReadOnlyList<Player> roster)
-        => TeamBalance.JoinSmallestTeam(joiner, roster, TeamCount);
+        => TeamBalance.JoinSmallestTeam(joiner, roster, _mapTeams.Length == 0 ? Teams.Active(TeamCount) : _mapTeams);
 
     private bool OnDeath(ref DeathEvent ev)
     {

@@ -1,0 +1,6 @@
+/tmp/va-scripted-native-build.nj13cS/tests/VortexArena.Tests/Legacy/CsqcHostTests.UriGet.cs(564,221): warning xUnit1031: Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead. (https://xunit.net/xunit.analyzers/rules/xUnit1031) [/tmp/va-scripted-native-build.nj13cS/tests/VortexArena.Tests/VortexArena.Tests.csproj]
+  VortexArena.Tests -> /tmp/va-scripted-native-build.nj13cS/tests/VortexArena.Tests/bin/Debug/net8.0/VortexArena.Tests.dll
+Test run for /tmp/va-scripted-native-build.nj13cS/tests/VortexArena.Tests/bin/Debug/net8.0/VortexArena.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    30, Skipped:     0, Total:    30, Duration: 117 ms - VortexArena.Tests.dll (net8.0)

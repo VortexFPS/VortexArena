@@ -1,0 +1,54 @@
+[
+  {
+    "seconds": 0.0,
+    "event": "both graphical clients connected",
+    "port": 26800
+  },
+  {
+    "seconds": 2.002,
+    "client": "BlueProbe",
+    "command": "cmd join"
+  },
+  {
+    "seconds": 3.06,
+    "client": "RedProbe",
+    "command": "cmd spectate"
+  },
+  {
+    "seconds": 4.101,
+    "server": "prvm_edictset server 1 origin \"-288 -208 112\"; prvm_edictset server 1 angles \"11 0 0\"; prvm_edictset server 1 fixangle 1"
+  },
+  {
+    "seconds": 4.101,
+    "client": "BlueProbe",
+    "command": "cmd teleporttotarget probe_cryfire"
+  },
+  {
+    "seconds": 5.191,
+    "server": "echo BlueProbe at probe_cryfire; prvm_edictget server 2 origin; prvm_edictget server 2 v_angle"
+  },
+  {
+    "seconds": 5.191,
+    "server": "status; g_weaponarena; g_balance_crylink_primary_speed; g_balance_crylink_primary_spread; g_balance_crylink_primary_refire; g_balance_crylink_primary_middle_lifetime; g_balance_crylink_primary_other_lifetime; g_balance_crylink_primary_middle_fadetime; g_balance_crylink_primary_other_fadetime"
+  },
+  {
+    "seconds": 7.742,
+    "client": "BlueProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 7.983,
+    "client": "BlueProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 12.583,
+    "client": "BlueProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 12.815,
+    "client": "BlueProbe",
+    "event": "attack up"
+  }
+]

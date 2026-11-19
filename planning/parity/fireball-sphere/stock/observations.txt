@@ -1,0 +1,48 @@
+Pinned stock observer
+client progs: breakpoint is at statement 297328
+ModelEffect_Draw breakpoint hits across all trials: 28
+
+Pinned stock server
+server progs: breakpoint is at statement 447537
+FIREBALL_TRIAL impact 
+"g_balance_fireball_primary_lifetime" is "15" ["15"]
+"g_balance_fireball_primary_radius" is "32" ["200"]
+"g_balance_fireball_primary_speed" is "1200" ["1200"]
+BlueProbe at probe_fire 
+1216 259.4086 4.48042107
+22.0001221 90 0
+100
+0
+100
+0
+FIREBALL_TRIAL timeout 
+"g_balance_fireball_primary_lifetime" is "0.001" ["15"]
+"g_balance_fireball_primary_radius" is "32" ["200"]
+"g_balance_fireball_primary_speed" is "1" ["1200"]
+BlueProbe at probe_timeout 
+1216 248 10.3532715
+-9.99755859 90 0
+100
+0
+PRVM_Breakpoint: Breakpoint hit
+s447534: ./common/weapons/weapon/fireball.qc:128: FIELD_F    GLOBAL48925, .pushltime (=.pushltime), GLOBAL48910
+s447535: ./common/weapons/weapon/fireball.qc:128: GT         time (=10.3157253), GLOBAL48910, GLOBAL48910
+s447536: ./common/weapons/weapon/fireball.qc:128: IFNOT      GLOBAL48910, statement 447547
+s447537: ./common/weapons/weapon/fireball.qc:130: ADDRESS    GLOBAL48925, .cnt (=.cnt), GLOBAL48910
+./common/weapons/weapon/fireball.qc:130 : W_Fireball_Think : statement 3
+./server/world.qc:2448 : RunThink : statement 27
+./server/world.qc:2466 : Physics_Frame : statement 70
+./server/world.qc:2507 : EndFrame : statement 1
+40.5340385
+0
+FIREBALL_TRIAL self-damage 
+"g_balance_fireball_primary_lifetime" is "15" ["15"]
+"g_balance_fireball_primary_radius" is "250" ["200"]
+"g_balance_fireball_primary_speed" is "1200" ["1200"]
+BlueProbe at probe_fire 
+1216 248 9.52319336
+22.0001221 90 0
+40.5340385
+0
+-60.478054
+0

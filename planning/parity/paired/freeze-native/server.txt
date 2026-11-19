@@ -1,0 +1,215 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: The separate rendering thread feature is experimental. Feel free to try it since it will eventually become a stable feature.
+However, bear in mind that at the moment it can lead to project crashes or instability.
+So, unless you want to test the engine, set the "rendering/driver/threads/thread_model" project setting to 'Safe'.
+     at: setup2 (main/main.cpp:3415)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Enabled maxfps=0 refresh=-1Hz cpu=6c gpu=
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag]
+=== VortexArena boot ===
+Weapons:   27
+Items:     21
+Mutators:  46
+GameTypes: 21
+Sounds:    223
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).
+[lb]MenuState] user gamedir mounted: /tmp/va-paired-20261119/resumed-native/freeze-native/server-user/data (drop .pk3 packs in its maps/ subfolder).
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"
+"maxplayers" set to "32"
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).
+[lb]MenuState] cvar help: 1386 engine descriptions.
+[lb]shell] --cvar sv_public = "0"
+[lb]shell] --cvar sv_eventlog = "1"
+[lb]shell] --cvar g_warmup = "0"
+[lb]shell] --cvar skill = "5"
+[lb]shell] --cvar sv_cheats = "1"
+[lb]shell] --cvar g_spawnshieldtime = "0"
+[lb]shell] --cvar g_buffs_random_location = "0"
+[lb]shell] --cvar g_buffs_randomize = "0"
+[lb]shell] --cvar g_buffs = "1"
+[lb]shell] --cvar g_buffs_replace_powerups = "1"
+[lb]shell] --cvar g_freezetag_warmup = "5"
+[lb]shell] --cvar g_freezetag_frozen_maxtime = "12"
+[lb]shell] --cvar g_freezetag_revive_auto = "1"
+[lb]shell] --cvar g_freezetag_revive_auto_progress = "1"
+[lb]shell] --cvar g_freezetag_weaponarena = "vortex"
+[lb]shell] --cvar g_weaponarena = "vortex"
+[lb]video] vid_vsync 0 → requested Disabled, actual Enabled (off — uncapped, may tear)
+[lb]video] cl_maxfps 256 -> Engine.MaxFps 144 (auto: nothing set a cap, using max(144, refresh); refresh -1Hz)
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)
+[lb]video] process priority boost unavailable: Permission denied
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] hosting listen server: gametype=freezetag map=stormkeep bots=3 skill=-1 timelimit=0 fraglimit=0
+[NetGame] dedicated slim: headless host — client render/audio asset loads are skipped (server keeps collision, entities, muzzle tags, waypoints). `sv_dedicated_slim 0` restores the full load.
+[lb]GameWorld] tick rate: sys_ticrate=0.015625 -> 64 Hz [lb]sharedStore=True, cfgLoaded=False]
+[NetGame] dedicated loop cap: Engine.MaxFps 64 (sim tickrate 64 Hz).
+[NetTransport.Server] listening on UDP 27982 (max 32).
+[ServerNet] LAN discovery: answering getinfo on UDP 27983 (game port 27982).
+[ServerConsole] reading commands from stdin (type 'status', 'help', 'quit'; --no-console to disable).
+[NetTransport.Client] connecting to 127.0.0.1:27982 …
+[MapLoader] 'stormkeep' dedicated slim: render geometry skipped (collision brushes + entities only; 39 bsp models).
+[lb]LightGrid] GPU lightgrid 54x61x39 (501 KB) bound — per-pixel model lighting active.
+[lb]WorldLights] stormkeep: no .rtlights and no importable light entities — realtime world lighting has nothing to render (this is the normal case).
+[Skybox] loaded 'env/extragalactic/asteroids'.
+[lb]WorldLights] realtime world lighting OFF — back to baked lightmaps.
+[MapEmitters] func_pointparticles 'sparks': 4 emissions/s (Absolute), count 6, velocity <50, -100, 30>, box <-1048.6946, 1458.194, 230.39345>..<-952, 1605.8062, 289.6066>, no brush: whole box
+[EffectInfo] parsed 'vortex/original/effectinfo.txt': 0 effects (process-lifetime, shared by every match).
+[EffectInfo] parsed 'effectinfo.txt': 0 effects (process-lifetime, shared by every match).
+[EffectSystem] effectinfo: 0 effects, particlefont atlas: MISSING (solid-quad fallback), style overlay: 0 effects
+[Particles] backend=original (cl_particles_modern=0)
+[NetGame] precached 0 weapon models, skipped 24 (lazy), 24 muzzle tags.
+[NetGame] listen server on 127.0.0.1:27982 (map 'stormkeep', freezetag, 3 bots) — self-connecting.
+[LoadTimeline] host stormkeep — load begin → ready, 970 ms total
+    textures.compress: nothing compressed (gl_texturecompression 1, no eligible textures)
+    bsp.parse             20.9 ms    2.2 %
+    collision.build      152.1 ms   15.7 %
+    world.boot           122.8 ms   12.7 %
+  server.start           324.6 ms   33.4 %
+    world.attach           0.3 ms    0.0 %
+    editor.nodes          18.3 ms    1.9 %
+    light                141.5 ms   14.6 %
+  render.setup           226.8 ms   23.4 %
+  camera.hud             146.8 ms   15.1 %
+  precache.weapons       149.8 ms   15.4 %
+  (unaccounted: yields, present, unmeasured)      122.5 ms
+[ServerNet] peer 2078692615 connected (awaiting handshake).
+:connect:1:-1:
+:join:1:-1::player
+[ServerNet] peer 2078692615 accepted as 'player' (netId 2078692615, id 0ec7cbe7).
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+:connect:2:-2:bot
+:join:2:-2:bot:[BOT]Toxic
+[lb]bots] waypoints for 'stormkeep': nodes=109 (file=loaded, cache=yes)
+:connect:3:-3:bot
+:join:3:-3:bot:[BOT]Discovery
+:connect:4:-4:bot
+:join:4:-4:bot:[BOT]Lion
+[lb]hitch CPU-LOGIC] 70.1ms (3 dropped @60Hz) (med 15.6, ×4.5) — ng.process 65.9ms (typ 4.4ms, 15× over) | proc 67.7 rcpu 0.0 gpu 0.0 rest 2.4 late 2.4 | alloc 1012KB | ticks 1 | watchdog: 12/57 samples in 'start.bots' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 16.4 14.8 15.6 15.6 15.6 15.6
+[lb]hitch CPU-LOGIC ×2] 32.9–70.1ms over 0.0s (med 15.6) — ng.process 65.9ms (typ 4.4ms, 15× over)
+[ServerNet] peer 1111878456 connected (awaiting handshake).
+:connect:5:-5:
+:join:5:-5::ParityProbe
+[ServerNet] peer 1111878456 accepted as 'ParityProbe' (netId 1111878456, id 353fee7e).
+[lb]wf] first attack this session: devastator
+[lb]wf] first attack this session: vortex
+[lb]wf] first attack this session: hagar
+[lb]wf] first attack this session: mortar
+gametype: freezetag  time: 35.5
+players: 5 (3 bots)
+  [BOT]Toxic       score    0  k/d 0/0
+  [BOT]Discovery   score    0  k/d 0/0
+  [BOT]Lion        score    0  k/d 0/0
+  ParityProbe      score    0  k/d 0/0
+"g_buffs" is "1"
+"g_buffs_random_location" is "0"
+"g_buffs_randomize" is "0"
+"g_buffs_replace_powerups" is "1"
+"g_freezetag_frozen_maxtime" is "12"
+"g_freezetag_revive_auto" is "1"
+"g_freezetag_revive_auto_progress" is "1"
+"g_freezetag_warmup" is "5"
+"g_freezetag_weaponarena" is "vortex"
+"g_spawnshieldtime" is "0"
+"g_warmup" is "0"
+"g_weaponarena" is "vortex"
+"skill" is "5"
+"sv_cheats" is "1"
+"sv_eventlog" is "1"
+"sv_public" is "0"
+:kill:suicide:5:5:type=kill:items=26
+gametype: freezetag  time: 48.5
+players: 5 (3 bots)
+  [BOT]Toxic       score    0  k/d 0/0
+  [BOT]Discovery   score    0  k/d 0/0
+  [BOT]Lion        score    0  k/d 0/0
+  ParityProbe      score   -1  k/d 0/1
+"g_buffs" is "1"
+"g_buffs_random_location" is "0"
+"g_buffs_randomize" is "0"
+"g_buffs_replace_powerups" is "1"
+"g_freezetag_frozen_maxtime" is "12"
+"g_freezetag_revive_auto" is "1"
+"g_freezetag_revive_auto_progress" is "1"
+"g_freezetag_warmup" is "5"
+"g_freezetag_weaponarena" is "vortex"
+"g_spawnshieldtime" is "0"
+"g_warmup" is "0"
+"g_weaponarena" is "vortex"
+"skill" is "5"
+"sv_cheats" is "1"
+"sv_eventlog" is "1"
+"sv_public" is "0"
+gametype: freezetag  time: 67.5
+players: 5 (3 bots)
+  [BOT]Discovery   score    1  k/d 0/0
+  [BOT]Toxic       score    0  k/d 0/0
+  [BOT]Lion        score    0  k/d 0/0
+  ParityProbe      score   -1  k/d 0/1
+"g_buffs" is "1"
+"g_buffs_random_location" is "0"
+"g_buffs_randomize" is "0"
+"g_buffs_replace_powerups" is "1"
+"g_freezetag_frozen_maxtime" is "12"
+"g_freezetag_revive_auto" is "1"
+"g_freezetag_revive_auto_progress" is "1"
+"g_freezetag_warmup" is "5"
+"g_freezetag_weaponarena" is "vortex"
+"g_spawnshieldtime" is "0"
+"g_warmup" is "0"
+"g_weaponarena" is "vortex"
+"skill" is "5"
+"sv_cheats" is "1"
+"sv_eventlog" is "1"
+"sv_public" is "0"
+:kill:frag:2:5:type=lava:items=4:victimitems=26
+:part:5
+:anticheat:_time:5:53.70312
+:anticheat:speedhack:0.009077:-
+:anticheat:speedhack_m1:0.760985:-
+:anticheat:speedhack_m2:0.781022:-
+:anticheat:speedhack_m3:0.797534:-
+:anticheat:speedhack_m4:0.81127:-
+:anticheat:speedhack_m5:0.822846:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+[ServerNet] peer 1111878456 disconnected (ParityProbe).
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — ng.process 20.3ms (typ 2.8ms, 7× over) | proc 21.9 rcpu 0.0 gpu 0.0 rest 9.4 late 11.5 | alloc 48KB | ticks 1 | watchdog: 11/21 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+shutting down…
+=== frame profiler session summary (79s, 4888 frames) ===
+  fps: avg 63.2  1%low 63  0.1%low 22  (median 15.6ms, worst 461.8ms)
+  hitches: 3 total — 3 primaries: 3 CPU-LOGIC
+    worst[lb]1]: 70.1ms CPU-LOGIC (ng.process) @ t=4.9s
+    worst[lb]2]: 32.9ms CPU-LOGIC (ng.process) @ t=4.9s
+    worst[lb]3]: 31.3ms CPU-LOGIC (ng.process) @ t=78.0s
+  gc: g0+46 g1+18 g2+7, total pause 163ms
+  alloc: 410.2MB total, 2MB/s recent, peak 88.3MB in one frame @ t=1.4s, heap 48.1MB
+  note: DEBUG build — frame times and the hitch census are NOT release-representative (run the release export via tools/perf-run.ps1 for real numbers)
+  [lb]vram census] 24 resident textures, est 4 MB (textures only; Godot's vram monitor adds mesh/render-target buffers)
+    compression: mode 1, s3tc unprobed (nothing compressed this session), ok 0, bc7-fallback 0, failed 0
+    TwoD                  4.3 MB in 24 textures
+    top 10:
+          1.3 MB  rgba8        gfx/blood.png
+          1.0 MB  rgb8         gfx/teamradar_ping.png
+          0.3 MB  l8           gfx/stormkeep_mini.jpg
+          0.1 MB  rgba8        gfx/hud/luma/armor_mega.png
+          0.1 MB  rgba8        gfx/hud/luma/health_mega.png
+          0.1 MB  rgba8        gfx/hud/luma/border_default.png
+          0.1 MB  rgba8        gfx/hud/luma/health.png
+          0.1 MB  rgba8        gfx/hud/luma/progressbar.png
+          0.1 MB  rgba8        gfx/hud/luma/border_default_south.png
+          0.1 MB  rgba8        gfx/hud/luma/ammo_cells.png

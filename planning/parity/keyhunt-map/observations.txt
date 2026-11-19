@@ -1,0 +1,110 @@
+Xonotic data 863cd3e8456e18f577f7fe5fef857ff55ae62cc0
+SHA-256 of staged inputs
+stock server QC: c4a5a9e85598333568183779c06446b2d03f056d2da71636b6f86150ed1202f7
+stock executable: 79e38b239b8dc5d5ee1ac8ada8245a51381ce27277dc165645fea0e69fed4312
+shared fixture archive: e50746b4b5917fc81bb91db8d3b83dfb6cafb87ec1db3d6333033a09cdd932c7
+maps/khdefault.bsp: 15b669ac3b8574c7f905f99f7cf8b4a6504b90f5ec19b6b1445a6edf02462e69
+maps/khdefault.ent: 91f3e197d3bc39ef73a5e7fc33db7546dfc0481a19087ad9898b767da1c1ce4a
+maps/khdefault.mapinfo: 7569fddb9afd34b1f3beeae49831ff26f3e52494bb18b3cd5d1e87752bc696b1
+maps/khexactdiam.bsp: 15b669ac3b8574c7f905f99f7cf8b4a6504b90f5ec19b6b1445a6edf02462e69
+maps/khexactdiam.ent: 69d78a4cb05530ae8ca9640a2deef8ee8ffad3cc64c1a75d14d5b7db8f74507f
+maps/khfewstarts.bsp: 15b669ac3b8574c7f905f99f7cf8b4a6504b90f5ec19b6b1445a6edf02462e69
+maps/khfewstarts.ent: 0f996f0dfc2526df21e6d66226148f41786edcdf579881950bef27867f826e20
+maps/khlargeenough.bsp: 15b669ac3b8574c7f905f99f7cf8b4a6504b90f5ec19b6b1445a6edf02462e69
+maps/khlargeenough.ent: 91f3e197d3bc39ef73a5e7fc33db7546dfc0481a19087ad9898b767da1c1ce4a
+maps/khlegacy.bsp: 15b669ac3b8574c7f905f99f7cf8b4a6504b90f5ec19b6b1445a6edf02462e69
+maps/khlegacy.ent: 91f3e197d3bc39ef73a5e7fc33db7546dfc0481a19087ad9898b767da1c1ce4a
+maps/khlegacy.mapinfo: 0bbb45584967b488a84a8e8de9f011adb2ddb9fa95fb46913e8f20707bf20db2
+maps/khmodern.bsp: 15b669ac3b8574c7f905f99f7cf8b4a6504b90f5ec19b6b1445a6edf02462e69
+maps/khmodern.ent: 91f3e197d3bc39ef73a5e7fc33db7546dfc0481a19087ad9898b767da1c1ce4a
+maps/khmodern.mapinfo: 5615902b459ab07cbd9c3a958320abc02b2808c1c098e49dfcb8a82e30b46e05
+
+stock dedicated console (selected lines)
+Loaded maps/khmodern.ent
+Generating khexactdiam.mapinfo: analyzing maps/khexactdiam.ent
+Loaded maps/khmodern.ent
+Generating khfewstarts.mapinfo: analyzing maps/khfewstarts.ent
+Loaded maps/khmodern.ent
+Generating khlargeenough.mapinfo: analyzing maps/khlargeenough.ent
+Loaded maps/khmodern.ent
+"fraglimit" is "650" ["0"]
+"timelimit" is "18" ["0"]
+"g_keyhunt_teams" is "4" ["0"]
+"leadlimit" is "75" ["0"]
+"g_keyhunt_teams_override" is "0" ["0"]
+Maps available (4): khdefault khlargeenough khlegacy khmodern
+"g_keyhunt_point_limit" is "-1" ["-1"]
+Loaded maps/khmodern.ent
+"fraglimit" is "400" ["0"]
+"timelimit" is "18" ["0"]
+"g_keyhunt_teams" is "4" ["0"]
+"leadlimit" is "0" ["0"]
+"g_keyhunt_teams_override" is "2" ["0"]
+Maps available (4): khdefault khlargeenough khlegacy khmodern
+"g_keyhunt_point_limit" is "400" ["-1"]
+Loaded maps/khlegacy.ent
+"fraglimit" is "700" ["0"]
+"timelimit" is "17" ["0"]
+"g_keyhunt_teams" is "4" ["0"]
+"leadlimit" is "85" ["0"]
+"g_keyhunt_teams_override" is "0" ["0"]
+Maps available (4): khdefault khlargeenough khlegacy khmodern
+"g_keyhunt_point_limit" is "-1" ["-1"]
+Loaded maps/khdefault.ent
+"fraglimit" is "1000" ["0"]
+"timelimit" is "20" ["0"]
+"g_keyhunt_teams" is "3" ["0"]
+"leadlimit" is "0" ["0"]
+"g_keyhunt_teams_override" is "0" ["0"]
+Maps available (4): khdefault khlargeenough khlegacy khmodern
+"g_keyhunt_point_limit" is "-1" ["-1"]
+Loaded maps/khdefault.ent
+"fraglimit" is "0" ["0"]
+"timelimit" is "20" ["0"]
+"g_keyhunt_teams" is "3" ["0"]
+"leadlimit" is "0" ["0"]
+"g_keyhunt_teams_override" is "0" ["0"]
+Maps available (4): khdefault khlargeenough khlegacy khmodern
+"g_keyhunt_point_limit" is "0" ["-1"]
+
+native dedicated console (selected lines)
+[LoadTimeline] host khmodern — load begin → ready, 1431 ms total
+"fraglimit" is "650"
+"timelimit" is "18"
+"g_keyhunt_teams" is "4"
+"leadlimit" is "75"
+"g_keyhunt_teams_override" is "0"
+Maps available (19): afterslime atelier boil bromine dance erbium glowplant implosion khdefault khlargeenough khlegacy khmodern opium runningman runningmanctf silentsiege solarium stormkeep trident
+"g_keyhunt_point_limit" is "-1"
+[LoadTimeline] host khmodern — load begin → ready, 300 ms total
+"fraglimit" is "400"
+"timelimit" is "18"
+"g_keyhunt_teams" is "4"
+"leadlimit" is "0"
+"g_keyhunt_teams_override" is "2"
+Maps available (19): afterslime atelier boil bromine dance erbium glowplant implosion khdefault khlargeenough khlegacy khmodern opium runningman runningmanctf silentsiege solarium stormkeep trident
+"g_keyhunt_point_limit" is "400"
+[LoadTimeline] host khlegacy — load begin → ready, 341 ms total
+"fraglimit" is "700"
+"timelimit" is "17"
+"g_keyhunt_teams" is "4"
+"leadlimit" is "85"
+"g_keyhunt_teams_override" is "0"
+Maps available (19): afterslime atelier boil bromine dance erbium glowplant implosion khdefault khlargeenough khlegacy khmodern opium runningman runningmanctf silentsiege solarium stormkeep trident
+"g_keyhunt_point_limit" is "-1"
+[LoadTimeline] host khdefault — load begin → ready, 325 ms total
+"fraglimit" is "1000"
+"timelimit" is "20"
+"g_keyhunt_teams" is "3"
+"leadlimit" is "0"
+"g_keyhunt_teams_override" is "0"
+Maps available (19): afterslime atelier boil bromine dance erbium glowplant implosion khdefault khlargeenough khlegacy khmodern opium runningman runningmanctf silentsiege solarium stormkeep trident
+"g_keyhunt_point_limit" is "-1"
+[LoadTimeline] host khdefault — load begin → ready, 314 ms total
+"fraglimit" is "0"
+"timelimit" is "20"
+"g_keyhunt_teams" is "3"
+"leadlimit" is "0"
+"g_keyhunt_teams_override" is "0"
+Maps available (19): afterslime atelier boil bromine dance erbium glowplant implosion khdefault khlargeenough khlegacy khmodern opium runningman runningmanctf silentsiege solarium stormkeep trident
+"g_keyhunt_point_limit" is "0"

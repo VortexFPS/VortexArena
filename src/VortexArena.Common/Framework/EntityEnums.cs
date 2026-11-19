@@ -72,6 +72,7 @@ public enum MoveFilter
     Missile = 2,
     WorldOnly = 3,
     HitModel = 4,
+    NormalWithVisibleTriggers = 5, // Diagnostic aim: include modeled triggers without making them solid.
 }
 
 /// <summary>Entity flag bits (QC FL_*).</summary>

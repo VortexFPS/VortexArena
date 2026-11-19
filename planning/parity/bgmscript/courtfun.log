@@ -1,0 +1,11 @@
+[MapBgm] 'maps/courtfun.bgs': 0 model(s), 36 emitter(s) bound.
+[BGM-PROBE] emitter=electricity_sparks lane=b time=-1.000 amplitude=-1.000 noteOn=False mode=OnlyAtToggle emissions=1
+[NetGame] map music: 'cdtracks/track009' (from mapinfo/worldspawn)
+[BGM-PROBE] emitter=smoking lane=c time=-1.000 amplitude=-1.000 noteOn=False mode=OnlyAtToggle emissions=1
+[BGM-PROBE] emitter=steam lane=a time=0.683 amplitude=0.949 noteOn=True mode=Absolute emissions=3
+[LoadTimeline] host courtfun — load begin → ready, 9612 ms total
+[BGM-PROBE] emitter=electricity_sparks lane=b time=8.704 amplitude=1.000 noteOn=True mode=OnlyAtToggle emissions=2
+[BGM-PROBE] emitter=smoking lane=c time=9.472 amplitude=0.762 noteOn=True mode=OnlyAtToggle emissions=2
+[ServerNet] peer 1895710950 connected (awaiting handshake).
+[ServerNet] peer 1895710950 accepted as 'player' (netId 1895710950, id 99c67714).
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.

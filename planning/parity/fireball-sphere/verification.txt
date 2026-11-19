@@ -1,0 +1,4 @@
+Passed!  - Failed:     0, Passed:    18, Skipped:     0, Total:    18, Duration: 143 ms - VortexArena.Tests.dll (net8.0)
+Build succeeded.
+    36 Warning(s)
+    0 Error(s)

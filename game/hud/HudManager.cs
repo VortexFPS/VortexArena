@@ -146,11 +146,20 @@ public partial class Hud : CanvasLayer
         Powerups     = Get<PowerupsPanel>();
         Scoreboard   = Get<ScoreboardPanel>();
         CenterPrint  = Get<CenterPrintPanel>();
+        ulong centerPrintId = CenterPrint.GetInstanceId();
+        Menu.MenuState.Interp?.RegisterCommand("localprint", args =>
+        {
+            if (args.Count < 2 || string.IsNullOrEmpty(args[1]))
+                VortexArena.Common.Diagnostics.Log.Help("Usage: cl_cmd localprint \"<message>\"");
+            else if (GodotObject.InstanceFromId(centerPrintId) is CenterPrintPanel panel && panel.IsInsideTree())
+                panel.Add(args[1]);
+        }, "show a center-screen message on this client");
         Notify       = Get<NotifyPanel>();
         Crosshair    = Get<CrosshairPanel>();
         Timer        = Get<TimerPanel>();
         InfoMessages = Get<InfoMessagesPanel>();
         Vehicle      = Get<VehicleHud>();
+        Vehicle.CrosshairColors = Crosshair;
         RaceTimer    = Get<RaceTimerPanel>();
         Checkpoints  = Get<CheckpointsPanel>();
         Vote         = Get<VotePanel>();

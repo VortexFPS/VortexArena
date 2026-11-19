@@ -34,25 +34,32 @@ public static class AutospriteShaderGen
     /// </summary>
     public static string Generate(ShaderDef def, ShaderStage stage, bool axial)
     {
+        bool crylink = def.Name is "crylink_projectile_core" or "crylink_projectile_long";
         var sb = new StringBuilder(1536);
         sb.Append("// VortexArena autosprite").Append(axial ? "2" : "").Append(" deform shader for '")
           .Append(Sanitize(def.Name)).Append("'. Generated in C#.\n");
         sb.Append("shader_type spatial;\n");
         // skip_vertex_transform: VERTEX/NORMAL are assigned in VIEW space by our vertex() below.
         // cull_disabled: the re-aimed quad's winding depends on the view; both faces must draw.
-        // blend_add: Q3 `blendfunc add` — and deliberately NOT `unshaded`: DP lights the base texture
-        // (rgbGen lightingDiffuse) and only the _glow companion is fullbright (EMISSION).
+        // A lightingDiffuse billboard has a lit base and emissive glow. A fullbright stage
+        // such as the relic sign uses its texture color directly.
         // fog_disabled: Godot fogs transparent surfaces toward the FOG COLOR, which on an additive
         // quad paints the black region as a haze-colored box; DP instead fades additive surfaces
         // toward black in fog. Staying fog-free is the lesser divergence for a small short-lived bolt.
-        sb.Append("render_mode skip_vertex_transform, cull_disabled, blend_add, fog_disabled;\n\n");
+        sb.Append("render_mode skip_vertex_transform, cull_disabled, blend_add, fog_disabled");
+        if (DpMaterialRules.Plan(def).FullBright)
+            sb.Append(", unshaded");
+        sb.Append(";\n\n");
 
         sb.Append("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic;\n");
         sb.Append("uniform sampler2D glow_tex : source_color, filter_linear_mipmap_anisotropic;\n");
         // Per-entity DP colormod/glowmod (folded into lightingDiffuse / the glow add). Fragment-stage
-        // instance uniforms — the working kind. Identity by default.
-        sb.Append("instance uniform vec3 colormod : source_color = vec3(1.0, 1.0, 1.0);\n");
-        sb.Append("instance uniform vec3 glowmod : source_color = vec3(1.0, 1.0, 1.0);\n\n");
+        // instance uniforms. The model shares these slots with opaque and layered materials.
+        sb.Append("instance uniform vec3 colormod : source_color, instance_index(2) = vec3(1.0, 1.0, 1.0);\n");
+        sb.Append("instance uniform vec3 glowmod : source_color, instance_index(3) = vec3(1.0, 1.0, 1.0);\n\n");
+
+        if (crylink)
+            sb.Append("instance uniform float effect_opacity : instance_index(15) = 1.0;\n");
 
         // ---- vertex(): rebuild each corner from its baked quad frame, in view space ----
         sb.Append("void vertex() {\n");
@@ -93,7 +100,7 @@ public static class AutospriteShaderGen
         sb.Append("    EMISSION = texture(glow_tex, uv).rgb * glowmod;  // _glow companion, fullbright add\n");
         // Q3 add is GL_ONE GL_ONE; Godot blend_add is srcAlpha*ONE, so alpha must be 1 — black texels
         // self-erase under the add, exactly like DP.
-        sb.Append("    ALPHA = 1.0;\n");
+        sb.Append(crylink ? "    ALPHA = c.a * effect_opacity;\n" : "    ALPHA = 1.0;\n");
         sb.Append("}\n");
         return sb.ToString();
     }

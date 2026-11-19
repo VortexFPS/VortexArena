@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Text;
 using Godot;
@@ -144,6 +145,11 @@ public static class MenuState
         UserPaths.MigrateLegacyUserData();
 
         _cvars ??= new CvarService();
+        _cvars.Changed += name =>
+        {
+            if (name == "g_mapinfo_q3compat")
+                MapInfoCache.Invalidate();
+        };
 
         // --- mount the asset VFS (same gamedir the match uses; resolved identically) ---
         try
@@ -166,6 +172,7 @@ public static class MenuState
                 string userGameDir = UserPaths.GameDir;
                 vfs.MountContentRoot(userGameDir);
                 _vfs = vfs;
+                MapInfoCache.Invalidate();
                 VortexArena.Common.Diagnostics.Log.Info(
                     $"[MenuState] user gamedir mounted: {userGameDir} (drop .pk3 packs in its maps/ subfolder).");
             }
@@ -200,7 +207,7 @@ public static class MenuState
         //     is KEPT (MenuState.Interp) so the in-game console shares this command buffer — runtime `exec`, the
         //     boot-time aliases, and the shared cvar store are all already wired into it. The file reader resolves
         //     through the VFS (returns null when unmounted, so a stray runtime `exec` is a no-op, not a crash). ---
-        Func<string, string?> reader = p => _vfs is not null && _vfs.Exists(p) ? _vfs.ReadText(p) : null;
+        Func<string, string?> reader = ReadMountedConfig;
         if (_vfs is not null)
         {
             try
@@ -364,15 +371,9 @@ public static class MenuState
         VirtualFileSystem.RescanResult r = _vfs.Rescan();
         _sharedAssets?.Assets.ReloadShaders();
 
-        // The menu-side caches are plain dictionaries owned by the main thread, and this is reachable from the
-        // SERVER console — which on a threaded host dispatches commands on the sim thread. Posting the
-        // invalidation keeps that off a foreign thread. From the main thread it just means "at the next idle",
-        // which is well before any menu screen can read them again.
-        Callable.From(() =>
-        {
-            MapInfoCache.Invalidate();
-            MenuSkin.InvalidateImageCache();
-        }).CallDeferred();
+        // Rotation can query the new catalog immediately. The image cache is owned by the menu thread.
+        MapInfoCache.Invalidate();
+        Callable.From(MenuSkin.InvalidateImageCache).CallDeferred();
 
         // The real count off the search path, not MapList.Available() — that one substitutes a hardcoded
         // fallback list when nothing is installed, which would make an empty install report 21 maps.
@@ -454,17 +455,108 @@ public static class MenuState
     /// </summary>
     public static void SaveUserConfig()
     {
-        if (_cvars is null)
+        if (!CanSaveConfig())
             return;
-        // DP Host_SaveConfig's guards: no config write on automation runs (-benchmark/-capturedemo ⇔ our
-        // --quit-after-seconds/--no-save-config) and none from a session that never booted the config chain
-        // (host_framecount < 3 ⇔ !_booted) — either would overwrite the player's real prefs with junk.
-        if (!_booted || ConfigSaveSuppressedBy is not null)
+        WriteConfig("config.cfg", forExec: false);
+    }
+
+    /// <summary>Write a snapshot of the live preferences under the writable gamedir, as DP's named saveconfig does.</summary>
+    internal static bool SaveNamedConfig(string filename)
+    {
+        if (!CanSaveConfig())
+            return false;
+        if (!VortexArena.Legacy.Csqc.LegacyQcHost.IsSafePath(filename) || filename.EndsWith('/'))
+        {
+            GD.PushWarning($"[MenuState] invalid saveconfig filename: '{filename}'.");
+            return false;
+        }
+
+        return WriteConfig($"{UserPaths.GameDirFolderName}/{filename}", forExec: true);
+    }
+
+    private static string? ReadMountedConfig(string filename)
+    {
+        if (!VortexArena.Legacy.Csqc.LegacyQcHost.IsSafePath(filename)) return null;
+        // The writable gamedir is the highest mount. Its startup index predates newly saved configs.
+        string local = Path.Combine(UserPaths.BaseDir, UserPaths.GameDirFolderName, filename);
+        if (File.Exists(local)) return File.ReadAllText(local);
+        return _vfs?.Exists(filename) == true ? _vfs.ReadText(filename) : null;
+    }
+
+    private static bool WriteConfig(string relativePath, bool forExec)
+    {
+        // Keep the last successful config until the complete replacement is on disk.
+        string? pending = null;
+        try
+        {
+            string path = UserPaths.Resolve(relativePath);
+            string temporaryPath = Path.Combine(Path.GetDirectoryName(path)!, Path.GetRandomFileName());
+            var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = System.IO.FileAccess.Write };
+            if (!OperatingSystem.IsWindows())
+                options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            using (var stream = new FileStream(temporaryPath, options))
+            {
+                pending = temporaryPath;
+                using var writer = new StreamWriter(stream);
+                writer.Write(SerializeConfig(forExec));
+            }
+            if (!OperatingSystem.IsWindows() && File.Exists(path))
+                File.SetUnixFileMode(temporaryPath, File.GetUnixFileMode(path) & (UnixFileMode)0x1ff);
+            File.Move(temporaryPath, path, overwrite: true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[MenuState] could not write {relativePath}: {ex.Message}");
+            if (pending is not null)
+            {
+                try { File.Delete(pending); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+            return false;
+        }
+    }
+
+    internal static void FactoryReset()
+    {
+        if (SaveNamedConfig("backup.cfg"))
+            ExecuteMenuConfig("default.cfg");
+    }
+
+    /// <summary>Execute an explicitly selected menu config through the shared, mounted command interpreter.</summary>
+    internal static void ExecuteMenuConfig(string filename)
+    {
+        if (_interp?.ExecuteFile(filename, forwardUnknownCommands: false) != true)
+        {
+            GD.Print($"[MenuState] couldn't exec {filename}");
             return;
+        }
+
+        // The stock default.cfg reinstates upstream values and binds. ADR-0018 keeps the Vortex layer last.
+        // The boot baseline stays locked, and cvars the scripts do not assign retain their current values.
+        if (filename.Equals("default.cfg", StringComparison.OrdinalIgnoreCase))
+        {
+            _interp.ExecuteFile(ConfigLoader.VortexCommonEntry, forwardUnknownCommands: false);
+            _interp.ExecuteFile("vortex-binds.cfg", forwardUnknownCommands: false);
+        }
+    }
+
+    // DP Host_SaveConfig guards: skip automated runs and sessions that never booted the config chain.
+    private static bool CanSaveConfig() => _booted && _cvars is not null && ConfigSaveSuppressedBy is null;
+
+    private static string SerializeConfig(bool forExec)
+    {
+        var cvars = Cvars;
         var sb = new StringBuilder();
         sb.Append("// VortexArena — saved menu preferences (archived cvars + keybinds). Auto-generated; edits may be overwritten.\n");
-        foreach (string name in _cvars.ArchivedNamesToPersist.OrderBy(n => n, StringComparer.Ordinal))
-            sb.Append($"seta {name} \"{Escape(_cvars.GetString(name))}\"\n");
+        foreach (string name in cvars.ArchivedNamesToPersist.OrderBy(n => n, StringComparer.Ordinal))
+        {
+            string value = Escape(cvars.GetPersistentString(name));
+            // Named configs run through command expansion. The primary config has a literal settings reader.
+            if (forExec) value = value.Replace("$", "$$");
+            sb.Append($"seta {name} \"{value}\"\n");
+        }
 
         // Dump the runtime keybind table (DP Key_WriteBindings) as `bind "KEY" "cmd"` lines so the user's
         // rebinds persist alongside the archived cvars — replacing the legacy user://settings.cfg keybind
@@ -472,13 +564,7 @@ public static class MenuState
         // after binds-xonotic.cfg, so a rebind wins over the default.
         BindInput.WriteBindings(sb);
 
-        using FileAccess? f = FileAccess.Open(UserConfigPath, FileAccess.ModeFlags.Write);
-        if (f is null)
-        {
-            GD.PushWarning($"[MenuState] could not write {UserConfigPath}: {FileAccess.GetOpenError()}");
-            return;
-        }
-        f.StoreString(sb.ToString());
+        return sb.ToString();
     }
 
     /// <summary>Parse a single <c>set</c>/<c>seta</c> line into (name, value), handling a quoted value. </summary>

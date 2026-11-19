@@ -34,7 +34,7 @@ Important Xonotic shipped defaults: `cl_bob 0`, `cl_bob2 0`, `cl_rollangle 0`, `
 - **HUD_Damage:** accumulator `myhealth_flash` rises with `dmg_take*hud_damage_factor`, decays by `hud_damage_fade_rate`/s, alpha = `flash - pain_threshold` (with a near-death sin-pulsing threshold), drawn as `gfx/blood` (or a gentle solid colour). Constants `hud_damage 0.55`, `hud_damage_factor 0.025`, `hud_damage_fade_rate 0.75`, `hud_damage_maxalpha 1.5`, `hud_damage_pain_threshold 0.1`, `hud_damage_color "1 0 0"`, the `*_pain_threshold_lower*` set.
 - **HUD_Contents:** low-passed `contentavgalpha` fades in (`hud_contents_fadeintime 0.02`) / out (`hud_contents_fadeouttime 0.25`) tinting per content: water `0.4 0.6 1.0`@0.5, lava `1.0 0.3 0.0`@0.7, slime `0.0 0.8 0.0`@0.7.
 - **View_PostProcessing:** sets `r_glsl_postprocess_uservec1/2` for damage/content blur and powerup edge-sharpen.
-- **View_NightVision:** yellow tint + animated noise when `r_fakelight>=2`/`r_fullbright` (and server allows).
+- **View_NightVision:** multiply the scene by `0.5 1 0.3`, then add `gfx/nightvision-bg` and `gfx/nightvision-fg` with animated UVs and independent pink noise. This runs when `r_fakelight >= 2` or `r_fullbright` is active and the server does not set `SERVERFLAG_ALLOW_FULLBRIGHT`.
 
 ### Zoom reticle  (`crosshair.qc:DrawReticle`)
 - Draws `gfx/reticle_normal` (generic `+zoom`) or the weapon scope (`w_reticle`, type 2) while zooming, alpha = `max(0.25, current_zoomfraction) * cl_reticle_*_alpha`; suppressed when dead/spectating/chase (unless `cl_reticle_chase`). `cl_reticle 1`, `cl_reticle_stretch 0`.

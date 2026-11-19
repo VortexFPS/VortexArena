@@ -156,7 +156,7 @@ public sealed class OkRpc : Weapon
         missile.DamagedByContents = true;
 
         // W_SetupProjVelocity_Basic(missile, speed, 0) — launch straight along shotdir at speed.
-        missile.Velocity = shot.Dir * Cvars.Speed;
+        missile.Velocity = WeaponFiring.CalculateProjectileVelocity(actor, shot.Dir * Cvars.Speed);
         missile.Angles = QMath.VecToAngles(missile.Velocity);
 
         // cnt = time + lifetime; m_chainsaw_damage = 0 (reuse Frags as the accumulated-damage flag).

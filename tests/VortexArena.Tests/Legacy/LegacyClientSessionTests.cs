@@ -22,6 +22,70 @@ namespace VortexArena.Tests.Legacy;
 /// </summary>
 public partial class LegacyClientSessionTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Demo_Closes_Immediately_At_Eof_Or_Recorded_Disconnect(bool recordedDisconnect)
+    {
+        using Rig rig = new(localProgram: false);
+        using MemoryStream stream = new();
+        using (BinaryWriter writer = new(stream, Encoding.ASCII, leaveOpen: true))
+        {
+            writer.Write("-1\n"u8);
+            if (recordedDisconnect)
+            {
+                writer.Write(1);
+                writer.Write(0f);
+                writer.Write(0f);
+                writer.Write(0f);
+                writer.Write((byte)Svc.Disconnect);
+            }
+        }
+        stream.Position = 0;
+        rig.Session.PlayDemo(stream, 0, timeDemo: true);
+
+        Assert.False(rig.Session.ReadDemo());
+        Assert.False(rig.Session.DemoPlaying);
+        Assert.False(stream.CanRead);
+        Assert.Equal(DpClientState.Disconnected, rig.Session.Client.State);
+    }
+
+    [Fact]
+    public void Timedemo_reads_one_record_per_frame_before_during_and_after_signon()
+    {
+        using Rig rig = new(localProgram: false);
+        using MemoryStream stream = new();
+        using (BinaryWriter writer = new(stream, Encoding.ASCII, leaveOpen: true))
+        {
+            writer.Write("-1\n"u8);
+            void Record(Action<DpMessageWriter> encode)
+            {
+                DpMessageWriter message = new();
+                encode(message);
+                writer.Write(message.WrittenSpan.Length);
+                writer.Write(0f);
+                writer.Write(0f);
+                writer.Write(0f);
+                writer.Write(message.WrittenSpan);
+            }
+            Record(w => DpServerMessageParserTests.WriteServerInfo(w));
+            for (int stage = 1; stage <= 3; stage++)
+                Record(w => { w.WriteByte(25); w.WriteByte(stage); });
+            Record(w => { w.WriteByte((int)Svc.Entities); w.WriteLong(1); w.WriteLong(0); w.WriteShort(0x8000); });
+            Record(w => w.WriteByte((int)Svc.Nop));
+        }
+        stream.Position = 0;
+        rig.Session.PlayDemo(stream, 0, timeDemo: true);
+        for (int frame = 1; frame <= 6; frame++)
+        {
+            Assert.True(rig.Session.ReadDemo());
+            Assert.Equal(frame, rig.Session.DemoMessages);
+            Assert.Equal(Math.Min(frame - 1, DpProtocol.Signons), rig.Session.State.Signon);
+        }
+        Assert.Equal(0, rig.Session.MessagesNotDecoded);
+        Assert.False(rig.Session.ReadDemo());
+    }
+
     /// <summary>
     /// A client program that reads two bytes per entity update into globals and counts its frames -
     /// enough to show that the bytes of svc_csqcentities reach the program and the parser resumes at
@@ -153,6 +217,37 @@ public partial class LegacyClientSessionTests
             Vfs.Dispose();
             if (Directory.Exists(Root)) Directory.Delete(Root, recursive: true);
         }
+    }
+
+    [Fact]
+    public void Session_samples_connect_timeout_at_accept_and_message_timeout_on_fresh_server_traffic()
+    {
+        using Rig rig = new(localProgram: false);
+        rig.Cvars.Set("net_connecttimeout", "12");
+        rig.Cvars.Set("net_messagetimeout", "6");
+        rig.Session.Connect(0);
+        rig.Settle();
+        DpClient client = rig.Session.Client;
+        Assert.Equal(DpClientState.Connected, client.State);
+        double accepted = client.Channel.LastMessageTime;
+        Assert.Equal(accepted + 12, client.Channel.TimeoutAt);
+        rig.Cvars.Set("net_connecttimeout", "4");
+        Assert.Equal(accepted + 12, client.Channel.TimeoutAt);
+
+        rig.Unreliable(w => w.WriteByte(1)); // svc_nop
+        rig.Step();
+        double received = rig.Now;
+        Assert.Equal(received + 6, client.Channel.TimeoutAt);
+        rig.Cvars.Set("net_messagetimeout", "2");
+        Assert.Equal(received + 6, client.Channel.TimeoutAt);
+        rig.Unreliable(w => w.WriteByte(1));
+        rig.Step();
+        double deadline = rig.Now + 2;
+        Assert.Equal(deadline, client.Channel.TimeoutAt);
+        client.Update(deadline);
+        Assert.Equal(DpClientState.Connected, client.State);
+        client.Update(deadline + 0.01);
+        Assert.Equal(DpClientState.TimedOut, client.State);
     }
 
     [Fact]

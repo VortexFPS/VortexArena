@@ -11,14 +11,10 @@
 // angles_y) for the camera orientation.
 //
 // Port notes:
-//  * WarpZoneLib_ExactTrigger_Init/Touch are mirrored by MapMover.InitTrigger (SOLID_TRIGGER + bbox) and a
-//    box-overlap test, exactly as MapVolumes does for trigger_conveyor/func_ladder.
 //  * INITPRIO_FINDTARGET (anchor resolve) is queued at spawn and drained in MapObjectsRegistry.RunPostSpawn.
-//  * There is NO client camera consumer yet (the CSQC side rotates the view to the start→end line; the port's
-//    client is free-look only). So the trigger spawns, ticks, and stamps player.ViewLoc faithfully, but the
-//    camera does not yet lock to the region. Documented in followups. (The Net_LinkEntity/send halves are
-//    client networking — out of scope for the server port.)
+//  * Native snapshots carry the active region's anchors and flags to prediction and the viewed camera.
 
+using System.Numerics;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Services;
 
@@ -28,8 +24,6 @@ using VortexArena.Common.Services;
 
 namespace VortexArena.Common.Gameplay
 {
-    using VortexArena.Common.Framework;
-
     /// <summary><c>trigger_viewlocation</c> + <c>target_viewlocation_start/end</c>. Registered by <see cref="MapObjectsRegistry"/>.</summary>
     public static class ViewLocation
     {
@@ -52,10 +46,31 @@ namespace VortexArena.Common.Gameplay
                 return;
             }
 
-            MapMover.InitTrigger(this_); // QC WarpZoneLib_ExactTrigger_Init(this, false): SOLID_TRIGGER + bbox.
+            // WarpZoneLib_ExactTrigger_Init keeps angles for the brush transform and treats
+            // authored bounds as an explicit request for a box.
+            if (this_.MoveDir == Vector3.Zero && this_.Angles != Vector3.Zero)
+                this_.MoveDir = Math.QMath.Forward(this_.Angles);
+            Vector3 mins = this_.Mins;
+            Vector3 maxs = this_.Maxs;
+            bool useBounds = mins != Vector3.Zero || maxs != Vector3.Zero;
+            this_.Solid = Solid.Trigger;
+            this_.MoveType = MoveType.None;
+            if (Api.Services is not null)
+            {
+                if (!string.IsNullOrEmpty(this_.Model))
+                    Api.Entities.SetModel(this_, this_.Model);
+                if (!useBounds)
+                {
+                    mins = this_.Mins;
+                    maxs = this_.Maxs;
+                }
+                float scale = this_.ScaleFactor == 0f ? 1f : this_.ScaleFactor;
+                Api.Entities.SetSize(this_, mins * scale, maxs * scale);
+            }
             MapMover.IndexRegister(this_);
 
-            // QC: InitializeEntity(this, viewloc_init, INITPRIO_FINDTARGET);
+            // The deferred anchor resolution schedules the first think.
+            this_.Think = trigger => ViewLocThink(trigger, useBounds);
             Queue(this_);
         }
 
@@ -108,10 +123,7 @@ namespace VortexArena.Common.Gameplay
             if (this_.GoalEntity is null)
                 this_.GoalEntity = this_.Enemy;
 
-            // QC Net_LinkEntity(trigger_viewloc_send) is client networking — the shared-entity facade carries it.
-
-            this_.Think = ViewLocThink;
-            this_.NextThink = MapMover.Now();
+            this_.NextThink = MathF.Max(MapMover.Now(), float.Epsilon);
         }
 
         /// <summary>
@@ -119,7 +131,7 @@ namespace VortexArena.Common.Gameplay
         /// trigger, then re-stamp it onto every player currently overlapping the volume. Runs every frame (NOT
         /// touch — touch can't "untouch" with several clients in one trigger).
         /// </summary>
-        private static void ViewLocThink(Entity this_)
+        private static void ViewLocThink(Entity this_, bool useBounds)
         {
             if (Api.Services is not null)
             {
@@ -135,23 +147,29 @@ namespace VortexArena.Common.Gameplay
                         continue;
                     if ((it.Flags & EntFlags.Client) == 0)
                         continue;
-                    if (ExactTriggerTouch(this_, it))
+                    if (ExactTriggerTouch(this_, it, useBounds))
                         it.ViewLoc = this_;
                 }
             }
 
-            this_.NextThink = MapMover.Now();
+            this_.NextThink = MathF.Max(MapMover.Now(), float.Epsilon);
         }
 
-        /// <summary>
-        /// QC <c>WarpZoneLib_ExactTrigger_Touch(trig, ent, …)</c> server-side reduction: an AABB overlap of the
-        /// toucher's box against the trigger's volume (warpzone-clip refinement is rendering-only). Matches the
-        /// box test MapVolumes/Teleporters use for their trigger volumes.
-        /// </summary>
-        private static bool ExactTriggerTouch(Entity trig, Entity ent)
-            => ent.AbsMin.X <= trig.AbsMax.X && ent.AbsMax.X >= trig.AbsMin.X
-            && ent.AbsMin.Y <= trig.AbsMax.Y && ent.AbsMax.Y >= trig.AbsMin.Y
-            && ent.AbsMin.Z <= trig.AbsMax.Z && ent.AbsMax.Z >= trig.AbsMin.Z;
+        /// <summary>QC <c>WarpZoneLib_ExactTrigger_Touch</c> bounds check followed by the brush clip.</summary>
+        private static bool ExactTriggerTouch(Entity trig, Entity ent, bool useBounds)
+        {
+            bool quake3Compat = CompatRemaps.IsQ3Compat;
+            Vector3 padding = quake3Compat ? Vector3.Zero : Vector3.One;
+            Vector3 min = ent.AbsMin - padding;
+            Vector3 max = ent.AbsMax + padding;
+            if (min.X > trig.AbsMax.X || max.X < trig.AbsMin.X ||
+                min.Y > trig.AbsMax.Y || max.Y < trig.AbsMin.Y ||
+                min.Z > trig.AbsMax.Z || max.Z < trig.AbsMin.Z)
+                return false;
+
+            return useBounds || trig.ModelIndex == 0 ||
+                Api.Trace.BoxTouchesBrushModel(trig, ent, ent.Mins - padding, ent.Maxs + padding, quake3Compat);
+        }
 
         // ===================================================================
         //  target_viewlocation_start / _end (+ compat alias)
@@ -182,7 +200,6 @@ namespace VortexArena.Common.Gameplay
             // QC: .float angle; if(this.angle) this.angles_y = this.angle;
             // The single-float `angle` anglehack is already folded into Angles.Y by the field-parse layer
             // (MapObjectFieldsExtra / GameWorld), so Angles already carries it — no extra step needed here.
-            // QC Net_LinkEntity(viewloc_send) is client networking — carried by the shared-entity facade.
             MapMover.IndexRegister(this_);
         }
     }

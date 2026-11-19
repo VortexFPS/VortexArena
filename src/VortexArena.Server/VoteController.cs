@@ -150,7 +150,7 @@ public sealed class VoteController
         {
             case "call": CmdCall(ctx); break;
             case "yes": CmdSelect(ctx, SelectAccept); break;
-            case "no": CmdNo(ctx); break;
+            case "no": CmdSelect(ctx, SelectReject); break;
             case "abstain": CmdSelect(ctx, SelectAbstain); break;
             case "stop": CmdStop(ctx); break;
             case "status": CmdStatus(ctx); break;
@@ -303,6 +303,10 @@ public sealed class VoteController
         if (Bans.PlayerInList(voter, "g_voteban_list")) { ctx.Print("^1You are banned from voting."); return; }
         if (!Active) { ctx.Print("^1No vote called."); return; }
         if (SelectionOf(voter) != SelectNull && !Cvars.Bool("sv_vote_change")) { ctx.Print("^1You have already voted."); return; }
+
+        if (selection == SelectReject && ReferenceEquals(voter, Caller) && Cvars.Bool("sv_vote_no_stops_vote"))
+        { Stop(voter); return; }
+
         _selection[voter] = selection;
         ctx.Print(selection switch
         {
@@ -312,14 +316,6 @@ public sealed class VoteController
         });
         if (!Cvars.Bool("sv_vote_singlecount"))
             Count(firstCount: false);
-    }
-
-    private void CmdNo(CommandContext ctx)
-    {
-        Player? voter = ctx.Caller;
-        if (voter is not null && Active && ReferenceEquals(voter, Caller) && Cvars.Bool("sv_vote_no_stops_vote"))
-        { Stop(voter); ctx.Print("^1You stopped your vote."); return; }
-        CmdSelect(ctx, SelectReject);
     }
 
     private void CmdStop(CommandContext ctx)
@@ -373,13 +369,14 @@ public sealed class VoteController
         return true;
     }
 
-    /// <summary>Withdraw a voter (disconnect) so their ballot no longer counts.</summary>
+    /// <summary>Clear a departed client's state and recount against the remaining roster.</summary>
     public void RemoveVoter(Player voter)
     {
-        bool changed = _selection.Remove(voter);
+        _selection.Remove(voter);
         _masters.Remove(voter);
         _waitTime.Remove(voter);
-        if (changed && Active) Count(firstCount: false);
+        if (Active && !voter.IsBot)
+            Count(firstCount: false);
     }
 
     /// <summary>QC <c>VoteStop</c>: cancel the active vote without running it.</summary>

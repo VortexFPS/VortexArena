@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using VortexArena.Game.Text;   // DpText: DarkPlaces-accurate text (font slots, baked outline, colour lift)
+using VortexArena.Game.Menu;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Gameplay.Scoring;
@@ -17,7 +18,7 @@ namespace VortexArena.Game.Hud;
 /// ScoreString), rows sorted by the per-mode primary/secondary keys (Scoreboard_ComparePlayerScores), grouped
 /// into team sections with per-team totals in teamplay. We port that faithfully (pragmatically): a per-mode
 /// column list, value formatting, per-mode sort, team panels, plus the map-stats / respawn / fraglimit header
-/// and (stubbed) accuracy + rankings blocks.
+/// and the accuracy, item stats and rankings blocks.
 ///
 /// Data source: other players' columns/name/team are a networked thing. The net layer pushes rows via
 /// <see cref="SetWireRows"/> (the decoded <see cref="VortexArena.Net.ScoreboardWire"/> — full column values per
@@ -169,13 +170,15 @@ public partial class ScoreboardPanel : HudPanel
         /// <summary>QC <c>.handicap_level</c> (entcs, scoreboard.qc:1003): 0..16; 0 = no handicap. When nonzero the
         /// row draws the <c>player_handicap</c> icon tinted white@1 → red@16 next to the name.</summary>
         public readonly int HandicapLevel;
+        public readonly bool Ignored;
+        public readonly int ClientSlotOrder;
         /// <summary>QC <c>pl.sv_entnum</c> stand-in: the player's stable net id, used for the playerid '#N' name
-        /// prefix (Scoreboard_AddPlayerId) and the final sort tiebreak. 0 = none.</summary>
+        /// prefix (Scoreboard_AddPlayerId). 0 = none.</summary>
         public readonly int NetId;
 
         public ScoreRow(string name, int score, int team = 0, int deaths = -1, int ping = -1,
             bool isLocal = false, int[]? columns = null, bool eliminated = false, float packetLoss = 0f,
-            int handicapLevel = 0, int netId = 0)
+            int handicapLevel = 0, int netId = 0, bool ignored = false, int clientSlotOrder = 0)
         {
             Name = name ?? "";
             Score = score;
@@ -187,6 +190,8 @@ public partial class ScoreboardPanel : HudPanel
             Eliminated = eliminated;
             Columns = columns;
             HandicapLevel = handicapLevel;
+            Ignored = ignored;
+            ClientSlotOrder = clientSlotOrder;
             NetId = netId;
         }
 
@@ -231,7 +236,14 @@ public partial class ScoreboardPanel : HudPanel
     {
         public readonly string Name;   // may carry ^N color codes
         public readonly int Ping;      // ms; &lt; 0 = unknown (bot / not networked)
-        public SpectatorRow(string name, int ping = -1) { Name = name ?? ""; Ping = ping; }
+        public readonly bool Ignored;
+
+        public SpectatorRow(string name, int ping = -1, bool ignored = false)
+        {
+            Name = name ?? "";
+            Ping = ping;
+            Ignored = ignored;
+        }
     }
 
     private readonly List<SpectatorRow> _spectators = new();
@@ -245,9 +257,19 @@ public partial class ScoreboardPanel : HudPanel
     public bool Active
     {
         get => _active;
-        set { if (_active != value) { _active = value; if (value) Visible = true; QueueRedraw(); } }
+        set { if (_active != value)
+            {
+                _active = value;
+                if (value && _fadeAlpha == 0f) _openSeconds = 0f;
+                if (value) Visible = true;
+                QueueRedraw();
+            } }
     }
     private bool _active;
+    private float _openSeconds;
+    private bool _drewAccuracy;
+    private bool _drewItemStats;
+    private bool _waitingForStatDelay;
     private float _fadeAlpha;        // 0..1 current fade (QC scoreboard_fade_alpha)
 
     /// <summary>The current fade level 0..1 (QC scoreboard_fade_alpha) so the owner can also drive the manager's
@@ -273,6 +295,7 @@ public partial class ScoreboardPanel : HudPanel
     /// <summary>QC <c>scoreboard_ui_disabling</c>: the UI is closing and fading out; input is already ignored,
     /// and the state is torn down once the fade reaches 0 (QC Scoreboard_WouldDraw).</summary>
     public bool UiDisabling { get; private set; }
+    public bool UiInputActive => UiMode != 0 && !UiDisabling;
 
     /// <summary>QC <c>scoreboard_selected_panel</c> — which sub-panel the keys act on.</summary>
     public int SelectedPanel { get; private set; }
@@ -360,7 +383,7 @@ public partial class ScoreboardPanel : HudPanel
         if (UiMode != 0 && !UiDisabling) { UiDisable(); return true; }
         // QC main.qc:547 — `if (hudShiftState & S_TAB)`: Escape while the scoreboard key is held opens the
         // interactive UI instead of the pause menu.
-        if (UiMode == 0 && VortexArena.Engine.Console.BindTable.ShowScores) { UiEnable(0); return true; }
+        if (UiMode == 0 && Input.IsKeyPressed(Key.Tab)) { UiEnable(0); return true; }
         return false;
     }
 
@@ -468,34 +491,16 @@ public partial class ScoreboardPanel : HudPanel
         return false;
     }
 
-    /// <summary>
-    /// QC <c>HUD_Scoreboard_InputEvent</c> acts on the key PRESS and returns true for the matching RELEASE too
-    /// (every branch opens with <c>if (!key_pressed) return true;</c>), so the release never falls through to a
-    /// gameplay bind — e.g. the Enter that spectated a player must not also re-trigger anything on release.
-    /// This mirrors that: true for exactly the keys <see cref="UiHandleKey"/> claims.
-    /// </summary>
-    public bool UiConsumesRelease(Key key, bool ctrl)
-    {
-        if (UiMode == 0 || UiDisabling) return false;
-        return key switch
-        {
-            Key.Tab or Key.Up or Key.Down or Key.Left or Key.Right
-                or Key.Enter or Key.KpEnter or Key.Space => true,
-            Key.C or Key.R or Key.T or Key.K => ctrl,
-            _ => false,
-        };
-    }
-
     /// <summary>QC the TAB panel cycle (scoreboard.qc:288-311): wraps, and SKIPS the Rankings panel when there
     /// are no records to scroll.</summary>
     private void CyclePanel(int dir)
     {
         int p = SelectedPanel;
         p += dir;
-        if (p == PanelRankings && _rankings.Count == 0) p += dir;
+        if (p == PanelRankings && !ShowsRankings()) p += dir;
         if (p < PanelScoreboard) p = PanelRankings;
         if (p > PanelRankings) p = PanelScoreboard;
-        if (p == PanelRankings && _rankings.Count == 0) p = PanelScoreboard;
+        if (p == PanelRankings && !ShowsRankings()) p = PanelScoreboard;
         SelectedPanel = p;
         _selectedPanelTime = UiNow();
         QueueRedraw();
@@ -638,12 +643,10 @@ public partial class ScoreboardPanel : HudPanel
     public string RespawnJumpKey { get; set; } = "jump";
 
     // Accuracy grid (QC Scoreboard_AccuracyStats_Draw weapon_accuracy[]): per-weapon-id hit percentage [0..100],
-    // -1 = the weapon was never fired (skipped). Networking the local player's accuracy is a follow-up
-    // (HudManager's WeaponsPanel.SetAccuracy seam); until then this is empty and the grid is hidden.
+    // -1 = the weapon was never fired. NetGame feeds the owner snapshot accuracy into this grid.
     private readonly Dictionary<int, int> _accuracy = new();
 
-    // Rankings (QC Scoreboard_Rankings_Draw race/CTS grecordtime/grecordholder). Race record networking is its
-    // own data source (not present yet) — so this is left empty and the block is gated on race modes + data.
+    // Rankings (QC grecordtime/grecordholder) from the scoreboard wire.
     private readonly List<(int timeEncoded, string holder)> _rankings = new();
 
     private readonly List<ScoreRow> _rows = new();
@@ -657,16 +660,28 @@ public partial class ScoreboardPanel : HudPanel
     /// <summary>Hidden by default; the owner toggles it (QC: held while the scoreboard key is down).</summary>
     public ScoreboardPanel() => Visible = false;
 
-    /// <summary>
-    /// QC <c>autocvar_scoreboard_columns</c>: an explicit column spec ("ping pl name | score …"); empty selects
-    /// the built-in SCOREBOARD_DEFAULT_COLUMNS. Settable by the owner (the user's cvar). Triggers a relayout.
-    /// </summary>
-    public string ColumnSpec
-    {
-        get => _columnSpec;
-        set { _columnSpec = value ?? ""; _columnsForLayoutGen = -1; QueueRedraw(); }
-    }
     private string _columnSpec = "";
+    private int _columnSpecGeneration = -1;
+
+    /// <summary>QC Cmd_Scoreboard_SetFields. Explicit layouts last until scores are initialized again.</summary>
+    internal void ApplyColumnSpec(string? spec)
+    {
+        if (string.IsNullOrEmpty(GameScores.Gametype)) return;
+        SetColumnSpec(spec);
+        QueueRedraw();
+    }
+
+    private void SetColumnSpec(string? spec)
+    {
+        string layout = string.IsNullOrWhiteSpace(spec) ? GlobalStr("scoreboard_columns") : spec;
+        if (layout == "expand_default")
+        {
+            layout = DefaultColumns;
+            MenuState.Cvars.Set("scoreboard_columns", layout);
+        }
+        _columnSpec = layout;
+        _columnSpecGeneration = GameScores.LayoutGeneration;
+    }
 
     // =====================================================================================
     //  Feed paths
@@ -681,7 +696,7 @@ public partial class ScoreboardPanel : HudPanel
     /// registry-indexed array so <see cref="ScoreRow.Col"/> reads the right field.
     /// </summary>
     public void SetWireRows(VortexArena.Net.ScoreboardWire wire, int localNetId,
-        IReadOnlyCollection<int>? eliminatedNetIds = null)
+        IReadOnlyCollection<int>? eliminatedNetIds = null, IReadOnlySet<int>? ignoredNetIds = null)
     {
         _rows.Clear();
         _spectators.Clear();
@@ -691,14 +706,16 @@ public partial class ScoreboardPanel : HudPanel
             int fieldCount = GameScores.FieldCount;
             ScoreField? scoreF = GameScores.Field("SCORE");
             ScoreField? deathsF = GameScores.Field("DEATHS");
-            foreach (VortexArena.Net.ScoreRowWire wr in wire.Rows)
+            for (int rowIndex = 0; rowIndex < wire.Rows.Count; rowIndex++)
             {
+                VortexArena.Net.ScoreRowWire wr = wire.Rows[rowIndex];
                 // QC Scoreboard_Spectators_Draw (scoreboard.qc:2369): a spectator/observer is NOT a score-table
                 // row — list it in the spectator block instead. The wire carries the flag (the port has no
                 // NUM_SPECTATOR team sentinel). Feed the networked per-row ping so spectators_showping renders it.
                 if (wr.IsSpectator)
                 {
-                    _spectators.Add(new SpectatorRow(wr.Name, ping: wr.PingMs));
+                    _spectators.Add(new SpectatorRow(wr.Name, wr.PingMs,
+                        ignored: ignoredNetIds?.Contains(wr.NetId) == true));
                     continue;
                 }
 
@@ -725,8 +742,8 @@ public partial class ScoreboardPanel : HudPanel
                     eliminated: eliminatedNetIds is not null && eliminatedNetIds.Contains(wr.NetId),
                     // QC entcs handicap_level (scoreboard.qc:1003): the player_handicap icon level (0 = none).
                     handicapLevel: wr.HandicapLevel,
-                    // QC pl.sv_entnum: the stable id for the playerid '#N' prefix + the final sort tiebreak.
-                    netId: wr.NetId));
+                    netId: wr.NetId, ignored: ignoredNetIds?.Contains(wr.NetId) == true,
+                    clientSlotOrder: rowIndex));
             }
 
             _teamScores.Clear();
@@ -827,7 +844,7 @@ public partial class ScoreboardPanel : HudPanel
     }
 
     /// <summary>QC the race/CTS rankings (Scoreboard_Rankings_Draw): an ordered best-time list (encoded
-    /// hundredths + holder name). Networking records is a follow-up; until then this is empty.</summary>
+    /// hundredths + holder name) from the scoreboard snapshot.</summary>
     public void SetRankings(IEnumerable<(int timeEncoded, string holder)> rankings)
     {
         _rankings.Clear();
@@ -874,14 +891,15 @@ public partial class ScoreboardPanel : HudPanel
                 if (byScore != 0) return byScore;
                 int ad = a.Deaths < 0 ? int.MaxValue : a.Deaths;
                 int bd = b.Deaths < 0 ? int.MaxValue : b.Deaths;
-                return ad.CompareTo(bd);
+                int byDeaths = ad.CompareTo(bd);
+                return byDeaths != 0 ? byDeaths : b.NetId.CompareTo(a.NetId);
             }
             // ComparePlayers>0 means the first arg ranks ahead; we want the better row FIRST (negative).
             int cmp = -CompareRows(a, b, primary, secondary);
             if (cmp != 0) return cmp;
-            // QC Scoreboard_ComparePlayerScores final tiebreak (scoreboard.qc:1300): equal scores fall to
-            // sv_entnum so the order is stable frame-to-frame (List.Sort is not a stable sort in .NET).
-            return a.NetId.CompareTo(b.NetId);
+            // QC Scoreboard_ComparePlayerScores swaps an equal pair when the left server slot is lower.
+            int bySlot = b.ClientSlotOrder.CompareTo(a.ClientSlotOrder);
+            return bySlot != 0 ? bySlot : b.NetId.CompareTo(a.NetId);
         });
     }
 
@@ -956,11 +974,8 @@ public partial class ScoreboardPanel : HudPanel
     {
         string gametype = GameScores.Gametype;
         bool teamplay = GameScores.Teamplay;
-        // QC autocvar_scoreboard_columns: the live user cvar drives the layout (the settable ColumnSpec property
-        // still wins when a host pushes one explicitly). Read here so `scoreboard_columns_set` — including the
-        // interactive UI's Ctrl+C cycle — takes effect on the next draw with no extra plumbing.
-        string effective = string.IsNullOrWhiteSpace(_columnSpec) ? GlobalStr("scoreboard_columns") : _columnSpec;
-        effective ??= "";
+        if (_columnSpecGeneration != GameScores.LayoutGeneration) SetColumnSpec(null);
+        string effective = _columnSpec;
         if (_columnsForLayoutGen == GameScores.LayoutGeneration && _columnsForSpec == effective && _columns.Count > 0)
             return;
         _columnsForLayoutGen = GameScores.LayoutGeneration;
@@ -971,14 +986,18 @@ public partial class ScoreboardPanel : HudPanel
         ScoreField? secondary = GameScores.Secondary;
 
         string spec = string.IsNullOrWhiteSpace(effective) ? DefaultColumns : effective;
-        if (spec == "default" || spec == "expand_default") spec = DefaultColumns;
-        // QC Cmd_Scoreboard_SetFields "all": every registered score field, after the standard identity columns.
-        if (spec == "all")
+        if (spec == "default") spec = DefaultColumns;
+        if (spec is "all" or "ALL")
         {
-            var sb = new System.Text.StringBuilder("ping pl name |");
-            foreach (ScoreField f in GameScores.NetworkedFields)
-                if (!string.IsNullOrEmpty(f.Label)) sb.Append(' ').Append(f.Label);
-            spec = sb.ToString();
+            var fields = new System.Text.StringBuilder("ping pl name |");
+            if (spec == "ALL") fields.Append(" sum kdratio frags");
+            foreach (ScoreField f in GameScores.Fields)
+                if (!f.ClientOnly && f.Label.Length != 0 && f != primary && f != secondary)
+                    fields.Append(' ').Append(f.Label);
+            if (secondary is not null && secondary != primary && secondary.Label.Length != 0)
+                fields.Append(' ').Append(secondary.Label);
+            if (primary is not null && primary.Label.Length != 0) fields.Append(' ').Append(primary.Label);
+            spec = fields.ToString();
         }
 
         bool haveName = false, haveSeparator = false, havePrimary = false, haveSecondary = false;
@@ -1046,7 +1065,7 @@ public partial class ScoreboardPanel : HudPanel
             _columns.Add(new Column(ColumnKind.Label, primary, primary.Label));
     }
 
-    private const int MaxColumns = 24; // QC MAX_SBT_FIELDS
+    private const int MaxColumns = 64; // QC MAX_SBT_FIELDS
 
     /// <summary>QC <c>FOREACH(Scores, str == strtolower(scores_label(it)))</c>: find a column by its (active) label.</summary>
     private static ScoreField? FieldByLabel(string label)
@@ -1064,28 +1083,14 @@ public partial class ScoreboardPanel : HudPanel
     /// </summary>
     private static bool IsGametypeInFilter(string gametype, bool teamplay, string pattern)
     {
-        string sub = "," + gametype + ",";
-        string sub2 = teamplay ? ",teams," : ",noteams,";
-        string sub4 = (gametype == "rc" || gametype == "cts") ? ",race," : null!;
-
-        if (pattern.StartsWith('-'))
-        {
-            string p = "," + pattern[1..] + ",";
-            if (p.Contains(sub)) return false;
-            if (p.Contains(sub2)) return false;
-            if (sub4 is not null && p.Contains(sub4)) return false;
-            return true;
-        }
-        else
-        {
-            string body = pattern.StartsWith('+') ? pattern[1..] : pattern;
-            string p = "," + body + ",";
-            // QC: pass if the gametype OR teams/noteams (OR race) is present.
-            if (p.Contains(sub)) return true;
-            if (p.Contains(sub2)) return true;
-            if (sub4 is not null && p.Contains(sub4)) return true;
-            return false;
-        }
+        bool exclude = pattern.StartsWith('-');
+        string contents = pattern.StartsWith('-') || pattern.StartsWith('+') ? pattern[1..] : pattern;
+        string choices = "," + contents + ",";
+        bool matches = choices.Contains("," + gametype + ",")
+            || choices.Contains(teamplay ? ",teams," : ",noteams,")
+            || choices.Contains(",noteamspawns,")
+            || ((gametype is "rc" or "cts") && choices.Contains(",race,"));
+        return exclude != matches;
     }
 
     // =====================================================================================
@@ -1246,7 +1251,9 @@ public partial class ScoreboardPanel : HudPanel
         int low = (int)CvarF("ping_low", 20f);
         int med = (int)CvarF("ping_medium", 80f);
         int high = (int)CvarF("ping_high", 200f);
-        Color cLow = new(0f, 1f, 0f, 1f), cMed = new(1f, 1f, 0f, 1f), cHigh = new(1f, 0f, 0f, 1f);
+        Color cLow = TryParseRgb(CvarStr("ping_low_color"), out Color lowColor) ? lowColor : Colors.Lime;
+        Color cMed = TryParseRgb(CvarStr("ping_medium_color"), out Color medColor) ? medColor : Colors.Yellow;
+        Color cHigh = TryParseRgb(CvarStr("ping_high_color"), out Color highColor) ? highColor : Colors.Red;
         if (ping < low) return cLow;
         // QC lerps use the band deltas directly; guard against degenerate (equal) bands.
         if (ping < med) return cLow.Lerp(cMed, med > low ? (ping - low) / (float)(med - low) : 1f);
@@ -1288,19 +1295,23 @@ public partial class ScoreboardPanel : HudPanel
             else if (RespawnStat != 0f) QueueRedraw();
         }
 
-        // QC scoreboard_acc_fade_alpha / scoreboard_itemstats_fade_alpha (scoreboard.qc:1807, 1980):
-        //   fade = min(scoreboard_fade_alpha, fade + frametime * 10)
-        // These MUST advance here, not in the draw: the panel is not IsDynamic, so once the board has settled it
-        // stops repainting — a ramp stepped inside DrawPanel would freeze partway and leave the accuracy / item
-        // grids permanently dimmed. Stepping them in _Process (where the delta is a real frame time) and
-        // repainting while they move keeps the fade-in animating and then costs nothing.
-        float statTarget = _active ? PanelFade() : 0f;
-        float before = _accFade + _itemFade;
+        float statTarget = PanelFade();
         float step = (float)delta * 10f;
-        _accFade = _active ? Mathf.Min(statTarget, _accFade + step) : 0f;
-        _itemFade = _active ? Mathf.Min(statTarget, _itemFade + step) : 0f;
-        if (!Mathf.IsEqualApprox(before, _accFade + _itemFade))
-            QueueRedraw();
+        if (_fadeAlpha == 0f && !_active)
+        {
+            _accFade = _itemFade = 0f;
+            _drewAccuracy = _drewItemStats = _waitingForStatDelay = false;
+        }
+        else
+        {
+            _openSeconds += (float)delta;
+            float oldAccuracy = _accFade, oldItems = _itemFade;
+            if (_drewAccuracy) _accFade = Mathf.Min(statTarget, _accFade + step);
+            if (_drewItemStats) _itemFade = Mathf.Min(statTarget, _itemFade + step);
+            if (_waitingForStatDelay || !Mathf.IsEqualApprox(oldAccuracy, _accFade)
+                || !Mathf.IsEqualApprox(oldItems, _itemFade))
+                QueueRedraw();
+        }
 
         // The interactive UI animates (the focused-panel flash decays over ~0.5 s) and must feel responsive to
         // the arrow keys, so it repaints every frame while it is up. Only while it is up.
@@ -1417,6 +1428,7 @@ public partial class ScoreboardPanel : HudPanel
         float fade = PanelFade();
         if (fade <= 0f) return; // QC: scoreboard_fade_alpha <= 0 → draw nothing
 
+        _waitingForStatDelay = false;
         EnsureColumns();
         CacheMetrics();
         _overflowRows = 0; // QC Scoreboard_DrawOthers: reset the dropped-row counter for this draw
@@ -1592,7 +1604,7 @@ public partial class ScoreboardPanel : HudPanel
         int va = _teamScores.TryGetValue(a, out int x) ? x : 0;
         int vb = _teamScores.TryGetValue(b, out int y) ? y : 0;
         int r = GameScores.CompareValues(va, vb, GameScores.TeamFlagsPrimary);
-        return r != 0 ? r : a - b; // QC the final team-id tiebreak
+        return r != 0 ? r : a.CompareTo(b); // QC the final team-id tiebreak
     }
 
     // =================================================================================================
@@ -1857,8 +1869,6 @@ public partial class ScoreboardPanel : HudPanel
     /// <summary>QC <c>..._respawntime_decimals</c> (1): decimals shown in the respawn countdown (0 = whole sec).</summary>
     private int RespawnDecimals() => (int)Mathf.Clamp(CvarF("respawntime_decimals", 1f), 0f, 3f);
     /// <summary>QC <c>..._accuracy</c> (true): show the accuracy stats block.</summary>
-    private bool AccuracyEnabled() => CvarF("accuracy", 1f) != 0f;
-
     /// <summary>QC <c>Scoreboard_AccuracyStats_WouldDraw</c> warmup gate (scoreboard.qc:1864): the accuracy block
     /// is hidden during warmup (the stats aren't meaningful until the match proper). Fed by the match layer.</summary>
     public bool MatchWarmup { get; set; }
@@ -1866,7 +1876,7 @@ public partial class ScoreboardPanel : HudPanel
     private bool SpectatorsShowPing() => CvarF("spectators_showping", 1f) != 0f;
     /// <summary>QC <c>autocvar_hud_panel_scoreboard_scores_per_round</c> (scoreboard.qc:105, default 0): when set,
     /// frags/kdr/sum/dmg/score are shown as per-round averages (divided by SP_ROUNDS_PL). Toggled by Ctrl+R in the
-    /// interactive UI (not yet ported) — read live so a console "toggle" still takes effect.</summary>
+    /// interactive UI or the console, and read live while drawing.</summary>
     private bool ScoresPerRound() => CvarF("scores_per_round", 0f) != 0f;
 
     /// <summary>QC <c>Scoreboard_DrawOthers</c> (scoreboard.qc:1571): how many rows were dropped because the
@@ -1943,7 +1953,14 @@ public partial class ScoreboardPanel : HudPanel
                         DrawRect(iconRect, hc);
                     nameX += sq + _fs * 0.25f;
                 }
-                DrawColored(new Vector2(nameX, textY), ft.Text, rowFg, _fs);
+                if (r.Ignored)
+                {
+                    nameX += DrawIgnoredIcon(nameX, textY, rowAlpha);
+                    DrawColoredWithin(new Vector2(nameX, textY), ft.Text, rowFg,
+                        layout.ColW[i] - (nameX - layout.ColX[i]));
+                }
+                else
+                    DrawColored(new Vector2(nameX, textY), ft.Text, rowFg, _fs);
             }
             else
                 DrawTextRight(layout.ColRight[i], textY, layout.ColW[i],
@@ -1951,6 +1968,18 @@ public partial class ScoreboardPanel : HudPanel
         }
 
         y += rowH;
+    }
+
+    private float IgnoredIconWidth => _fs * 1.25f;
+
+    private float DrawIgnoredIcon(float x, float y, float alpha)
+    {
+        Color color = new(1f, 1f, 1f, alpha);
+        if (TextureCache.Get("gfx/scoreboard/player_ignored") is { } icon)
+            DrawTextureRect(icon, new Rect2(x, y, _fs, _fs), false, color);
+        else
+            DrawText(new Vector2(x, y), "×", color, _fs);
+        return IgnoredIconWidth;
     }
 
     // ---- spectators / map stats / respawn / accuracy / rankings footer (QC the footer draws) ----
@@ -1978,7 +2007,8 @@ public partial class ScoreboardPanel : HudPanel
             float pingW = pingTxt.Length != 0 ? MeasureText(pingTxt, _fs) + _fs * 0.5f : 0f;
             float nameW = MeasureText(HudText.Strip(sp.Name), _fs);
 
-            if (cx + pingW + nameW + gap > x + w && cx > x + _fs * 0.5f)
+            float iconW = sp.Ignored ? IgnoredIconWidth : 0f;
+            if (cx + pingW + iconW + nameW + gap > x + w && cx > x + _fs * 0.5f)
             {
                 cx = x + _fs * 0.5f; y += _rowH;
                 if (y > Size2.Y - _rowH) break;
@@ -1989,6 +2019,8 @@ public partial class ScoreboardPanel : HudPanel
                     new Color(PingColor(sp.Ping).R, PingColor(sp.Ping).G, PingColor(sp.Ping).B, rowAlpha), _fs);
                 cx += pingW;
             }
+            if (sp.Ignored)
+                cx += DrawIgnoredIcon(cx, y, rowAlpha);
             DrawColored(new Vector2(cx, y), sp.Name, new Color(1f, 1f, 1f, rowAlpha), _fs);
             cx += nameW + gap;
         }
@@ -2033,7 +2065,7 @@ public partial class ScoreboardPanel : HudPanel
         // QC scoreboard.qc:2763-2796: float respawn_time = STAT(RESPAWN_TIME); the line shows only when not in
         // intermission and respawn_time != 0. The stat is the absolute respawn time, NEGATED while awaiting respawn.
         float respawnTime = RespawnStat;
-        if (respawnTime == 0f) return y;
+        if (MatchIntermission || respawnTime == 0f) return y;
         if (y > Size2.Y - 24f) return y;
         float now = RespawnServerTime;
 
@@ -2076,47 +2108,44 @@ public partial class ScoreboardPanel : HudPanel
             : Mathf.CeilToInt(seconds).ToString();
     }
 
+    private bool StatBlockWouldDraw(float y, string block, float delay)
+    {
+        float height = GetViewportRect().Size.Y;
+        float top = PanelRect.Position.Y + y;
+        if (MatchWarmup || top > 0.91f * height || CvarF(block, 1f) == 0f) return false;
+        if (MatchIntermission || top <= CvarF(block + "_showdelay_minpos", 0.75f) * height) return true;
+        if (_openSeconds >= CvarF(block + "_showdelay", delay)) return true;
+        _waitingForStatDelay = true;
+        return false;
+    }
+
     private float DrawAccuracy(float x, float w, float y, float fade)
     {
-        if (!AccuracyEnabled()) return y;             // QC ..._accuracy gate
-        if (MatchWarmup) return y;                    // QC Scoreboard_AccuracyStats_WouldDraw: hidden in warmup
-        // QC cl_invasion.qc MUTATOR_HOOKFUNCTION(cl_inv, DrawScoreboardItemStats) returns ISGAMETYPE(INVASION):
-        // the item-stats (weapon accuracy) panel is hidden in Invasion because monsters are not valid accuracy
-        // targets (sv_invasion.qc AccuracyTargetValid → MUT_ACCADD_INVALID), so the stats would be meaningless.
-        if (GameScores.Gametype == "inv") return y;
-        // QC cl_nexball.qc MUTATOR_HOOKFUNCTION(cl_nb, DrawScoreboardAccuracy) / DrawScoreboardItemStats: both return
-        // false in Nexball — there is no firing (football mode) or only the BallStealer (basketball), so per-weapon
-        // accuracy stats are irrelevant. QC DrawScoreboardAccuracy returns false unconditionally for nexball.
-        if (GameScores.Gametype == "nb") return y;
-        if (_accuracy.Count == 0) return y;           // not networked yet — block hidden (QC gates on data)
-
-        // QC scoreboard.qc:1810-1831 — which weapons get a cell:
-        //   * WEP_TYPE_OTHER (turrets, vehicle guns, the ball stealer …) is ALWAYS skipped ("not for damaging
-        //     people"), and so are WEP_FLAG_HIDDEN / WEP_FLAG_MUTATORBLOCKED weapons with no stat;
-        //   * a weapon with no stat is skipped unless the player OWNS it or it exists in the map
-        //     (weapons_stat / weapons_inmap) — so an all-weapons grid never appears on a map that has three guns.
-        // Registry order keeps the grid stable frame to frame.
+        _drewAccuracy = false;
+        if (GameScores.Gametype is "rc" or "cts" or "nb" || !StatBlockWouldDraw(y, "accuracy", 2f))
+            return y;
+        bool haveStats = false;
+        int visibleRegistryCount = 0;
         _accCells.Clear();
         foreach (Weapon wep in Weapons.All)
         {
-            if (wep is null) continue;
+            if (wep is null || wep.NetName == "null") continue;
+            int pct = _accuracy.TryGetValue(wep.RegistryId, out int value) ? value : -1;
+            haveStats |= pct >= 0;
             if ((wep.SpawnFlags & WeaponFlags.TypeOther) != 0) continue;
-            if (!_accuracy.TryGetValue(wep.RegistryId, out int pct)) continue;
-            if (pct < 0)
-            {
-                // No stat: only show it if it is a weapon the player could realistically use here.
-                if ((wep.SpawnFlags & (WeaponFlags.Hidden | WeaponFlags.MutatorBlocked)) != 0) continue;
-                if (!OwnedOrInMap(wep)) continue;
-            }
-            _accCells.Add((wep, pct));
+            bool available = pct >= 0 || _availableAccuracyWeapons.Has(wep);
+            if (!available && (wep.SpawnFlags & (WeaponFlags.Hidden | WeaponFlags.MutatorBlocked)) != 0)
+                continue;
+            visibleRegistryCount++;
+            if (available) _accCells.Add((wep, pct));
         }
         int weaponCnt = _accCells.Count;
-        if (weaponCnt == 0) return y;
+        if (!haveStats || weaponCnt == 0) return y;
 
         // QC scoreboard.qc:1836-1841: rows/columns + the cell metrics.
         //   weapon_height = hud_fontsize.y * 2.3 / hud_panel_weapons_aspect;  height = weapon_height + fontsize.y
         int rows = 1;
-        if (CvarF("accuracy_doublerows", 0f) != 0f && weaponCnt >= Mathf.FloorToInt(Weapons.Count * 0.5f))
+        if (CvarF("accuracy_doublerows", 0f) != 0f && weaponCnt >= visibleRegistryCount / 2)
             rows = 2;
         int columns = Mathf.Max(1, Mathf.CeilToInt(weaponCnt / (float)rows));
         float aspect = Mathf.Max(0.001f, GlobalF("hud_panel_weapons_aspect", 1f));
@@ -2130,8 +2159,8 @@ public partial class ScoreboardPanel : HudPanel
         foreach ((Weapon _, int pct) in _accCells) if (pct >= 0) { sum += pct; n++; }
         int avg = n > 0 ? Mathf.FloorToInt((float)sum / n + 0.5f) : 0;
 
-        // The ramp itself is stepped in _Process (see there); read it here.
-        float a = _accFade;
+        _drewAccuracy = true;
+        float a = Mathf.Min(fade, _accFade);
 
         Rect2 c = BeginBlock(x, w, ref y, cellH * rows, fade,
             $"Accuracy stats (average {avg}%)", _blockRgb, a / Mathf.Max(0.0001f, fade), out float endY);
@@ -2150,7 +2179,7 @@ public partial class ScoreboardPanel : HudPanel
             DrawWeaponIcon(wep, new Rect2(cellRect.Position, new Vector2(cellRect.Size.X, weaponH)), iconAlpha);
             if (pct < 0) return;
             string s = $"{pct}%";
-            Color col = noColors ? new Color(1f, 1f, 1f, 1f) : AccuracyColor(pct);
+            Color col = noColors ? new Color(1f, 1f, 1f, 1f) : GetAccuracyColor(pct);
             float padX = (cellRect.Size.X - MeasureText(s, _fs)) * 0.5f;
             DrawText(new Vector2(cellRect.Position.X + padX, textY), s,
                 new Color(col.R, col.G, col.B, SbtFgAlpha() * a), _fs);
@@ -2160,34 +2189,16 @@ public partial class ScoreboardPanel : HudPanel
 
     private readonly List<(Weapon Weapon, int Pct)> _accCells = new();
 
-    /// <summary>
-    /// QC <c>WepSet_GetFromStat()</c> / <c>WepSet_GetFromStat_InMap()</c> (scoreboard.qc:1808-1809): the weapons
-    /// the local player currently carries, plus every weapon that exists on this map. Fed by the match layer
-    /// (<see cref="SetOwnedWeapons"/> / <see cref="SetWeaponsInMap"/>); with neither fed, every weapon counts as
-    /// available so the grid degrades to "show them all" rather than to nothing.
-    /// </summary>
-    private bool OwnedOrInMap(Weapon w)
+    private WepSet _availableAccuracyWeapons;
+
+    /// <summary>QC STAT(WEAPONS) | STAT(WEAPONSINMAP), the eligibility for an unfired weapon's cell.</summary>
+    public void SetAvailableAccuracyWeapons(ulong bits)
     {
-        if (_ownedWeapons.Count == 0 && _weaponsInMap.Count == 0) return true;
-        return _ownedWeapons.Contains(w.RegistryId) || _weaponsInMap.Contains(w.RegistryId);
+        if (_availableAccuracyWeapons.Bits == bits) return;
+        _availableAccuracyWeapons.Bits = bits;
+        QueueRedraw();
     }
 
-    private readonly HashSet<int> _ownedWeapons = new();
-    private readonly HashSet<int> _weaponsInMap = new();
-
-    /// <summary>QC <c>WepSet_GetFromStat()</c>: the local player's carried weapon set (registry ids).</summary>
-    public void SetOwnedWeapons(IEnumerable<int>? ids)
-    {
-        _ownedWeapons.Clear();
-        if (ids is not null) foreach (int id in ids) _ownedWeapons.Add(id);
-    }
-
-    /// <summary>QC <c>WepSet_GetFromStat_InMap()</c>: every weapon that spawns on the loaded map.</summary>
-    public void SetWeaponsInMap(IEnumerable<int>? ids)
-    {
-        _weaponsInMap.Clear();
-        if (ids is not null) foreach (int id in ids) _weaponsInMap.Add(id);
-    }
     private float _accFade;
     private float _itemFade;
 
@@ -2198,27 +2209,29 @@ public partial class ScoreboardPanel : HudPanel
     /// </summary>
     private float DrawItemStats(float x, float w, float y, float fade)
     {
-        if (CvarF("itemstats", 1f) == 0f) return y;   // QC hud_panel_scoreboard_itemstats
-        if (MatchWarmup) return y;                    // QC Scoreboard_ItemStats_WouldDraw warmup gate
-        if (GameScores.Gametype == "nb") return y;    // QC cl_nexball DrawScoreboardItemStats -> false
-        if (_itemStats.Count == 0) return y;
+        _drewItemStats = false;
+        if (GameScores.Gametype is "rc" or "cts" or "nb" or "inv" || _itemStats.Count == 0
+            || !StatBlockWouldDraw(y, "itemstats", 2.2f)) return y;
 
+        int mask = CvarF("itemstats_filter", 1f) != 0f ? (int)CvarF("itemstats_filter_mask", 12f) : 0;
         _itemCells.Clear();
-        foreach (var kv in _itemStats)
-            if (kv.Value > 0 && !IsItemFiltered(kv.Key)) _itemCells.Add((kv.Key, kv.Value));
+        foreach ((string icon, int tier) in ItemStatsOrder)
+            if (!IsItemFiltered(tier, mask) && _itemStats.TryGetValue(icon, out int count) && count > 0)
+                _itemCells.Add((icon, count));
         int n = _itemCells.Count;
         if (n == 0) return y;
 
         // QC scoreboard.qc:1997-2002: columns = max(6, ceil(n / rows)); item_height = hud_fontsize.y * 2.3
         // (NOTE: unlike the accuracy grid, the item grid does NOT divide by the weapons aspect).
-        int rows = (CvarF("itemstats_doublerows", 0f) != 0f && n >= Mathf.FloorToInt(_itemStats.Count / 2f)) ? 2 : 1;
+        int rows = (CvarF("itemstats_doublerows", 0f) != 0f && n >= ItemStatsOrder.Length / 2) ? 2 : 1;
         int columns = Mathf.Max(6, Mathf.CeilToInt(n / (float)rows));
         float itemH = _fs * 2.3f;
         float cellH = itemH + _fs;
 
         if (y > Size2.Y - (cellH * rows + _rowH * 2f)) return y;
 
-        float a = _itemFade;
+        _drewItemStats = true;
+        float a = Mathf.Min(fade, _itemFade);
 
         Rect2 c = BeginBlock(x, w, ref y, cellH * rows, fade, "Item stats", _blockRgb,
             a / Mathf.Max(0.0001f, fade), out float endY);
@@ -2241,28 +2254,26 @@ public partial class ScoreboardPanel : HudPanel
 
     private readonly List<(string Icon, int Count)> _itemCells = new();
 
-    /// <summary>QC <c>is_item_filtered</c> (scoreboard.qc:1954): <c>..._itemstats_filter</c> +
-    /// <c>..._itemstats_filter_mask</c> hide the small/medium/big health+armor tiers (ones digit) and all ammo
-    /// (tens digit) from the item-stats grid. The mask is cumulative: 4 hides mega and everything below.</summary>
-    private bool IsItemFiltered(string icon)
+    // Order of the pinned CSQC Items registrations before REGISTRY_SORT.
+    // Tier 0 is unfiltered; tiers 1–4 are health/armor from small to mega.
+    private const int AmmoStat = -1;
+    private static readonly (string Icon, int Tier)[] ItemStatsOrder =
     {
-        if (CvarF("itemstats_filter", 1f) == 0f) return false;
-        int mask = (int)CvarF("itemstats_filter_mask", 0f);
-        if (mask <= 0) return false;
+        ("fuelregen", 0), ("buff_invisible", 0), ("jetpack", 0),
+        ("shield", 0), ("buff_speed", 0), ("strength", 0),
+        ("ammo_shells", AmmoStat), ("ammo_bullets", AmmoStat), ("ammo_rockets", AmmoStat),
+        ("ammo_cells", AmmoStat), ("ammo_fuel", AmmoStat),
+        ("armor_small", 1), ("armor_medium", 2), ("armor_big", 3), ("armor_mega", 4),
+        ("health_small", 1), ("health_medium", 2), ("health_big", 3), ("health_mega", 4),
+        ("ammo_vaporizer_cells", AmmoStat), ("extralife", 0),
+    };
 
-        bool isHealthArmor = icon.StartsWith("health", System.StringComparison.Ordinal)
-                          || icon.StartsWith("armor", System.StringComparison.Ordinal);
-        if (isHealthArmor)
-        {
-            int tier = icon.EndsWith("mega", System.StringComparison.Ordinal) ? 4
-                     : icon.EndsWith("big", System.StringComparison.Ordinal) ? 3
-                     : icon.EndsWith("medium", System.StringComparison.Ordinal) ? 2
-                     : icon.EndsWith("small", System.StringComparison.Ordinal) ? 1 : 0;
-            return tier > 0 && tier <= (mask % 10);
-        }
-        if (icon.StartsWith("ammo", System.StringComparison.Ordinal))
-            return ((mask / 10) % 10) == 1;
-        return false;
+    private static bool IsItemFiltered(int tier, int mask)
+    {
+        if (mask <= 0 || tier == 0) return false;
+        if (tier == AmmoStat) return mask / 10 % 10 == 1;
+        int cutoff = mask % 10;
+        return cutoff is >= 1 and <= 4 && tier <= cutoff;
     }
 
     /// <summary>
@@ -2324,16 +2335,14 @@ public partial class ScoreboardPanel : HudPanel
     /// <summary>Draw an item's HUD icon (QC <c>it.m_icon</c>) fitted into <paramref name="cell"/>.</summary>
     private void DrawItemIcon(string bareName, Rect2 cell, Color tint)
     {
-        Texture2D? icon;
-        // A weapon pickup's icon key is "weapon<netname>" (WeaponPickup.Icon). The HUD ART name is NOT the
-        // netname for the renamed weapons — mortar's art is weapongrenadelauncher, vortex's is weaponnex, and so
-        // on — so route it through WeaponHud's mapping table rather than resolving the raw key, which silently
-        // missed for every legacy-named gun.
-        if (bareName.StartsWith("weapon", System.StringComparison.Ordinal) && bareName.Length > 6)
-            icon = TextureCache.GetFirst(WeaponHud.IconPaths(bareName[6..]));
-        else
-            icon = TextureCache.GetFirst($"gfx/hud/{HudSkin.SkinName}/{bareName}", $"gfx/hud/default/{bareName}");
-
+        bareName = bareName switch
+        {
+            "ammo_vaporizer_cells" => "ammo_supercells",
+            "extralife" => "item_mega_health",
+            _ => bareName,
+        };
+        Texture2D? icon = TextureCache.GetFirst($"gfx/hud/{HudSkin.SkinName}/{bareName}",
+            $"gfx/hud/default/{bareName}");
         if (icon is null) { DrawRect(cell, new Color(tint.R, tint.G, tint.B, tint.A * 0.25f)); return; }
         DrawTextureRect(icon, FitAspect(icon, cell), false, tint);
     }
@@ -2349,13 +2358,30 @@ public partial class ScoreboardPanel : HudPanel
                          cell.Position.Y + (cell.Size.Y - draw.Y) * 0.5f, draw.X, draw.Y);
     }
 
-    /// <summary>QC accuracy color ramp (red→yellow→green by hit %).</summary>
-    private static Color AccuracyColor(int pct)
+    private static Color GetAccuracyColor(int pct)
     {
-        float f = Mathf.Clamp(pct / 100f, 0f, 1f);
-        return f < 0.5f
-            ? new Color(1f, Mathf.Lerp(0f, 1f, f * 2f), 0f, 1f)
-            : new Color(Mathf.Lerp(1f, 0f, (f - 0.5f) * 2f), 1f, 0f, 1f);
+        string[] levels = GlobalStr("accuracy_color_levels").Split((char[]?)null,
+            System.StringSplitOptions.RemoveEmptyEntries);
+        if (levels.Length < 2) return Colors.Black;
+
+        float lower = ParseLevel(levels[0]);
+        Color first = ReadAccuracyColor(0);
+        for (int i = 1; i < System.Math.Min(levels.Length, 10); i++)
+        {
+            float upper = ParseLevel(levels[i]);
+            Color next = ReadAccuracyColor(i);
+            if (upper > lower && pct <= upper)
+                return first.Lerp(next, (pct - lower) / (upper - lower));
+            lower = upper;
+            first = next;
+        }
+        return first;
+
+        static float ParseLevel(string level) =>
+            float.TryParse(level, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float value) ? value : 0f;
+        static Color ReadAccuracyColor(int index) =>
+            TryParseRgb(GlobalStr($"accuracy_color{index}"), out Color color) ? color : Colors.Black;
     }
 
     /// <summary>
@@ -2368,24 +2394,33 @@ public partial class ScoreboardPanel : HudPanel
     {
         if (GameScores.Gametype != "rc" && GameScores.Gametype != "cts") return y;
         if (_speedAwardBest == 0) return y; // QC: if (race_speedaward_alltimebest)
-        if (y > Size2.Y - 20f) return y;
+        if (y > Size2.Y - _rowH) return y;
 
         int unit = (int)GlobalF("hud_speed_unit", 1f);
         float factor = SpeedUnitFactor(unit);
         string lbl = SpeedUnitLabel(unit);
-        var body = new Color(1f, 1f, 1f, RowFgAlpha() * fade);
-
-        string str = "";
-        if (_speedAward != 0) // QC: if (race_speedaward)
+        var body = new Color(1f, 1f, 1f, Cfg.FgAlpha * fade);
+        float nameWidth = Mathf.Max(0f, CvarF("namesize", 15f) * _fs);
+        var pos = new Vector2(x, y);
+        if (_speedAward != 0)
         {
-            string name = HudText.Strip(_speedAwardHolder);
-            str = $"Speed award: {(int)(_speedAward * factor)}{lbl} ({name})";
-            str += " / ";
+            DrawPart($"Speed award: {(int)(_speedAward * factor)}{lbl} (", _speedAwardHolder);
+            DrawLabel(" / ");
         }
-        string bestName = HudText.Strip(_speedAwardBestHolder);
-        str += $"All-time fastest: {(int)(_speedAwardBest * factor)}{lbl} ({bestName})";
-        DrawText(new Vector2(x, y), str, body, 14);
-        return y + 20f;
+        DrawPart($"All-time fastest: {(int)(_speedAwardBest * factor)}{lbl} (", _speedAwardBestHolder);
+        return y + _rowH;
+
+        void DrawPart(string label, string holder)
+        {
+            DrawLabel(label);
+            pos.X += DrawColoredWithin(pos, holder, body, nameWidth);
+            DrawLabel(")");
+        }
+        void DrawLabel(string label)
+        {
+            DrawText(pos, label, body, _fs);
+            pos.X += MeasureText(label, _fs);
+        }
     }
 
     /// <summary>QC <c>GetSpeedUnitFactor</c> (client/main.qc): qu/s -> the selected unit's factor.</summary>
@@ -2408,6 +2443,9 @@ public partial class ScoreboardPanel : HudPanel
         _ => "qu/s",
     };
 
+    private bool ShowsRankings() => _rankings.Count > 0
+        && (GameScores.Gametype is "rc" or "cts" || (GameScores.Gametype == "ctf" && CvarF("ctf_leaderboard", 1f) != 0f));
+
     /// <summary>
     /// QC <c>Scoreboard_Rankings_Draw</c> (scoreboard.qc:2164): the framed race-record table — ordinal, time and
     /// holder in fixed sub-columns (3 / 5 / namesize font widths), laid out in as many COLUMNS as the block width
@@ -2415,15 +2453,13 @@ public partial class ScoreboardPanel : HudPanel
     /// </summary>
     private float DrawRankings(float x, float w, float y, float fade)
     {
-        // QC Scoreboard_Rankings_Draw is race/CTS only; gate on the mode + data (the networked rankings table).
-        if (_rankings.Count == 0) return y;
-        if (GameScores.Gametype != "rc" && GameScores.Gametype != "cts") return y;
+        if (!ShowsRankings()) return y;
 
         // QC scoreboard.qc:2191-2213 — sub-column widths, then how many record columns fit across the block.
         float nameSize = 0f;
         foreach ((int _, string holder) in _rankings)
             nameSize = Mathf.Max(nameSize, MeasureText(HudText.Strip(holder), _fs));
-        float nameCap = CvarF("namesize", 15f) * _fs;
+        float nameCap = Mathf.Max(0f, CvarF("namesize", 15f) * _fs);
         bool cut = nameSize > nameCap;
         if (cut) nameSize = nameCap;
 
@@ -2432,9 +2468,10 @@ public partial class ScoreboardPanel : HudPanel
         float colW = rankSize + timeSize + nameSize + _fs;
         int columns = Mathf.Max(1, Mathf.FloorToInt((w - 2f * _bgPad) / Mathf.Max(1f, colW)));
         columns = Mathf.Min(columns, _rankings.Count);
-        int rows = Mathf.CeilToInt(_rankings.Count / (float)columns);
-
-        if (y > Size2.Y - (rows * _rowH + _rowH * 2f)) return y;
+        int fittingRows = Mathf.FloorToInt((GetViewportRect().Size.Y * 0.95f
+            - PanelRect.Position.Y - y - 2f * _rowH - 2f * (_bgPad + _bgBorder)) / _rowH);
+        if (fittingRows < 1) return y;
+        int rows = Mathf.Min(fittingRows, Mathf.CeilToInt(_rankings.Count / (float)columns));
 
         // Publish the grid shape so the Left/Right scroll can clamp itself (QC rankings_columns/rankings_rows).
         _rankingsColumns = columns;
@@ -2443,7 +2480,8 @@ public partial class ScoreboardPanel : HudPanel
         if (RankingsStartColumn > maxStart) RankingsStartColumn = maxStart;
 
         float blockTop = y;
-        Rect2 c = BeginBlock(x, w, ref y, rows * _rowH, fade, "Rankings:", _blockRgb, 1f, out float endY);
+        string title = GameScores.Gametype == "ctf" ? "Capture time rankings" : "Rankings";
+        Rect2 c = BeginBlock(x, w, ref y, rows * _rowH, fade, title, _blockRgb, 1f, out float endY);
         if (c.Size.X <= 1f) return endY;
         DrawTableBackingTiled(c, _blockRgb, SbtBgAlpha(fade));
 
@@ -2458,6 +2496,7 @@ public partial class ScoreboardPanel : HudPanel
                            Mathf.Min(1f, _blockRgb.B + 0.5f));
         var body = new Color(1f, 1f, 1f, SbtFgAlpha() * fade);
         float cellW = c.Size.X / columns;
+        float holderWidth = Mathf.Max(0f, cellW - rankSize - timeSize - _fs);
         float textOfs = (_rowH - _fs) * 0.5f; // QC: center text vertically in the 1.25x row
         string selfName = HudText.Strip(RankingsSelfName);
 
@@ -2475,9 +2514,9 @@ public partial class ScoreboardPanel : HudPanel
 
             bool isSelf = selfName.Length != 0 && HudText.Strip(holder) == selfName;
             if (isSelf)
-                DrawRect(new Rect2(rx, ry, colW, _rowH), new Color(hl.R, hl.G, hl.B, SelfHighlightAlpha() * fade));
-            else if (TableHighlight() && ((j + column) & 1) == 0)
-                DrawRect(new Rect2(rx, ry, colW, _rowH), new Color(hl.R, hl.G, hl.B, TableHighlightAlpha() * fade));
+                DrawRect(new Rect2(rx, ry, cellW, _rowH), new Color(hl.R, hl.G, hl.B, SelfHighlightAlpha() * fade));
+            else if (TableHighlight() && ((j + RankingsStartColumn + column) & 1) == 0)
+                DrawRect(new Rect2(rx, ry, cellW, _rowH), new Color(hl.R, hl.G, hl.B, TableHighlightAlpha() * fade));
 
             // QC scoreboard.qc:2256-2262: gold / silver / bronze for the top 3, white otherwise.
             Color rankColor = i switch
@@ -2490,7 +2529,7 @@ public partial class ScoreboardPanel : HudPanel
             float tx = rx + _fs * 0.5f, ty = ry + textOfs;
             DrawText(new Vector2(tx, ty), Ordinal(i + 1), rankColor, _fs);
             DrawText(new Vector2(tx + rankSize, ty), GameScores.TimeEncodedToString(t, compact: false), body, _fs);
-            DrawColored(new Vector2(tx + rankSize + timeSize, ty), holder, body, _fs);
+            DrawColoredWithin(new Vector2(tx + rankSize + timeSize, ty), holder, body, holderWidth);
         }
         return endY;
     }
@@ -2506,6 +2545,26 @@ public partial class ScoreboardPanel : HudPanel
     /// <summary>QC <c>strdecolorize(entcs_GetName(player_localnum))</c>: the local player's name, used to highlight
     /// the player's own row in the rankings block. Fed by the match layer; "" disables the self-highlight.</summary>
     public string RankingsSelfName { get; set; } = "";
+
+    private float DrawColoredWithin(Vector2 pos, string text, Color color, float width)
+    {
+        float used = 0f;
+        foreach (HudText.Run run in HudText.Parse(text, color))
+        {
+            string content = run.Text;
+            float measured = MeasureText(content, _fs);
+            while (content.Length > 0 && used + measured > width)
+            {
+                int remove = content.Length >= 2 && char.IsSurrogatePair(content, content.Length - 2) ? 2 : 1;
+                content = content[..^remove];
+                measured = MeasureText(content, _fs);
+            }
+            DrawText(pos + new Vector2(used, 0f), content, run.Color, _fs);
+            used += measured;
+            if (content.Length < run.Text.Length) break;
+        }
+        return used;
+    }
 
     /// <summary>Draw a possibly color-coded string left-to-right starting at <paramref name="pos"/>.</summary>
     private void DrawColored(Vector2 pos, string text, Color baseColor, int size)
@@ -2739,13 +2798,25 @@ public partial class ScoreboardPanel : HudPanel
         c.Register("hud_panel_scoreboard_playerid", "0", CvarFlags.Save);
         c.Register("hud_panel_scoreboard_playerid_prefix", "#", CvarFlags.Save);
         c.Register("hud_panel_scoreboard_playerid_suffix", " ", CvarFlags.Save);
-        // accuracy show-delay (scoreboard.qc:83) — registered for the HUD-skin round-trip (the warmup gate is wired;
-        // the time-since-start show-delay is a documented residual).
+        // Display delays apply to stat blocks near the bottom of the viewport.
         c.Register("hud_panel_scoreboard_accuracy_showdelay", "2", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_accuracy_showdelay_minpos", "0.75", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_itemstats_showdelay", "2.2", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_itemstats_showdelay_minpos", "0.75", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_itemstats_filter", "1", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_itemstats_filter_mask", "12", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_namesize", "15", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_ctf_leaderboard", "1", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_minwidth", "0.6", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_maxheight", "0.6", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_table_fieldtitle_maxwidth", "0.07", CvarFlags.Save);
         // ping color bands (scoreboard.qc:1017-1019)
         c.Register("hud_panel_scoreboard_ping_low", "20", CvarFlags.Save);
         c.Register("hud_panel_scoreboard_ping_medium", "80", CvarFlags.Save);
         c.Register("hud_panel_scoreboard_ping_high", "200", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_ping_low_color", "0 1 0", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_ping_medium_color", "1 1 0", CvarFlags.Save);
+        c.Register("hud_panel_scoreboard_ping_high_color", "1 0 0", CvarFlags.Save);
         // team-size side display position (scoreboard.qc:79)
         c.Register("hud_panel_scoreboard_team_size_position", "0", CvarFlags.Save);
     }

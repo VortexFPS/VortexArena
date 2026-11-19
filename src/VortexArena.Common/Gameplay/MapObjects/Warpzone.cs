@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Threading;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Math;
 using VortexArena.Common.Services;
@@ -189,6 +190,40 @@ public sealed class Warpzone
     public bool Linked => Transform.Valid;
 }
 
+/// <summary>An authored dpcamera brush and its independently positioned viewpoint.</summary>
+public sealed class WarpzoneCamera(Entity surface)
+{
+    public sealed record Pose(Vector3 Origin, Vector3 Angles);
+
+    public Entity Surface { get; } = surface;
+    private Entity? _target;
+    private Pose? _view;
+
+    // The threaded listen host publishes the pose as one value for the render thread.
+    public Pose? View => Volatile.Read(ref _view);
+
+    internal void ResolveTarget()
+    {
+        var selection = new MapMover.RandomSelection();
+        foreach (Entity candidate in MapMover.FindByTargetName(Surface.Target))
+            selection.Add(candidate, 1f, 0f);
+        _target = selection.Chosen;
+        if (_target is null)
+            Volatile.Write(ref _view, null);
+        else
+            UpdatePose();
+    }
+
+    internal void UpdatePose()
+    {
+        if (_target is not { IsFreed: false } target)
+            return;
+        if (_view is { } current && current.Origin == target.Origin && current.Angles == target.Angles)
+            return;
+        Volatile.Write(ref _view, new Pose(target.Origin, target.Angles));
+    }
+}
+
 /// <summary>
 /// The warpzone manager — holds the world's warpzones, links each to its partner (by targetname), and performs
 /// the seamless teleport when an entity crosses a zone. The C# successor to lib/warpzone's server-side
@@ -198,6 +233,8 @@ public sealed class WarpzoneManager
 {
     private readonly List<Warpzone> _zones = new();
     public IReadOnlyList<Warpzone> Zones => _zones;
+    private readonly List<WarpzoneCamera> _cameras = new();
+    public IReadOnlyList<WarpzoneCamera> Cameras => _cameras;
 
     /// <summary>
     /// QC <c>.warpzone_teleport_finishtime</c> — the per-entity same-frame re-teleport guard (server.qc:186). After a
@@ -448,7 +485,7 @@ public sealed class WarpzoneManager
             // QC MUTATOR_CALLHOOK(PortalTeleport, player) (server/portals.qc): fire after the Porto-portal
             // crossing completes (telefrag + kill-credit already applied) so subscribers (CTF flag-drop, etc.)
             // see the player in its post-teleport state. Only for Porto portals (map warpzones have no owner).
-            OnPortalTeleport?.Invoke(e);
+            NotifyPortalTeleport(e);
         }
 
         // QC WarpZone_Touch fires the targets of BOTH this zone and its partner (this.enemy) on a crossing, with the
@@ -471,6 +508,8 @@ public sealed class WarpzoneManager
     /// </summary>
     public static event System.Action<Entity>? OnPortalTeleport;
 
+    internal static void NotifyPortalTeleport(Entity player) => OnPortalTeleport?.Invoke(player);
+
     /// <summary>
     /// QC trigger_warpzone spawnfunc: create + register a warpzone from explicit IN/OUT plane parameters and a
     /// touch volume. The touch warps any crossing player/projectile. <paramref name="target"/>/<paramref name="targetName"/>
@@ -492,10 +531,12 @@ public sealed class WarpzoneManager
     /// <c>target_position</c>) is given, its origin/angles seed the result and the brush plane only corrects
     /// the orientation. Returns ok=false when the brush is non-planar / has no usable surface (the QC errors).
     /// </summary>
-    public (Vector3 origin, Vector3 angles, bool ok) DerivePlaneFromBrush(Entity brush, Entity? aiment = null)
+    public (Vector3 origin, Vector3 angles, bool ok) DerivePlaneFromBrush(Entity brush, Entity? aiment = null) =>
+        Api.Services is null ? (Vector3.Zero, Vector3.Zero, false) : DerivePlaneFromBrush(brush, aiment, Api.Surfaces);
+
+    public (Vector3 origin, Vector3 angles, bool ok) DerivePlaneFromBrush(
+        Entity brush, Entity? aiment, ISurfaceService surf)
     {
-        if (Api.Services is null) return (Vector3.Zero, Vector3.Zero, false);
-        ISurfaceService surf = Api.Surfaces;
 
         Vector3 org = brush.Origin;
         if (org == Vector3.Zero) org = 0.5f * (brush.Mins + brush.Maxs);
@@ -830,6 +871,7 @@ public sealed class WarpzoneManager
     public void OnMapEntity(Entity e)
     {
         if (e.ClassName == "trigger_warpzone_position") AddMapPosition(e);
+        else if (e.ClassName == "func_camera") _cameras.Add(new WarpzoneCamera(e));
         else AddMapZone(e);
     }
 
@@ -900,6 +942,8 @@ public sealed class WarpzoneManager
         }
         Link();
         SeedMovingSnapshots();
+        foreach (WarpzoneCamera camera in _cameras)
+            camera.ResolveTarget();
         _pendingZones.Clear();
         _pendingPositions.Clear();
     }
@@ -929,6 +973,10 @@ public sealed class WarpzoneManager
     /// </summary>
     public void ThinkMovingZones()
     {
+        foreach (WarpzoneCamera camera in _cameras)
+            if (!camera.Surface.IsFreed && (camera.Surface.SpawnFlags & 1) != 0)
+                camera.UpdatePose();
+
         for (int i = 0; i < _zones.Count; i++)
         {
             Warpzone wz = _zones[i];
@@ -980,6 +1028,9 @@ public sealed class WarpzoneManager
         foreach (Warpzone wz in _zones)
             if (wz.Owner is null) { wz.Partner = null; wz.Transform = default; RederivePlane(wz); }
         Link();
+        foreach (WarpzoneCamera camera in _cameras)
+            if (!camera.Surface.IsFreed)
+                camera.ResolveTarget();
         SeedMovingSnapshots();
     }
 
@@ -997,6 +1048,10 @@ public sealed class WarpzoneManager
     public void ReconnectByTarget(string? target)
     {
         bool all = string.IsNullOrEmpty(target);
+        foreach (WarpzoneCamera camera in _cameras)
+            if (!camera.Surface.IsFreed && (all || camera.Surface.Target == target))
+                camera.ResolveTarget();
+
         // Collect the zones to reconnect (matching .target) + their existing partners (server.qc:803 e.enemy too).
         var touched = new HashSet<Warpzone>();
         foreach (Warpzone wz in _zones)
@@ -1154,88 +1209,23 @@ public static class WarpzoneSpawns
     /// <see cref="WarpzoneManager.OnReconnectUse"/>. Null = no manager (unit tests without a host).</summary>
     public static System.Action<Entity>? ReconnectSink;
 
-    /// <summary>
-    /// QC <c>spawnfunc(func_camera)</c> / <c>spawnfunc(func_warpzone_camera)</c> (lib/warpzone/server.qc): a
-    /// map-placed security camera. The camera entity resolves its <see cref="Entity.Target"/> (a
-    /// <c>target_position</c> / <c>info_notnull</c> aim point), stores its camera POSE (origin + the angles that
-    /// look from the camera toward that target, exactly as <c>info_autoscreenshot</c> aims at its target), becomes a
-    /// non-moving trigger volume, and — on a CLIENT viewer crossing the trigger — stamps the viewer's
-    /// AUTHORITATIVE <see cref="Entity.FixAngle"/>/<see cref="Entity.FixAngleAngles"/>: the SAME view-orient channel
-    /// the warpzone owner block uses (<see cref="WarpzoneManager.Teleport"/>) and that <c>NetGame</c> consumes
-    /// (ConsumePredictedFixAngle). This closes the AUTHORITY half of <c>warpzones.camera</c> with no new wire
-    /// fields. The see-through camera-surface RENDER (the <c>dpcamera</c> portal view) stays delegated to
-    /// <c>PortalRenderer</c> on the listen host — out of scope here, consistent with the partial render liveness.
-    ///
-    /// The target is resolved lazily on the FIRST touch as well as at setup, because the <c>target_position</c> aim
-    /// point may not have spawned yet when the camera's spawnfunc runs (the BSP entity lump spawns in file order, so
-    /// a forward target reference is common — mirrors <c>info_autoscreenshot</c>'s deferred find-target pass).
-    /// </summary>
+    /// <summary>QC <c>spawnfunc(func_camera)</c>: a camera brush is solid by default, and has no touch action.
+    /// Resolve its view after all map targets have spawned.</summary>
     public static void FuncCameraSetup(Entity e)
     {
         e.ClassName = "func_camera";
-
-        // The camera presents a touchable view volume but never moves on its own (QC SOLID_TRIGGER / MOVETYPE_NONE).
-        e.Solid = Solid.Trigger;
         e.MoveType = MoveType.None;
-
-        // The camera POSE (origin + the angles looking from the camera toward its target) is held in the touch
-        // closure rather than on the edict — there is no networked camera-pose field, and none is needed (the pose
-        // is pure server-side AUTHORITY that drives the existing FixAngle/FixAngleAngles channel). Resolve the aim
-        // target now if it already exists; otherwise the Touch handler resolves it lazily on the first crossing,
-        // because the target_position aim point may not have spawned yet when this spawnfunc runs (BSP lump order —
-        // mirrors info_autoscreenshot's deferred find-target pass).
-        bool posed = TryResolveCameraPose(e, out Vector3 cameraAngles);
-
-        e.Touch = (self, other) =>
+        e.Solid = e.SolidOverride switch
         {
-            if (other.IsFreed || other.Solid == Solid.Not) return;
-            // Only a CLIENT viewer's view is re-oriented (the same gate the warpzone teleport uses); a projectile or
-            // item crossing the camera volume is unaffected.
-            if ((other.Flags & EntFlags.Client) == 0) return;
-
-            // Lazy resolution: if the aim target hadn't spawned at setup time, resolve it on the first crossing.
-            if (!posed)
-            {
-                posed = TryResolveCameraPose(self, out cameraAngles);
-                if (!posed) return; // misconfigured camera (no resolvable target) — nothing to orient to
-            }
-
-            // Stamp the AUTHORITATIVE fixed-view channel — the host applies these angles verbatim (NetGame reads
-            // LocalServerPlayer.FixAngle / ConsumePredictedFixAngle), snapping the viewer to the camera's facing.
-            other.FixAngle = true;
-            other.FixAngleAngles = cameraAngles;
+            0f => Solid.Bsp,
+            < 0f => Solid.Not,
+            _ => (Solid)(int)e.SolidOverride,
         };
-
-        // Route to the match manager (mirrors the other warpzone spawnfuncs) so it participates on the normal path.
+        float scale = e.ScaleFactor != 0f ? e.ScaleFactor : e.ModelScale != 0f ? e.ModelScale : 1f;
+        e.ScaleFactor = scale;
+        if (Api.Services is not null && !string.IsNullOrEmpty(e.Model))
+            Api.Entities.SetModel(e, e.Model);
+        MapMover.SetSize(e, e.Mins * scale, e.Maxs * scale);
         Sink?.Invoke(e);
-    }
-
-    /// <summary>
-    /// Resolve the camera's <see cref="Entity.Target"/> aim point and compute the camera POSE angles — the angles
-    /// looking from the camera toward the target (QC <c>info_autoscreenshot</c> aim: <c>vectoangles(target − origin)</c>
-    /// with the pitch flip). Falls back to the target's own explicit angles when the camera sits AT its target
-    /// (degenerate aim vector). Returns false (with <paramref name="angles"/> = default) when no target resolves yet.
-    /// </summary>
-    private static bool TryResolveCameraPose(Entity e, out Vector3 angles)
-    {
-        angles = default;
-        Entity? target = !string.IsNullOrEmpty(e.Target) ? MapMover.FindFirstByTargetName(e.Target) : null;
-        if (target is null) return false;
-
-        Vector3 dir = target.Origin - e.Origin;
-        if (dir.LengthSquared() > 0.0001f)
-        {
-            // QC info_autoscreenshot_findtarget: a = vectoangles(target - origin); a.x = -a.x (the pitch flip that
-            // matches the fixedvectoangles convention the view consumer expects).
-            angles = QMath.VecToAngles(dir);
-            angles.X = -angles.X;
-            angles.Z = e.Angles.Z; // preserve any mapper roll on the camera body
-        }
-        else
-        {
-            // Camera coincident with its target (or a self-aimed dpcamera): use the target's explicit orientation.
-            angles = target.Angles;
-        }
-        return true;
     }
 }

@@ -604,7 +604,7 @@ public sealed class Arc : Weapon
         missile.Health = Bolt.Health;
 
         // W_SetupProjVelocity_PRE(bolt_): velocity = w_shotdir * speed (with bolt_spread, normally 0).
-        missile.Velocity = WeaponFiring.ProjectileVelocity(shot.Dir, Vector3.UnitZ, Bolt.Speed, 0f, 0f, Bolt.Spread);
+        missile.Velocity = WeaponFiring.ProjectileVelocity(actor, shot.Dir, Vector3.UnitZ, Bolt.Speed, 0f, 0f, Bolt.Spread);
         missile.Angles = QMath.VecToAngles(missile.Velocity);
 
         // QC arc.qc:150-152 — flag the energy bolt as a dodgeable hazard (rating = bolt damage). (The sweeping

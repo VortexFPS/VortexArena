@@ -1,0 +1,192 @@
+DarkPlaces Linux d93f9c4 Nov 19 2026 release GCC 
+Game is Xonotic using gamedir [0;1mdata[m
+gamename for server filtering: Xonotic
+Package /tmp/va-countdown-original10/original/data/shared.pk3 contains the file models/xonotic_jumppad01/xonotic_jumppads01_readme.txt several times
+Package /tmp/va-countdown-original10/original/data/shared.pk3 contains the file textures/phillipk1x/_GPL.txt several times
+Package /tmp/va-countdown-original10/original/data/shared.pk3 contains the file textures/phillipk1x/_readme.txt several times
+Package /tmp/va-countdown-original10/original/data/shared.pk3 contains the file textures/phillipk2x/_GPL.txt several times
+Package /tmp/va-countdown-original10/original/data/shared.pk3 contains the file textures/phillipk2x/_readme.txt several times
+Current nice level is below the soft limit - cannot use niceness
+Loaded library "libcurl.so.4"
+Skeletal animation uses SSE code path
+Initializing client
+Linked against SDL version 2.30.0
+Using SDL library version 2.30.0
+Loaded library "libfreetype.so.6"
+Loaded library "libogg.so.0"
+Loaded library "libtheora.so.0"
+Loaded library "libvorbis.so.0"
+Loaded library "libvorbisenc.so.2"
+Client using an automatically assigned port
+Client opened a socket on address 0.0.0.0:0
+Client opened a socket on address [0:0:0:0:0:0:0:0]:0
+execing quake.rc
+execing default.cfg
+execing xonotic-common.cfg
+execing commands.cfg
+execing xonotic-server.cfg
+"maxplayers" set to "16"
+execing testing.cfg
+execing balance-xonotic.cfg
+execing bal-wep-xonotic.cfg
+execing physicsX.cfg
+execing turrets.cfg
+execing vehicles.cfg
+execing gametypes-server.cfg
+execing ctfscoring-samual.cfg
+execing mutators.cfg
+execing randomitems-xonotic.cfg
+execing monsters.cfg
+execing minigames.cfg
+execing physics.cfg
+[1;33mcouldn't exec cdtracks.cfg[m
+execing xonotic-client.cfg
+execing sRGB-disable.cfg
+[1;33mUnknown command "cd"[m
+execing binds-xonotic.cfg
+execing _hud_common.cfg
+execing _hud_descriptions.cfg
+execing hud_luma.cfg
+execing effects-normal.cfg
+execing crosshairs.cfg
+execing gametypes-client.cfg
+execing notifications.cfg
+[1;33mcouldn't exec config.cfg[m
+execing data/campaign.cfg
+execing config_update.cfg
+[1;33mcouldn't exec font-xolonium.cfg[m
+execing autoexec/empty.cfg
+execing autoexec.cfg
+[1;33mUnknown command "crypto_keygen"[m
+execing post-config.cfg
+[1;31mERROR: can't deactivate vsync because That operation is not supported[m
+GL_VENDOR: Mesa
+GL_RENDERER: llvmpipe (LLVM 20.1.2, 256 bits)
+GL_VERSION: 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4
+Detected GLSL version 450
+Using GL32 rendering path
+Display 0: screen
+Video Mode: window 640x480 24bpp on display 0
+OpenGL backend started
+Loaded library "libpng16.so.16"
+Loaded library "libpng16.so.16"
+menu: program loaded (crc 4486, size 2090K)
+[0;1m[::[mMENUQC[0;1m::[1;33mWARNING[0;1m] [mEngine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+Connection established to 127.0.0.1:26909
+--> client to server keepalive
+<-- server to client keepalive
+
+Server: Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC  (progs 51381 crc)
+Server protocol is DP7
+
+<===================================>
+
+[1;33mRunning Man CTF[m
+Auto-recording to demos/2026-11-19_05-23_runningmanctf.dem.
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;31mdds/textures/exx/floor/floor_clang01_norm.dds: not a DDS image[m
+[1;31mdds/textures/narmorx/base/concrete05_red_gloss.dds: not a DDS image[m
+[1;31mdds/textures/narmorx/base/concrete07_norm.dds: not a DDS image[m
+[1;31mdds/textures/narmorx/base/concrete07_gloss.dds: not a DDS image[m
+[1;31mdds/textures/narmorx/base/concrete05_norm.dds: not a DDS image[m
+[1;31mdds/textures/narmorx/base/concrete05_gloss.dds: not a DDS image[m
+[1;31mdds/textures/narmorx/base/concrete05_blue_norm.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/light/light_light2c_norm.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/light/light_light2c_gloss.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/light/light_light2b_norm.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/light/light_light2b_gloss.dds: not a DDS image[m
+[1;31mdds/textures/exx/base/base_metal01_norm.dds: not a DDS image[m
+[1;31mdds/textures/exx/floor/floor_wrn01-red_gloss.dds: not a DDS image[m
+[1;31mdds/textures/exx/floor/floor_crete01_norm.dds: not a DDS image[m
+[1;31mdds/textures/exx/floor/floor_wrn01-blue_norm.dds: not a DDS image[m
+[1;31mdds/textures/exx/floor/floor_wrn01-blue_gloss.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/light/light_light2a_gloss.dds: not a DDS image[m
+[1;31mdds/textures/exx/base/base_metal04_norm.dds: not a DDS image[m
+[1;31mdds/textures/ex2x/light/light_beam_red_norm.dds: not a DDS image[m
+[1;31mdds/textures/ex2x/light/light_beam_red_gloss.dds: not a DDS image[m
+[1;31mdds/textures/exx/floor/floor_crete01_phoenix_norm.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/base/base_pipe1a_norm.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/base/base_pipe1c_norm.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/wall/wall_wall1a_norm.dds: not a DDS image[m
+[1;31mdds/textures/effects_warpzone/wavy_norm.dds: not a DDS image[m
+client: program loaded (crc 54264, size 4002K) EXT_CSQC
+[0;1m[::[mCSQC[0;1m::[1;33mWARNING[0;1m] [mEngine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+[1;31mdds/textures/facility114invx/trim/trim01invg_norm.dds: not a DDS image[m
+--> client to server keepalive
+[0;1m[::[mCSQC[0;1m::[1;33mWARNING[0;1m] [mThis map doesn't support Duel in Xonotic newer than 0.9.0. To fix it add "gametype duel" to the "runningmanctf.mapinfo" file.
+<-- server to client keepalive
+[1;33mUnknown command "cd"[m
+Rebound MOUSE4 to "weapon_last", replacing legacy "weaplast"
+[1;33m[mBlueProbe[1;34m connected[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+]cmd join
+[1;33m[mBlueProbe[1;34m is now playing[m
+]cmd teleporttotarget probe_clone
+]impulse 142
+]cmd teleporttotarget probe_player
+]bind F8 "kill"
+BlueProbe[1;31m couldn't take it anymore[m
+
+Received Termination signal, exiting...
+Completed demo
+Disconnected
+[1;31mERROR: can't deactivate vsync because That operation is not supported[m
+[1;33mWarning: Cvar_SetQuick() cannot set unregistered cvar "snd_initialized"[m
+OpenGL backend shutting down
+Saving command history to darkplaces_history.txt ...
+Saving config to config.cfg ...

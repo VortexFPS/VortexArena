@@ -352,6 +352,8 @@ public sealed class Mayhem : GameType
 
     public override void OnInit()
     {
+        if (UseMatchLimits)
+            return;
         // QC INIT(mayhem): identity is set in the ctor; the point/lead limits are read on demand
         // (PointLimit/LeadLimit fall back to 1000/0). gametype_init flags (USEPOINTS) and map-size gating are
         // engine/map-pool concerns.
@@ -362,6 +364,9 @@ public sealed class Mayhem : GameType
         // reset to its default of 15.
         SeedTimeLimit(DefaultTimeLimitMinutes);
     }
+
+    public bool UseMatchLimits { get; set; }
+    public override string MenuSummary => "Compete for the most damage dealt and frags in this chaotic mayhem";
 
     /// <summary>
     /// Apply mayhem's gametype-default timelimit (gametype_init "timelimit=15") if the host has not overridden it.
@@ -392,6 +397,7 @@ public sealed class Mayhem : GameType
     {
         get
         {
+            if (UseMatchLimits && Api.Services is not null) return Api.Cvars.GetFloat("fraglimit");
             if (TryCvar(CvarPointLimit, out float pl) && pl >= 0f) return pl;
             return DefaultPointLimit;
         }
@@ -402,6 +408,7 @@ public sealed class Mayhem : GameType
     {
         get
         {
+            if (UseMatchLimits && Api.Services is not null) return Api.Cvars.GetFloat("leadlimit");
             if (TryCvar(CvarLeadLimit, out float ll) && ll >= 0f) return ll;
             return DefaultLeadLimit;
         }

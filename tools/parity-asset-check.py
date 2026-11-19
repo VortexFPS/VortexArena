@@ -14,7 +14,7 @@ Method:
      data/maps/*.pk3 — the per-map packs, which sit one level down and were being missed entirely.
   3. Resolve each reference with DarkPlaces' fallback rules: images try .tga/.png/.jpg[/.dds],
      sounds try .wav<->.ogg, env/ skyboxes try the 6 _ft.._dn side suffixes.
-  4. For model hits, sniff the magic: IDP3 (md3) / IQM / DPM ok; IDPO (quake .mdl) and other
+  4. For model hits, sniff the magic: IDP3 (md3) / IQM / DPM / Quake MDL v6 ok; other
      magics are flagged present-but-unsupported.
 
 Findings are leads: a "missing" ref may be dead code or a write-path; check before filing.
@@ -46,7 +46,11 @@ LIT_RE = re.compile(r'(?<!\$)"((?:%s)[A-Za-z0-9_\-./]*[A-Za-z0-9_\-.])"' % "|".j
 IMG_EXTS = (".tga", ".png", ".jpg", ".jpeg", ".dds")
 SND_EXTS = (".wav", ".ogg")
 MODEL_EXTS = (".md3", ".iqm", ".dpm", ".mdl", ".md2", ".obj", ".zym", ".psk")
-SKY_SUFFIXES = ("_ft", "_bk", "_lf", "_rt", "_up", "_dn")
+SKY_FACE_SETS = (
+    ("px", "nx", "py", "ny", "pz", "nz"),
+    ("posx", "negx", "posy", "negy", "posz", "negz"),
+    ("rt", "lf", "bk", "ft", "up", "dn"),
+)
 
 
 class Vfs:
@@ -74,27 +78,27 @@ class Vfs:
                     self.index.setdefault(p.relative_to(d).as_posix().lower(), (d.name, p))
 
         def add_zip(z: pathlib.Path) -> None:
-            self.mounts.append(z.name)
             try:
                 zf = zipfile.ZipFile(z)
             except (OSError, zipfile.BadZipFile):
                 return
+            self.mounts.append(z.name)
             for member in zf.namelist():
                 if not member.endswith("/"):
                     self.index.setdefault(member.lower(), (z.name, (zf, member)))
 
-        # Root packs first (core outranks maps — see the precedence note above).
-        for d in sorted(data.glob("*.pk3dir")):
-            add_dir(d)
-        for z in sorted(data.glob("*.pk3")):
-            add_zip(z)
-        # Then the per-map packs, in whichever form fetch-maps.py left them.
-        maps = data / "maps"
-        if maps.is_dir():
-            for d in sorted(maps.glob("*.pk3dir")):
-                add_dir(d)
-            for z in sorted(maps.glob("*.pk3")):
-                add_zip(z)
+        # First writer wins here. The native VFS prepends each mount, giving loose
+        # files first priority, then packs in reverse name order within each root.
+        for directory in (data, data / "maps"):
+            if not directory.is_dir():
+                continue
+            add_dir(directory)
+            for entry in sorted(directory.iterdir(), key=lambda p: p.name.lower(), reverse=True):
+                suffix = entry.suffix.lower()
+                if entry.is_dir() and suffix in {".pk3dir", ".dpkdir"}:
+                    add_dir(entry)
+                elif entry.is_file() and suffix in {".pk3", ".dpk", ".obb", ".pak"}:
+                    add_zip(entry)
 
     def exists(self, path: str) -> bool:
         return path.lower() in self.index
@@ -131,23 +135,32 @@ def resolve(vfs: Vfs, ref: str) -> tuple[str, str | None]:
         if hit is None:
             return "missing", None
         head = vfs.read_head(hit)
-        if head[:4] in (b"IDP3",) or head.startswith(b"INTERQUAKEMODEL") or head.startswith(b"DARKPLACESMODEL"):
+        if head[:4] == b"IDP3" or head[:8] == b"IDPO\x06\x00\x00\x00" or head.startswith(b"INTERQUAKEMODEL") or head.startswith(b"DARKPLACESMODEL"):
             return "ok", hit
         if hit.lower().endswith(".obj"):
             return "ok", hit
-        return "unsupported-format", hit  # IDPO (quake .mdl), IDP2, unknown magic
+        return "unsupported-format", hit  # IDP2 or unknown magic
 
     if ref.startswith(("sound/", "sounds/")) or ext in SND_EXTS:
         cands = [stem + e for e in SND_EXTS] if ext in SND_EXTS or not ext else [ref]
         hit = first_hit(cands if cands else [ref])
         return ("ok", hit) if hit else ("missing", None)
 
-    if ref.startswith(("env/", "cubemaps/")) and ext == "":
-        # skybox base: any side image counts as resolved
-        for suf in SKY_SUFFIXES + ("",):
-            for e in IMG_EXTS:
-                if vfs.exists(ref + suf + e):
-                    return "ok", ref + suf + e
+    if ref.startswith("cubemaps/") and ext == "":
+        # AssetSystem.DefaultReflectCubemap requires all six DP box faces.
+        faces = [first_hit(ref + face + e for e in IMG_EXTS) for face in SKY_FACE_SETS[0]]
+        return ("ok", faces[0]) if all(faces) else ("missing", None)
+
+    if ref.startswith("env/") and ext == "":
+        # SkyboxLoader accepts all six faces in the same naming convention.
+        def find_face(side):
+            names = (ref + "_" + side, ref + side, "env/" + ref + side, "gfx/env/" + ref + side)
+            return first_hit(name + e for name in names for e in IMG_EXTS)
+
+        for convention in SKY_FACE_SETS:
+            faces = [find_face(side) for side in convention]
+            if all(faces):
+                return "ok", faces[0]
         return "missing", None
 
     if ext in IMG_EXTS or ext == "":
@@ -164,7 +177,7 @@ def collect_refs() -> tuple[dict[str, list[str]], int]:
     interpolated = 0
     interp_re = re.compile(r'\$"(?:%s)[^"]*\{' % "|".join(p.rstrip("/") for p in PREFIXES))
     for top in ("src", "game"):
-        for p in (ROOT / top).rglob("*.cs"):
+        for p in sorted((ROOT / top).rglob("*.cs")):
             if any(part in ("obj", "bin", ".godot") for part in p.parts):
                 continue
             try:
@@ -172,10 +185,12 @@ def collect_refs() -> tuple[dict[str, list[str]], int]:
             except OSError:
                 continue
             rel = p.relative_to(ROOT).as_posix()
-            interpolated += len(interp_re.findall(text))
-            for m in LIT_RE.finditer(text):
-                line = text.count("\n", 0, m.start()) + 1
-                refs.setdefault(m.group(1), []).append(f"{rel}:{line}")
+            for number, line in enumerate(text.splitlines(), 1):
+                if line.lstrip().startswith("//"):
+                    continue
+                interpolated += len(interp_re.findall(line))
+                for m in LIT_RE.finditer(line):
+                    refs.setdefault(m.group(1), []).append(f"{rel}:{number}")
     return refs, interpolated
 
 
@@ -188,15 +203,14 @@ def main():
         for e in (yaml.safe_load(KNOWN_FILE.read_text(encoding="utf-8")) or {}).get("known") or []:
             known.append(((e.get("path") or "").lower(), e.get("note", "")))
 
-    def is_known(ref: str) -> bool:
-        low = ref.lower()
-        return any(fnmatch.fnmatch(low, pat) for pat, _ in known)
-
     vfs = Vfs(DATA)
     refs, interpolated = collect_refs()
     missing, unsupported, ok = [], [], 0
+    exceptions = []
     for ref in sorted(refs):
-        if is_known(ref):
+        if exception := next(((pat, note) for pat, note in known if fnmatch.fnmatch(ref.lower(), pat)), None):
+            pattern, note = exception
+            exceptions.append({"ref": ref, "pattern": pattern, "reason": note, "where": refs[ref]})
             continue
         status, hit = resolve(vfs, ref)
         if status == "ok":
@@ -231,12 +245,18 @@ def main():
         md += [f"| `{r}` | `{h}` | {'; '.join(w[:2])} |" for r, h, w in unsupported]
     else:
         md.append("none.")
-    md += ["", f"_{ok} refs resolved ok. Full data in `_asset-check.json`._", ""]
+    if exceptions:
+        md += ["", "## Documented exceptions", "",
+               "| Detected reference | Reason |", "|---|---|"]
+        md.extend(f"| `{entry['ref']}` | {entry['reason']} |" for entry in exceptions)
+    md += ["", f"_{ok} references resolved and passed the extension or header check. Loading and rendering "
+           "require separate tests. Full data in `_asset-check.json`._", ""]
 
     (OUT / "ASSET-CHECK.md").write_text("\n".join(md), encoding="utf-8")
     (OUT / "_asset-check.json").write_text(json.dumps({
         "generated": today,
         "missing": [{"ref": r, "where": w} for r, w in missing],
+        "exceptions": exceptions,
         "unsupported": [{"ref": r, "resolved": h, "where": w} for r, h, w in unsupported],
         "ok": ok, "interpolated_skipped": interpolated,
     }, indent=1), encoding="utf-8")

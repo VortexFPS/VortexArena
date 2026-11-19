@@ -1,0 +1,25 @@
+progs.dat c4a5a9e85598333568183779c06446b2d03f056d2da71636b6f86150ed1202f7
+implosion.pk3 33ee6363ae88262fd13b36731c0dea6de74e0032cc984b58ca2795f69a9feb0e
+original Maps available (2) (New maps have asterisks marked in blue): *implosion *runningmanctf
+original Maps in list (2): implosion runningmanctf
+original maplist: ERROR: parity-missing does not exist!
+original "g_maplist" is "implosion runningmanctf" [""]
+original "g_maplist" is "runningmanctf implosion runningmanctf" [""]
+original Maps in list (2): implosion runningmanctf
+native Maps available (9) (New maps have asterisks marked in blue): *catharsis *courtfun *dance *geoplanetary *go *implosion *runningmanctf *space-elevator *vorix
+native Maps in list (2): implosion runningmanctf
+native maplist: ERROR: parity-missing does not exist!
+native "g_maplist" is "implosion runningmanctf"
+native "g_maplist" is "runningmanctf implosion runningmanctf"
+native Maps in list (3): runningmanctf implosion runningmanctf
+original-feature [::SVQC::WARNING] the selected map lacks features required by current settings; playing anyway.
+native-feature [::client::WARNING] The selected map lacks features required by current settings; playing anyway.
+native vote: Darkzone DM -> Running Man CTF; startup alias ran; CTF catalog listed
+offline melee: armed BSP listed, unarmed BSP excluded, nested BSP omitted, no record markers
+offline melee disabled: unarmed BSP listed immediately
+
+CTF capture on Leave Em Behind, same world before and after, marker excerpt
+original before (dedicated): *leave_em_behind
+original after (client, 4.08 s capture): *leave_em_behind
+native before (dedicated): ^5*leave_em_behind
+native after (dedicated and ENet client, 5.08 s capture): ^3leave_em_behind

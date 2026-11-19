@@ -1,0 +1,3 @@
+79e38b239b8dc5d5ee1ac8ada8245a51381ce27277dc165645fea0e69fed4312  /tmp/va-reviewed-stock/xonotic-linux64-sdl
+4d502424af24f90c36c8a17a034ded536571a0d353a4192d8b332e8cc8b2d771  /tmp/va-reviewed-stock/compiled/menu.dat
+6972d09d260d4ff7b32d8c77539251713960b558840f159a8f5faa1c22120a1e  /tmp/vortex-parity-base/common.zh_CN.po

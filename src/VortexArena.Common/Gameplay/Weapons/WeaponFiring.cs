@@ -32,8 +32,7 @@ public readonly struct ShotInfo
 /// Spread (deterministic PRNG), solid-penetration multi-hit, exponential distance falloff, knockback force,
 /// railgun multi-pierce and the per-target headshot bbox (<see cref="Headshot"/>) are all implemented here.
 /// Antilag take-back brackets the SetupShot trueaim/muzzle traces and the FireBullet/FireRailgunBullet damage
-/// traces (g_antilag==2, via <see cref="LagComp"/>). Warpzone transforms and accuracy hitplot bookkeeping are the
-/// remaining online/render-only gaps.
+/// traces (g_antilag==2, via <see cref="LagComp"/>). The server can observe shared shot setup for local hitplots.
 /// </summary>
 public static class WeaponFiring
 {
@@ -134,8 +133,8 @@ public static class WeaponFiring
     /// them instead of stopping on the wall; we approximate that with a NoMonsters body trace when
     /// <paramref name="penetrateWalls"/> is set. At g_antilag==2 the trueaim + muzzle-nudge traces are
     /// bracketed by <see cref="LagComp"/> (QC tracing.qc:46/85/97), so w_shotend/w_shotorg/w_shotdir are
-    /// computed against rewound enemy positions. Still deferred vs QC: warpzones, the trueaim minrange clamp,
-    /// accuracy/hitplot bookkeeping, and g_antilag modes 1/3.
+    /// computed against rewound enemy positions. The optional server hitplot observer samples the eye trace
+    /// independently of the weapon's gameplay trace.
     /// </summary>
     public static ShotInfo SetupShot(Entity actor, Vector3 forward, Vector3 mins, Vector3 maxs,
         float range = -1f, bool penetrateWalls = false,
@@ -150,6 +149,9 @@ public static class WeaponFiring
         // Zero maxDamage (porto/seeker missile) is filtered by accuracy_add's all-zero guard.
         if (wep is not null && (actor.Flags & EntFlags.Client) != 0 && WeaponAccuracyEvents.CanBeGoodDamage(actor))
             WeaponAccuracyEvents.Fired(actor, wep, maxDamage);
+
+        if (actor is Player { HitPlotShot: { } hitPlot } shooter)
+            hitPlot(shooter, wep ?? Inventory.CurrentWeapon(shooter));
 
         // QC W_SetupShot: `if (!autocvar_g_norecoil) ent.punchangle_x = -recoil;` — the view kicks UP on firing
         // (pitch −recoil°), then decays via PM_check_punch (PlayerPhysics.CheckPunch, −10°/s). Players only (a
@@ -699,13 +701,7 @@ public static class WeaponFiring
                     - (Prandom.Float() * 25f + 25f) * forward
                     + (upBase - Prandom.Float() * 5f) * up;
 
-        // Route the casing through the effect sink as a velocity-carrying emission. CASING_BULLET/CASING_SHELL
-        // are registered Effects (EffectsList.cs) so this resolves to a non-null Effect with a stable RegistryId
-        // — it networks live (ServerNet.WriteEffect encodes the origin+velocity instead of dropping a null-Effect
-        // request) and the client routes the name to EffectSystem.SpawnCasing (the real bouncing brass shell, not
-        // a generic particle burst). The casing kind picks the shell vs bullet model client-side.
-        string casingName = type == CasingType.Shell ? "casing_shell" : "casing_bullet";
-        EffectEmitter.EmitByEffectInfoName(casingName, muzzle, vel, 1, except: null);
+        EffectEmitter.EmitCasing(actor, type == CasingType.Shell, muzzle, vel);
     }
 
     /// <summary>
@@ -777,17 +773,20 @@ public static class WeaponFiring
     /// <c>end-start</c>, then intersects the running [a0,a1] parametric interval per axis.
     /// </summary>
     public static bool TraceHitsBox(Vector3 start, Vector3 end, Vector3 thmi, Vector3 thma)
+        => TraceHitsBox(start, end, thmi, thma, out _);
+
+    public static bool TraceHitsBox(Vector3 start, Vector3 end, Vector3 thmi, Vector3 thma, out float entry)
     {
         end -= start;
         thmi -= start;
         thma -= start;
         // now it is a trace from 0 to end
 
-        float a0 = 0f, a1 = 1f;
-        if (!TraceHitsBox1d(end.X, thmi.X, thma.X, ref a0, ref a1)) return false;
-        if (!TraceHitsBox1d(end.Y, thmi.Y, thma.Y, ref a0, ref a1)) return false;
-        if (!TraceHitsBox1d(end.Z, thmi.Z, thma.Z, ref a0, ref a1)) return false;
-        return true;
+        entry = 0f;
+        float exit = 1f;
+        return TraceHitsBox1d(end.X, thmi.X, thma.X, ref entry, ref exit)
+            && TraceHitsBox1d(end.Y, thmi.Y, thma.Y, ref entry, ref exit)
+            && TraceHitsBox1d(end.Z, thmi.Z, thma.Z, ref entry, ref exit);
     }
 
     /// <summary>Port of <c>trace_hits_box_1d</c> (common/util.qc:2197-2217): one-axis slab clip.</summary>
@@ -1024,6 +1023,47 @@ public static class WeaponFiring
         dir = QMath.Normalize(dir);
         dir = CalculateSpread(dir, spread, mustNormalize: false);
         return QMath.Normalize(dir) * speed;
+    }
+
+    public static Vector3 ProjectileVelocity(Entity actor, Vector3 dir, Vector3 up, float speed,
+        float upSpeed = 0f, float zSpeed = 0f, float spread = 0f)
+        => CalculateProjectileVelocity(actor, ProjectileVelocity(dir, up, speed, upSpeed, zSpeed, spread));
+
+    /// <summary>QC W_CalculateProjectileVelocity for a launch which permits Newtonian inheritance.</summary>
+    public static Vector3 CalculateProjectileVelocity(Entity actor, Vector3 launch)
+    {
+        launch *= WeaponSpeedFactor(actor);
+        float style = Api.Services is null ? 0f : Api.Cvars.GetFloat("g_projectiles_newton_style");
+        if (style == 0f) return launch;
+        if (style != 2f) return actor.Velocity + launch;
+
+        float speed = launch.Length();
+        if (speed == 0f) return Vector3.Zero;
+        Vector3 direction = launch / speed;
+        float along = Vector3.Dot(actor.Velocity, direction);
+        float discriminant = along * along - actor.Velocity.LengthSquared() + speed * speed;
+        float result = along + MathF.Sqrt(MathF.Max(0f, discriminant));
+        float min = string.IsNullOrEmpty(Api.Cvars.GetString("g_projectiles_newton_style_2_minfactor"))
+            ? 0.8f : Api.Cvars.GetFloat("g_projectiles_newton_style_2_minfactor");
+        float max = string.IsNullOrEmpty(Api.Cvars.GetString("g_projectiles_newton_style_2_maxfactor"))
+            ? 1.5f : Api.Cvars.GetFloat("g_projectiles_newton_style_2_maxfactor");
+        return direction * QMath.Clamp(result, speed * min, speed * max);
+    }
+
+    /// <summary>QC W_WeaponSpeedFactor. Mutators can adjust the launch speed for the firing actor.</summary>
+    public static float WeaponSpeedFactor(Entity? actor)
+    {
+        if (Api.Services is null)
+            return 1f;
+
+        const string cvar = "g_weaponspeedfactor";
+        float factor = string.IsNullOrEmpty(Api.Cvars.GetString(cvar)) ? 1f : Api.Cvars.GetFloat(cvar);
+        if (actor is null)
+            return factor;
+
+        var args = new MutatorHooks.WeaponSpeedFactorArgs(factor, actor);
+        MutatorHooks.WeaponSpeedFactor.Call(ref args);
+        return args.Factor;
     }
 
     /// <summary>

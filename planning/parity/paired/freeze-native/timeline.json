@@ -1,0 +1,42 @@
+[
+  {
+    "elapsed": 3.011,
+    "command": "cmd join"
+  },
+  {
+    "elapsed": 13.049,
+    "server_query": "status and scenario cvars"
+  },
+  {
+    "elapsed": 19.711,
+    "frame": "0053.webp"
+  },
+  {
+    "elapsed": 20.004,
+    "command": "cmd kill"
+  },
+  {
+    "elapsed": 23.935,
+    "frame": "0062.webp"
+  },
+  {
+    "elapsed": 26.007,
+    "server_query": "status and scenario cvars"
+  },
+  {
+    "elapsed": 29.996,
+    "frame": "0079.webp"
+  },
+  {
+    "elapsed": 32.835,
+    "frame": "0087.webp"
+  },
+  {
+    "elapsed": 45.024,
+    "server_query": "status and scenario cvars"
+  },
+  {
+    "elapsed": 51.066,
+    "command": "quit"
+  }
+]

@@ -1,5 +1,9 @@
 # Xonotic ↔ VortexArena Parity System
 
+[Directory-order review, scripted multiplayer evidence and implementation results](ORDERED-FOLLOWUP.md)
+
+The [scope page](review/index.html) exports selected answers with the reference commit. From the repository root, run `python3 tools/parity-bundle-decisions.py /tmp/vortex-decisions.html` to embed the screenshots and implementation report. With Firefox and geckodriver installed, run `python3 tools/check-parity-decisions.py /tmp/vortex-decisions.html`. The check opens the standalone file after shutting down its local web server, downloads the report and verifies its contents. It checks both viewport widths, every screenshot against its assigned question, all fourteen approved answers and every alternative through five prompt downloads. Omit the filename to test the editable page.
+
 This directory is the **single source of truth** for how faithfully the Godot/C# port
 reproduces the original Xonotic gameplay and presentation, and where it falls short.
 
@@ -86,25 +90,88 @@ work, organized into **4 dependency-ordered waves** sized for maximum parallelis
 The plan is generated, not hand-maintained: `tools/parity-plan-deps.*` analysis feeds
 `tools/parity-plan-gen.py`, which writes `PORTING-PLAN.md` (and persists `_plan-analysis.json`).
 
+## Evidence for a completeness review
+
+Start with the [approved decisions and follow-up evidence](REVIEW-2026-11-19.md), the [initial review](REVIEW-2026-11-18.md), and the [decision page](review/index.html).
+The ranked table includes every nonzero score. The evidence section below it retains zero-score
+rows with gap text or a mismatched constant, and rows with a design rationale. Read both sections.
+An intended-divergence flag can cover an architectural choice while a second, observable
+difference in the same row still needs work.
+
+For each candidate, identify the upstream entry point and the shipped data it actually selects.
+Trace the port from the normal caller through to the player-visible result, including remote
+clients where relevant. Check the ADRs, the Vortex cfg layer and any later implementations
+before changing behavior. Use the following evidence when recording a disposition.
+
+| Disposition | Evidence needed |
+|---|---|
+| Implementation deficit | An observable difference on a reachable path at the pin and in the current port. Record a reproduction or a failing assertion when possible. |
+| Deliberate difference | An accepted decision or explicit product configuration covering that particular outcome. Keep any additional deficit visible separately. |
+| Obsolete finding | Current caller and implementation, or evidence that upstream never invokes the claimed behavior. |
+| Verification needed | A specific unanswered factual question and a check that would answer it. |
+| Owner decision | Competing plausible product outcomes. Show the context and let the owner choose. |
+
+Use the coverage JSON to inspect every uncited and deferred file, ordinary function names and
+recognized method, hook and registration declarations without an explicit same-file anchor.
+File and symbol counts measure the audit surface. Inspect other macros, runtime behavior and
+engine semantics independently. The content comparison
+reads every non-QC entry from the pinned data Git tree. Its optional pixel pass compares decoded
+RGBA at full resolution, including alpha. A file absent from the core pack may live in another
+mount or be a build input.
+
 ## Running it
 
+The ranked report also checks a narrow class of stale assessments. When a gap or failed verification explicitly names a missing native method and identifies its source file, the assembler looks for declaration-shaped lines there and links them for inspection. A name match leaves the score unchanged. Trace the caller and the behavior at the pin before updating the assessment. The deferred-source verifier keeps the original 176-file cohort fixed while accepting paths that acquire individual registry citations.
+
 ```sh
+# For a fresh reference, fetch the DATA repository (PyYAML required; Pillow for --verify-pixels).
+# Set XON_BASE_DATA to your desired reference checkout path.
+export XON_BASE_DATA=/tmp/xonotic-data-parity
+git init "$XON_BASE_DATA"
+git -C "$XON_BASE_DATA" fetch --depth=1 https://github.com/xonotic/xonotic-data.pk3dir.git 863cd3e8456e18f577f7fe5fef857ff55ae62cc0
+git -C "$XON_BASE_DATA" checkout --detach FETCH_HEAD
+
 # Regenerate INDEX.md, PARITY-GAPS.md, NEEDS-INGAME-CHECK.md from the registry shards:
 python tools/parity-assemble.py
 
 # Regenerate COVERAGE.md (+ _coverage.json): Base-file citation coverage + stale-citation lint.
 # Run alongside parity-assemble after any registry change; drive UNMAPPED to 0 via audits or
 # explicit coverage-scope.yaml entries:
-python tools/parity-coverage.py
+python tools/parity-coverage.py --verify-pin --base "$XON_BASE_DATA/qcsrc"
+
+# Verify the frozen 631-file inventory and the 178 directory-ordered source reviews.
+# All three QC checks compare the scanned source files and build witnesses to pinned Git blob bytes.
+python -m unittest discover -s tools/tests
+python tools/parity-unmapped-audit.py --check --base "$XON_BASE_DATA"
+python tools/parity-s1-review.py --check --base "$XON_BASE_DATA"
+python planning/parity/deferred-audit/verify.py --base "$XON_BASE_DATA"
+
+# Check the seven published multiplayer comparisons, both clients' commands and logs,
+# sample records, and matching map, lightmap and QC hashes in the input manifests.
+python tools/check-parity-captures.py
+# With the original capture archives still present, rebuild the sheets and inspect the runtime inputs.
+python tools/check-parity-captures.py --raw /tmp --base "$XON_BASE_DATA"
 
 # Regenerate CVAR-DIFF.md: cfg-chain + code-default + never-read cvar diffs vs Base.
 # Rerun after touching cfgs, Cvars tables, or Register defaults; triage findings into fixes or
 # cvar-diff-known.yaml entries:
-python tools/parity-cvar-diff.py
+python tools/parity-cvar-diff.py --verify-pin
+python tools/parity-content.py --base "$XON_BASE_DATA" --verify-pixels
 
 # Regenerate ASSET-CHECK.md: literal asset refs resolved against the VFS (missing / bad-format).
 # Rerun after adding assets or asset-path code:
+python tools/data/fetch-maps.py
 python tools/parity-asset-check.py
+python tools/check-parity-refs.py
+
+# Compare each package member and each of the 17 IBSP v46 lump payloads.
+# The older VortexMaps release contains the re-split original Xonotic map binaries.
+git show e8ecfdef9a99bcb5f3e812e86dd5505030f8a233:data/maps.lock.json > /tmp/xonotic-maps.lock.json
+mkdir -p /tmp/xonotic-maps-parity
+jq -r '.packs | to_entries[] | [.key,.value.urls[0]] | @tsv' /tmp/xonotic-maps.lock.json | while read -r map url; do
+    curl --fail --location --retry 2 "$url" --output "/tmp/xonotic-maps-parity/$map.pk3" || exit 1
+done
+python tools/parity-maps.py --reference /tmp/xonotic-maps-parity --reference-lock /tmp/xonotic-maps.lock.json
 
 # Regenerate the wave-based PORTING-PLAN.md from the persisted dependency analysis:
 python tools/parity-plan-gen.py
@@ -128,33 +195,12 @@ present in the code yet **never called on the live path** (gibs that never spawn
 feature is scored independently on: **logic, values, timing, presentation, audio, liveness**.
 See `SCHEMA.md`.
 
-## Nine stale `port_refs` (recorded 2026-07-30, not fixed)
+## Native source pointers
 
-Found while repointing the registry after the Tier-1 rename. These paths do not resolve, and **did not
-resolve before the rename either** — the rename only changed the prefix, not whether the file is there.
-Six moved within `src/`; three are not under `src/` at all:
+The July rename audit identified nine stale C# pointers. Eight were resolved. The active checker
+retains one explicit exception for the objective healing reference to `Damage/Combat.cs`.
+Both the damage contract and damage system contain related code. Trace the original row to its
+live implementation before assigning a replacement pointer. The checker rejects a new dangling
+pointer or an exception that has outlived its purpose.
 
-| cited as | actually |
-| --- | --- |
-| `VortexArena.Common/Gameplay/MinigameSessionManager.cs` | `…/Gameplay/Minigames/MinigameSessionManager.cs` |
-| `VortexArena.Common/Gameplay/PlayerPhysics.cs` | `…/Physics/PlayerPhysics.cs` |
-| `VortexArena.Common/Gameplay/RoundHandler.cs` | `…/Gameplay/GameTypes/RoundHandler.cs` |
-| `VortexArena.Engine/Entity.cs` | `VortexArena.Common/Framework/Entity.cs` |
-| `VortexArena.Server/GameScores.cs` | `VortexArena.Common/Gameplay/Scoring/GameScores.cs` |
-| `VortexArena.Server/Mutators/SuperSpecMutator.cs` | `VortexArena.Common/Gameplay/Mutators/SuperSpecMutator.cs` |
-| `VortexArena.Common/Gameplay/Damage/Combat.cs` | not in `src/` |
-| `VortexArena.Common/Gameplay/Effects/HeroMaterials.cs` | not in `src/` |
-| `VortexArena.Common/Gameplay/Waypoints/WaypointSprites.cs` | not in `src/` |
-
-Left as-is deliberately: correcting a `port_refs` pointer means re-verifying that the row's recorded parity
-status still holds against the code at the *new* location, and a pointer silently redirected without that
-re-audit is worse than one that visibly fails to resolve. The three not under `src/` are the interesting
-ones — they may have moved to `game/`, been renamed, or been folded into another file, and each answer
-implies something different about the row above it.
-
-Detect with:
-
-```bash
-git ls-files 'planning/parity/**' | xargs grep -ho 'src/VortexArena\.[A-Za-z]*/[A-Za-z0-9_/.-]*\.cs' \
-  | sort -u | while read -r r; do [ -f "$r" ] || echo "$r"; done
-```
+Run `python tools/check-parity-refs.py` to inspect the current result.

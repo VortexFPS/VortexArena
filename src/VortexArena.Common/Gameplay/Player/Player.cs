@@ -74,6 +74,7 @@ public sealed class Player : Entity
     /// <see cref="SpawnSystem"/>. 0 at construction (player has never spawned).
     /// </summary>
     public float SpawnTime;
+    public bool SpawnParity; // toggles on every spawn, including a live-to-live map reset
 
     /// <summary>
     /// QC <c>STAT(WEAPONS, this)</c> — the owned-weapon set (a WEPSET bitfield in QC). Modeled here as a set
@@ -160,10 +161,9 @@ public sealed class Player : Entity
     /// <summary>QC <c>.maycheat</c>: a per-player override that always permits cheats regardless of <c>sv_cheats</c>.</summary>
     public bool MayCheat;
 
-    /// <summary>QC <c>.lip</c> (reused by server/cheats.qc): the count of corpse clones this player has spawned this
-    /// life via the CLONE_MOVING/CLONE_STANDING cheats. The clone impulses are permitted (independent of
-    /// <c>sv_cheats</c>) while this is below <c>sv_clones</c> — see <c>Cheats.Allowed</c>.</summary>
-    public int Lip;
+    /// <summary>QC <c>.lip</c>: clone impulse count since the last armed kill countdown.
+    /// The clone allowance applies while this is below <c>sv_clones</c>.</summary>
+    public new int Lip;
 
     /// <summary>
     /// QC <c>.speedrunning</c> (server/cheats.qc CHIMPULSE_SPEEDRUN): set when the player has teleported back to
@@ -201,6 +201,9 @@ public sealed class Player : Entity
     /// the event log. "" / "bot" / "local" for a non-remote client. See the server ban + stats systems.
     /// </summary>
     public string NetAddress = "";
+
+    /// <summary>Authoritative shot observer installed only while this client's hitplot is open.</summary>
+    public Action<Player, Weapon?>? HitPlotShot { get; set; }
 
     /// <summary>
     /// QC <c>.playerid</c>: a per-match unique integer id for this client (distinct from the net id), used as
@@ -279,6 +282,7 @@ public sealed class Player : Entity
     /// player's first death (which, with a zero <see cref="DeathOrigin"/>, disables the penalty anyway).
     /// </summary>
     public float DeathTime;
+    internal bool CorpseHullPending;
 
     // ===== chat state (server/chat.qc Say + server/command/cmd.qc ignore-list CRUD — T46) =====
     // The flat per-client chat fields QC keeps on the clientstate (CS(this)): the three per-say-type flood

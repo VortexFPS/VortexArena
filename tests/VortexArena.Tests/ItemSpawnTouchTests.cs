@@ -243,6 +243,70 @@ public class ItemSpawnTouchTests
     }
 
     [Fact]
+    public void SuperweaponMapPickup_ArmsOrdinaryItemBitAndExpires()
+    {
+        var f = Boot();
+        f.Cvars.Set("g_balance_superweapons_time", "24");
+        f.Cvars.Set("g_pickup_respawntime_superweapon", "70");
+        f.Cvars.Set("g_pickup_respawntimejitter_superweapon", "8");
+
+        var item = Api.Services!.Entities.Spawn();
+        Assert.True(SpawnFuncs.TrySpawn("weapon_fireball", item));
+        Assert.Equal(24f, item.SuperweaponsFinished);
+        Assert.Equal(70f, item.ItemRespawnTime);
+        Assert.Equal(8f, item.ItemRespawnTimeJitter);
+        Assert.False(item.ItemAvailable);
+
+        // Let the already registered pickup enter its ordinary live phase, then use its actual touch handler.
+        f.GameClock.Time = item.ScheduledRespawnTime;
+        ItemPickupRules.Respawn(item);
+        f.GameClock.Time += 1f;
+        var player = NewPlayer();
+        item.Touch!(item, player);
+        VortexArena.Server.PlayerFrameLogic.PlayerPowerups(player);
+
+        var status = StatusEffectsCatalog.Superweapon!;
+        Assert.Contains("fireball", player.OwnedWeapons);
+        Assert.True(((ItemFlag)player.Items).HasFlag(ItemFlag.Superweapon));
+        Assert.False(((ItemFlag)player.Items).HasFlag(ItemFlag.UnlimitedSuperweapons));
+        Assert.Equal(f.GameClock.Time + 24f, StatusEffectsCatalog.GetTime(player, status, f.GameClock.Time), 3);
+
+        f.GameClock.Time += 24.1f;
+        VortexArena.Server.PlayerFrameLogic.PlayerPowerups(player);
+        Assert.DoesNotContain("fireball", player.OwnedWeapons);
+        Assert.False(((ItemFlag)player.Items).HasFlag(ItemFlag.Superweapon));
+    }
+
+    [Fact]
+    public void WeaponMapPickup_CountSeedsAmmoButPreservesExplicitResourceAndTiming()
+    {
+        var f = Boot();
+        f.Cvars.Set("g_balance_devastator_ammo", "2.5");
+        f.Cvars.Set("g_pickup_respawntimejitter_weapon", "4");
+
+        var counted = Api.Services!.Entities.Spawn();
+        counted.Count = 1;
+        Assert.True(SpawnFuncs.TrySpawn("weapon_devastator", counted));
+        Assert.Equal(3f, counted.GetResource(ResourceType.Rockets));
+        Assert.Equal(4f, counted.ItemRespawnTimeJitter);
+
+        var authored = Api.Services.Entities.Spawn();
+        authored.Count = 3;
+        authored.SetResourceExplicit(ResourceType.Rockets, 13f);
+        authored.ItemRespawnTime = 25f;
+        authored.ItemRespawnTimeJitter = 6f;
+        Assert.True(SpawnFuncs.TrySpawn("weapon_devastator", authored));
+        Assert.Equal(13f, authored.GetResource(ResourceType.Rockets));
+        Assert.Equal(25f, authored.ItemRespawnTime);
+        Assert.Equal(6f, authored.ItemRespawnTimeJitter);
+
+        var timed = Api.Services.Entities.Spawn();
+        timed.SuperweaponsFinished = 9f;
+        Assert.True(SpawnFuncs.TrySpawn("weapon_fireball", timed));
+        Assert.Equal(9f, timed.SuperweaponsFinished);
+    }
+
+    [Fact]
     public void WeaponStay_GivesOnlyWeaponNoAmmo_AndNoRespawn()
     {
         var f = Boot();

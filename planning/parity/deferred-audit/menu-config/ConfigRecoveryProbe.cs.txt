@@ -1,0 +1,83 @@
+using System;
+using System.IO;
+using Godot;
+using VortexArena.Engine.Console;
+using VortexArena.Game.Menu;
+
+public partial class ConfigRecoveryProbe : Node
+{
+    private static void Check(bool condition, string phase)
+    {
+        if (!condition) throw new InvalidOperationException(phase);
+        GD.Print("PASS " + phase);
+    }
+
+    public override void _Ready()
+    {
+        try
+        {
+            string profile = System.Environment.GetEnvironmentVariable("VORTEX_USERDIR") ?? "";
+            if (!Directory.Exists(profile) || Directory.GetFileSystemEntries(profile).Length != 0)
+                throw new InvalidOperationException("Supply an empty disposable profile.");
+            MenuState.Boot("res://data");
+            var cvars = MenuState.Cvars;
+            cvars.Set("menu_tooltips", "2");
+            const string literal = "quoted \"sample\"; folder\\name $menu_tooltips";
+            const string binding = "echo \"a;b\"; echo folder\\name $menu_tooltips";
+            cvars.Set("recovery_fixture", literal);
+            cvars.MarkArchived("recovery_fixture");
+            BindTable.Unbind("W");
+            BindTable.Bind("F8", binding);
+            MenuState.SaveUserConfig();
+            string primary = File.ReadAllText(MenuState.UserConfigPath);
+            Check(primary.Contains("unbindall\n"), "primary saves the full bind table");
+            BindTable.Bind("W", "+forward");
+            BindTable.Unbind("F8");
+            cvars.Set("recovery_fixture", "");
+            MenuState.LoadUserConfig();
+            Check(BindTable.Get("W") == "" && BindTable.Get("F8") == binding
+                && cvars.GetString("recovery_fixture") == literal, "primary reload restores unbound key and literal values");
+
+            const string filename = "saved settings $menu_tooltips.cfg";
+            MenuCommand.RunArguments(new[] { "saveconfig", filename });
+            BindTable.Bind("W", "+forward");
+            BindTable.Unbind("F8");
+            cvars.Set("recovery_fixture", "");
+            MenuCommand.RunArguments(new[] { "exec", filename });
+            Check(BindTable.Get("W") == "" && BindTable.Get("F8") == binding
+                && cvars.GetString("recovery_fixture") == literal, "named save and exec restore key table and literal values");
+            string backup = Path.Combine(profile, "data", "backup.cfg");
+            Directory.CreateDirectory(backup);
+            MenuState.FactoryReset();
+            Check(cvars.GetString("menu_tooltips") == "2" && Directory.Exists(backup)
+                && File.ReadAllText(MenuState.UserConfigPath) == primary, "failed backup leaves primary and live settings intact");
+            Directory.Delete(backup);
+            MenuState.FactoryReset();
+            Check(File.Exists(backup) && cvars.GetString("menu_tooltips") == "1", "successful backup precedes reset");
+            MenuCommand.RunArguments(new[] { "exec", "backup.cfg" });
+            Check(cvars.GetString("menu_tooltips") == "2" && BindTable.Get("W") == ""
+                && BindTable.Get("F8") == binding, "executing the actual reset backup restores the prior preferences");
+            if (OperatingSystem.IsLinux())
+            {
+                string directory = Path.GetDirectoryName(backup)!;
+                UnixFileMode mode = File.GetUnixFileMode(directory);
+                byte[] before = File.ReadAllBytes(backup);
+                try
+                {
+                    File.SetUnixFileMode(directory, mode & ~(UnixFileMode.UserWrite | UnixFileMode.GroupWrite | UnixFileMode.OtherWrite));
+                    cvars.Set("menu_tooltips", "0");
+                    MenuState.FactoryReset();
+                    Check(cvars.GetString("menu_tooltips") == "0" && before.AsSpan().SequenceEqual(File.ReadAllBytes(backup)),
+                        "failed temporary-file creation preserves existing backup and current settings");
+                }
+                finally { File.SetUnixFileMode(directory, mode); }
+            }
+            GetTree().Quit();
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr(ex.ToString());
+            GetTree().Quit(1);
+        }
+    }
+}

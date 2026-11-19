@@ -1,0 +1,107 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver.
+     at: set_use_vsync (platform/linuxbsd/x11/gl_manager_x11.cpp:364)
+OpenGL API 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 20.1.2, 256 bits)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Disabled maxfps=0 refresh=NaNHz cpu=6c gpu=llvmpipe (LLVM 20.1.2, 256 bits)
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag]
+=== VortexArena boot ===
+Weapons:   27
+Items:     21
+Mutators:  46
+GameTypes: 21
+Sounds:    223
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).
+[lb]MenuState] user gamedir mounted: /tmp/va-script-ons-native5/RedProbe-user/data (drop .pk3 packs in its maps/ subfolder).
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"
+"maxplayers" set to "32"
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).
+[lb]MenuState] cvar help: 1386 engine descriptions.
+[lb]shell] --cvar cl_autopause = "0"
+[lb]shell] --cvar cl_maxfps = "40"
+[lb]shell] --cvar cl_frameprofiler = "0"
+[lb]shell] --cvar _cl_name = "RedProbe"
+[lb]shell] --cvar cl_portal_render = "0"
+[lb]shell] --cvar cl_warm_at_boot = "0"
+[lb]shell] --cvar cl_precache_all_weapons = "0"
+[lb]shell] --cvar gl_texturecompression = "0"
+[lb]video] vid_vsync 0 → requested Disabled, actual Disabled (off — uncapped, may tear)
+[lb]video] cl_maxfps 40 -> Engine.MaxFps 40 (your setting; refresh NaNHz)
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)
+[lb]video] process priority boost unavailable: Permission denied
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] connecting to 127.0.0.1:26818.
+[NetTransport.Client] connecting to 127.0.0.1:26818 …
+[EffectInfo] parsed 'vortex/original/effectinfo.txt': 301 effects (process-lifetime, shared by every match).
+[EffectSystem] effectinfo: 301 effects, particlefont atlas: loaded, style overlay: 0 effects
+[Particles] backend=original (cl_particles_modern=0)
+[AssetLoader] model 'models/items/buff.md3' read failed: Asset not found in any mount: "models/items/buff.md3".
+[lb]LightGrid] this map ships no light grid (BSP lump 15) — models use the PBR + sun fallback.
+[lb]WorldLights] realtime world lighting OFF — back to baked lightmaps.
+[NetGame] precached 24 weapon models, skipped 0 (lazy), 24 muzzle tags.
+[AssetLoader] skeletal parse MISS 'models/player/erebus.iqm' (loader#32dd1e cache n=1: [models/player/erebus.iqm])
+[NetGame] precached 36 combat sounds, 1 player models (rendered for pipeline warm).
+[NetGame] roster warm set: [models/player/erebus.iqm] → loader#32dd1e cache n=1: [models/player/erebus.iqm]
+[NetGame] connecting to 127.0.0.1:26818.
+[LoadTimeline] connect 127.0.0.1 — load begin → ready, 8643 ms total
+    textures.compress: off (gl_texturecompression 0)
+  client.boot                       36.5 ms    0.4 %
+    fx.warmup                      152.5 ms    1.8 %
+    fx.trails                      917.0 ms   10.6 %
+    gpu.warm-items(build)          723.4 ms    8.4 %
+    world.attach                     0.4 ms    0.0 %
+    editor.nodes                    16.0 ms    0.2 %
+    light                            9.1 ms    0.1 %
+  render.setup                    1900.7 ms   22.0 %
+  camera.hud                       162.0 ms    1.9 %
+  music                              2.6 ms    0.0 %
+  precache.weapons                4426.7 ms   51.2 %
+    precache.weapons.pso-warm     1333.8 ms   15.4 %
+  precache.sounds+models           813.5 ms    9.4 %
+  (unaccounted: yields, present, unmeasured)     1301.5 ms
+[ClientNet] handshake accepted by 'Vortex 1.0.0 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0 Server': netId 1.
+[MapLoader] occluder: 69662 verts / 58760 tris (r_occlusion_cull A/B)
+[MapLoader] 'runningmanctf' materials: lightmapped=52 vertexLit=0 plain=16 lightmapMissing=3 glow=10 normalMapped=51 (deluxe=True, internalPages=0, atlas=3p, cellSize=1024, cells=35, surfaces=568)
+[lb]::client::WARNING] [lb]MapLoader] 'runningmanctf': 2 textures missing (40 faces affected) — type `r_missingtextures` for the list.
+[MapLoader] 'runningmanctf' portal surfaces: 4 (from 4 faces), pocket decor: 8 (from 8 faces)
+[DecalSplats] geometry: 154616 render triangles, 593 grid cells
+[Skybox] loaded 'env/heaven/heaven'.
+[lb]LightGrid] GPU lightgrid 71x71x60 (1181 KB) bound — per-pixel model lighting active.
+[NetGame] map music: 'cdtracks/track006' (from mapinfo, client map load)
+[NetGame] client loaded map 'runningmanctf' (ons) for render + prediction collision.
+[LoadTimeline] (late) precache.models.pso-warm: 1022.3 ms — finished after the table printed; not included in the total above.
+[AssetLoader] md3 'models/items/buff.md3' read/parse failed: Asset not found in any mount: "models/items/buff.md3".
+[lb]md3morph] 'models/players/model/model.md3' frames=30 gpu=True mats: morphable
+]cmd selectteam red
+changing to Red
+]cmd join
+[lb]hitch MIXED] 549.8ms (med 252.4, ×2.2) — 545.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 4.3 rcpu 0.0 gpu 0.0 rest 545.4 late 545.0 | alloc 290KB | remote.ents 64 | watchdog: 443/444 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   gpu: draws 298, pipeline compiles +0, vram 1902MB
+[lb]hitch]   events: [lb]-1f] net: PREDICTION DESYNC 747qu (predicted vs acked-replay origin); net: PREDICTION DESYNC 752qu (predicted vs acked-replay origin)
+[lb]hitch]   prev: 306.7 266.2 210.0 244.3 314.1 302.1 384.7 443.9
+joined the game
+[AssetLoader] skeletal parse MISS 'models/player/megaerebus.iqm' (loader#32dd1e cache n=2: [models/player/erebus.iqm, models/player/megaerebus.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/nyx.iqm' (loader#32dd1e cache n=3: [models/player/erebus.iqm, models/player/megaerebus.iqm, models/player/nyx.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/pyria.iqm' (loader#32dd1e cache n=4: [models/player/erebus.iqm, models/player/megaerebus.iqm, models/player/nyx.iqm, models/player/pyria.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/seraphina.iqm' (loader#32dd1e cache n=5: [models/player/erebus.iqm, models/player/megaerebus.iqm, models/player/nyx.iqm, models/player/pyria.iqm, models/player/seraphina.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/umbra.iqm' (loader#32dd1e cache n=6: [models/player/erebus.iqm, models/player/megaerebus.iqm, models/player/nyx.iqm, models/player/pyria.iqm, models/player/seraphina.iqm, models/player/umbra.iqm])
+[lb]hitch ASSET-BUILD] 749.5ms (med 266.8, ×2.8) — iqm.anims 488.5ms (asset build/upload) | proc 8.4 rcpu 0.0 gpu 0.0 rest 741.1 late 741.1 | alloc 7.4MB | remote.ents 18 | watchdog: 666/669 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   gpu: draws 359, pipeline compiles +0, vram 1912MB
+[lb]hitch]   events: [lb]-7f] net: PREDICTION DESYNC 752qu (predicted vs acked-replay origin); [lb]-6f] net: PREDICTION DESYNC 747qu (predicted vs acked-replay origin); [lb]-4f] net: PREDICTION DESYNC 752qu (predicted vs acked-replay origin); [lb]-4f] net: PREDICTION DESYNC 752qu (predicted vs acked-replay origin); [lb]-3f] net: PREDICTION DESYNC 752qu (predicted vs acked-replay origin); [lb]-3f] net: PREDICTION DESYNC 752qu (predicted vs acked-replay origin); [lb]-1f] anim cache MISS models/player/megaerebus.iqm; [lb]-1f] anim cache MISS models/player/nyx.iqm; [lb]-1f] anim cache MISS models/player/pyria.iqm; [lb]-1f] stream: idle-warm models/player/megaerebus.iqm (parse) built (2.0ms); anim cache MISS models/player/seraphina.iqm; anim cache MISS models/player/umbra.iqm
+[lb]hitch]   prev: 443.9 549.8 195.1 266.8 204.3 307.6 319.5 428.6
+[lb]hitch GC-PAUSE] 519.4ms (med 266.8, ×1.9) — gen2/GC-pause tail (prior frame paused 4.4ms; this frame rest-dominated) | proc 51.7 rcpu 0.0 gpu 0.0 rest 467.6 late 467.6 | alloc 15.6MB | remote.ents 18 | watchdog: 415/449 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   gpu: draws 349, pipeline compiles +0, vram 1912MB
+[lb]hitch]   events: [lb]-7f] net: PREDICTION DESYNC 747qu (predicted vs acked-replay origin); [lb]-5f] net: PREDICTION DESYNC 752qu (predicted vs acked-replay origin); [lb]-5f] net: PREDICTION DESYNC 752qu (predicted vs acked-replay origin); [lb]-4f] net: PREDICTION DESYNC 752qu (predicted vs acked-replay origin); [lb]-4f] net: PREDICTION DESYNC 752qu (predicted vs acked-replay origin); [lb]-2f] anim cache MISS models/player/megaerebus.iqm; [lb]-2f] anim cache MISS models/player/nyx.iqm; [lb]-2f] anim cache MISS models/player/pyria.iqm; [lb]-2f] stream: idle-warm models/player/megaerebus.iqm (parse) built (2.0ms); [lb]-1f] anim cache MISS models/player/seraphina.iqm; [lb]-1f] anim cache MISS models/player/umbra.iqm; stream: idle-warm models/player/nyx.iqm (parse) built (0.0ms); stream: idle-warm models/player/pyria.iqm (parse) built (0.0ms); stream: idle-warm models/player/seraphina.iqm (parse) built (0.0ms); stream: idle-warm models/player/umbra.iqm (parse) built (0.0ms); stream: idle-warm models/player/megaerebus.iqm tex textures/megaerebus built (32.0ms)
+[lb]hitch]   prev: 549.8 195.1 266.8 204.3 307.6 319.5 428.6 749.5
+]cmd teleporttotarget probe_bluegen
+[lb]hitch MIXED] 775.5ms (med 307.6, ×2.5) — 769.7ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 5.7 rcpu 0.0 gpu 0.0 rest 769.7 late 869.0 | alloc 650KB | remote.ents 18 | watchdog: 734/737 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   gpu: draws 359, pipeline compiles +0, vram 1911MB
+[lb]hitch]   prev: 409.0 376.5 254.9 406.0 266.1 493.9 323.2 391.3
+[lb]hitch MIXED] 640.4ms (med 314.1, ×2.0) — 594.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 46.1 rcpu 0.0 gpu 0.0 rest 594.3 late 594.4 | alloc 2.8MB | remote.ents 28 | watchdog: 451/561 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   gpu: draws 338, pipeline compiles +0, vram 1935MB
+[lb]hitch]   gc: g0+1 g1+1 g2+0 pause 16.8ms alloc 2.8MB (rate 37MB/s, heap 129.6MB)
+[lb]hitch]   events: net: PREDICTION DESYNC 1449qu (predicted vs acked-replay origin); anim cache HIT models/player/erebus.iqm
+[lb]hitch]   prev: 254.9 406.0 266.1 493.9 323.2 391.3 775.5 352.7

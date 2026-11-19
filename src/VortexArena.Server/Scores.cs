@@ -1044,6 +1044,14 @@ public sealed class Scores
                 _teamScores[t] = 0;
     }
 
+    internal void SetActiveTeams(IReadOnlyCollection<int> teams)
+    {
+        foreach (int team in _teamScores.Keys.Where(team => !teams.Contains(team)).ToArray())
+            _teamScores.Remove(team);
+        foreach (int team in teams)
+            _teamScores.TryAdd(team, 0);
+    }
+
     // ---------------------------------------------------------------------------------------------
     // queries (QC PlayerScore_Sort / winning-team checks)
     // ---------------------------------------------------------------------------------------------

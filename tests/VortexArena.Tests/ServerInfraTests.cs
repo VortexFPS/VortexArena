@@ -91,6 +91,34 @@ public class ServerInfraTests
         Assert.False(server.Has("cl_local_only"));                  // client-only cvar never leaked into the server
     }
 
+    [Fact]
+    public void PrivateWorldBoot_AppliesLaunchOverridesBeforeMutatorsAndCheatPolicy()
+    {
+        var shared = new CvarService();
+        shared.Register("g_nix", "0");
+        shared.Register("sv_cheats", "0");
+        shared.Set("g_nix", "1");
+        shared.Set("sv_cheats", "1");
+
+        var world = new GameWorld(new CollisionWorld())
+        {
+            ConfigReader = path => path == "xonotic-server.cfg" ? "set g_nix 0\nset sv_cheats 0" : null,
+        };
+        try
+        {
+            world.Boot("dm", applyStartupOverrides: store => CvarService.BackfillModified(shared, store));
+
+            Assert.True(Mutators.ByName("nix")!.Added);
+            Assert.Equal(1, world.Cheats.GameStartCheats);
+            Assert.Equal("0", shared.GetDefault("g_nix"));
+        }
+        finally
+        {
+            world.Shutdown();
+            MutatorActivation.DeactivateAll();
+        }
+    }
+
     // ============================================================== config-save rule (DP Cvar_WriteVariables)
 
     [Fact]
@@ -367,6 +395,119 @@ public class ServerInfraTests
         Assert.True(p.GetResource(ResourceType.Health) > 0f);
     }
 
+    [Fact]
+    public void CloneImpulses_CopyBodyAndUseTheLiveAllowance()
+    {
+        var world = new GameWorld(new CollisionWorld());
+        world.Boot("dm");
+        Cvars.Set("sv_cheats", "0");
+        Cvars.Set("sv_clones", "2");
+        world.Cheats.Init();
+        var p = NewPlayer();
+        p.Origin = new Vector3(32, 16, 48);
+        p.Angles = p.ViewAngles = new Vector3(0, 90, 0);
+        p.Velocity = new Vector3(12, 34, 5);
+        p.Model = "models/player/erebus.iqm";
+        p.ModelIndex = 24;
+        p.ClientColors = 0xB4;
+        p.Solid = Solid.SlideBox;
+        p.MoveType = MoveType.Walk;
+        p.TakeDamage = DamageMode.Aim;
+        p.SetResourceExplicit(ResourceType.Health, 75);
+        p.SetResourceExplicit(ResourceType.Armor, 25);
+        var bodies = new List<Entity>();
+        void CollectBodies()
+        {
+            bodies.Clear();
+            foreach (Entity e in world.Services.EntityTable.All)
+            {
+                if (!e.IsFreed && e.ClassName == PlayerBody.ClassName)
+                    bodies.Add(e);
+            }
+        }
+        void Impulse(int number) => world.Commands.Execute($"impulse {number}", isServerConsole: false, caller: p);
+
+        p.IsObserver = true;
+        Impulse(140);
+        p.IsObserver = false;
+        p.DeadState = DeadFlag.Dead;
+        Impulse(140);
+        p.DeadState = DeadFlag.No;
+        Assert.Equal(0, p.Lip);
+        CollectBodies();
+        Assert.Empty(bodies);
+
+        Impulse(140);
+        Impulse(142);
+        Impulse(140);
+        CollectBodies();
+        Assert.Equal(2, bodies.Count);
+        Entity moving = bodies[0], standing = bodies[1];
+        Assert.Equal(new Vector3(12, 34, 5), p.Velocity);
+        Assert.True(Vector3.Distance(new Vector3(12, 334, 5), moving.Velocity) < 0.001f);
+        Assert.Equal(moving.Velocity, moving.OldVelocity);
+        Assert.Equal(Vector3.Zero, standing.Velocity);
+        Assert.Equal(0, PlayerBody.GetCloneOrdinal(moving));
+        Assert.Equal(1, PlayerBody.GetCloneOrdinal(standing));
+        Assert.Equal(2, p.Lip);
+        Assert.Equal(2, world.Cheats.CheatCountOf(p));
+
+        foreach (Entity body in bodies)
+        {
+            Assert.Same(p, body.Enemy);
+            Assert.Equal(p.Origin, body.Origin);
+            Assert.Equal(p.Angles, body.Angles);
+            Assert.Equal(p.Model, body.Model);
+            Assert.Equal(p.ModelIndex, body.ModelIndex);
+            Assert.Equal(p.ClientColors, body.Colors);
+            Assert.Equal(p.Solid, body.Solid);
+            Assert.Equal(p.MoveType, body.MoveType);
+            Assert.Equal(p.TakeDamage, body.TakeDamage);
+            Assert.Equal(75f, body.GetResource(ResourceType.Health));
+            Assert.Equal(25f, body.GetResource(ResourceType.Armor));
+            body.Reset!(body);
+            Assert.True(body.IsFreed);
+        }
+
+        Cvars.Set("sv_clones", "3");
+        p.Effects |= EffectFlags.NoDraw;
+        Impulse(142);
+        CollectBodies();
+        Assert.Empty(bodies);
+        Assert.Equal(3, p.Lip); // A hidden player still spends the allowance and counts the cheat.
+        Assert.Equal(3, world.Cheats.CheatCountOf(p));
+    }
+
+    [Fact]
+    public void KillCommand_ExpiresTheStandingCloneThroughTheDamageSystem()
+    {
+        var world = new GameWorld(new CollisionWorld());
+        world.Boot("dm");
+        Cvars.Set("sv_clones", "1");
+        Cvars.Set("g_balance_kill_delay", "2");
+        world.Cheats.Init();
+        var player = NewPlayer();
+        player.Model = "models/player/erebus.iqm";
+        player.TakeDamage = DamageMode.Aim;
+        player.SetResourceExplicit(ResourceType.Health, 100);
+        float now = 0f;
+        world.KillCountdown.Now = () => now;
+        world.Commands.Execute("impulse 142", isServerConsole: false, caller: player);
+        Entity body = Assert.Single(world.Services.EntityTable.All, e => e.ClassName == PlayerBody.ClassName);
+        world.Commands.Execute("kill", isServerConsole: false, caller: player);
+        world.KillCountdown.TickClones();
+        Assert.Equal((byte)2, body.CountdownIndicator.Digit);
+        now = 1;
+        world.KillCountdown.TickClones();
+        Assert.Equal((byte)1, body.CountdownIndicator.Digit);
+        now = 2;
+        world.KillCountdown.TickClones();
+        Assert.Equal(default, body.CountdownIndicator);
+        Assert.True(body.IsCorpse);
+        Assert.Equal(DeadFlag.Dead, body.DeadState);
+        Assert.False(player.IsDead);
+    }
+
     // ====================================================================================== anticheat
 
     [Fact]
@@ -462,6 +603,67 @@ public class ServerInfraTests
         // 2 no of 3 → yes can't reach the needed 2 → rejected.
         Assert.False(vc.Active);
         Assert.False(ran);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Vote_CallerNoStopsOnlyWhenChangesAreAllowed(bool allowChange)
+    {
+        var caller = NewPlayer("caller");
+        var other = NewPlayer("other");
+        var vote = new VoteController { Roster = () => new[] { caller, other } };
+        Cvars.Set("sv_vote_no_stops_vote", "1");
+        Cvars.Set("sv_vote_change", allowChange ? "1" : "0");
+        Assert.True(vote.Call(caller, "endmatch"));
+
+        var ctx = new CommandContext(new[] { "vote", "no" }, false, caller);
+        vote.Execute(ctx);
+
+        Assert.Equal(!allowChange, vote.Active);
+        if (!allowChange)
+        {
+            Assert.Contains("You have already voted.", ctx.Output);
+            Assert.Equal(1, vote.YesCount);
+            Assert.Equal(0, vote.NoCount);
+        }
+    }
+
+    [Fact]
+    public void Vote_TwoPlayersSplit_RejectsWithoutApplyingTheVote()
+    {
+        var caller = NewPlayer("caller");
+        var other = NewPlayer("other");
+        var vote = new VoteController { Roster = () => new[] { caller, other } };
+        string? applied = null;
+        string? outcome = null;
+        vote.VotePassed = command => applied = command;
+        vote.Broadcast = message => outcome = message;
+        Assert.True(vote.Call(caller, "endmatch"));
+
+        vote.Execute(new CommandContext(new[] { "vote", "no" }, false, other));
+
+        Assert.False(vote.Active);
+        Assert.Contains("was rejected", outcome);
+        Assert.Null(applied);
+    }
+
+    [Fact]
+    public void Vote_RecountsAfterAnUnvotedClientLeaves()
+    {
+        var caller = NewPlayer("caller");
+        var other = NewPlayer("other");
+        var roster = new List<Player> { caller, other };
+        var vote = new VoteController { Roster = () => roster };
+        string? applied = null;
+        vote.VotePassed = command => applied = command;
+        Assert.True(vote.Call(caller, "endmatch"));
+
+        roster.Remove(other);
+        vote.RemoveVoter(other);
+
+        Assert.False(vote.Active);
+        Assert.Equal("endmatch", applied);
     }
 
     [Fact]
@@ -685,6 +887,20 @@ public class ServerInfraTests
         r.Init("boil");
         string next = r.GetNextMap();
         Assert.Equal("dance", next);
+    }
+
+    [Fact]
+    public void MapRotation_BypassesDoNotWantOnlyWhenNeeded()
+    {
+        Cvars.Set("g_maplist", "boil dance stormkeep");
+        Cvars.Set("g_maplist_shuffle", "0");
+        Cvars.Set("g_maplist_selectrandom", "0");
+        Cvars.Set("g_maplist_mostrecent", "");
+        var rotation = new MapRotation { AvoidInRotation = map => map == "dance" };
+        rotation.Init("boil");
+        Assert.Equal("stormkeep", rotation.GetNextMap());
+        rotation.AvoidInRotation = _ => true;
+        Assert.Equal("boil", rotation.GetNextMap());
     }
 
     [Fact]
@@ -931,6 +1147,36 @@ public class ServerInfraTests
         Assert.Equal("dance", changedTo); // rotated from boil → dance
         Assert.Equal("dance", world.SelectedNextMap);
         Assert.True(MapRotation.IsRecent("dance"));
+    }
+
+    [Theory]
+    [InlineData(true, "ctf", "ctf-map")]
+    [InlineData(false, "dm", "dm-map")]
+    public void GameWorld_GametypeVoteSelectsMapsForTheAcceptedMode(bool hasCtfMaps, string mode, string map)
+    {
+        var world = new GameWorld(new CollisionWorld()) { MapName = "current" };
+        world.Boot("dm");
+        Cvars.Set("sv_vote_gametype", "1");
+        Cvars.Set("sv_vote_gametype_options", "custom");
+        Cvars.Set("sv_vote_gametype_custom_type", "ctf");
+        Cvars.Set("sv_vote_gametype_maplist_reset", "1");
+        Cvars.Set("g_maplist", "dm-map");
+        Cvars.Set("g_maplist_votable", "0");
+        Cvars.Set("sv_mapchange_delay", "0");
+        world.HasMapsForGametype = gt => gt == "ctf" && hasCtfMaps;
+        world.Rotation.AllowedMaps = () => new[] { world.CatalogGametype + "-map" };
+        world.Rotation.MapSupportsGametype = name => name == world.CatalogGametype + "-map";
+        world.Commands.Replies.RecordMapCatalog = gt => new[] { gt + "-map" };
+        world.Clients.ClientConnect(isBot: false, netName: "Voter");
+        world.EndMatch();
+
+        for (int i = 0; i < 150 && world.SelectedNextMap == ""; i++)
+            world.Frame(0.1f);
+
+        Assert.Equal("dm", world.GameType!.NetName);
+        Assert.Equal(mode, world.CatalogGametype);
+        Assert.Equal(map, world.SelectedNextMap);
+        Assert.Contains(map, world.Commands.Execute("lsmaps", isServerConsole: true).Output);
     }
 
     // ====================================================================== console chat / bot host sinks

@@ -1,0 +1,146 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver.
+     at: set_use_vsync (platform/linuxbsd/x11/gl_manager_x11.cpp:364)
+OpenGL API 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 20.1.2, 256 bits)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Disabled maxfps=0 refresh=NaNHz cpu=6c gpu=llvmpipe (LLVM 20.1.2, 256 bits)[0m
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag][0m
+=== VortexArena boot ===[0m
+Weapons:   27[0m
+Items:     21[0m
+Mutators:  46[0m
+GameTypes: 21[0m
+Sounds:    223[0m
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).[0m
+[lb]MenuState] user gamedir mounted: /tmp/va-scripted-native-buff14/session-native/guest-user/data (drop .pk3 packs in its maps/ subfolder).[0m
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"[0m
+"maxplayers" set to "32"[0m
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).[0m
+[lb]MenuState] cvar help: 1386 engine descriptions.[0m
+[lb]shell] --cvar cl_autopause = "0"[0m
+[lb]shell] --cvar cl_maxfps = "40"[0m
+[lb]shell] --cvar _cl_name = "ParityGuest"[0m
+[lb]shell] --cvar gl_texturecompression = "0"[0m
+[lb]shell] --cvar sensitivity = "4"[0m
+[lb]shell] --cvar showposition = "1"[0m
+[lb]shell] --cvar cl_frameprofiler = "0"[0m
+[lb]shell] --cvar sv_warpzone_trace = "1"[0m
+[lb]shell] --cvar cl_portal_render = "0"[0m
+[lb]shell] --cvar cl_warm_at_boot = "0"[0m
+[lb]shell] --cvar cl_precache_all_weapons = "0"[0m
+[lb]shell] --cvar cl_idle_warmup = "0"[0m
+[lb]shell] --cvar gl_picmip = "2"[0m
+[lb]shell] --cvar r_bloom = "0"[0m
+[lb]shell] --cvar r_shadow_realtime_dlight = "0"[0m
+[lb]video] vid_vsync 0 → requested Disabled, actual Disabled (off — uncapped, may tear)[0m
+[lb]video] cl_maxfps 40 -> Engine.MaxFps 40 (your setting; refresh NaNHz)[0m
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)[0m
+[lb]video] process priority boost unavailable: Permission denied[0m
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] connecting to 127.0.0.1:26711.[0m
+[NetTransport.Client] connecting to 127.0.0.1:26711 …
+[EffectInfo] parsed 'vortex/original/effectinfo.txt': 301 effects (process-lifetime, shared by every match).
+[EffectSystem] effectinfo: 301 effects, particlefont atlas: loaded, style overlay: 0 effects
+[Particles] backend=original (cl_particles_modern=0)
+[AssetLoader] model 'models/items/buff.md3' read failed: Asset not found in any mount: "models/items/buff.md3".
+[lb]LightGrid] this map ships no light grid (BSP lump 15) — models use the PBR + sun fallback.[0m
+[lb]WorldLights] realtime world lighting OFF — back to baked lightmaps.[0m
+[NetGame] precached 24 weapon models, skipped 0 (lazy), 24 muzzle tags.
+[AssetLoader] skeletal parse MISS 'models/player/erebus.iqm' (loader#d8ec7b cache n=1: [models/player/erebus.iqm])
+[NetGame] precached 36 combat sounds, 1 player models (rendered for pipeline warm).
+[NetGame] roster warm set: [models/player/erebus.iqm] → loader#d8ec7b cache n=1: [models/player/erebus.iqm]
+[NetGame] connecting to 127.0.0.1:26711.
+[LoadTimeline] connect 127.0.0.1 — load begin → ready, 6482 ms total
+    textures.compress: off (gl_texturecompression 0)
+  client.boot                       36.8 ms    0.6 %
+    fx.warmup                       67.7 ms    1.0 %
+    fx.trails                      626.0 ms    9.7 %
+    gpu.warm-items(build)          510.4 ms    7.9 %
+    world.attach                     0.3 ms    0.0 %
+    editor.nodes                    14.1 ms    0.2 %
+    light                            8.5 ms    0.1 %
+  render.setup                    1298.2 ms   20.0 %
+  camera.hud                       140.5 ms    2.2 %
+  music                              3.0 ms    0.0 %
+  precache.weapons                3307.9 ms   51.0 %
+    precache.weapons.pso-warm      842.3 ms   13.0 %
+  precache.sounds+models           697.8 ms   10.8 %
+  (unaccounted: yields, present, unmeasured)      998.1 ms
+[ClientNet] handshake accepted by 'Vortex 1.0.0 Server': netId 2, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0 Server': netId 2.
+[MapLoader] occluder: 52008 verts / 43612 tris (r_occlusion_cull A/B)
+[MapLoader] 'stormkeep' materials: lightmapped=34 vertexLit=3 plain=8 glow=5 normalMapped=34 (deluxe=True, internalPages=0, atlas=1p, cellSize=1024, cells=31, surfaces=380)
+[MapLoader] 'stormkeep' portal surfaces: 2 (from 2 faces), pocket decor: 5 (from 5 faces)
+[DecalSplats] geometry: 106027 render triangles, 502 grid cells
+[Skybox] loaded 'env/extragalactic/asteroids'.
+[lb]LightGrid] GPU lightgrid 54x61x39 (501 KB) bound — per-pixel model lighting active.[0m
+[NetGame] client loaded map 'stormkeep' (dm) for render + prediction collision.
+[wzview] authoritative snap -> <0, 225, 0>
+[lb]md3morph] 'models/players/model/model.md3' frames=30 gpu=True mats: morphable[0m
+[lb]md3morph] 'models/player/relic.md3elic.md3' frames=101 gpu=True mats: std std std std std std std std[0m
+[LoadTimeline] (late) precache.models.pso-warm: 947.7 ms — finished after the table printed; not included in the total above.
+[wzview] authoritative snap -> <0, 45, 0>
+[38;2;0;255;255m]cmd teleporttotarget parity_buff_view[39m[0m
+[wzview] authoritative snap -> <12, 270, 0>
+[lb]md3morph] 'models/player/relic.md3elic.md3' frames=101 gpu=True mats: std std std std std std std std[0m
+[lb]hitch MIXED] 443.9ms (med 158.1, ×2.8) — 438.0ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 5.9 rcpu 0.0 gpu 0.0 rest 438.0 late 438.0 | alloc 48KB | remote.ents 33 | watchdog: 357/360 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 162, pipeline compiles +0, vram 335MB[0m
+[lb]hitch]   prev: 170.0 189.6 164.6 151.9 169.8 165.7 178.2 229.2[0m
+[lb]hitch MIXED ×3] 353.5–443.9ms over 1.1s (med 161.4) — 438.0ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch MIXED] 322.0ms (med 161.4, ×2.0) — 318.0ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 4.0 rcpu 0.0 gpu 0.0 rest 318.0 late 318.0 | alloc 40KB | remote.ents 34 | watchdog: 276/276 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 164, pipeline compiles +0, vram 335MB[0m
+[lb]hitch]   prev: 443.9 440.9 164.5 168.9 353.5 225.2 288.5 207.2[0m
+[lb]md3morph] 'models/player/relic.md3elic.md3' frames=101 gpu=True mats: std std std std std std std std[0m
+[lb]hitch MIXED] 454.4ms (med 164.5, ×2.8) — 437.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 17.0 rcpu 0.0 gpu 0.0 rest 437.4 late 437.5 | alloc 2.2MB | remote.ents 34 | watchdog: 384/395 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 171, pipeline compiles +0, vram 335MB[0m
+[lb]hitch]   prev: 168.9 353.5 225.2 288.5 207.2 322.0 289.0 266.8[0m
+[lb]hitch MIXED ×2] 370.1–454.4ms over 0.4s (med 165.7) — 437.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch MIXED] 321.1ms (med 165.7, ×1.9) — 318.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.7 rcpu 0.0 gpu 0.0 rest 318.4 late 318.4 | alloc 48KB | remote.ents 33 | watchdog: 277/277 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 170, pipeline compiles +0, vram 335MB[0m
+[lb]hitch]   prev: 454.4 370.1 255.4 256.5 202.5 198.8 212.7 208.9[0m
+[lb]perf] entity PVS tests: 217 run, 2719 skipped by memo (92.6% of 2936 avoided BSP descents)[0m
+[lb]hitch MIXED ×7] 321.1–656.0ms over 3.0s (med 167.9) — 318.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+=== frame profiler session summary (27s, 99 frames) ===[0m
+  fps: avg 4.3  1%low 1  0.1%low 1  (median 167.4ms, worst 864.2ms)[0m
+  hitches: 13 total — 13 primaries: 13 MIXED[0m
+    worst[lb]1]: 656.0ms MIXED (proc:other) @ t=25.9s[0m
+    worst[lb]2]: 541.5ms MIXED (ng.process) @ t=24.4s[0m
+    worst[lb]3]: 531.1ms MIXED (particles.cpu) @ t=25.0s[0m
+    worst[lb]4]: 465.5ms MIXED (ng.process) @ t=26.4s[0m
+    worst[lb]5]: 454.4ms MIXED (cw.process) @ t=21.4s[0m
+  gc: g0+51 g1+32 g2+18, total pause 151ms[0m
+  alloc: 632.3MB total, 27MB/s recent, peak 168.2MB in one frame @ t=9.2s, heap 139.9MB[0m
+  scope coverage debt: proc:other dominated 0 hitch(es), watchdog '(unscoped)' won 13 — add Prof scopes there[0m
+  note: DEBUG build — frame times and the hitch census are NOT release-representative (run the release export via tools/perf-run.ps1 for real numbers)[0m
+  [lb]vram census] 386 resident textures, est 129 MB (textures only; Godot's vram monitor adds mesh/render-target buffers)[0m
+    compression: mode 0, s3tc yes, ok 0, bc7-fallback 0, failed 0[0m
+    Color                41.5 MB in 149 textures[0m
+    Normal               27.0 MB in 64 textures[0m
+    Gloss                21.8 MB in 70 textures[0m
+    Glow                 16.0 MB in 49 textures[0m
+    ReflectMask          10.7 MB in 27 textures[0m
+    TwoD                  9.2 MB in 25 textures[0m
+    Q3BspLightmaps        3.0 MB in 1 textures[0m
+    Sprites               0.0 MB in 1 textures[0m
+    top 10:[0m
+          5.3 MB  rgba8        gfx/conback3.png[0m
+          3.0 MB  rgb8         maps/stormkeep/lm_0001.jpg[0m
+          1.3 MB  rgba8        vortex/original/particles/particlefont.png[0m
+          1.3 MB  rgba8        textures/erebusfullbright_glow.png[0m
+          1.3 MB  rgba8        textures/erebusfullbright_gloss.png[0m
+          1.3 MB  rgba8        textures/erebusfullbright_norm.png[0m
+          1.3 MB  rgba8        textures/erebusfullbright_shirt.png[0m
+          1.3 MB  rgba8        textures/erebusfullbright.png[0m
+          1.3 MB  rgba8        textures/nexgun_gloss.png[0m
+          1.3 MB  rgba8        textures/nexgun_norm.png[0m
+Unhandled exception. System.ObjectDisposedException: Cannot access a disposed object.
+Object name: 'VortexArena.Main'.
+   at Godot.GodotObject.GetPtr(GodotObject instance) in /root/godot/modules/mono/glue/GodotSharp/GodotSharp/Core/GodotObject.base.cs:line 93
+   at Godot.NativeInterop.Marshaling.ConvertCallableToNative(Callable& p_managed_callable) in /root/godot/modules/mono/glue/GodotSharp/GodotSharp/Core/NativeInterop/Marshaling.cs:line 277
+   at Godot.Callable.CallDeferred(ReadOnlySpan`1 args) in /root/godot/modules/mono/glue/GodotSharp/GodotSharp/Core/Callable.cs:line 137
+   at Godot.Callable.CallDeferred(Variant[] args) in /root/godot/modules/mono/glue/GodotSharp/GodotSharp/Core/Callable.cs:line 127
+   at VortexArena.Main.<RegisterShutdownSignals>g__Handle|4_0(PosixSignalContext ctx) in /tmp/va-scripted-native-build.nj13cS/Main.cs:line 305
+   at System.Runtime.InteropServices.PosixSignalRegistration.<OnPosixSignal>g__HandleSignal|10_0(Object state)
+   at System.Threading.Thread.StartCallback()

@@ -1,0 +1,94 @@
+Xonotic source: 863cd3e8456e18f577f7fe5fef857ff55ae62cc0
+SHA-256 progs.dat c4a5a9e85598333568183779c06446b2d03f056d2da71636b6f86150ed1202f7
+SHA-256 csprogs.dat cbc9fd9a4e2c7fc8f02f4aab6e5883e549790eb24e71be2bc0b8a0b0fea89999
+SHA-256 leave_em_behind.pk3 31300fcbef4470afd81497665831095755808b0579d7cbd357f3677761a75ff9
+
+[Stock-LocalRace]
+Server PID 258783
+UNCONN 0      0      127.0.0.1:28951 0.0.0.0:*
+No server.db before startup
+execing fixture-local.cfg
+[::MENUQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+Connection established to 127.0.0.1:28951
+Server protocol is DP7
+[::CSQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+]cmd join
+Stock-LocalRace is now playing
+]cmd records 1
+No records available for the current gametype.
+]cmd rankings
+No records are available for the map: leave_em_behind
+]cmd ladder
+Top 30 ladder rankings:
+Pos | Total  | 1st | 2nd | 3rd | 4th | 5th | 6th | 7th | 8th | 9th | 10th | Speed awards | Name
+server.db after graceful quit
+0
+
+[Stock-LocalCTS]
+Server PID 258095
+UNCONN 0      0      127.0.0.1:28951 0.0.0.0:*
+No server.db before startup
+execing fixture-local.cfg
+[::MENUQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+Connection established to 127.0.0.1:28951
+Server protocol is DP7
+[::CSQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+]cmd join
+Stock-LocalCTS is now playing
+]cmd records 1
+No records available for the current gametype.
+]cmd rankings
+No records are available for the map: leave_em_behind
+]cmd ladder
+Top 30 ladder rankings:
+Pos | Total  | 1st | 2nd | 3rd | 4th | 5th | 6th | 7th | 8th | 9th | 10th | Speed awards | Name
+server.db after graceful quit
+0
+
+[Stock-Capture]
+Server PID 260567
+UNCONN 0      0      127.0.0.1:28931 0.0.0.0:*
+No server.db before startup
+execing fixture-local.cfg
+[::MENUQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+Connection established to 127.0.0.1:28931
+Server protocol is DP7
+[::CSQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+]cmd join
+Stock-Capture is now playing on the RED team
+Stock-Capture got the BLUE flag
+Stock-Capture captured the BLUE flag in 3.05 seconds
+]cmd records 1
+No records available for the current gametype.
+]cmd rankings
+No records are available for the map: leave_em_behind
+]cmd ladder
+Top 30 ladder rankings:
+Pos | Total  | 1st | 2nd | 3rd | 4th | 5th | 6th | 7th | 8th | 9th | 10th | Speed awards | Name
+server.db after graceful quit
+0
+\leave_em_behind/captimerecord/time\3.046875
+\leave_em_behind/captimerecord/netname\Stock-Capture
+
+[Stock-Readback]
+Server PID 261030
+UNCONN 0      0      127.0.0.1:28931 0.0.0.0:*
+Prior earned server.db present before startup
+execing fixture-local.cfg
+[::MENUQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+Connection established to 127.0.0.1:28931
+Server protocol is DP7
+[::CSQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+]cmd records 1
+leave_em_behind                    3.05 Stock-Capture
+]cmd rankings
+No records are available for the map: leave_em_behind
+]cmd ladder
+Top 30 ladder rankings:
+Pos | Total  | 1st | 2nd | 3rd | 4th | 5th | 6th | 7th | 8th | 9th | 10th | Speed awards | Name
+server.db after graceful quit
+0
+\leave_em_behind/captimerecord/time\3.046875
+\leave_em_behind/captimerecord/netname\Stock-Capture
+
+Stock-Capture → Stock-Readback: byte-identical before and after restart.

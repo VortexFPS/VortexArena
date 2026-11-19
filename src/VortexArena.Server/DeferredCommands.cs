@@ -25,6 +25,7 @@ public sealed class DeferredCommands
         public float FireTime;   // absolute sim time at which the command runs (now + delay)
         public float Delay;      // the original delay, for the `defer` listing ("-> In %9.2f: %s")
         public string Command;
+        public Action<string>? Execute;
     }
 
     private readonly List<Entry> _pending = new();
@@ -40,6 +41,9 @@ public sealed class DeferredCommands
     /// seconds from <paramref name="now"/>. A non-positive delay fires on the next <see cref="Pump"/>.
     /// </summary>
     public void Defer(float delaySeconds, string command, float now)
+        => Defer(delaySeconds, command, now, execute: null);
+
+    internal void Defer(float delaySeconds, string command, float now, Action<string>? execute)
     {
         if (string.IsNullOrEmpty(command))
             return; // DP requires strlen(argv(2)) > 0
@@ -48,6 +52,7 @@ public sealed class DeferredCommands
             FireTime = now + (delaySeconds > 0f ? delaySeconds : 0f),
             Delay = delaySeconds,
             Command = command,
+            Execute = execute,
         });
     }
 
@@ -91,12 +96,12 @@ public sealed class DeferredCommands
             return;
         // Collect the due commands first (in order), remove them, THEN run — so a command that itself enqueues
         // a new defer doesn't get fired again this same tick (DP moves the node to the free list before AddText).
-        List<string>? due = null;
+        List<Entry>? due = null;
         for (int i = 0; i < _pending.Count; /* advance in body */)
         {
             if (_pending[i].FireTime <= now)
             {
-                (due ??= new List<string>()).Add(_pending[i].Command);
+                (due ??= new List<Entry>()).Add(_pending[i]);
                 _pending.RemoveAt(i); // preserves order of the remaining entries
             }
             else
@@ -106,7 +111,7 @@ public sealed class DeferredCommands
         }
         if (due is null)
             return;
-        foreach (string cmd in due)
-            run(cmd);
+        foreach (Entry entry in due)
+            (entry.Execute ?? run)(entry.Command);
     }
 }

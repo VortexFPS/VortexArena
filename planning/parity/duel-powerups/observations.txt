@@ -1,0 +1,77 @@
+Xonotic data 863cd3e8456e18f577f7fe5fef857ff55ae62cc0
+SHA-256 of staged inputs
+stock executable: 79e38b239b8dc5d5ee1ac8ada8245a51381ce27277dc165645fea0e69fed4312
+stock server QC: c4a5a9e85598333568183779c06446b2d03f056d2da71636b6f86150ed1202f7
+initial entities (identical fixture from preceding three-load run), stock: efba42a001e6dfef94562252dbd5cefc39e0e84802b15aef967b680cc3b22115
+initial entities (identical fixture from preceding three-load run), native: efba42a001e6dfef94562252dbd5cefc39e0e84802b15aef967b680cc3b22115
+aliases-only entities, stock: 17ab33f6bde4958b47c0e6788d4e7009ef360ce468e01499f2aa0373e18bd2bc
+aliases-only entities, native: 17ab33f6bde4958b47c0e6788d4e7009ef360ce468e01499f2aa0373e18bd2bc
+Stormkeep BSP: 15b669ac3b8574c7f905f99f7cf8b4a6504b90f5ec19b6b1445a6edf02462e69
+
+stock dedicated console (selected lines)
+Loaded maps/stormkeep.ent
+"g_duel" is "1" ["0"]
+"g_duel_with_powerups" is "0" ["0"]
+3807 (item_health_small)
+DUEL_ITEMS_END_0
+Loaded maps/stormkeep.ent
+"g_duel" is "1" ["0"]
+"g_duel_with_powerups" is "1" ["0"]
+3811 (item_strength)
+3812 (item_shield)
+3817 (item_shield)
+3813 (item_speed)
+3818 (item_speed)
+3814 (item_invisibility)
+3815 (item_jetpack)
+3816 (item_fuel_regen)
+3819 (item_health_small)
+DUEL_ITEMS_END_1
+Loaded maps/stormkeep.ent
+"g_duel" is "1" ["0"]
+"g_duel_with_powerups" is "0" ["0"]
+3819 (item_health_small)
+DUEL_ITEMS_END_2
+Loaded maps/stormkeep.ent
+"g_duel" is "1" ["0"]
+"g_duel_with_powerups" is "1" ["0"]
+3805 (item_shield)
+3806 (item_speed)
+3807 (item_health_small)
+DUEL_ITEMS_END_3
+
+native dedicated console (selected lines)
+[lb]Shell] hosting listen server: gametype=duel map=stormkeep bots=0 skill=-1 timelimit=0 fraglimit=0
+[NetGame] DEDICATED: no local client — no loopback connection, carrier, camera, HUD or prediction. All player slots are available to real clients.
+[LoadTimeline] host stormkeep — load begin → ready, 526 ms total
+"g_duel_with_powerups" is "0"
+2 (item_health_small)
+"g_powerups_jetpack" is "1"
+[lb]Shell] hosting listen server: gametype=duel map=stormkeep bots=0 skill=-1 timelimit=0 fraglimit=0
+[NetGame] DEDICATED: no local client — no loopback connection, carrier, camera, HUD or prediction. All player slots are available to real clients.
+[LoadTimeline] host stormkeep — load begin → ready, 315 ms total
+"g_duel_with_powerups" is "1"
+2 (item_strength)
+3 (item_shield)
+8 (item_shield)
+4 (item_speed)
+9 (item_speed)
+5 (item_invisibility)
+6 (item_jetpack)
+7 (item_fuel_regen)
+10 (item_health_small)
+"g_powerups_jetpack" is "1"
+[lb]Shell] hosting listen server: gametype=duel map=stormkeep bots=0 skill=-1 timelimit=0 fraglimit=0
+[NetGame] DEDICATED: no local client — no loopback connection, carrier, camera, HUD or prediction. All player slots are available to real clients.
+[LoadTimeline] host stormkeep — load begin → ready, 327 ms total
+"g_duel_with_powerups" is "0"
+2 (item_health_small)
+"g_powerups_jetpack" is "1"
+[lb]Shell] hosting listen server: gametype=duel map=stormkeep bots=0 skill=-1 timelimit=0 fraglimit=0
+[NetGame] DEDICATED: no local client — no loopback connection, carrier, camera, HUD or prediction. All player slots are available to real clients.
+[LoadTimeline] host stormkeep — load begin → ready, 329 ms total
+"g_duel_with_powerups" is "1"
+2 (item_shield)
+3 (item_speed)
+4 (item_health_small)
+"g_powerups_jetpack" is "1"

@@ -57,7 +57,7 @@ public class BotPatchCollisionBench
         _out.WriteLine($"=== {map}: {BotCount} bots, {Seconds} s measured after 14 s of warm-up ===");
         foreach (PatchCollisionMode mode in new[] { PatchCollisionMode.Slabs, PatchCollisionMode.DarkPlacesTriangles })
         {
-            BspCollisionBuilder.Result built = BspCollisionBuilder.Build(bsp, null, new BspCollisionOptions { PatchCollision = mode, MapFile = file });
+            BspCollisionBuilder.Result built = BspCollisionBuilder.Build(bsp, null, new BspCollisionOptions { PatchCollision = mode });
             var world = new GameWorld(built.World, BuildEntityDicts(bsp)) { MapName = map };
             world.BrushModels = built.Submodels;
             world.MapBsp = bsp;

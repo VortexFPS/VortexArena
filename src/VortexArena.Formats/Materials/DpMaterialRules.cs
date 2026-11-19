@@ -285,6 +285,17 @@ vec3 dp_fb_factor(vec3 display) {
 }
 ";
 
+    // The classic DP fakelight path shades from the view with a 15% floor (RSurf_DrawBatch_GL11_ApplyFakeLight).
+    public const string DebugLightingShader = """
+        global uniform vec2 native_debug_lighting;
+        float native_debug_light(vec3 normal_view) {
+            if (native_debug_lighting.x < 1.5) {
+                return 1.0;
+            }
+            return (0.15 + 0.85 * max(normalize(normal_view).z, 0.0)) * native_debug_lighting.y;
+        }
+        """;
+
     /// <summary>
     /// The same data combined the way the native game combines it (decode, multiply in linear light, encode):
     /// what a legacy session showed before it had its own arithmetic. Kept so the difference can be stated.

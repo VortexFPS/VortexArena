@@ -188,12 +188,15 @@ public sealed class Ctf : GameType
     /// <summary>The flag belonging to each team (QC g_flags), keyed by the flag's home-team color code.</summary>
     public readonly Dictionary<int, FlagState> Flags = new();
 
+    public Func<Player, bool>? UidConsentProvider;
+
+    public bool LeaderboardEnabled => Api.Services is not null && Api.Cvars.GetFloat("g_ctf_leaderboard") != 0f;
+
     public bool MatchEnded { get; private set; }
     public int LeaderTeam { get; private set; }
 
     /// <summary>QC ctf_captimerecord (sv_ctf.qc): the fastest capture this match in seconds (0 = none yet). Drives
-    /// the CHOICE_CTF_CAPTURE_TIME / _BROKEN / _UNBROKEN fastest-cap broadcast. The persistent ServerProgsDB
-    /// record + cross-session leaderboard (g_ctf_leaderboard) remain out of scope (need a persistent DB).</summary>
+    /// the CHOICE_CTF_CAPTURE_TIME / _BROKEN / _UNBROKEN fastest-cap broadcast.</summary>
     private float _ctfCapTimeRecord;
 
     /// <summary>QC ctf_captimerecord refername: the name of the player who holds the current fastest cap.</summary>
@@ -225,6 +228,7 @@ public sealed class Ctf : GameType
     /// crosses a Porto portal drops the flag (QC MUTATOR_HOOKFUNCTION(ctf, PortalTeleport), sv_ctf.qc:2404,
     /// gated by autocvar_g_ctf_portalteleport). Null when CTF is not active.</summary>
     private System.Action<Entity>? _portalTeleportHandler;
+    private HookHandler<MutatorHooks.PlayerUseKeyArgs>? _dropSpecialItemsHandler;
 
     // ----- flagcarrier damage/force factors + auto-helpme (g_ctf_flagcarrier_*; gametypes-server.cfg, all 1) -----
     private const string CvarFcSelfDamage = "g_ctf_flagcarrier_selfdamagefactor"; // 1
@@ -375,12 +379,11 @@ public sealed class Ctf : GameType
         _preferScoreClearHandler = OnPreferPlayerScoreClear;
         MutatorHooks.PreferPlayerScore_Clear.Add(_preferScoreClearHandler);
 
-        // QC MUTATOR_HOOKFUNCTION(ctf, PortalTeleport) (sv_ctf.qc:2404): when a carrier crosses a Porto
-        // portal, drop the flag (DROP_NORMAL) if autocvar_g_ctf_portalteleport is set (default 0 = disabled;
-        // with ratio 0 the stock config is inert, exactly like Base). The WarpzoneManager.OnPortalTeleport
-        // callback fires for every client crossing a Porto-owned warpzone — a player-only path.
+        // QC PortalTeleport drops a carried flag by default.
         _portalTeleportHandler = OnPortalTeleport;
         WarpzoneManager.OnPortalTeleport += _portalTeleportHandler;
+        _dropSpecialItemsHandler = OnDropSpecialItems;
+        MutatorHooks.DropSpecialItems.Add(_dropSpecialItemsHandler);
     }
 
     /// <summary>
@@ -451,6 +454,11 @@ public sealed class Ctf : GameType
             MutatorHooks.PreferPlayerScore_Clear.Remove(_preferScoreClearHandler);
             _preferScoreClearHandler = null;
         }
+        if (_dropSpecialItemsHandler is not null)
+        {
+            MutatorHooks.DropSpecialItems.Remove(_dropSpecialItemsHandler);
+            _dropSpecialItemsHandler = null;
+        }
         if (_portalTeleportHandler is not null)
         {
             WarpzoneManager.OnPortalTeleport -= _portalTeleportHandler;
@@ -479,6 +487,8 @@ public sealed class Ctf : GameType
                 Vector3 fpos = f.Entity is { } fe ? fe.Origin : f.HomeOrigin;
                 string fsuffix = FlagSuffix(f.HomeTeam);
                 string fsprite = f.Status == FlagStatus.Dropped ? "FlagDropped" + fsuffix : "FlagBase" + fsuffix;
+                Entity? dropped = f.Status == FlagStatus.Dropped
+                    && (FlagReturnTime > 0f || Cvar("g_ctf_flag_return_damage", 0f) != 0f) ? f.Entity : null;
                 into.Add(new Waypoints.WaypointSprite
                 {
                     // Color is the RADAR tint = the flag's team color (QC WaypointSprite_UpdateTeamRadar with the
@@ -487,7 +497,7 @@ public sealed class Ctf : GameType
                     // (showto=NULL, t=0) so flag markers are shown to EVERYONE (the SPRITERULE_DEFAULT team-restriction
                     // applies only when wp.team is set — the flag's home team lives in Color, not the visibility team).
                     SpriteName = fsprite, FixedOrigin = fpos, Team = 0, Color = TeamRadarColor(f.HomeTeam),
-                    RadarIcon = 1, Health = -1f, MaxHealth = 1f,
+                    RadarIcon = 1, Health = dropped?.Health ?? -1f, MaxHealth = dropped?.MaxHealth ?? 1f,
                 });
                 continue;
             }
@@ -877,10 +887,13 @@ public sealed class Ctf : GameType
         if (flag.Status != FlagStatus.Dropped)
             return;
 
-        // QC ctf_CheckFlagReturn: the global "flag returned" voice + the team-colored timeout kill-feed line
-        // (APP_NUM(flag.team, INFO_CTF_FLAGRETURN_TIMEOUT); the neutral flag uses the _NEUTRAL variant). No player credit.
+        ReturnDroppedFlag(flag, "TIMEOUT");
+    }
+
+    private void ReturnDroppedFlag(FlagState flag, string reason)
+    {
         FlagAnnounceSound(flag.HomeTeam, "RETURNED");
-        NotificationSystem.Info($"CTF_FLAGRETURN_TIMEOUT_{TeamSuffix(flag.HomeTeam)}");
+        NotificationSystem.Info($"CTF_FLAGRETURN_{reason}_{TeamSuffix(flag.HomeTeam)}");
 
         flag.ResetToBase();
         RespawnFlagEntity(flag);
@@ -924,20 +937,19 @@ public sealed class Ctf : GameType
             GametypeEntities.DetachFromCarrier(fe);
             fe.Solid = Solid.Trigger;
             fe.MoveType = MoveType.Toss;
-            fe.TakeDamage = DamageMode.Yes;
+            ArmDroppedFlag(fe, carried);
             fe.Angles = Vector3.Zero;
             fe.GtStatus = (int)FlagStatus.Dropped;
             fe.GtDropTime = now;
             fe.GtLandTime = 0f;
             fe.GtCapturer = carrier;
             GametypeEntities.SetOrigin(fe, carrier.Origin + FlagDropOffset);
-            // QC ctf_Handle_Throw DROP_NORMAL (sv_ctf.qc:571): toss the flag up + a randomized sideways kick on top
-            // of the carrier's velocity (W_CalculateProjectileVelocity) so it tumbles away from where they fell.
+            // QC ctf_Handle_Throw DROP_NORMAL draws the Y component first, then X.
             float up   = Cvar(CvarDropVelocityUp,   DefaultDropVelocityUp);
             float side = Cvar(CvarDropVelocitySide, DefaultDropVelocitySide);
-            float cx = Prandom.Float() * 2f - 1f; // QC crandom() ∈ [-1,1]
             float cy = Prandom.Float() * 2f - 1f;
-            fe.Velocity = carrier.Velocity + new Vector3(cx * side, cy * side, up);
+            float cx = Prandom.Float() * 2f - 1f;
+            fe.Velocity = WeaponFiring.CalculateProjectileVelocity(carrier, new Vector3(cx * side, cy * side, up));
         }
     }
 
@@ -992,6 +1004,13 @@ public sealed class Ctf : GameType
             player.GtThrowPrevTime = now;
         }
 
+        ThrowCarriedFlag(carried, player);
+        player.GtThrowAntispam = now + PassWait;
+        return true;
+    }
+
+    private void ThrowCarriedFlag(FlagState carried, Player player)
+    {
         // QC: makevectors((v_angle.y * '0 1 0') + (bound(min,v_angle.x,max) * '1 0 0')); the thrown velocity is
         // up + forward, with the forward leg multiplied by the Strength bonus when the thrower has it.
         float pitch = QClamp(player.Angles.X, Cvar(CvarThrowAngleMin, DefaultThrowAngleMin), Cvar(CvarThrowAngleMax, DefaultThrowAngleMax));
@@ -1002,9 +1021,7 @@ public sealed class Ctf : GameType
 
         ThrowDropCommon(carried, player, FlagDropType.Throw);
         if (carried.Entity is Entity fe)
-            fe.Velocity = player.Velocity + vel; // QC W_CalculateProjectileVelocity adds the thrower's velocity
-        player.GtThrowAntispam = now + PassWait;
-        return true;
+            fe.Velocity = WeaponFiring.CalculateProjectileVelocity(player, vel);
     }
 
     /// <summary>
@@ -1174,7 +1191,7 @@ public sealed class Ctf : GameType
             {
                 fe.GtStatus = (int)FlagStatus.Dropped;
                 fe.MoveType = MoveType.Toss;
-                fe.TakeDamage = DamageMode.Yes;
+                ArmDroppedFlag(fe, flag);
                 fe.GtDropTime = now;
                 fe.Velocity = Vector3.Zero;
             }
@@ -1210,7 +1227,8 @@ public sealed class Ctf : GameType
             GametypeEntities.DetachFromCarrier(fe);
             fe.Solid = Solid.Trigger;
             fe.MoveType = MoveType.Toss;
-            fe.TakeDamage = DamageMode.Yes;
+            if (droptype == FlagDropType.Throw)
+                ArmDroppedFlag(fe, flag);
             fe.Angles = Vector3.Zero;
             fe.GtStatus = (int)FlagStatus.Dropped;
             fe.GtDropTime = now;
@@ -1319,14 +1337,16 @@ public sealed class Ctf : GameType
     /// QC ctf_CaptureRecord (sv_ctf.qc:113): broadcast the capture, including the fastest-cap time. One-flag mode
     /// fires the plain INFO_CTF_CAPTURE_NEUTRAL; otherwise it fires the MSG_CHOICE CHOICE_CTF_CAPTURE_TIME /
     /// _BROKEN / _UNBROKEN (the client picks the plain "captured the flag" or the timed variant). The in-process
-    /// fastest-cap record (<see cref="_ctfCapTimeRecord"/>) is updated when beaten; the persistent ServerProgsDB
-    /// record + cross-session leaderboard are out of scope. <paramref name="capTime"/> is the carry duration (s).
+    /// fastest-cap record (<see cref="_ctfCapTimeRecord"/>) is updated when beaten. The optional scoreboard
+    /// leaderboard stores each player's best valid capture separately.
     /// </summary>
     private void CaptureRecord(int flagTeam, Player player, float capTime)
     {
         bool validRecord = capTime > 0.01f;
-        float capRecord = _ctfCapTimeRecord;
-        string refername = _ctfCapTimeRecordHolder;
+        string map = Api.Services is null ? "" : Api.Cvars.GetString("mapname");
+        (float capRecord, string refername) = map.Length == 0
+            ? (_ctfCapTimeRecord, _ctfCapTimeRecordHolder)
+            : RaceRecords.ReadCaptureBest(map);
         string suffix = TeamSuffix(flagTeam);
 
         if (OneFlag)
@@ -1358,6 +1378,14 @@ public sealed class Ctf : GameType
         {
             _ctfCapTimeRecord = capTime;
             _ctfCapTimeRecordHolder = player.NetName;
+            if (map.Length != 0) RaceRecords.WriteCaptureBest(map, capTime, player.NetName);
+        }
+
+        if (!OneFlag && validRecord && map.Length != 0 && LeaderboardEnabled
+            && !string.IsNullOrEmpty(player.PersistentId) && UidConsentProvider?.Invoke(player) != false)
+        {
+            float rankedTime = Scoring.GameScores.TimeDecode(Scoring.GameScores.TimeEncode(capTime));
+            RaceRecords.SetTime(map, RaceRecords.CtfRecord, rankedTime, player.PersistentId, player.NetName);
         }
     }
 
@@ -1509,6 +1537,9 @@ public sealed class Ctf : GameType
             e.GtSpawnAngles = angles;
             e.GtStatus = (int)FlagStatus.AtBase;
             e.NextThink = GametypeEntities.Now + 0.2f; // QC FLAG_THINKRATE
+            e.GtEventDamage = FlagDamage;
+            e.DamagedByTriggers = Cvar("g_ctf_flag_return_when_unreachable", 1f) != 0f;
+            e.DamageForceScale = Cvar("g_ctf_flag_damageforcescale", 2f);
             // QC ctf_FlagSetup: flag.reset = ctf_Reset (sv_ctf.qc:1380). The engine round/map reset
             // (GameWorld.ResetMapObjects → Entity.Reset) fires this so a carried/dropped/passing flag is
             // force-thrown (DROP_RESET) and respawned at base on an in-place round/map reset.
@@ -1646,6 +1677,8 @@ public sealed class Ctf : GameType
         e.Solid = Solid.Trigger;
         e.MoveType = MoveType.None;
         e.TakeDamage = DamageMode.No;
+        e.DamagedByContents = false;
+        e.Health = e.MaxHealth;
         e.Velocity = Vector3.Zero;
         e.Angles = e.GtSpawnAngles;
         e.GtStatus = (int)FlagStatus.AtBase;
@@ -1661,8 +1694,7 @@ public sealed class Ctf : GameType
     /// fired by the engine round/map reset (GameWorld.ResetMapObjects). If a player is carrying the flag it is
     /// force-thrown with DROP_RESET (no toss velocity), then the flag is respawned at its home base. This is what
     /// restores a carried/dropped/passing flag's at-base state on an in-place round/map reset that doesn't re-run
-    /// Activate(). QC also clears flag.enemy (the takedamage-return back-link); the port has no flag-health bleed
-    /// so there is no enemy back-link to clear.
+    /// Activate().
     /// </summary>
     private void FlagResetEntity(Entity self)
     {
@@ -1850,14 +1882,58 @@ public sealed class Ctf : GameType
             bool nearBase = returnDropped == -1f || (self.Origin - self.GtSpawnOrigin).Length() <= returnDropped;
             if (nearBase)
             {
-                AutoReturnFlag(flag);
+                ReturnDroppedFlag(flag, "DROPPED");
                 return;
             }
         }
 
-        float returnTime = FlagReturnTime;
-        if (returnTime > 0f && now >= self.GtDropTime + returnTime && flag is not null)
-            AutoReturnFlag(flag);
+        if (flag is null)
+            return;
+        float returnTime = flag.DamagedByWorld ? Cvar("g_ctf_flag_return_damage_delay", 0f) : FlagReturnTime;
+        if (returnTime > 0f)
+            self.Health -= self.MaxHealth * (0.2f / returnTime);
+        if (returnTime > 0f || flag.DamagedByWorld)
+            CheckDroppedFlagReturn(self, flag, flag.DamagedByWorld ? "NEEDKILL" : "TIMEOUT");
+    }
+
+    private void CheckDroppedFlagReturn(Entity entity, FlagState flag, string reason)
+    {
+        float timeout = FlagReturnTime;
+        if (entity.Health <= 0f || (timeout > 0f && Now >= flag.DropTime + timeout)
+            || (flag.DamagedByWorld && Cvar("g_ctf_flag_return_damage_delay", 0f) <= 0f))
+            ReturnDroppedFlag(flag, reason);
+    }
+
+    private void ArmDroppedFlag(Entity entity, FlagState flag)
+    {
+        float health = Cvar("g_ctf_flag_health", 0f);
+        entity.Health = entity.MaxHealth = Cvar("g_ctf_flag_return_damage", 0f) != 0f && health > 0f ? health : 100f;
+        entity.TakeDamage = DamageMode.Yes;
+        entity.DamagedByContents = Cvar("g_ctf_flag_return_when_unreachable", 1f) != 0f;
+        entity.Flags &= ~EntFlags.OnGround;
+        flag.DamagedByWorld = false;
+    }
+
+    private void FlagDamage(Entity self, Entity? inflictor, Entity? attacker, string deathType,
+        float damage, Vector3 hitLocation, Vector3 force)
+    {
+        if (MatchEnded || FlagForEntity(self) is not { Status: FlagStatus.Dropped } flag)
+            return;
+
+        if (DeathTypes.ItemDamageNeedKill(deathType))
+        {
+            if (Cvar("g_ctf_flag_return_when_unreachable", 1f) == 0f)
+                return;
+            if (Cvar("g_ctf_flag_return_damage_delay", 0f) > 0f)
+                flag.DamagedByWorld = true;
+            else
+                ReturnDroppedFlag(flag, "NEEDKILL");
+        }
+        else if (Cvar("g_ctf_flag_return_damage", 0f) != 0f)
+        {
+            self.Health -= damage;
+            CheckDroppedFlagReturn(self, flag, "DAMAGED");
+        }
     }
 
     /// <summary>
@@ -1962,7 +2038,7 @@ public sealed class Ctf : GameType
             else if (flag.Status == FlagStatus.Passing)
                 DrivePass(flag, now);
             // QC ctf_CheckFlagReturn: a dropped flag whose return timer elapsed returns itself to base.
-            else if (returnTime > 0f && flag.Status == FlagStatus.Dropped && now >= flag.DropTime + returnTime)
+            else if (flag.Entity is null && returnTime > 0f && flag.Status == FlagStatus.Dropped && now >= flag.DropTime + returnTime)
                 AutoReturnFlag(flag);
         }
 
@@ -2045,19 +2121,15 @@ public sealed class Ctf : GameType
     /// <summary>
     /// QC <c>MUTATOR_HOOKFUNCTION(ctf, AbortSpeedrun)</c> (sv_ctf.qc): when a speedrun is aborted via
     /// impulse 141 (the SPEEDRUN cheat), any flag the carrier holds is force-respawned and
-    /// <c>INFO_CTF_FLAGRETURN_ABORTRUN</c> is broadcast (QC <c>ctf_RespawnFlag</c> + announce). The port
-    /// collapses the QC <c>ctf_RespawnFlag</c> into <see cref="AutoReturnFlag"/> which already handles the
-    /// reset + voice + info line; the ABORTRUN variant sends the dedicated notification instead.
+    /// <c>INFO_CTF_FLAGRETURN_ABORTRUN</c> is broadcast.
     /// </summary>
     public void AbortSpeedrun(Player p)
     {
         FlagState? carried = CarriedBy(p);
         if (carried is null)
             return;
-        // QC MUTATOR_HOOKFUNCTION(ctf, AbortSpeedrun): ctf_RespawnFlag(player.flagcarried) +
-        // INFO_CTF_FLAGRETURN_ABORTRUN broadcast + snd_flag_respawn global voice.
-        FlagAnnounceSound(carried.HomeTeam, "RETURNED"); // QC snd_flag_respawn (ATTEN_NONE)
         NotificationSystem.Info($"CTF_FLAGRETURN_ABORTRUN_{TeamSuffix(carried.HomeTeam)}");
+        GametypeEntities.ScoringVip(p, false);
         KillCarrierWaypoint(carried);
         carried.ResetToBase();
         RespawnFlagEntity(carried);
@@ -2100,20 +2172,17 @@ public sealed class Ctf : GameType
     /// <see cref="RemovePlayer"/> so a leaving carrier drops the flag and stale back-links are cleared.</summary>
     public override void OnPlayerRemoved(Player player) => RemovePlayer(player);
 
-    /// <summary>
-    /// QC <c>MUTATOR_HOOKFUNCTION(ctf, PortalTeleport)</c> (sv_ctf.qc:2404): when a carrier crosses a Porto
-    /// portal (player-placed via the Porto weapon), drop the flag with DROP_NORMAL — gated by
-    /// <c>autocvar_g_ctf_portalteleport</c> (default 0 = disabled, matching Base). Subscribed to
-    /// <see cref="WarpzoneManager.OnPortalTeleport"/> (fires for every client crossing a Porto-owned portal).
-    /// </summary>
     private void OnPortalTeleport(Entity e)
     {
-        if (MatchEnded || Cvar("g_ctf_portalteleport", 0f) == 0f)
-            return;
-        if (e is not Player player)
-            return;
-        // QC: ctf_RemovePlayer(player) — the same drop-and-clear path used by disconnect/observe/vehicle.
-        RemovePlayer(player);
+        if (Cvar("g_ctf_portalteleport", 0f) == 0f && e is Player player)
+            DropFlag(player);
+    }
+
+    private bool OnDropSpecialItems(ref MutatorHooks.PlayerUseKeyArgs args)
+    {
+        if (!MatchEnded && args.Player is Player player && CarriedBy(player) is { } flag)
+            ThrowCarriedFlag(flag, player);
+        return false;
     }
 
     /// <summary>
@@ -2420,6 +2489,8 @@ public sealed class FlagState
     /// <summary>Sim time the flag was dropped (QC ctf_droptime) — drives the auto-return timer.</summary>
     public float DropTime;
 
+    internal bool DamagedByWorld;
+
     /// <summary>QC flag.pass_target: the teammate a FLAG_PASSING flag is flying toward, or null.</summary>
     public Player? PassTarget;
 
@@ -2449,6 +2520,7 @@ public sealed class FlagState
         Dropper = null;
         DropOrigin = Vector3.Zero;
         DropTime = 0f;
+        DamagedByWorld = false;
         PassTarget = null;
         PassSender = null;
         PassDistance = 0f;

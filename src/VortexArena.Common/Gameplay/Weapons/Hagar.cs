@@ -179,7 +179,7 @@ public sealed class Hagar : Weapon
         ShotInfo shot = WeaponFiring.SetupShot(actor, forward, recoil: 2f);
 
         Entity missile = SpawnRocket(actor, shot.Origin, "missile", Primary.Health, MoveType.Fly);
-        missile.Velocity = WeaponFiring.ProjectileVelocity(shot.Dir, up, Primary.Speed);
+        missile.Velocity = WeaponFiring.ProjectileVelocity(actor, shot.Dir, up, Primary.Speed);
         missile.Angles = QMath.VecToAngles(missile.Velocity);
 
         // QC hagar.qc:109-110 — flag the rocket as a dodgeable hazard (rating = primary damage).
@@ -214,7 +214,7 @@ public sealed class Hagar : Weapon
         ShotInfo shot = WeaponFiring.SetupShot(actor, forward, recoil: 2f);
 
         Entity missile = SpawnRocket(actor, shot.Origin, "missile", Secondary.Health, MoveType.BounceMissile);
-        missile.Velocity = WeaponFiring.ProjectileVelocity(shot.Dir, up, Secondary.Speed, 0f, 0f, Secondary.Spread);
+        missile.Velocity = WeaponFiring.ProjectileVelocity(actor, shot.Dir, up, Secondary.Speed, 0f, 0f, Secondary.Spread);
         missile.Angles = QMath.VecToAngles(missile.Velocity);
         missile.Count = 0; // bounce counter
 
@@ -398,7 +398,7 @@ public sealed class Hagar : Weapon
             // W_SetupProjVelocity adds the per-shot random jitter (perShot, which shrinks as shots grow).
             Vector3 s = WeaponFiring.CalculateSpreadPattern(i, shots) * (Secondary.LoadSpread * WeaponFiring.WeaponSpreadFactor);
             Vector3 dir = QMath.Normalize(shot.Dir + right * s.Y + up * s.Z);
-            missile.Velocity = WeaponFiring.ProjectileVelocity(dir, up, Secondary.Speed, 0f, 0f, perShot);
+            missile.Velocity = WeaponFiring.ProjectileVelocity(actor, dir, up, Secondary.Speed, 0f, 0f, perShot);
             missile.Angles = QMath.VecToAngles(missile.Velocity);
 
             // QC hagar.qc:214-215 — flag each loaded-salvo rocket as a dodgeable hazard (rating = secondary damage).

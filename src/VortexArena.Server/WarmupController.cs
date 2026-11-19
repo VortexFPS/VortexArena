@@ -50,6 +50,14 @@ public sealed class WarmupController
     /// <summary>QC <c>readycount</c>: how many players have readied up.</summary>
     public int ReadyCount => _ready.Count;
 
+    public bool IsReady(Player player) => _ready.Contains(player);
+
+    public bool HasDeferredReset => _pendingResetAt.HasValue;
+
+    // QC sv_ready_restart_after_countdown is a level rule; a mode can disable it without changing the cvar.
+    internal bool AllowDeferredReset { get; set; } = true;
+    internal bool RestartAfterCountdown => AllowDeferredReset && Cvars.Bool("sv_ready_restart_after_countdown");
+
     /// <summary>
     /// Supplies the roster the ready-majority is computed against (QC FOREACH_CLIENT(IS_PLAYER)). The host
     /// wires this to its connected players.
@@ -141,7 +149,7 @@ public sealed class WarmupController
     /// warmup limit, and pin <see cref="GameStartTime"/> until the match is readied. Call once at boot after
     /// the cvars are registered. When warmup is disabled, the match starts immediately (countdown only).
     /// </summary>
-    public void Begin()
+    public void Begin(bool suppressWarmup = false)
     {
         _started = true;
         _ready.Clear();
@@ -151,7 +159,7 @@ public sealed class WarmupController
         // and a g_warmup value outside [0,1] (e.g. -1 "until enough players" or >1 "minimum N players") means an
         // infinite warmup_limit (-1). The plain g_warmup==1 path resolves the timed limit.
         int gWarmup = Cvars.Int("g_warmup");
-        WarmupStage = !CampaignActive && gWarmup != 0;
+        WarmupStage = !suppressWarmup && !CampaignActive && gWarmup != 0;
         ResolveMinPlayers(gWarmup);
 
         if (WarmupStage)
@@ -270,7 +278,7 @@ public sealed class WarmupController
             if (WarmupLimit > 0f)
             {
                 _warmupStartTime = Now;       // anchor the now-timed warmup window
-                GameStartTime = Now + WarmupLimit;
+                GameStartTime = !WarmupStage && Cvars.Int("g_race_qualifying") == 2 ? Now : Now + WarmupLimit;
             }
             // implicit else (g_warmup -1 && g_warmup_limit -1): warmup continues until enough RUPs (no time limit).
         }
@@ -374,7 +382,7 @@ public sealed class WarmupController
         //     reset is DEFERRED until the countdown finishes, so players keep moving during the countdown and only
         //     reset the instant the match goes live. Modelled here with a pending-reset time the Think loop fires
         //     (the restart_timer think's ReadyRestart_think calls reset_map(false) at game_starttime).
-        if (!WarmupStage && Cvars.FloatOr("sv_ready_restart_after_countdown", 0f) != 0f)
+        if (!WarmupStage && RestartAfterCountdown)
         {
             _pendingResetAt = GameStartTime;
         }

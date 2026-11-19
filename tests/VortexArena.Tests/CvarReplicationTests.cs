@@ -2,6 +2,7 @@ using System.Linq;
 using System.Numerics;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Scoring;
 using VortexArena.Common.Physics;
 using VortexArena.Common.Services;
 using VortexArena.Engine.Collision;
@@ -51,6 +52,80 @@ public class CvarReplicationTests
         Assert.True(world.Commands.GetClientCvarBool(a, "cl_noantilag"));
         Assert.False(world.Commands.GetClientCvarBool(b, "cl_noantilag")); // per-client, not shared
         Assert.Equal("1", world.Commands.GetClientCvar(a, "cl_noantilag"));
+    }
+
+    [Theory]
+    [InlineData("0", false, false)]
+    [InlineData("1", true, true)]
+    [InlineData("2", true, false)]
+    public void SpawnNearTeammate_UsesEachClientsPreference(string mode, bool relocateA, bool relocateB)
+    {
+        var collision = new CollisionWorld();
+        collision.AddBrush(Brush.FromBox(new Vector3(-4096, -4096, -64),
+            new Vector3(4096, 4096, 0), SuperContents.Solid));
+        collision.BuildGrid();
+        var world = new GameWorld(collision) { MapName = "boil" };
+        world.Boot("dm");
+        world.Services.Cvars.Set("g_spawn_unique", "0");
+        world.Services.Cvars.Set("g_spawn_near_teammate", "1");
+        world.Services.Cvars.Set("g_spawn_near_teammate_distance", "1000");
+        world.Services.Cvars.Set("g_spawn_near_teammate_ignore_spawnpoint", mode);
+        world.Services.Cvars.Set("g_spawn_near_teammate_ignore_spawnpoint_check_health", "0");
+        world.Services.Cvars.Set("cl_spawn_near_teammate", "1");
+
+        var a = NewCaller("a");
+        var b = NewCaller("b");
+        a.Team = b.Team = Teams.Red;
+        var spot = new Entity { Team = Teams.Red, Origin = new Vector3(300, 0, 32) };
+        foreach (var origin in new[] { new Vector3(500, 0, 32), new Vector3(800, 0, 32) })
+        {
+            var teammate = Api.Entities.Spawn();
+            teammate.ClassName = "player";
+            teammate.Flags = EntFlags.Client;
+            teammate.Team = Teams.Red;
+            Api.Entities.SetOrigin(teammate, origin);
+        }
+
+        bool wasTeamplay = GameScores.Teamplay;
+        try
+        {
+            GameScores.Teamplay = true;
+            MutatorActivation.Apply();
+
+            // An unsent preference starts false even when the server's cvar has the shipped client default.
+            if (mode == "2")
+                CheckSpawn(a, false);
+
+            world.Commands.Execute("sentcvar cl_spawn_near_teammate 1", isServerConsole: false, caller: a);
+            world.Commands.Execute("sentcvar cl_spawn_near_teammate 0", isServerConsole: false, caller: b);
+            CheckSpawn(a, relocateA);
+            CheckSpawn(b, relocateB);
+
+            if (mode == "2")
+            {
+                world.Commands.Execute("sentcvar cl_spawn_near_teammate 1", isServerConsole: false, caller: b);
+                world.Commands.ForgetPlayer(a);
+                CheckSpawn(a, false);
+                CheckSpawn(b, true);
+            }
+        }
+        finally
+        {
+            MutatorActivation.DeactivateAll();
+            GameScores.Teamplay = wasTeamplay;
+        }
+
+        void CheckSpawn(Player player, bool shouldRelocate)
+        {
+            var score = new MutatorHooks.SpawnScoreArgs(player, spot, priority: 10f, weight: 500f);
+            MutatorHooks.SpawnScore.Call(ref score);
+            Assert.Equal(shouldRelocate ? 10f : 210f, score.Priority);
+
+            Api.Entities.SetOrigin(player, spot.Origin);
+            var spawn = new MutatorHooks.PlayerSpawnArgs(player, spot);
+            MutatorHooks.PlayerSpawn.Call(ref spawn);
+            Assert.Equal(shouldRelocate, player.Origin != spot.Origin);
+        }
     }
 
     [Fact]

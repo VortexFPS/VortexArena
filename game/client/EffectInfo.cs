@@ -23,6 +23,8 @@ public sealed class EffectInfo
 {
     /// <summary>The default path the parser reads when no <see cref="TextLoader"/> is supplied.</summary>
     public const string DefaultVPath = "effectinfo.txt";
+    public const string OriginalRoot = "vortex/original/";
+    public const string OriginalVPath = OriginalRoot + DefaultVPath;
 
     // name (lower-cased) -> the ordered list of emitter blocks that share that name.
     private readonly Dictionary<string, List<EffectInfoEmitter>> _byName =

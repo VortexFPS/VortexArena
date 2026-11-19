@@ -1,0 +1,117 @@
+[
+  {
+    "seconds": 0.0,
+    "event": "both graphical clients connected",
+    "port": 26818
+  },
+  {
+    "seconds": 2.001,
+    "client": "RedProbe",
+    "command": "cmd selectteam red"
+  },
+  {
+    "seconds": 3.037,
+    "client": "RedProbe",
+    "command": "cmd join"
+  },
+  {
+    "seconds": 5.963,
+    "client": "BlueProbe",
+    "command": "cmd selectteam blue"
+  },
+  {
+    "seconds": 7.007,
+    "client": "BlueProbe",
+    "command": "cmd join"
+  },
+  {
+    "seconds": 8.13,
+    "server": "status"
+  },
+  {
+    "seconds": 8.13,
+    "server": "g_weaponarena"
+  },
+  {
+    "seconds": 8.13,
+    "server": "g_balance_vortex_charge"
+  },
+  {
+    "seconds": 8.13,
+    "server": "g_balance_vortex_primary_damage"
+  },
+  {
+    "seconds": 8.13,
+    "server": "g_balance_vortex_primary_refire"
+  },
+  {
+    "seconds": 8.13,
+    "server": "g_balance_vortex_primary_force"
+  },
+  {
+    "seconds": 8.13,
+    "server": "g_onslaught_warmup"
+  },
+  {
+    "seconds": 8.13,
+    "server": "g_onslaught_round_timelimit"
+  },
+  {
+    "seconds": 8.13,
+    "server": "g_onslaught_cp_buildtime"
+  },
+  {
+    "seconds": 8.131,
+    "server": "g_onslaught_cp_health"
+  },
+  {
+    "seconds": 8.131,
+    "server": "g_onslaught_cp_buildhealth"
+  },
+  {
+    "seconds": 8.131,
+    "server": "g_onslaught_cp_regen"
+  },
+  {
+    "seconds": 8.131,
+    "server": "g_onslaught_gen_health"
+  },
+  {
+    "seconds": 10.131,
+    "client": "BlueProbe",
+    "command": "cmd teleporttotarget probe_blueview"
+  },
+  {
+    "seconds": 11.249,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_bluegen"
+  },
+  {
+    "seconds": 13.413,
+    "phase": "shielded generator shot"
+  },
+  {
+    "seconds": 13.413,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 13.709,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 14.53,
+    "phase": "initial build touch"
+  },
+  {
+    "seconds": 14.539,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_point"
+  },
+  {
+    "seconds": 35.587,
+    "client": "RedProbe",
+    "sample_error": "Command '['import', '-window', 'root', '-quality', '83', '/tmp/va-script-ons-native5/RedProbe/0010.webp']' timed out after 7.615244480999536 seconds"
+  }
+]

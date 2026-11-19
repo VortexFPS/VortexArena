@@ -1,0 +1,42 @@
+Stock pinned server
+attached: edict 3858 {'origin': "'1216 316 26.9902344'", 'nextthink': '32.7625999', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '107.590729', 'move_movetype': '12', 'creationtime': '32.5907249'}
+moved: edict 3858 {'origin': "'1216 460 26.9902344'", 'nextthink': '34.0282249', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '107.590729', 'move_movetype': '12', 'creationtime': '32.5907249'}
+dead: edict 3858 {'origin': "'1216 460 -27.96875'", 'nextthink': '107.590729', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '107.590729', 'move_movetype': '6', 'creationtime': '32.5907249'}
+reattached: edict 3842 {'origin': "'1216 316 26.9902363'", 'nextthink': '46.2782249', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '119.762604', 'move_movetype': '12', 'creationtime': '44.7625999'}
+disconnected: 0 remaining
+Alpha: 1 impact at cap eviction
+Alpha: 0 impacts after Beta's disconnect notification
+Beta: 1 impact at cap eviction
+
+Native negotiated ENet clients
+PASS both negotiated clients
+PASS both owners joined
+ORB slot=2 owner=Alpha order=1 move=Follow origin=<1216, 316, 8.753998> deadline=6.319 health=5.0
+PASS orb attached to Beta on ordinary collision
+PASS live orb moved with Beta
+FOLLOW moved owner=Alpha target=Beta targetFreed=False order=1 move=Follow solid=Not origin=<1216, 436, 8.753998> next=6.514
+FOLLOW dead owner=Alpha target= targetFreed= order=1 move=Toss solid=Corpse origin=<1216, 436, -27.96875> next=80.153
+PASS death drops a collidable orb with its original owner, cap order and deadline
+PASS respawn target before the next launch
+BLAST receiver=Alpha origin=<1216, 436, -27.96875>
+BLAST receiver=Beta origin=<1216, 436, -27.96875>
+ORB slot=3 owner=Alpha order=2 move=Follow origin=<1216, 316, 8.753998> deadline=8.181 health=5.0
+PASS next launch forces the dropped oldest orb to detonate for both clients
+FOLLOW disconnected owner=Alpha target=Beta targetFreed=True order=2 move=Follow solid=Not origin=<1216, 316, 8.753998> next=0.000
+PASS Beta disconnected through the ENet session
+PASS disconnect removes the attachment without another impact
+ORB slot=2 owner=Alpha order=3 move=None origin=<1216, 362.78162, -27.96875> deadline=86.861 health=5.0
+PASS the deleted orb leaves the cap slot available without a forced detonation
+
+Repeated stock run, same settings
+Stock pinned server
+attached: edict 3853 {'origin': "'1216 316 26.9902344'", 'nextthink': '37.9969749', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '111.825104', 'move_movetype': '12', 'creationtime': '36.8250999'}
+moved: edict 3853 {'origin': "'1216 460 26.9902344'", 'nextthink': '39.3407249', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '111.825104', 'move_movetype': '12', 'creationtime': '36.8250999'}
+dead: edict 3853 {'origin': "'1216 460 -27.96875'", 'nextthink': '111.825104', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '111.825104', 'move_movetype': '6', 'creationtime': '36.8250999'}
+reattached: edict 3842 {'origin': "'1216 316 26.9902344'", 'nextthink': '50.7782249', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '124.559479', 'move_movetype': '12', 'creationtime': '49.5594749'}
+disconnected: 1 remaining
+disconnected: edict 3842 {'origin': "'12 -7.34788112e-16 -27.96875'", 'nextthink': '124.559479', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '124.559479', 'move_movetype': '6', 'creationtime': '49.5594749'}
+Alpha: 1 impact at cap eviction
+Alpha: 0 impacts after Beta's disconnect notification
+Beta: 1 impact at cap eviction
+

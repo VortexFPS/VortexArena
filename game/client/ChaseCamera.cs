@@ -50,14 +50,15 @@ public static class ChaseCamera
     /// overhead/front variants so the caller's basis matches. Operates on the eye position
     /// <paramref name="eyeQuake"/> (= QC vieworg post-smoothing).
     /// </summary>
-    public static NVec3 ApplyClassic(NVec3 eyeQuake, ref NVec3 viewAnglesQuake, bool spectating)
+    public static NVec3 ApplyClassic(NVec3 eyeQuake, ref NVec3 viewAnglesQuake, bool spectating,
+        ICvarService? clientCvars = null)
     {
         NVec3 v = eyeQuake;
         // DarkPlaces engine defaults: chase_back 48, chase_up 24, chase_front 0, chase_overhead 0, chase_pitchangle 0.
-        float chaseBack = FirstPersonView.Cvar("chase_back", 48f);
-        float chaseUp = FirstPersonView.Cvar("chase_up", 24f);
-        bool chaseFront = FirstPersonView.Cvar("chase_front", 0f) != 0f;
-        bool chaseOverhead = FirstPersonView.Cvar("chase_overhead", 0f) != 0f;
+        float chaseBack = FirstPersonView.Cvar("chase_back", 48f, clientCvars);
+        float chaseUp = FirstPersonView.Cvar("chase_up", 24f, clientCvars);
+        bool chaseFront = FirstPersonView.Cvar("chase_front", 0f, clientCvars) != 0f;
+        bool chaseOverhead = FirstPersonView.Cvar("chase_overhead", 0f, clientCvars) != 0f;
         // Spectating-only test (QC CSQCPlayer_ApplyChase: `if (autocvar_chase_front && spectatee_status)`): chase_front
         // is honored ONLY while following a player. For one's own chase cam spectating is false, so chase_front does
         // nothing — matching the QC guard. While spectating with chase_active set it engages the frontal selfie view.
@@ -81,7 +82,7 @@ public static class ChaseCamera
                     if (best.Z > end.Z) best.Z = end.Z;
                 }
             best.Z -= 8f;
-            viewAnglesQuake.X = FirstPersonView.Cvar("chase_pitchangle", 0f);
+            viewAnglesQuake.X = FirstPersonView.Cvar("chase_pitchangle", 0f, clientCvars);
             return best;
         }
 
@@ -127,7 +128,8 @@ public static class ChaseCamera
     /// <paramref name="state"/>) and box-tracing against the world so the camera stops short of geometry rather than
     /// clipping through it.
     /// </summary>
-    public static NVec3 ApplyEvent(NVec3 originQuake, NVec3 forwardQuake, float dt, ref EventState state)
+    public static NVec3 ApplyEvent(NVec3 originQuake, NVec3 forwardQuake, float dt, ref EventState state,
+        NVec3? offsetOverride = null, float? distanceOverride = null)
     {
         state.Running = true;
 
@@ -140,7 +142,7 @@ public static class ChaseCamera
         // The lift is ceiling-aware: trace world-up by view_offset + maxs.z; if clear take the full offset,
         // else clamp the rise so the camera box (height maxs.z) stays below the blocking surface.
         NVec3 pivot = originQuake;
-        NVec3 viewOffset = new(0f, 0f, 20f);
+        NVec3 viewOffset = offsetOverride ?? new NVec3(0f, 0f, 20f);
         if (viewOffset != NVec3.Zero && Api.Services is not null)
         {
             NVec3 ceilTo = pivot + viewOffset + new NVec3(0f, 0f, maxs.Z);
@@ -155,7 +157,7 @@ public static class ChaseCamera
             pivot += viewOffset;
         }
 
-        float chaseDistance = FirstPersonView.Cvar("cl_eventchase_distance", 140f);
+        float chaseDistance = distanceOverride ?? FirstPersonView.Cvar("cl_eventchase_distance", 140f);
         float chaseSpeed = FirstPersonView.Cvar("cl_eventchase_speed", 1.3f);
 
         // ease the distance out (slow down the further back we get) — QC eventchase_current_distance integration.

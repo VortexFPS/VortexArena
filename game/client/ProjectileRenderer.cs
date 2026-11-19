@@ -42,6 +42,7 @@ public partial class ProjectileRenderer : Node3D
         public Vector3 LastPos;               // for velocity-from-motion when Entity.Velocity is unset
         public ProjectilePredictor Predictor; // CSQC Projectile_Draw: snap-to-server + local velocity extrapolation
         public string? SegmentTrail;          // faithful per-segment trail effect (DP CL_ParticleTrail); null = legacy emitters
+        public float FadeAlpha = 1f;
         public NVec3 TrailPos;                // Quake-space tail of the last emitted trail segment
 
         /// <summary>
@@ -234,6 +235,32 @@ public partial class ProjectileRenderer : Node3D
             light.LightColor = desc.GlowColor;
     }
 
+    private static readonly StringName ProjectileOpacity = new("effect_opacity");
+
+    private static void ApplyCrylinkAlpha(Visual visual, float alpha)
+    {
+        if (visual.FadeAlpha == alpha)
+            return;
+
+        visual.FadeAlpha = alpha;
+        if (visual.Body is Sprite3D sprite)
+        {
+            Color color = sprite.Modulate;
+            color.A = alpha;
+            sprite.Modulate = color;
+        }
+
+        else if (visual.Body is MeshInstance3D mesh)
+            mesh.SetInstanceShaderParameter(ProjectileOpacity, alpha);
+
+        float particleFade = Mathf.Sqrt(alpha);
+        foreach (GpuParticles3D trail in visual.Trails)
+        {
+            trail.AmountRatio = particleFade;
+            trail.Transparency = 1f - particleFade;
+        }
+    }
+
     /// <summary>Stop rendering a projectile (it hit something / expired). Optionally play an impact effect.</summary>
     public void OnRemove(Entity entity, string? impactEffect = null)
     {
@@ -340,6 +367,9 @@ public partial class ProjectileRenderer : Node3D
             OrientToVelocity(v.Root, v.Entity, v.Root.Position - v.LastPos);
             v.LastPos = v.Root.Position;
 
+            if (v.Type is PType.Crylink or PType.CrylinkBouncing)
+                ApplyCrylinkAlpha(v, Mathf.Clamp(v.Entity.Alpha, 0f, 1f));
+
             // Faithful trail segment (DP CL_ParticleTrail): feed this frame's flight segment to the sim —
             // its trailspacing stepping + shared accumulator make the per-frame calls compose into the
             // exact DP trail density regardless of frame rate or projectile speed.
@@ -349,7 +379,7 @@ public partial class ProjectileRenderer : Node3D
                 NVec3 seg = cur - v.TrailPos;
                 if (NVec3.Dot(seg, seg) > 0.01f)
                 {
-                    Effects?.SpawnTrailSegment(v.SegmentTrail, v.TrailPos, cur, v.Entity.Velocity);
+                    Effects?.SpawnTrailSegment(v.SegmentTrail, v.TrailPos, cur, v.Entity.Velocity, v.FadeAlpha);
                     v.TrailPos = cur;
                 }
             }

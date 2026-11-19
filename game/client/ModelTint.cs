@@ -105,6 +105,13 @@ public static class ModelTint
             mi.SetInstanceShaderParameter(PlayerSkinShader.GridLitUniform, on ? 1f : 0f);
     }
 
+    /// <summary>Use the model shaders' fullbright mode for a visible buff relic.</summary>
+    public static void SetRelicLighting(Node root, bool fullbright)
+    {
+        foreach (MeshInstance3D mesh in Meshes(root))
+            mesh.SetInstanceShaderParameter(PlayerSkinShader.GridLitUniform, fullbright ? 3f : 1f);
+    }
+
     /// <summary>
     /// Override ONLY the <c>colormod</c> instance-uniform on a cached mesh list, leaving glow/shirt/pants as a
     /// prior <see cref="ApplyAppearance(IReadOnlyList{MeshInstance3D},int,bool,float,bool)"/> set them. Used by the

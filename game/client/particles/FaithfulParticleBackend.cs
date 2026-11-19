@@ -297,12 +297,12 @@ public sealed partial class FaithfulParticleBackend : Node3D
     /// <paramref name="count"/> is DP's <c>pcount</c>.
     /// </summary>
     public void Trail(IReadOnlyList<EffectInfoEmitter> blocks, NVec3 start, NVec3 end, NVec3 velocity, float count,
-        uint tintRgba = 0xFFFFFFFFu)
+        uint tintRgba = 0xFFFFFFFFu, float fade = 1f)
     {
         if (blocks is null || blocks.Count == 0)
             return;
         ParticleEmitterInfo[] converted = Convert(blocks);
-        _runner.Spawn(converted, count, start, end, velocity, velocity, tintRgba, wantTrail: true);
+        _runner.Spawn(converted, count, start, end, velocity, velocity, tintRgba, fade, wantTrail: true);
     }
 
     /// <summary>Drop all live particles (map change / mode switch). Does not touch already-spawned decals.</summary>

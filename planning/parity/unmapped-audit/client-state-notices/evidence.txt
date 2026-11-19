@@ -1,0 +1,80 @@
+Pinned stock source · 863cd3e8456e18f577f7fe5fef857ff55ae62cc0
+qcsrc/common/net_notice.qc sv_notice_join, sv_notice_join_think, cl_notice_read, cl_notice_run
+qcsrc/common/state.qh CS, CS_CVAR, PlayerState, ClientState
+qcsrc/common/state.qc PlayerState_attach/detach, ClientState_attach/detach
+qcsrc/server/client.qh Client INIT and m_unwind
+qcsrc/server/client.qc PutObserverInServer, PutPlayerInServer, SetChangeParms, DecodeLevelParms, ClientConnect/Disconnect, SpectateCopy
+qcsrc/server/command/cmd.qc ClientCommand_sentcvar and qcsrc/server/command/getreplies.qc GetCvars
+qcsrc/server/weapons/hitplot.qc W_HitPlotOpen/Close
+
+Native Godot 4.6.3 Mono · headless Stormkeep dedicated and two ENet remotes using separate temporary profiles.
+The disposable project only held loading dismissal by a configured interval after packet receipt and printed receipt, release, show, hide and discard times. It exercised the production sender, receipt, lifetime and overlay methods. No transport delay was injected. No graphical redraw was measured in these runs.
+
+Partial load · hold 1.5 simulation seconds
+[notice-probe] receipt 17.953, duration 3, loading True
+[notice-probe] release 19.453
+[notice-probe] show 19.453, deadline 20.953, remaining 2
+[notice-probe] hide 20.953, deadline 20.953
+
+Expired load · hold 4 simulation seconds
+[notice-probe] receipt 18.469, duration 3, loading True
+[notice-probe] discard 21.469, deadline 21.469, loading True
+[notice-probe] release 22.469
+No show call in this run.
+
+Checked-in driver · pinned stock SDL, unmodified server program and instrumented CSQC viewer
+The stock client used its real CSQC clock and ordinary Stormkeep signon. The instrumented draw hold began on notice receipt, left the stock expiry loop active and released after the requested delay. This is a post-receipt display delay. The placement of receipt in the actual DarkPlaces map-load process remains source-only.
+
+Partial viewer hold · 1.5 seconds
+[notice-probe] line 11.284407 deadline 14.284407
+[notice-probe] receipt 11.284407 duration 3 loading True
+[notice-probe] line 11.284407 deadline 14.284407
+[notice-probe] release 12.829100
+[notice-probe] show 12.829100 deadline 14.284407 remaining 2
+[notice-probe] hide 14.321580 deadline 14.284407
+
+Expired viewer hold · 4 seconds
+[notice-probe] line 24.842920 deadline 27.842920
+[notice-probe] receipt 24.842920 duration 3 loading True
+[notice-probe] line 24.842920 deadline 27.842920
+[notice-probe] discard 27.907961 deadline 27.842920 loading True
+[notice-probe] release 28.857235
+No show call in this run. The stock hide and discard traces report the first draw pass that reached their deadlines.
+
+The final reproduce.py --engine both run passed all four checks with both dedicated servers bound to loopback.
+Engine / hold      release after receipt   first show     hide or discard after receipt
+Native / 1.5 s          1.703125 s          2 seconds       3.000000 s (hide)
+Native / 4 s            4.000000 s          none            3.000000 s (discard)
+Stock / 1.5 s           1.566907 s          2 seconds       3.095676 s (hide)
+Stock / 4 s             4.055176 s          none            3.026013 s (discard)
+
+Saved paired recipient, paused clock, native mode-2 replacement and pinned original early/late sends are linked from ../S1-VERIFICATION.md.
+
+Native focused .NET command
+DOTNET_ROLL_FORWARD=Major dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj --no-restore --filter 'FullyQualifiedName~JoinNoticeAndClientStateTests|FullyQualifiedName~OrderedAuditGameplayTests|FullyQualifiedName~CvarReplicationTests|FullyQualifiedName~HitPlotTests|FullyQualifiedName~ServerClientCommandsTests|FullyQualifiedName~KillCountdownTests'
+Passed 104. Failed 0. Skipped 0.
+dotnet build VortexArena.csproj --no-restore succeeded with warnings and zero errors.
+
+Independent first-eligible-frame replay
+PASS native-partial.log
+  receipt 11.640625 duration 3 loading True
+  release 13.140625
+  show 13.140625 deadline 14.640625 remaining 2
+  hide 14.640625 deadline 14.640625
+PASS native-expired.log
+  receipt 26.750000 duration 3 loading True
+  discard 29.750000 deadline 29.750000 loading True
+  release 30.750000
+PASS stock-partial.log
+  line 11.398864 deadline 14.398864
+  receipt 11.398864 duration 3 loading True
+  line 11.398864 deadline 14.398864
+  release 12.937300
+  show 12.937300 deadline 14.398864 remaining 2
+  hide 14.420598 deadline 14.398864
+PASS stock-expired.log
+  line 25.078232 deadline 28.078232
+  receipt 25.078232 duration 3 loading True
+  line 25.078232 deadline 28.078232
+  discard 28.110287 deadline 28.078232 loading True
+  release 29.128378

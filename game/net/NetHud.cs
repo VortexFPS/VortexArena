@@ -1,4 +1,5 @@
 using Godot;
+using VortexArena.Game.Hud;
 using VortexArena.Net;
 
 namespace VortexArena.Game.Net;
@@ -48,6 +49,8 @@ public sealed partial class NetHud : Control
     private const float RingRadius = 16f;
 
     private Label _stats = null!;
+    public Vector2? ViewLocationCursor { get; set; }
+    internal CrosshairPanel? ViewLocationCrosshair { get; set; }
 
     public override void _Ready()
     {
@@ -94,6 +97,13 @@ public sealed partial class NetHud : Control
 
     public override void _Draw()
     {
+        if (Net?.ActiveViewLocation is not null)
+        {
+            if (ViewLocationCursor is { } cursor)
+                ViewLocationCrosshair?.DrawViewLocationCursor(this, cursor * Size);
+            return;
+        }
+
         // When the skinned CrosshairPanel owns the reticle (a local Player is present), draw nothing here so
         // there is no double crosshair / double firing ring — the full HUD's crosshair handles both.
         if (SuppressCrosshairAndHealth)

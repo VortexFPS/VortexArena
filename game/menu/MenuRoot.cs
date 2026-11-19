@@ -33,10 +33,11 @@ public partial class MenuRoot : Control
     // ResumeOnClose marks a dialog opened by `menu_cmd directmenu` (QC m_goto(name, true)): closing it while a
     // match is live should DISMISS the whole menu (resume the match), not just pop back to the pause menu —
     // mirroring the QC "hide the menu when this dialog is closed" semantics. See OpenDialog in MenuCommand.
-    private readonly List<(Control Host, Control Screen, bool ResumeOnClose)> _stack = new();
+    private readonly List<(Control Host, Control Screen, bool ResumeOnClose, string? RouteName)> _stack = new();
 
     /// <summary>The screen currently on top of the stack (null before the first ShowScreen).</summary>
     public Control? Current => _stack.Count > 0 ? _stack[^1].Screen : null;
+    internal string? CurrentRouteName => _stack.Count > 0 ? _stack[^1].RouteName : null;
 
     /// <summary>True when there's a screen above the root that <see cref="Pop"/> can close (drives ESC behavior).</summary>
     public bool CanPop => _stack.Count > 1;
@@ -323,13 +324,21 @@ public partial class MenuRoot : Control
     /// Replace the entire stack with a single root screen. Frees any screens currently in the stack.
     /// Use this for top-level entry (the main menu); use <see cref="Push"/> to layer dialogs on top.
     /// </summary>
-    public void ShowScreen(Control screen)
+    public void ShowScreen(Control screen) => ReplaceScreen(screen, framed: false);
+
+    internal void ShowResumeOnClose(Control screen, string routeName) =>
+        ReplaceScreen(screen, framed: true, resumeOnClose: true, routeName: routeName);
+
+    private void ReplaceScreen(Control screen, bool framed, bool resumeOnClose = false, string? routeName = null)
     {
         for (int i = _stack.Count - 1; i >= 0; i--)
+        {
+            _stack[i].Host.Hide();
             _stack[i].Host.QueueFree();
+        }
         _stack.Clear();
 
-        AddScreen(screen, framed: false);
+        AddScreen(screen, framed, resumeOnClose, routeName);
     }
 
     /// <summary>
@@ -337,7 +346,7 @@ public partial class MenuRoot : Control
     /// screen underneath is hidden (but kept) so <see cref="Pop"/> can restore it. The new screen is given a
     /// reference back to this host (via <see cref="MenuScreen"/>) when it implements it, so it can navigate on.
     /// </summary>
-    public void Push(Control screen) => AddScreen(screen, framed: true);
+    public void Push(Control screen, string? routeName = null) => AddScreen(screen, framed: true, routeName: routeName);
 
     /// <summary>
     /// Push <paramref name="screen"/> framed (like <see cref="Push"/>), but mark it so that closing it while a
@@ -345,17 +354,21 @@ public partial class MenuRoot : Control
     /// pause menu. This is the C# successor to QC <c>m_goto(name, true)</c> — the <c>menu_cmd directmenu</c>
     /// "hide the menu when this dialog is closed" behavior (dialog_gamemenu's Servers/Profile/Input buttons).
     /// </summary>
-    public void PushResumeOnClose(Control screen) => AddScreen(screen, framed: true, resumeOnClose: true);
+    public void PushResumeOnClose(Control screen, string? routeName = null) =>
+        AddScreen(screen, framed: true, resumeOnClose: true, routeName: routeName);
 
     /// <summary>
     /// Add a screen to the stack. A root screen (<paramref name="framed"/> false) fills the viewport; a
     /// pushed sub-dialog is wrapped in a centered, bordered <see cref="PanelContainer"/> (the skin's border.tga
     /// dialog frame, via the menu theme) so every dialog gets the authentic translucent-blue Xonotic panel.
     /// </summary>
-    private void AddScreen(Control screen, bool framed, bool resumeOnClose = false)
+    private void AddScreen(Control screen, bool framed, bool resumeOnClose = false, string? routeName = null)
     {
         if (_stack.Count > 0)
         {
+            if (GetViewport().GuiGetFocusOwner() is { } focused && _stack[^1].Host.IsAncestorOf(focused))
+                focused.ReleaseFocus();
+
             // ModalController state 2: under a QC dialog the screen it was opened from stays drawn, faded to
             // SKINALPHA_BEHIND (MainWindow.fadedAlpha); anything else replaces the screen beneath it.
             if (framed && screen is IQcDialog)
@@ -395,7 +408,7 @@ public partial class MenuRoot : Control
             host = screen;
         }
 
-        _stack.Add((host, screen, resumeOnClose));
+        _stack.Add((host, screen, resumeOnClose, routeName));
         _screenHost.AddChild(host);
         host.Visible = true;
     }
@@ -412,7 +425,7 @@ public partial class MenuRoot : Control
             // top-level dialogs live inside the nexposee, not on the stack, so there's nothing to pop).
             if (Current is MainMenu nexposee)
                 nexposee.CloseActivePanel();
-            else if (Current is PauseMenu)
+            else if (Current is PauseMenu || (_stack.Count == 1 && _stack[0].ResumeOnClose))
                 RequestResume(); // the Game menu's close button closes the menu, back to the match
             return; // never pop the root screen away
         }

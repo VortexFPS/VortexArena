@@ -375,6 +375,7 @@ public sealed class CvarService : ICvarService
         // Written after LockDefaults, i.e. by the user's config.cfg, the console, the menu or a --cvar pin —
         // never by the shipped cfg tree. See CvarService.WasSetByUser.
         public bool UserSet;
+        public string? MapTempOriginal;
     }
 
     /// <summary>
@@ -499,12 +500,37 @@ public sealed class CvarService : ICvarService
         // recorded even when the value is unchanged — writing a cvar's own default is still a choice.
         if (_defaultsLocked)
             v.UserSet = true;
+        SetValue(name, v, value);
+    }
+
+    private void SetValue(string name, Var v, string value)
+    {
         bool changed = !string.Equals(v.Value, value, StringComparison.Ordinal);
         v.Value = value;
         v.FloatValue = ParseFloat(value);
         if (changed)
             Changed?.Invoke(name);
     }
+
+    public bool SetMapTemporary(string name, string value)
+    {
+        if (!TryGetVar(name, out var v) || (v.Flags & (CvarFlags.ReadOnly | CvarFlags.Private)) != 0)
+            return false;
+        v.MapTempOriginal ??= v.Value;
+        SetValue(name, v, value);
+        return true;
+    }
+
+    public void RestoreMapTemporary(string name)
+    {
+        if (!TryGetVar(name, out var v) || v.MapTempOriginal is not { } original)
+            return;
+        v.MapTempOriginal = null;
+        SetValue(name, v, original);
+    }
+
+    public string GetPersistentString(string name) =>
+        TryGetVar(name, out var v) ? v.MapTempOriginal ?? v.Value : "";
 
     public void Register(string name, string defaultValue, CvarFlags flags = CvarFlags.None)
         => Register(name, defaultValue, flags, description: null);
@@ -577,6 +603,17 @@ public sealed class CvarService : ICvarService
     /// <summary>The cvar's baseline default (registered default, or the first value a cfg set). "" if unknown.</summary>
     public string GetDefault(string name) => TryGetVar(name, out var v) ? v.Default : "";
 
+    public bool IsPrivate(string name) =>
+        name.Equals("rcon_password", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("rcon_restricted_password", StringComparison.OrdinalIgnoreCase) ||
+        (TryGetVar(name, out var v) && (v.Flags & CvarFlags.Private) != 0);
+
+    public void MarkPrivate(string name)
+    {
+        if (TryGetVar(name, out var v))
+            v.Flags |= CvarFlags.Private;
+    }
+
     /// <summary>
     /// Attach DP's help string to a cvar name (see <see cref="_descriptions"/>). First writer wins for a given
     /// name and a blank never overwrites: the cfg tree's own <c>set … "description"</c> is the authority for
@@ -621,7 +658,11 @@ public sealed class CvarService : ICvarService
         {
             if (exclude is not null && exclude.Contains(name)) continue;
             if (to.HasVar(name) && from.IsModified(name))
+            {
+                if (from.IsPrivate(name))
+                    to.MarkPrivate(name);
                 to.Set(name, from.GetString(name));
+            }
         }
     }
 
@@ -706,7 +747,7 @@ public sealed class CvarService : ICvarService
                 var v = kv.Value;
                 if (!(v.Archived || (v.Flags & CvarFlags.Save) != 0))
                     continue;
-                bool modified = v.HasDefault && !string.Equals(v.Value, v.Default, StringComparison.Ordinal);
+                bool modified = v.HasDefault && !string.Equals(v.MapTempOriginal ?? v.Value, v.Default, StringComparison.Ordinal);
                 if (modified || (v.Allocated && !v.DefaultLocked))
                     yield return kv.Key;
             }
@@ -749,6 +790,19 @@ public sealed class SoundService : ISoundService
     // no locking is added here. (With sv_threaded 0 everything is on one thread, unchanged.)
     /// <summary>Fired for every <see cref="Play"/>/<see cref="Stop"/> — the server→client sound emission (SV_StartSound).</summary>
     public event Action<SoundEvent>? Broadcast;
+
+    // Like the server's DarkPlaces sound table, this lives for the map and survives bot queue resets.
+    private readonly HashSet<string> _precachedSamples = new(StringComparer.Ordinal);
+    public IReadOnlyCollection<string> PrecachedSamples => _precachedSamples;
+    public event Action<string>? SamplePrecached;
+
+    /// <summary>Register a sample for the active and joining clients without emitting a positional sound.</summary>
+    public void Precache(string sample)
+    {
+        // The original sound table is bounded by MAX_SOUNDS.
+        if (sample.Length > 0 && _precachedSamples.Count < 4096 && _precachedSamples.Add(sample))
+            SamplePrecached?.Invoke(sample);
+    }
 
     public void Play(Entity e, SoundChannel channel, string sample, float volume = 1f, float attenuation = 1f, bool loop = false, float pitch = 1f)
     {

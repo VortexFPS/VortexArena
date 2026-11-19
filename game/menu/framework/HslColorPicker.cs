@@ -17,8 +17,8 @@ namespace VortexArena.Game.Menu;
 /// <item><see cref="ForStringCvar"/> — colorpicker_string.qc: write the color to a cvar, either as a
 ///   space-separated <c>"r g b"</c> string, or (when the cvar name ends in <c>_</c>) to its
 ///   <c>red</c>/<c>green</c>/<c>blue</c> sub-cvars. Shows the current cvar color's position as a cursor.</item>
-/// <item><see cref="ForNameBox"/> — colorpicker.qc: insert a <c>^xRGB</c> hex color code at the caret of a bound
-///   name input box (via <see cref="CvarLineEdit.InsertAtCaret"/>).</item>
+/// <item><see cref="ForNameBox"/> — colorpicker.qc: apply a <c>^xRGB</c> hex color code at the caret of a bound
+///   name input box (via <see cref="CvarLineEdit.ApplyColorAtCaret"/>).</item>
 /// </list>
 /// Degrades gracefully without the content repo (no image → a generated HSL gradient stand-in), rather than
 /// crashing on a null texture.
@@ -52,7 +52,7 @@ public partial class HslColorPicker : Control, IQcDisableable
     public static HslColorPicker ForStringCvar(string cvar)
         => new() { _mode = PickerMode.StringCvar, _cvar = cvar };
 
-    /// <summary>colorpicker.qc: build a picker that inserts a ^xRGB code into the given name box.</summary>
+    /// <summary>colorpicker.qc: build a picker that applies a ^xRGB code to the given name box.</summary>
     public static HslColorPicker ForNameBox(CvarLineEdit nameBox)
         => new() { _mode = PickerMode.NameBox, _nameBox = nameBox };
 
@@ -110,7 +110,7 @@ public partial class HslColorPicker : Control, IQcDisableable
         }
         else
         {
-            _nameBox?.InsertAtCaret(MenuPickerMath.RgbToHexColor(rgb)); // colorpicker.qc: enterText(^xRGB)
+            _nameBox?.ApplyColorAtCaret(MenuPickerMath.RgbToHexColor(rgb));
         }
         QueueRedraw();
         AcceptEvent();

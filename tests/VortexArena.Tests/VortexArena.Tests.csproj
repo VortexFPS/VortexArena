@@ -16,6 +16,8 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="../fixtures/record-migration/*.db" Link="RecordMigrationFixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <ProjectReference Include="../../tools/race-record-migration/RaceRecordMigration.csproj" />
     <ProjectReference Include="..\..\src\VortexArena.Common\VortexArena.Common.csproj" />
     <ProjectReference Include="..\..\src\VortexArena.Engine\VortexArena.Engine.csproj" />
     <ProjectReference Include="..\..\src\VortexArena.Net\VortexArena.Net.csproj" />

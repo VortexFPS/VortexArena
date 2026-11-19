@@ -1,0 +1,302 @@
+[
+  {
+    "seconds": 0.0,
+    "event": "both graphical clients connected",
+    "port": 26813
+  },
+  {
+    "seconds": 2.003,
+    "client": "RedProbe",
+    "command": "cmd selectteam red"
+  },
+  {
+    "seconds": 3.444,
+    "client": "RedProbe",
+    "command": "cmd join"
+  },
+  {
+    "seconds": 4.869,
+    "client": "BlueProbe",
+    "command": "cmd selectteam blue"
+  },
+  {
+    "seconds": 6.299,
+    "client": "BlueProbe",
+    "command": "cmd join"
+  },
+  {
+    "seconds": 7.699,
+    "server": "status"
+  },
+  {
+    "seconds": 7.7,
+    "server": "g_weaponarena"
+  },
+  {
+    "seconds": 7.7,
+    "server": "g_balance_vortex_charge"
+  },
+  {
+    "seconds": 7.7,
+    "server": "g_balance_vortex_primary_damage"
+  },
+  {
+    "seconds": 7.7,
+    "server": "g_balance_vortex_primary_refire"
+  },
+  {
+    "seconds": 7.7,
+    "server": "g_balance_vortex_primary_force"
+  },
+  {
+    "seconds": 7.7,
+    "server": "g_onslaught_warmup"
+  },
+  {
+    "seconds": 7.7,
+    "server": "g_onslaught_round_timelimit"
+  },
+  {
+    "seconds": 7.7,
+    "server": "g_onslaught_cp_buildtime"
+  },
+  {
+    "seconds": 7.7,
+    "server": "g_onslaught_cp_health"
+  },
+  {
+    "seconds": 7.7,
+    "server": "g_onslaught_cp_buildhealth"
+  },
+  {
+    "seconds": 7.7,
+    "server": "g_onslaught_cp_regen"
+  },
+  {
+    "seconds": 7.7,
+    "server": "g_onslaught_gen_health"
+  },
+  {
+    "seconds": 9.7,
+    "client": "BlueProbe",
+    "command": "cmd teleporttotarget probe_blueview"
+  },
+  {
+    "seconds": 11.12,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_bluegen"
+  },
+  {
+    "seconds": 13.525,
+    "phase": "shielded generator shot"
+  },
+  {
+    "seconds": 13.525,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 14.583,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 15.383,
+    "phase": "initial build touch"
+  },
+  {
+    "seconds": 15.383,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_point"
+  },
+  {
+    "seconds": 16.801,
+    "client": "RedProbe",
+    "event": "walk straight into pad"
+  },
+  {
+    "seconds": 18.435,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_redview"
+  },
+  {
+    "seconds": 19.834,
+    "server": "status"
+  },
+  {
+    "seconds": 20.735,
+    "server": "status"
+  },
+  {
+    "seconds": 21.635,
+    "server": "status"
+  },
+  {
+    "seconds": 22.535,
+    "client": "RedProbe",
+    "verified_score": 10
+  },
+  {
+    "seconds": 22.536,
+    "phase": "captured point damage"
+  },
+  {
+    "seconds": 22.536,
+    "client": "BlueProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 23.594,
+    "client": "BlueProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 24.394,
+    "client": "BlueProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 25.451,
+    "client": "BlueProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 26.252,
+    "phase": "wait for automatic repair"
+  },
+  {
+    "seconds": 35.253,
+    "phase": "destroy point and reset"
+  },
+  {
+    "seconds": 35.253,
+    "client": "BlueProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 36.315,
+    "client": "BlueProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 37.115,
+    "client": "BlueProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 38.177,
+    "client": "BlueProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 38.977,
+    "client": "BlueProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 40.04,
+    "client": "BlueProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 40.84,
+    "client": "BlueProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 41.9,
+    "client": "BlueProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 42.7,
+    "server": "status"
+  },
+  {
+    "seconds": 43.601,
+    "client": "BlueProbe",
+    "verified_score": 10
+  },
+  {
+    "seconds": 43.601,
+    "phase": "second build touch"
+  },
+  {
+    "seconds": 43.601,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_point"
+  },
+  {
+    "seconds": 44.985,
+    "client": "RedProbe",
+    "event": "walk straight into pad"
+  },
+  {
+    "seconds": 46.652,
+    "server": "status"
+  },
+  {
+    "seconds": 47.552,
+    "server": "status"
+  },
+  {
+    "seconds": 48.453,
+    "server": "status"
+  },
+  {
+    "seconds": 49.354,
+    "server": "status"
+  },
+  {
+    "seconds": 50.255,
+    "client": "RedProbe",
+    "verified_score": 20
+  },
+  {
+    "seconds": 50.255,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_bluegen"
+  },
+  {
+    "seconds": 53.853,
+    "phase": "exposed generator damage"
+  },
+  {
+    "seconds": 53.853,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 54.915,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 56.365,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 57.424,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 58.874,
+    "phase": "destroy generator"
+  },
+  {
+    "seconds": 58.874,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 59.931,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 65.934,
+    "server": "status"
+  }
+]

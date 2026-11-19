@@ -99,6 +99,24 @@ public class GenericCommandsTests
     }
 
     [Fact]
+    public void Maplist_ListenConsoleRoutesToTheHostWithQuotedArguments()
+    {
+        string? command = null;
+        var (interp, cvars, output, cc) = Make(line =>
+        {
+            command = line;
+            return "host reply\n";
+        });
+        cvars.Set("g_maplist", "offline");
+        cc.MapExists = _ => throw new InvalidOperationException("Only the host should look up the BSP.");
+        interp.ExecuteLine("maplist add \"missing map\"");
+
+        Assert.Equal("maplist add \"missing map\"", command);
+        Assert.Equal("offline", cvars.GetString("g_maplist"));
+        Assert.Equal("host reply", Assert.Single(output));
+    }
+
+    [Fact]
     public void Maplist_Remove_DropsTheMap()
     {
         var (interp, cvars, _, _) = Make();
@@ -126,7 +144,8 @@ public class GenericCommandsTests
     {
         var (interp, cvars, _, cc) = Make();
         cc.MapExists = m => m != "gone"; // "gone" no longer exists
-        cvars.Set("g_maplist", "boil gone dance");
+        cc.MapSupportsGametype = m => m != "wrong-mode";
+        cvars.Set("g_maplist", "boil gone wrong-mode dance");
         interp.ExecuteLine("maplist cleanup");
         Assert.Equal("boil dance", cvars.GetString("g_maplist"));
     }

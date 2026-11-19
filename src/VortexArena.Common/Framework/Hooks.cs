@@ -39,6 +39,12 @@ public sealed class HookChain<TArgs> where TArgs : struct
     public bool Call(ref TArgs args)
     {
         bool handled = false;
+        return Call(ref args, ref handled);
+    }
+
+    /// <summary>Expose the accumulated handler result to later handlers when it is part of the hook arguments.</summary>
+    public bool Call(ref TArgs args, ref bool handled)
+    {
         // index loop avoids allocating an enumerator on the hot path
         var list = _handlers;
         for (int i = 0; i < list.Count; i++)

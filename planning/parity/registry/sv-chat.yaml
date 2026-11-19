@@ -259,12 +259,12 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Permanent (db-persisted) ignore tier is dropped (the QC return-2 path / ServerProgsDB by UID); ignores are keyed by PersistentId in-memory only (acceptable within a match, lost across server restarts). This is the sole remaining logic-partial reason."
+      - "The pin can persist up to 16 ignores between players with fingerprints on the same server. Native applies in-memory ignores. Whether to remember an ignore across visits is open on the decision page (chat.ignore.persistence)."
     verification:
       - { kind: test, ref: "ChatEngineTests.Ignore_FullList_ReturnsZero / Command_Ignore_Unignore_Roundtrip / Command_ClearIgnores_* / Ignore_RejectsTargetWithoutPersistentId", result: pass }
       - { kind: value-diff, ref: "cmd.qh:11 (16) vs Chat.cs:444 IgnoreMaxPlayers = 16", result: pass }
     confidence: high
-    notes: "FIXED since 2026-06-22: IGNORE_MAXPLAYERS is now 16 (Chat.cs:444), matching Base cmd.qh:11 — the prior 50-vs-16 value drift is resolved (and the doc-comment now correctly cites cmd.qh:11=16). Add/remove/clear logic + the per-call gate cascade (empty/unresolvable/self/already/add/full) are faithful; only the intentionally-dropped permanent (db) tier remains, which is why logic stays partial. NOTE the 'Ignore_FullList_ReturnsZero' test should be re-checked to assert at 16 not 50."
+    notes: "The native 16-player limit and active chat filter have source and test coverage. Paired sessions verified the viewer-specific scoreboard icon, blocked chat and delivery after unignore. The prior native chat implementation deferred the database tier. The stock authenticated persistence path was traced in source. See planning/parity/scoreboard-blocks/README.md and the decision page."
 
   - id: sv-chat.format.macros
     name: "formatmessage %/\\ macro expansion (%%/%h/%a/%o/%O/%w/%W/%s/%S/%t/%T + \\n/\\\\, 7-budget)"
@@ -429,4 +429,4 @@ features:
     verification:
       - { kind: code-read, ref: "grep MUTATOR_HOOKFUNCTION(.*ChatMessage|FormatMessage) over common/+server/ = 0 subscribers", result: pass }
     confidence: high
-    notes: "Marked intended_divergence because no stock behavior depends on it; the empty port_refs reflects the deliberate omission, not an oversight. Note MX_Say (matrix bridge) is likewise omitted with no stock effect."
+    notes: "The unused hook is an intentional omission. The separate public chat relay is implemented by the optional dedicated Matrix bridge and tracked in sv-matrix."

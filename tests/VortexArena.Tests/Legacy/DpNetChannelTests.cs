@@ -148,7 +148,7 @@ public class DpNetChannelTests
         var ch = new DpNetChannel(0);
         var o = new List<byte[]>();
         Assert.Equal(DpChannelReceive.Message, ch.Receive(Packet(Unreliable, 0, 1), 1, o, out _));
-        Assert.Equal(DpChannelReceive.Message, ch.Receive(Packet(Unreliable, 5, 2), 2, o, out byte[]? m));
+        Assert.Equal(DpChannelReceive.Message, ch.Receive(Packet(Unreliable, 5, 2), 2, o, out byte[]? m, timeoutSeconds: 7));
         Assert.Equal(new byte[] { 2 }, m);
         Assert.Equal(4, ch.DroppedDatagrams);
         Assert.Equal(2, ch.LastMessageTime);
@@ -158,7 +158,9 @@ public class DpNetChannelTests
         Assert.Equal(DpChannelReceive.Handled, ch.Receive(Packet(Unreliable, 5, 2), 3, o, out m));
         Assert.Null(m);
         Assert.Equal(2, ch.LastMessageTime); // stale datagrams do not count as hearing from the server
+        Assert.Equal(9, ch.TimeoutAt);
         Assert.Equal(DpChannelReceive.Message, ch.Receive(Packet(Unreliable, 6, 4), 4, o, out m));
+        Assert.Equal(11, ch.TimeoutAt); // the four-argument receive keeps the last seven-second interval
         Assert.Empty(o); // unreliable datagrams are never acknowledged
     }
 

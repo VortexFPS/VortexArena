@@ -1,4 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
 using Godot;
+using VortexArena.Game.Console;
+using VortexArena.Server;
 
 namespace VortexArena.Game.Menu;
 
@@ -9,25 +14,32 @@ namespace VortexArena.Game.Menu;
 /// (<c>cmd join</c>) and "Spectate" (<c>cmd spectate</c>), each half the width, both closing the dialog. The title is
 /// the server's name (welcomeDialog_resetStrings: "Welcome" until a server sends one).
 ///
-/// The port has no server that sends the HOSTNAME / WELCOME arguments yet, so the dialog shows what the constructor
-/// is given: by default Xonotic's reset strings.
 /// </summary>
 public partial class DialogWelcome : MenuScreen, IQcDialog
 {
-    private readonly string _name;
-    private readonly string _motd;
+    private WelcomeDialogData _data;
+    private QcTextBox? _message;
 
     public DialogWelcome() : this(null, "") { }
 
-    public DialogWelcome(string? serverName, string motd)
-    {
-        _name = serverName ?? Localization.Tr("Welcome");
-        _motd = motd;
-    }
+    public DialogWelcome(string? serverName, string motd) => SetData(new(serverName, motd));
 
-    public string QcTitle => _name;
+    public string QcTitle => _data.Title ?? Localization.Tr("Welcome");
     public float QcIntendedWidth => 0.8f;
     public float QcRows => 12;
+    public bool QcTitleAllowsColors => true;
+    public bool QcCloseOnOutsideRelease => true;
+    internal bool Demo { get; set; }
+
+    internal void SetData(WelcomeDialogData data)
+    {
+        _data = data;
+        if (_message is not null)
+            _message.Text = MessageText;
+    }
+
+    // ConfigInterpreter decodes escaped newlines in quotes; callers can also pass stock's literal \n.
+    private string MessageText => (_data.Message ?? "").Replace("\\n", "\n").Replace("\r\n", "\n").Replace('\r', '\n');
 
     protected override void BuildUi()
     {
@@ -38,16 +50,20 @@ public partial class DialogWelcome : MenuScreen, IQcDialog
         AddChild(me);
 
         me.TR();
-            me.TD(me.Rows - 1, me.Columns, new QcTextBox { Align = 0.5f, AllowColors = true, EscapedNewLines = true, Text = _motd });
+            _message = me.TD(me.Rows - 1, me.Columns, new QcTextBox { Align = 0.5f, AllowColors = true, Text = MessageText });
         me.GotoRC(me.Rows - 1, 0);
-            me.TD(1, me.Columns / 2, Qc.Button("Join!", () => RunAndClose("cmd join"), tint: new Color(0, 1, 0)));
-            me.TD(1, me.Columns / 2, Qc.Button("Spectate", () => RunAndClose("cmd spectate")));
+            var join = me.TD(1, me.Columns / 2, Qc.Button("Join!", () => RunAndClose("cmd join"), tint: new Color(0, 1, 0)));
+            var spectate = me.TD(1, me.Columns / 2, Qc.Button("Spectate", () => RunAndClose("cmd spectate")));
+        join.Disabled = spectate.Disabled = Demo;
+        if (!Demo && !ConsoleState.IsOpen)
+            join.CallDeferred(Control.MethodName.GrabFocus);
     }
 
     /// <summary>XonoticWelcomeDialog_keyDown: Enter and Space press "Join!".</summary>
     public override void _UnhandledKeyInput(InputEvent e)
     {
-        if (e is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Enter or Key.KpEnter or Key.Space } && IsVisibleInTree())
+        if (!Demo && IsVisibleInTree() && Menu?.Current == this
+            && e is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Enter or Key.KpEnter or Key.Space })
         {
             RunAndClose("cmd join");
             AcceptEvent();
@@ -59,5 +75,55 @@ public partial class DialogWelcome : MenuScreen, IQcDialog
     {
         MenuCommand.Run(command);
         GoBack();
+    }
+}
+
+/// <summary>Payload for the named Welcome dialog (dialog_welcome.qc readInputArgs).</summary>
+internal readonly record struct WelcomeDialogData(string? Title, string? Message)
+{
+    public static bool TryParse(IReadOnlyList<string> args, string campaign, out WelcomeDialogData data)
+    {
+        data = default;
+        string? title = null;
+        string? message = null;
+        bool recognized = false;
+        for (int i = 0; i < args.Count && args[i].Length != 0; i++)
+        {
+            switch (args[i])
+            {
+                case "HOSTNAME":
+                    if (++i == args.Count) return false;
+                    title = args[i];
+                    recognized = true;
+                    break;
+                case "WELCOME":
+                    if (++i == args.Count) return false;
+                    message = args[i];
+                    recognized = true;
+                    break;
+                case "RESET":
+                    return true;
+                case "CAMPAIGN":
+                    if (args.Count - i < 3 ||
+                        !int.TryParse(args[i + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int level))
+                        return false;
+                    data = CampaignBriefing(campaign, level, args[i + 2]);
+                    return true;
+            }
+        }
+        data = new(title, message);
+        return recognized;
+    }
+
+    private static WelcomeDialogData CampaignBriefing(string campaign, int level, string template)
+    {
+        string path = CampaignCatalog.FileName(string.IsNullOrWhiteSpace(campaign) ? CampaignCatalog.DefaultName : campaign);
+        string? text = MenuState.Vfs is { } vfs && vfs.Exists(path) ? vfs.ReadText(path) : null;
+        var levels = CampaignCatalog.Parse(text, out string title);
+        var entry = level > 0 ? levels.Find(item => item.Index == level - 1) : null;
+        string message = entry is null
+            ? $"^1Error: invalid level number {level}"
+            : template.Replace("_LEVEL_DESC", entry.ShortDesc + "\n\n" + entry.LongDesc, StringComparison.Ordinal);
+        return new(string.IsNullOrWhiteSpace(title) ? Localization.Tr("Campaign") : title, message);
     }
 }

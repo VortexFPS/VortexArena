@@ -1,0 +1,114 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver.
+     at: set_use_vsync (platform/linuxbsd/x11/gl_manager_x11.cpp:364)
+OpenGL API 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 20.1.2, 256 bits)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Disabled maxfps=0 refresh=NaNHz cpu=6c gpu=llvmpipe (LLVM 20.1.2, 256 bits)
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag]
+=== VortexArena boot ===
+Weapons:   27
+Items:     21
+Mutators:  46
+GameTypes: 21
+Sounds:    223
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).
+[lb]MenuState] user gamedir mounted: /tmp/va-script-ons-native5/BlueProbe-user/data (drop .pk3 packs in its maps/ subfolder).
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"
+"maxplayers" set to "32"
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).
+[lb]MenuState] cvar help: 1386 engine descriptions.
+[lb]shell] --cvar cl_autopause = "0"
+[lb]shell] --cvar cl_maxfps = "40"
+[lb]shell] --cvar cl_frameprofiler = "0"
+[lb]shell] --cvar _cl_name = "BlueProbe"
+[lb]shell] --cvar cl_portal_render = "0"
+[lb]shell] --cvar cl_warm_at_boot = "0"
+[lb]shell] --cvar cl_precache_all_weapons = "0"
+[lb]shell] --cvar gl_texturecompression = "0"
+[lb]video] vid_vsync 0 → requested Disabled, actual Disabled (off — uncapped, may tear)
+[lb]video] cl_maxfps 40 -> Engine.MaxFps 40 (your setting; refresh NaNHz)
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)
+[lb]video] process priority boost unavailable: Permission denied
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] connecting to 127.0.0.1:26818.
+[NetTransport.Client] connecting to 127.0.0.1:26818 …
+[EffectInfo] parsed 'vortex/original/effectinfo.txt': 301 effects (process-lifetime, shared by every match).
+[EffectSystem] effectinfo: 301 effects, particlefont atlas: loaded, style overlay: 0 effects
+[Particles] backend=original (cl_particles_modern=0)
+[AssetLoader] model 'models/items/buff.md3' read failed: Asset not found in any mount: "models/items/buff.md3".
+[lb]LightGrid] this map ships no light grid (BSP lump 15) — models use the PBR + sun fallback.
+[lb]WorldLights] realtime world lighting OFF — back to baked lightmaps.
+[NetGame] precached 24 weapon models, skipped 0 (lazy), 24 muzzle tags.
+[AssetLoader] skeletal parse MISS 'models/player/erebus.iqm' (loader#2b3a7bc cache n=1: [models/player/erebus.iqm])
+[NetGame] precached 36 combat sounds, 1 player models (rendered for pipeline warm).
+[NetGame] roster warm set: [models/player/erebus.iqm] → loader#2b3a7bc cache n=1: [models/player/erebus.iqm]
+[NetGame] connecting to 127.0.0.1:26818.
+[LoadTimeline] connect 127.0.0.1 — load begin → ready, 8581 ms total
+    textures.compress: off (gl_texturecompression 0)
+  client.boot                       37.1 ms    0.4 %
+    fx.warmup                      148.8 ms    1.7 %
+    fx.trails                      888.7 ms   10.4 %
+    gpu.warm-items(build)          700.3 ms    8.2 %
+    world.attach                     0.4 ms    0.0 %
+    editor.nodes                    16.2 ms    0.2 %
+    light                            8.8 ms    0.1 %
+  render.setup                    1837.7 ms   21.4 %
+  camera.hud                       162.1 ms    1.9 %
+  music                              2.6 ms    0.0 %
+  precache.weapons                4419.5 ms   51.5 %
+    precache.weapons.pso-warm     1339.7 ms   15.6 %
+  precache.sounds+models           807.9 ms    9.4 %
+  (unaccounted: yields, present, unmeasured)     1313.9 ms
+[ClientNet] handshake accepted by 'Vortex 1.0.0 Server': netId 2, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0 Server': netId 2.
+[MapLoader] occluder: 69662 verts / 58760 tris (r_occlusion_cull A/B)
+[MapLoader] 'runningmanctf' materials: lightmapped=52 vertexLit=0 plain=16 lightmapMissing=3 glow=10 normalMapped=51 (deluxe=True, internalPages=0, atlas=3p, cellSize=1024, cells=35, surfaces=568)
+[lb]::client::WARNING] [lb]MapLoader] 'runningmanctf': 2 textures missing (40 faces affected) — type `r_missingtextures` for the list.
+[MapLoader] 'runningmanctf' portal surfaces: 4 (from 4 faces), pocket decor: 8 (from 8 faces)
+[DecalSplats] geometry: 154616 render triangles, 593 grid cells
+[Skybox] loaded 'env/heaven/heaven'.
+[lb]LightGrid] GPU lightgrid 71x71x60 (1181 KB) bound — per-pixel model lighting active.
+[NetGame] map music: 'cdtracks/track006' (from mapinfo, client map load)
+[NetGame] client loaded map 'runningmanctf' (ons) for render + prediction collision.
+[AssetLoader] md3 'models/items/buff.md3' read/parse failed: Asset not found in any mount: "models/items/buff.md3".
+[lb]md3morph] 'models/players/model/model.md3' frames=30 gpu=True mats: morphable
+[LoadTimeline] (late) precache.models.pso-warm: 1399.8 ms — finished after the table printed; not included in the total above.
+[lb]md3morph] 'models/players/model/model.md3' frames=30 gpu=True mats: morphable
+]cmd selectteam blue
+changing to Blue
+]cmd join
+[AssetLoader] skeletal parse MISS 'models/player/megaerebus.iqm' (loader#2b3a7bc cache n=2: [models/player/erebus.iqm, models/player/megaerebus.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/pyria.iqm' (loader#2b3a7bc cache n=3: [models/player/erebus.iqm, models/player/megaerebus.iqm, models/player/pyria.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/nyx.iqm' (loader#2b3a7bc cache n=4: [models/player/erebus.iqm, models/player/megaerebus.iqm, models/player/pyria.iqm, models/player/nyx.iqm])
+joined the game
+[AssetLoader] skeletal parse MISS 'models/player/seraphina.iqm' (loader#2b3a7bc cache n=5: [models/player/erebus.iqm, models/player/megaerebus.iqm, models/player/pyria.iqm, models/player/nyx.iqm, models/player/seraphina.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/umbra.iqm' (loader#2b3a7bc cache n=6: [models/player/erebus.iqm, models/player/megaerebus.iqm, models/player/pyria.iqm, models/player/nyx.iqm, models/player/seraphina.iqm, models/player/umbra.iqm])
+[lb]hitch GC-PAUSE] 690.7ms (med 289.8, ×2.4) — gen2/GC-pause tail (prior frame paused 7.2ms; this frame rest-dominated) | proc 75.5 rcpu 0.0 gpu 0.0 rest 615.1 late 615.1 | alloc 6.9MB | remote.ents 2 | watchdog: 462/559 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   gpu: draws 187, pipeline compiles +0, vram 1903MB
+[lb]hitch]   gc: g0+1 g1+1 g2+0 pause 11.4ms alloc 6.9MB (rate 46MB/s, heap 99.5MB)
+[lb]hitch]   events: [lb]-7f] anim cache HIT models/player/erebus.iqm; [lb]-6f] stream: player model models/player/erebus.iqm (parse) built (18.6ms); [lb]-3f] stream: player model models/player/erebus.iqm tex textures/erebusfullbright built (0.1ms); [lb]-3f] stream: player model models/player/erebus.iqm tex textures/erebusfullbright_norm built (0.0ms); [lb]-2f] stream: player model models/player/erebus.iqm tex textures/erebusfullbright_gloss built (0.1ms); [lb]-2f] stream: player model models/player/erebus.iqm tex textures/erebusfullbright_glow built (0.0ms); [lb]-2f] stream: player model models/player/erebus.iqm tex textures/erebusfullbright_reflect built (0.0ms); [lb]-2f] stream: player model models/player/erebus.iqm tex textures/erebusfullbright_shirt built (0.0ms); [lb]-2f] stream: player model models/player/erebus.iqm tex textures/erebusfullbright_pants built (0.0ms); [lb]-2f] stream: player model models/player/erebus.iqm tex textures/shadowheadfb built (0.0ms); [lb]-2f] stream: player model models/player/erebus.iqm tex textures/shadowheadfb_norm built (0.0ms); [lb]-2f] stream: player model models/player/erebus.iqm tex textures/shadowheadfb_gloss built (0.0ms); [lb]-1f] stream: player model models/player/erebus.iqm tex textures/shadowheadfb_glow built (0.0ms); [lb]-1f] stream: player model models/player/erebus.iqm tex textures/shadowheadfb_reflect built (0.0ms); [lb]-1f] stream: player model models/player/erebus.iqm tex textures/shadowheadfb_shirt built (0.0ms); [lb]-1f] stream: player model models/player/erebus.iqm tex textures/shadowheadfb_pants built (12.0ms); anim cache MISS models/player/megaerebus.iqm; anim cache MISS models/player/pyria.iqm; anim cache MISS models/player/nyx.iqm; net: PREDICTION DESYNC 650qu (predicted vs acked-replay origin)
+[lb]hitch]   prev: 364.5 382.3 333.0 255.2 233.4 302.6 332.5 353.9
+]cmd teleporttotarget probe_blueview
+[lb]hitch GC-PAUSE] 762.8ms (med 290.6, ×2.6) — GC g0+1 g1+1 g2+1, pause 6.0ms, 25.9MB allocated, top alloc stream.predecode 17.9MB | proc 51.8 rcpu 0.0 gpu 0.0 rest 711.0 late 711.0 | alloc 25.9MB | remote.ents 27 | watchdog: 599/645 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   gpu: draws 334, pipeline compiles +0, vram 1914MB
+[lb]hitch]   gc: g0+1 g1+1 g2+1 pause 6.0ms alloc 25.9MB (rate 41MB/s, heap 120.0MB)
+[lb]hitch]   events: [lb]-3f] stream: idle-warm models/player/megaerebus.iqm (parse) built (0.9ms); [lb]-3f] stream: idle-warm models/player/nyx.iqm (parse) built (0.0ms); [lb]-3f] stream: idle-warm models/player/pyria.iqm (parse) built (0.0ms); [lb]-3f] stream: idle-warm models/player/seraphina.iqm (parse) built (0.0ms); [lb]-3f] stream: idle-warm models/player/umbra.iqm (parse) built (0.0ms); [lb]-2f] stream: idle-warm models/player/megaerebus.iqm tex textures/megaerebus built (20.1ms); net: PREDICTION DESYNC 3280qu (predicted vs acked-replay origin)
+[lb]hitch]   prev: 464.6 178.2 208.3 419.5 208.5 419.7 449.1 399.8
+X connection to :164 broken (explicit kill or server shutdown).
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+ERROR: BUG: Unreferenced static string to 0: _exit_world
+   at: unref (core/string/string_name.cpp:116)
+ERROR: BUG: Unreferenced static string to 0: RaycastOcclusionCullUpdateCamera
+   at: unref (core/string/string_name.cpp:116)
+ERROR: BUG: Unreferenced static string to 0: _request_gizmo_for_id
+   at: unref (core/string/string_name.cpp:116)
+ERROR: BUG: Unreferenced static string to 0: _enter_world
+   at: unref (core/string/string_name.cpp:116)
+ERROR: BUG: Unreferenced static string to 0: servers
+   at: unref (core/string/string_name.cpp:116)
+ERROR: BUG: Unreferenced static string to 0: .
+   at: unref (core/string/string_name.cpp:116)
+ERROR: Required virtual method AudioStreamPlayback::_mix must be overridden before calling.
+   at: _gdvirtual__mix_call (servers/audio/audio_stream.h:90)

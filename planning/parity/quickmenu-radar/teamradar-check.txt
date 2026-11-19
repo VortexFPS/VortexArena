@@ -1,0 +1,11 @@
+Stock: 36 sent, 36 recorded, slots 31→0→1, peak 3 active pulses
+Native: 36 sent, 36 recorded, slots 31→0→1, peak 3 active pulses
+North, fitted: scale 530.36/530.36, waypoint pixels (492.857, 322.857, 607.143, 208.571)/(492.857, 322.857, 607.143, 208.571)
+Yaw 37°, normal: scale 1909.29/1909.29, waypoint pixels (255.405, 275.026, 174.447, -301.162)/(255.405, 275.034, 174.427, -301.151)
+Yaw 37°, fitted: scale 325.61/325.61, waypoint pixels (486.848, 274.823, 473.042, 176.56)/(486.848, 274.821, 473.038, 176.559)
+Yaw 37°, fitted and mirrored: scale 325.61/325.61, waypoint pixels (413.152, 274.823, 426.958, 176.56)/(413.152, 274.821, 426.962, 176.559)
+Mirrored picker: scale 325.61/325.61, waypoint pixels (413.152, 274.823, 426.958, 176.56)/(413.152, 274.821, 426.962, 176.559)
+Intermediate zoom samples: [0.85, 0.96, 0.46, 0.03]
+Intermediate zoom samples: [0.86, 0.55, 0.05]
+Server pick: -1501.708496 819.787598 95.000000
+Server pick: -1501.694092 819.818481 95.000000

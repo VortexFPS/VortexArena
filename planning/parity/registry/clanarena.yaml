@@ -1,21 +1,15 @@
 unit: clanarena
 category: gametype
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
-last_audited: "2026-06-28"
+last_audited: "2026-11-19"
 summary:
   feature_count: 28
   worst_gaps:
-    - "Still missing (unchanged): cl_ca DrawInfoMessages spectator-scoreboard gate (InfoMessagesPanel only ports the LMS variant), m_isAlwaysSupported map heuristic, dedicated round-win announcer cue, RESPAWN_SILENT/FORCE flag detail."
-    - "clanarena.matchend.restore_status: hook now fires live AND its upstream state (_prevTeam, _joiningMidRound) is now populated, so the joining-flag drop is meaningful — BUT OnMatchEndBeforeScores still only CLEARS those sets; it never reads _prevTeam back to RESTORE each player's pre-CA team/observer status (QC MatchEnd_RestoreSpectatorAndTeamStatus). Stays partial."
+    - "CA-specific bot-fill accounting and dedicated round-win announcer cue remain open."
+    - "The match-end team restore updates membership and scoreboard state. Stock broadcast text and winning-flag updates remain unverified."
   fixed_since_baseline:
-    - "THIS WAVE (2026-06-28 working tree) wired the three previously-DEAD CA INGAME_JOINING seams to the live path — the handlers existed since Wave-16/17 but had no live caller; this wave added the callers (GameWorld.cs +26, ClientManager.cs +15, Commands.cs +5): (1) clanarena.join.late_join_observer — OnJoinLate is now reachable via the NEW Clients.GametypeOnJoinRefused side-channel: GameWorld wires GametypeOnJoinRefused = p => {if(Rounds.IsRoundStarted) ca.OnJoinLate(p);} (GameWorld.cs:2863) and JoinAllowed invokes GametypeOnJoinRefused?.Invoke(p) on the refusal branch (ClientManager.cs:360), which fires EXACTLY when a mid-round join is refused. So _joiningMidRound IS now populated and INFO_CA_JOIN_LATE IS sent → the INGAME_JOINING tracking half is now live. (2) clanarena.lifecycle.reset_map — `case ClanArena ca: ca.ResetMapPlayers(Clients.Players)` was added to GameWorld.ResetMap (GameWorld.cs:4642), so ResetMapPlayers runs live each round reset (clears _joiningMidRound, zeroes killcount, snapshots _prevTeam). (3) clanarena.spectate.force_spectate_cmd — GametypeSpectateCommand now has a live caller: CmdSpectate (the registered `spectate` command, Commands.cs:808/1561) calls _world.Clients.GametypeSpectateCommand(p) (Commands.cs:1594) → ca.OnSpectateCommand, which sends INFO_CA_LEAVE."
-    - "DOWNSTREAM of the three seams above: clanarena.hud.eliminated_greyout's IsEliminatedPlayer `_joiningMidRound.Contains(p)` branch is now LIVE (the set is populated), so a mid-round joiner waiting out the round IS now greyed (logic partial→faithful). clanarena.spawn.ingame_status_decimal_reset's _joiningMidRound.Remove (the INGAME_STATUS_SET(JOINED) flip) is now meaningful on spawn (logic partial→faithful). clanarena.matchend.restore_status's hook now clears REAL populated state (liveness partial→live) but stays logic:partial because it only drops the joining flags and never restores prev_team team assignments."
-    - "shuffleteams round-defer (clanarena.cmd.shuffleteams_reset) LIVE+faithful (carried from Wave-16/17): CmdShuffleTeams (Commands.cs:1401) defers a mid-round shuffle to the next round reset when `Rounds.IsRoundStarted && GameType is ClanArena`, consumed in ResetMap and wired to Rounds.OnRoundReset. This is the QC shuffleteams_on_reset_map = !allowed_to_spawn behavior."
-    - "PlayerSpawn damage2score decimal reset (clanarena.spawn.ingame_status_decimal_reset) is now LIVE+faithful for the modeled (decimal-reset) half: ClanArena.Activate subscribes OnPlayerSpawn to MutatorHooks.PlayerSpawn (ClanArena.cs:242-243); the hook fires live in ClientManager.PutPlayerInServer (ClientManager.cs:749); OnPlayerSpawn (ClanArena.cs:506-514) removes the player's _scoreDecimal entry when now <= Handler.GameStartTime, matching QC `if (time <= game_starttime) player.float2int_decimal_fld = 0`. At the prior baseline this handler did not exist and the decimal was only cleared at the Activate/Deactivate match boundary (logic/timing/liveness = partial). Only the QC INGAME_STATUS_SET(JOINED) half remains unmodeled (no INGAME state)."
-    - "'You are now alone!' on teammate disconnect / make-observer (clanarena.notify.alone_on_leave) is now LIVE+faithful: ClanArena.Activate subscribes OnMakePlayerObserver to MutatorHooks.MakePlayerObserver (ClanArena.cs:229-230) and OnClientDisconnect to MutatorHooks.ClientDisconnect (ClanArena.cs:234-235). Both hooks fire on the real server paths: MakePlayerObserver.Call in ClientManager.PutObserverInServer (ClientManager.cs:524, BEFORE DeadState is reset at :531 so !IsDead identifies a formerly-live player) and ClientDisconnect.Call in ClientManager.ClientDisconnect (ClientManager.cs:788). Each calls NotifyLastPlayerForTeam(leaving,_roster). Was fully missing at the prior baseline."
-    - "'You are now alone!' on the death path (carried from prior baseline): OnDeath (ClanArena.cs:307) subscribed to Combat.Death (ClanArena.cs:195-196) calls NotifyLastPlayerForTeam; Combat.Death.Call fires on the live player-death path (DamageSystem)."
-    - "Per-player ROUNDS_PL award LIVE+faithful (carried): GameWorld CA branch sets caRounds.OnRoundCounted = ca.AwardRoundStartScore (GameWorld.cs:2244); _roundPrep sets the live roster (GameWorld.cs:2247) before Rounds.Think fires OnRoundCounted at cnt==0."
-    - "Inter-round grace fire-block LIVE+faithful (carried): WeaponFireDriver.RoundFireForbidden = _ => Rounds is {IsRoundStarted:false} wired in EnableRounds (GameWorld.cs:1476, which CA calls)."
+    - "The server distinguishes playing, eliminated, queued and pure-spectator clients. Round reset preserves these distinctions and admits eligible queued clients."
+    - "Native status messages and the scoreboard distinguish participating observers from pure spectators. Only the jump-to-join hint is suppressed for participating observers."
 features:
   - id: clanarena.round.lifecycle
     name: "Round wait/countdown/live/end-delay state machine"
@@ -67,9 +61,9 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: trace, ref: "EnableRounds is called with canStart = ca.CheckTeams (GameWorld.cs:2763); Server RoundHandler.CanStart -> ca.CheckTeams, which requires every active team to have >=1 live player (matching QC Team_GetNumberOfAliveTeams == AVAILABLE_TEAMS)", result: pass }
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
     confidence: high
-    notes: "Faithful+live, unchanged since baseline (line ref refreshed). The live canRoundStart is CA's faithful CheckTeams (all active teams must have a live player), not the generic DefaultCanRoundStart. Faithful for 3-4 teams, not just 2."
+    notes: "Only live players with valid active teams satisfy the start gate."
 
   - id: clanarena.round.resolution
     name: "Round resolution: last team alive wins, banks a round point"
@@ -94,9 +88,9 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: trace, ref: "Server RoundHandler.Think polls _canRoundEnd = ()=>ca.CheckWinner()!=0 every frame while the round is live; CheckWinner banks +1 ST_CA_ROUNDS to the sole surviving team and runs UpdateLeaderAndCheckLimit. DriveGametypeFrame case ClanArena is `break` so the dead CheckRound double-award path is avoided (GameWorld.cs:3355)", result: pass }
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
     confidence: high
-    notes: "Faithful+live, unchanged since baseline (line refs refreshed). Resolution is the live CA_CheckWinner path (survivor + timelimit + stalemate + notifications). CheckRound is DEAD (no caller) but kept for the AliveByTeam recount it shares with CheckWinner."
+    notes: "Observer team colors and copied spectator resources leave survivor counts and winner resolution unchanged."
 
   - id: clanarena.round.timelimit_stalemate
     name: "Round time limit + stalemate prevention (survivors/health)"
@@ -334,9 +328,9 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: trace, ref: "GametypeStatusBlock.Capture(ClanArena) writes the 4 alive counts in red/blue/yellow/pink order; NetGame.UpdateModIcons feeds ModIconsPanel. AliveByTeam is refreshed by the live CheckTeams/CheckWinner each frame", result: pass }
-    confidence: medium
-    notes: "Unchanged from baseline. AliveByTeam is refreshed by the live CheckWinner (canRoundEnd, polled per frame) and CheckTeams. Exact on-screen DrawCAItem layout not visually verified."
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
+    confidence: high
+    notes: "The authority counts living players, and the existing status block carries the four team totals."
 
   - id: clanarena.hud.eliminated_greyout
     name: "Eliminated-player scoreboard grey-out"
@@ -345,7 +339,7 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:ca_isEliminated"
       - "server/elimination.qc:EliminatedPlayers_SendEntity"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:IsEliminatedPlayer (ClanArena.cs:880 — p.IsDead || _joiningMidRound.Contains(p))"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:IsEliminatedPlayer"
       - "src/VortexArena.Net/GametypeStatusBlock.cs:WriteIdList (eliminated, GametypeStatusBlock.cs:91)"
       - "game/net/NetGame.cs:UpdateScoreboard"
     constants: []
@@ -358,12 +352,11 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "QC ca_isEliminated also greys FRAGS_PLAYER_OUT_OF_GAME (N/A to the port — no per-life elimination column). Equivalent for CA: there is no per-life out-of-game state distinct from IS_DEAD + INGAME_JOINING."
+    gaps: []
     verification:
-      - { kind: trace, ref: "GametypeStatusBlock.Capture(ClanArena) writes the eliminated id list via ca.IsEliminatedPlayer = `p.IsDead || _joiningMidRound.Contains(p)` (GametypeStatusBlock.cs:91); consumed live by the NetGame scoreboard. THIS WAVE made _joiningMidRound populated on the live path (OnJoinLate now fires via GametypeOnJoinRefused — see clanarena.join.late_join_observer), so the joining branch now greys an actual mid-round joiner, not just the dead.", result: pass }
-    confidence: medium
-    notes: "CLOSED THIS WAVE (2026-06-28): logic partial→faithful. The IsEliminatedPlayer `_joiningMidRound` branch is now live (the set is populated by the newly-reachable OnJoinLate / live ResetMapPlayers), so a mid-round late joiner waiting out the round is greyed — matching QC ca_isEliminated INGAME_JOINING. Confidence medium only because the on-screen grey row rendering is not visually verified (the data path is confirmed)."
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
+    confidence: high
+    notes: "The existing status list carries dead and in-game observer IDs. The score row remains in the team table for both states."
 
   - id: clanarena.spectate.enemies_rule
     name: "Spectate-enemies anti-ghost rule (g_ca_spectate_enemies)"
@@ -384,12 +377,11 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Modes -1/0/1 modeled; the in-game-eliminated distinction relies on the port's coarser observer/in-game state (see eliminated_greyout)."
+    gaps: []
     verification:
-      - { kind: trace, ref: "ClientManager calls SpectatorRules.SpectateEnemiesMode + CycleSpectatee; CA default 0 (teammates only)", result: pass }
-    confidence: medium
-    notes: "Unchanged from baseline. Helper logic faithful; exact in-game-eliminated gating depends on the port's INGAME approximation. Not visually verified."
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
+    confidence: high
+    notes: "Pure spectators can follow either team. An in-game observer follows teammates at 0 and -1, and -1 also disables free-fly. The configured mode takes effect on reset."
 
   - id: clanarena.notify.round_outcome
     name: "Round-win / tied / over notifications + 'You are now alone'"
@@ -460,7 +452,7 @@ features:
       - "src/VortexArena.Server/GameWorld.cs:CA branch sets caRounds.OnRoundCounted = ca.AwardRoundStartScore (GameWorld.cs:2773) + _roundPrep = ca.SetRoster(Clients.Players) (GameWorld.cs:2776)"
       - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ROUNDS_PL field + AddToPlayer"
     constants:
-      - { name: "rounds_pl_per_round", base: "+1 per present player when the round starts", port: "+1 per roster player (AwardRoundStartScore: GameScores.AddToPlayer(p, ROUNDS_PL, 1) for each _roster member)", match: true }
+      - { name: "rounds_pl_per_round", base: "+1 per present player when the round starts", port: "+1 per Clan Arena participant at round start", match: true }
     status:
       logic: faithful
       values: faithful
@@ -470,12 +462,11 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Minor: QC's present-set is IS_PLAYER(it) || INGAME(it); the port has no INGAME_JOINING state, so the playing roster (Clients.Players, the IS_PLAYER set) is the present set. A late joiner waiting out a round (INGAME but not yet IS_PLAYER) would not yet get the bump — consistent with the port's missing INGAME state (see clanarena.join.late_join_observer)."
+    gaps: []
     verification:
-      - { kind: trace, ref: "GameWorld CA branch wires caRounds.OnRoundCounted = ca.AwardRoundStartScore (GameWorld.cs:2773). DriveGametypeFrame loop runs _roundPrep (ca.SetRoster(Clients.Players), GameWorld.cs:2521/2776) BEFORE Rounds.Think, and Think fires OnRoundCounted at the f==0 round-begin edge — so AwardRoundStartScore reads the just-set live roster and adds +1 ROUNDS_PL to each.", result: pass }
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
     confidence: high
-    notes: "Faithful+live, unchanged in substance since baseline (line refs refreshed). Minor scoreboard column, distinct from the team ST_CA_ROUNDS round-win count."
+    notes: "The live round-start callback awards players and in-game observers. Pure spectators are excluded."
 
   - id: clanarena.spawn.no_regen_forced_spectate
     name: "No health/armor regen; dead players forced to spectate (no respawn calc)"
@@ -498,12 +489,11 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "QC RESPAWN_SILENT/RESPAWN_FORCE flags + respawn_time = time+2 (to suppress the spectator-camera jump) are not explicitly modeled; the effective one-life-per-round behavior holds via the round-gated respawn machine."
+    gaps: []
     verification:
-      - { kind: trace, ref: "ClanArena.Activate subscribes OnPlayerRegen -> true (ClanArena.cs:220-221); PlayerFrameLogic fires PlayerRegen.Call and skips regen when a handler returns true. DeadPlayerThink gates respawn on !(Rounds is {IsRoundStarted:true}) so dead CA players stay dead until OnRoundReset->ResetMap re-spawns everyone", result: pass }
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
     confidence: high
-    notes: "Faithful+live, unchanged since baseline (line ref refreshed). No-regen rule explicitly ported AND live; one-life-per-round confirmed via the round-gated DeadPlayerThink/RespawnDuePlayers. Only the cosmetic silent/forced respawn-flag detail remains unmodeled."
+    notes: "The real death path arms a silent, forced observer transition after two simulation seconds while spawning is locked. An earlier round reset can supersede it."
 
   - id: clanarena.join.late_join_observer
     name: "Late joiner forced to Observer until next round (+ CA join-late info)"
@@ -513,9 +503,9 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, PutClientInServer)"
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, Bot_FixCount)"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:CanJoin (ClanArena.cs:104) — LIVE (force-observe mid-round)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:SpawnBlocked"
       - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnJoinLate (ClanArena.cs:111; adds to _joiningMidRound + sends CA_JOIN_LATE) — now LIVE via GametypeOnJoinRefused"
-      - "src/VortexArena.Server/GameWorld.cs:GametypeJoinGate = ca.CanJoin(p, Rounds.IsRoundStarted) (GameWorld.cs:2856); GametypeOnJoinRefused = if(round started) ca.OnJoinLate (GameWorld.cs:2863); GametypeOnJoin = null (GameWorld.cs:2864)"
+      - "src/VortexArena.Server/GameWorld.cs:WireCommandsInfrastructure and Clan Arena activation"
       - "src/VortexArena.Server/ClientManager.cs:JoinAllowed (refuses on GametypeJoinGate, invokes GametypeOnJoinRefused?.Invoke(p) on the refusal branch, ClientManager.cs:356-362)"
     constants: []
     status:
@@ -528,11 +518,11 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "QC Bot_FixCount counts in-game-joined clients (so bots fill mid-round) — not ported. Minor (bot-fill timing for late joiners), no impact on a human mid-round joiner's observer-until-next-round + greyout behavior."
+      - "Stock CA-specific bot-fill participation accounting remains unported."
     verification:
-      - { kind: trace, ref: "THIS WAVE wired the INGAME_JOINING tracking live via the NEW Clients.GametypeOnJoinRefused side-channel. CanJoin is live via GametypeJoinGate (GameWorld.cs:2856 → JoinAllowed ClientManager.cs:356): while a round is live the join is refused so the client stays observer until reset. On that SAME refusal branch JoinAllowed now calls GametypeOnJoinRefused?.Invoke(p) (ClientManager.cs:360), wired to `p => if(Rounds.IsRoundStarted) ca.OnJoinLate(p)` (GameWorld.cs:2863). OnJoinLate adds p to _joiningMidRound and Sends INFO_CA_JOIN_LATE. The old contradiction (OnJoinLate on GametypeOnJoin, which fired only on SUCCESSFUL joins) is gone — GametypeOnJoin is now null for CA (GameWorld.cs:2864). grep confirms _joiningMidRound is written by OnJoinLate (now reachable) and the new ResetMapPlayers (also now live).", result: pass }
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
     confidence: high
-    notes: "CLOSED THIS WAVE (2026-06-28): was partial/dead (OnJoinLate unreachable). The new GametypeOnJoinRefused seam fires OnJoinLate exactly on a refused mid-round join, so _joiningMidRound IS now populated and INFO_CA_JOIN_LATE IS sent. Force-observe-until-next-round + the greyout's joining branch + the spawn-time JOINED flip are all now reachable. Only the unported Bot_FixCount mid-round bot-fill remains a minor gap. Not run in-game; trace-confirmed reachable."
+    notes: "An eligible join refused solely by the CA phase keeps an out-of-game team row and waits for reset. Slot cap, team lock and play-ban checks still gate admission."
 
   - id: clanarena.spawn.forbid_throw_weapon
     name: "Cannot drop/throw the current weapon"
@@ -565,7 +555,7 @@ features:
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, ClientDisconnect) (ca_LastPlayerForTeam_Notify, line 393)"
       - "common/gametypes/gametype/clanarena/sv_clanarena.qc:MUTATOR_HOOKFUNCTION(ca, MakePlayerObserver) (ca_LastPlayerForTeam_Notify, line 406)"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnMakePlayerObserver (ClanArena.cs:465; subscribed ClanArena.cs:229-230)"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:PrepareObserverTransition (ClanArena.cs:465; subscribed ClanArena.cs:229-230)"
       - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:OnClientDisconnect (ClanArena.cs:479; subscribed ClanArena.cs:234-235)"
       - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:NotifyLastPlayerForTeam (ClanArena.cs:593)"
       - "src/VortexArena.Server/ClientManager.cs:PutObserverInServer (MutatorHooks.MakePlayerObserver.Call, ClientManager.cs:542)"
@@ -582,9 +572,9 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: trace, ref: "ClanArena.Activate subscribes OnMakePlayerObserver -> MutatorHooks.MakePlayerObserver and OnClientDisconnect -> MutatorHooks.ClientDisconnect. MakePlayerObserver.Call fires in PutObserverInServer (ClientManager.cs:542) BEFORE DeadState is reset so !leaving.IsDead identifies a formerly-live player (QC IS_PLAYER && !IS_DEAD). ClientDisconnect.Call fires in ClientManager.ClientDisconnect (:832). Both call NotifyLastPlayerForTeam(leaving,_roster), which prints CENTER_ALONE to the last surviving teammate while the round is started (matching ca_LastPlayerForTeam_Notify's !warmup && IsActive && IsRoundStarted gate).", result: pass }
-    confidence: high
-    notes: "FIX since 2026-06-25 baseline: missing -> faithful, na -> live on both the disconnect and make-observer paths. The two new handlers (OnMakePlayerObserver / OnClientDisconnect) were added and wired live; combined with the existing death-path notify, all three QC ca_LastPlayerForTeam_Notify call sites are now covered."
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
+    confidence: medium
+    notes: "Death and departure both use the live-player roster when selecting the last surviving teammate."
 
   - id: clanarena.matchend.restore_status
     name: "Restore spectator/team status before final scores (MatchEnd_BeforeScores)"
@@ -605,11 +595,11 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Hook is SUBSCRIBED + FIRED LIVE (ClanArena.cs:299-300 → FireMatchEndBeforeScores GameWorld.cs:3954), and THIS WAVE its upstream state is now populated on the live path: _joiningMidRound (via the now-reachable OnJoinLate, see late_join_observer) and _prevTeam (via the now-live ResetMapPlayers, see lifecycle.reset_map). So the joining-flag drop is now meaningful. BUT the handler (ClanArena.cs:707-712) only CLEARS _joiningMidRound + _prevTeam — it never reads _prevTeam back to RESTORE each player's pre-CA team/observer assignment, which is what QC MatchEnd_RestoreSpectatorAndTeamStatus(prev_team) actually does. So the team/observer restoration itself is still not performed; logic stays partial."
+      - "Stock team-restoration announcements and winning-flag updates were not verified."
     verification:
-      - { kind: trace, ref: "OnMatchEndBeforeScores subscribed (ClanArena.cs:299) and fired live (FireMatchEndBeforeScores GameWorld.cs:3954). Handler body (ClanArena.cs:707-712) does _joiningMidRound.Clear() + _prevTeam.Clear(). Both sets now HAVE live writers this wave (_joiningMidRound ← OnJoinLate/ResetMapPlayers; _prevTeam ← ResetMapPlayers via GameWorld.cs:4642), so the clear is no longer a pure no-op. But there is no code path that reassigns p.Team from _prevTeam — the restore is a flag-drop only.", result: pass }
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
     confidence: medium
-    notes: "PARTIAL (liveness partial→live this wave; logic stays partial). The hook now fires AND operates on real populated state, but it only drops the INGAME-joining flags; it does not perform the QC prev_team team/observer restoration. NOT fully closed — would need OnMatchEndBeforeScores to actually reassign each player to _prevTeam[p] (or restore observer status) before the final scoreboard."
+    notes: "The final-score hook restores round-start teams for participants and moves pending joiners to the pure spectator score group."
 
   - id: clanarena.spectate.force_spectate_cmd
     name: "CA spectate-command force + 'leave the game' notice (ClientCommand_Spectate)"
@@ -630,12 +620,11 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Minor: QC ClientCommand_Spectate returns MUT_SPECCMD_FORCE so CA's own force-spectate fully supplants the generic path; in the port OnSpectateCommand sets up CA state (sends INFO_CA_LEAVE when sv_spectate, drops _prevTeam) and the generic kill-countdown PutObserverInServer still runs afterward (Commands.cs:1599). The net observable outcome (player spectates + gets the CA leave notice) matches, but the QC `return true → skip the default` short-circuit is not used."
+    gaps: []
     verification:
-      - { kind: trace, ref: "THIS WAVE added the caller: CmdSpectate (Commands.cs:1561, registered as `spectate` at Commands.cs:808) calls _world.Clients.GametypeSpectateCommand(p) (Commands.cs:1594) BEFORE the generic kill-countdown spectate. GametypeSpectateCommand (ClientManager.cs:530) routes to ca.OnSpectateCommand for a CA match, which Sends INFO_CA_LEAVE (when sv_spectate != 0) and clears _prevTeam. grep now shows GametypeSpectateCommand has a live caller (Commands.cs:1594), no longer zero.", result: pass }
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
     confidence: high
-    notes: "CLOSED THIS WAVE (2026-06-28): liveness dead→live, logic/presentation missing→faithful. The OnSpectateCommand handler + GametypeSpectateCommand adapter existed since Wave-16/17 but had no caller; this wave wired the registered `spectate` command through it, so a CA player running `spectate` now triggers the CA force-spectate + INFO_CA_LEAVE notice. Only the cosmetic MUT_SPECCMD_FORCE short-circuit (the generic path still runs afterward, to the same end state) remains a minor gap. Not run in-game; trace-confirmed reachable."
+    notes: "Plain spectate withdraws a participant. The camera-only spectate arguments preserve participation."
 
   - id: clanarena.cmd.shuffleteams_reset
     name: "shuffleteams reschedules to next round (SV_ParseServerCommand)"
@@ -682,13 +671,11 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "QC reset_map_players also re-PutClientInServer per in-game client (a full re-transmute/respawn of each player); the port re-spawns everyone via the generic round-gated ResetMap/DeadPlayerThink machinery rather than inside ResetMapPlayers. Equivalent end state (everyone live next round). ResetMapPlayers itself now does the CA-specific bookkeeping: flip the whole _joiningMidRound set to JOINED, zero killcount, snapshot _prevTeam."
-      - "QC reset_map_global: allowed_to_spawn = true — the port gates spawn on round phase instead (effective), so this half is N/A."
+    gaps: []
     verification:
-      - { kind: trace, ref: "THIS WAVE added `case ClanArena ca: ca.ResetMapPlayers(Clients.Players); break;` to GameWorld.ResetMap (GameWorld.cs:4642), alongside the existing Mayhem/TeamMayhem/Cts/LMS cases. ResetMap is wired to Rounds.OnRoundReset (GameWorld.cs:1647) so it fires each CA round reset. ResetMapPlayers (ClanArena.cs:689) clears _joiningMidRound (INGAME_STATUS_JOINED for all), zeroes p.GtKillCount, and writes _prevTeam[p]=p.Team. grep ResetMapPlayers in Server now shows the ClanArena call site.", result: pass }
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
     confidence: high
-    notes: "CLOSED THIS WAVE (2026-06-28): liveness dead→live, logic partial→faithful. The CA reset_map_players code existed since Wave-16/17 but had no caller; this wave added the `case ClanArena` to GameWorld.ResetMap, so the per-round INGAME-flip / killcount-zero / prev_team-snapshot now runs live. This also un-strands the _prevTeam writer feeding clanarena.matchend.restore_status (though that row's actual restore is still unperformed — see its gap)."
+    notes: "Only participants and eligible bots spawn. Pending intent is cleared by successful PlayerSpawn."
 
   - id: clanarena.spawn.ingame_status_decimal_reset
     name: "PlayerSpawn: set INGAME_STATUS_JOINED + reset damage2score decimal on game restart"
@@ -709,57 +696,59 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "QC ca PlayerSpawn: `if (!warmup_stage) eliminatedPlayers.SendFlags = 0xFFFFFF` (force eliminated-list resend on spawn) — the port's elimination-list capture runs per frame anyway, so the explicit dirty-flag is N/A."
+    gaps: []
     verification:
-      - { kind: trace, ref: "ClanArena.Activate subscribes OnPlayerSpawn to MutatorHooks.PlayerSpawn (ClanArena.cs:291-292); the hook fires live in ClientManager.PutPlayerInServer (ClientManager.cs:772). OnPlayerSpawn (ClanArena.cs:567-578) removes the player's _scoreDecimal entry when now <= Handler.GameStartTime (QC float2int_decimal_fld=0) AND _joiningMidRound.Remove(player) (QC INGAME_STATUS_SET(JOINED)). THIS WAVE made _joiningMidRound actually populated on the live path (OnJoinLate now reachable — see clanarena.join.late_join_observer), so the JOINED flip is now a meaningful state transition: a late joiner who finally spawns stops being greyed.", result: pass }
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
     confidence: high
-    notes: "CLOSED THIS WAVE (2026-06-28): logic partial→faithful. The decimal-reset half was already live+faithful; this wave made the _joiningMidRound.Remove (QC INGAME_STATUS_SET(JOINED) flip) meaningful because _joiningMidRound is now populated by the newly-reachable OnJoinLate / live ResetMapPlayers. Both halves of QC ca PlayerSpawn are now modeled. Only the eliminatedPlayers.SendFlags dirty-flag remains N/A (per-frame capture)."
+    notes: "A successful spawn clears pending participation and exits the out-of-game status. The match-start decimal reset remains in place."
 
   - id: clanarena.hud.spectator_info_messages
-    name: "Show HUD info messages to a CA spectator viewing the scoreboard (cl_ca DrawInfoMessages)"
+    name: "Suppress the join hint for Clan Arena scoreboard participants observing"
     layer: [presentation]
     base_refs:
       - "common/gametypes/gametype/clanarena/cl_clanarena.qc:MUTATOR_HOOKFUNCTION(cl_ca, DrawInfoMessages)"
-    port_refs: []
+    port_refs:
+      - "game/net/NetGame.cs:UpdateInfoMessages"
+      - "game/hud/InfoMessagesPanel.cs:SuppressJoinHint"
     constants: []
     status:
-      logic: missing
+      logic: faithful
       values: na
       timing: na
-      presentation: missing
+      presentation: faithful
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Base cl_ca DrawInfoMessages returns true when ISGAMETYPE(CA) && the local player's entcs spec-state is ENTCS_SPEC_IN_SCOREBOARD, which keeps the HUD info-message panel drawing for a CA spectator who is looking at the scoreboard. The port's InfoMessagesPanel (game/hud/InfoMessagesPanel.cs) ports the cl_lms DrawInfoMessages variant (locally-eliminated LMS player) but has NO CA branch and no ENTCS_SPEC_IN_SCOREBOARD spec-state gate, so this CA-specific info-message visibility is not modeled. Minor client-presentation only."
+    gaps: []
     verification:
-      - { kind: trace, ref: "grep game/hud/InfoMessagesPanel.cs for ClanArena/CA/ENTCS_SPEC_IN_SCOREBOARD = none; only the cl_lms DrawInfoMessages variant is ported. No CA DrawInfoMessages equivalent anywhere in src/ or game/.", result: pass }
-    confidence: medium
-    notes: "Newly mapped Base feature (was unmapped at the prior baseline). Purely cosmetic CA spectator HUD detail; no gameplay impact."
+      - { kind: test, ref: "planning/parity/clanarena-participation/README.md", result: pass }
+    confidence: high
+    notes: "The local observer status and score row suppress only the jump-to-join hint for an in-game observer. Scoreboard key state is independent."
 
   - id: clanarena.mapinfo.always_supported
     name: "Map-support heuristic (m_isAlwaysSupported: spawnpoints>=8 && diameter>3250)"
     layer: [authority]
     base_refs:
       - "common/gametypes/gametype/clanarena/clanarena.qh:METHOD(ClanArena, m_isAlwaysSupported)"
-    port_refs: []
+      - "common/mapinfo.qc:_MapInfo_Generate"
+    port_refs:
+      - "src/VortexArena.Formats/Bsp/MapInfoCatalog.cs:Generate"
+      - "tests/VortexArena.Tests/MapInfoGenerationTests.cs:NativeMapThresholdsReachCatalogAndDetails"
     constants:
-      - { name: "min_spawnpoints", base: "8", port: "none", match: false }
-      - { name: "min_diameter", base: "3250", port: "none", match: false }
+      - { name: "minimum qualifying spawnpoints", base: "8", port: "8", match: true }
+      - { name: "exclusive minimum entity-origin diameter", base: "3250", port: "3250", match: true }
     status:
-      logic: missing
-      values: missing
+      logic: faithful
+      values: faithful
       timing: na
       presentation: na
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Base CLASS(ClanArena) overrides m_isAlwaysSupported to auto-enable CA on any map with >=8 spawnpoints and a world diameter >3250 (so big arena maps offer CA even without an explicit mapinfo gametype tag). The port has no map-support / auto-gametype heuristic for CA (the same gap noted for Duel.cs:37 and Mayhem.cs:296 — a map-pool concern needing BSP world bounds), so CA availability per map is not derived this way. No in-match gameplay impact."
+    gaps: []
     verification:
-      - { kind: trace, ref: "grep src/ game/ for m_isAlwaysSupported / spawnpoints>=8 / diameter 3250 in a CA context = none; only Duel.cs/Mayhem.cs note the same unported heuristic in comments", result: pass }
-    confidence: medium
-    notes: "Newly mapped Base feature (was unmapped at the prior baseline). Map-pool / mapinfo metadata, not in-match logic; mirrors the unported m_isAlwaysSupported gap already documented for Duel and Mayhem."
+      - { kind: test, ref: "MapInfoGenerationTests.NativeMapThresholdsReachCatalogAndDetails exercises generated eligibility through the catalog and detail APIs with 7 and 8 spawns and diameters 3249, 3250 and 3251.", result: pass }
+    confidence: high
+    notes: "This rule applies during generic map metadata generation. Authored mode declarations take precedence."

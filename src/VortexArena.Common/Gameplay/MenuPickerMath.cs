@@ -239,5 +239,6 @@ public static class MenuPickerMath
     private static float Clamp01(float v) => v < 0 ? 0 : (v > 1 ? 1 : v);
 
     /// <summary>QC <c>DEC_TO_HEXDIGIT</c> over HEXDIGITS_MINSET ("0123456789abcdef").</summary>
-    private static char HexDigit(int d) => "0123456789abcdef"[d < 0 ? 0 : (d > 15 ? 15 : d)];
+    // DEC_TO_HEXDIGIT indexes the first 16 characters of HEXDIGITS_MINSET.
+    private static char HexDigit(int d) => "0123456789ABCDEF"[d < 0 ? 0 : (d > 15 ? 15 : d)];
 }

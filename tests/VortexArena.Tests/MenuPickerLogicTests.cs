@@ -102,15 +102,15 @@ public class MenuPickerLogicTests
     }
 
     [Fact]
-    public void RgbToHexColor_Matches_QC_Quantization()
+    public void RgbToHexColor_Matches_QC_Quantization_And_Case()
     {
         // QC rgb_to_hexcolor: each component floor(c*15 + 0.5) → hex digit over "0123456789abcdef".
-        Assert.Equal("^xfff", MenuPickerMath.RgbToHexColor((1f, 1f, 1f)));   // 15,15,15
+        Assert.Equal("^xFFF", MenuPickerMath.RgbToHexColor((1f, 1f, 1f)));   // 15,15,15
         Assert.Equal("^x000", MenuPickerMath.RgbToHexColor((0f, 0f, 0f)));   // 0,0,0
-        Assert.Equal("^xf00", MenuPickerMath.RgbToHexColor((1f, 0f, 0f)));   // red
+        Assert.Equal("^xF00", MenuPickerMath.RgbToHexColor((1f, 0f, 0f)));   // red
         // 0.5 → floor(7.5+0.5)=8
         Assert.Equal("^x888", MenuPickerMath.RgbToHexColor((0.5f, 0.5f, 0.5f)));
         // clamps out-of-range
-        Assert.Equal("^xf00", MenuPickerMath.RgbToHexColor((2f, -1f, 0f)));
+        Assert.Equal("^xF00", MenuPickerMath.RgbToHexColor((2f, -1f, 0f)));
     }
 }

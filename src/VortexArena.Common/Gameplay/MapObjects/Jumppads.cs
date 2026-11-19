@@ -89,11 +89,18 @@ public static class Jumppads
         FindTarget(this_);
     }
 
-    /// <summary><c>spawnfunc(target_push)</c> / <c>target_position</c> / <c>info_notnull</c> — a jump destination point.</summary>
-    public static void TargetPushSetup(Entity this_)
+    /// <summary>Passive destination shared by jump pads and fixed cameras. Preserve its authored angles.</summary>
+    public static void TargetPositionSetup(Entity this_)
     {
         this_.MAngle = this_.Angles;
         MapMover.SetOrigin(this_, this_.Origin);
+        MapMover.IndexRegister(this_);
+    }
+
+    /// <summary><c>spawnfunc(target_push)</c> — a destination that can also push its activator.</summary>
+    public static void TargetPushSetup(Entity this_)
+    {
+        TargetPositionSetup(this_);
         this_.Use = TargetPushUse;
         this_.ClassName = "target_push";
 
@@ -108,8 +115,6 @@ public static class Jumppads
 
         if (string.IsNullOrEmpty(this_.Noise))
             this_.Noise = "misc/jumppad.wav";
-
-        MapMover.IndexRegister(this_);
     }
 
     /// <summary>QC <c>trigger_push_findtarget</c> (headless core): cache the single destination if there is one.</summary>

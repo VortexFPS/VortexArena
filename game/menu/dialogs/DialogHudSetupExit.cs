@@ -267,7 +267,7 @@ public partial class DialogHudSetupExit : MenuScreen, IQcDialog
     {
         int i = _list.SelectedItem;
         if (i < 0 || i >= _paths.Count) return;
-        MenuCommand.Run("exec \"" + _paths[i] + "\"");
+        MenuState.ExecuteMenuConfig(_paths[i]);
     }
 }
 

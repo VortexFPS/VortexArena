@@ -1,0 +1,15 @@
++0.057 25 commands read
++0.122 2 BOTPROBE_start
++0.130 3 BOTPROBE_start
++0.729 2 BOTPROBE_relative_wait_done
++0.729 2 BOTPROBE_barrier_one
++0.729 3 BOTPROBE_barrier_one
++1.126 2 BOTPROBE_absolute_wait_done
++1.128 3 BOTPROBE_absolute_wait_done
++1.594 2 BOTPROBE_cue_release
++1.594 3 BOTPROBE_cue_release
++1.594 CUE botprobe/default.wav entity=2 channel=-1 volume=0.7 attenuation=0.015625
++1.594 CUE botprobe/explicit.wav entity=3 channel=4 volume=0.5 attenuation=2
++1.959 2 BOTPROBE_end
++1.960 3 BOTPROBE_end
++2.428 players: 3 (2 bots)

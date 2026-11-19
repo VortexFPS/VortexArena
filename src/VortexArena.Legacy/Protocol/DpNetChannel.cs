@@ -63,9 +63,10 @@ public sealed class DpNetChannel
     // conn->cleartime: when the rate limit next allows a datagram.
     private double _clearTime;
 
-    public DpNetChannel(double now)
+    public DpNetChannel(double now, double connectTimeout = double.PositiveInfinity)
     {
         LastMessageTime = now;
+        ArmTimeout(now, connectTimeout);
     }
 
     /// <summary>conn->message: reliable data waiting for the message in flight to finish. Callers append
@@ -88,6 +89,21 @@ public sealed class DpNetChannel
     public uint OutgoingUnreliableSequence => _outgoingUnreliableSequence;
     /// <summary>When the last in-sequence datagram arrived (conn->lastMessageTime), for timeout checks.</summary>
     public double LastMessageTime { get; private set; }
+    /// <summary>The connection deadline, stamped at open and refreshed by an in-sequence receive.</summary>
+    public double TimeoutAt { get; private set; }
+    private double _timeoutSeconds;
+
+    internal void ArmTimeout(double now, double timeoutSeconds)
+    {
+        _timeoutSeconds = timeoutSeconds;
+        TimeoutAt = now + timeoutSeconds;
+    }
+
+    private void RecordReceive(double now, double timeoutSeconds)
+    {
+        LastMessageTime = now;
+        ArmTimeout(now, timeoutSeconds);
+    }
 
     public int DroppedDatagrams { get; private set; }
     public int DuplicatesReceived { get; private set; }
@@ -206,6 +222,10 @@ public sealed class DpNetChannel
     /// <see cref="DpChannelReceive.Invalid"/>.
     /// </summary>
     public DpChannelReceive Receive(ReadOnlySpan<byte> datagram, double now, List<byte[]> outgoing, out byte[]? message)
+        => Receive(datagram, now, outgoing, out message, _timeoutSeconds);
+
+    public DpChannelReceive Receive(ReadOnlySpan<byte> datagram, double now, List<byte[]> outgoing, out byte[]? message,
+        double timeoutSeconds)
     {
         message = null;
         if (datagram.Length < DpProtocol.NetHeaderSize)
@@ -228,7 +248,7 @@ public sealed class DpNetChannel
                 if (sequence > _unreliableReceiveSequence)
                     DroppedDatagrams += (int)Math.Min(sequence - _unreliableReceiveSequence, int.MaxValue / 2);
                 _unreliableReceiveSequence = sequence + 1;
-                LastMessageTime = now;
+                RecordReceive(now, timeoutSeconds);
                 if (data.Length > 0)
                 {
                     message = data.ToArray();
@@ -245,7 +265,7 @@ public sealed class DpNetChannel
             if (sequence == _sendSequence - 1 && sequence == _ackSequence)
             {
                 _ackSequence++;
-                LastMessageTime = now;
+                RecordReceive(now, timeoutSeconds);
                 if (_sendMessageLength > DpProtocol.MaxPacketFragment)
                 {
                     // That fragment arrived; slide the rest down and send the next one straight away.
@@ -274,7 +294,7 @@ public sealed class DpNetChannel
                 DuplicatesReceived++;
                 return DpChannelReceive.Handled;
             }
-            LastMessageTime = now;
+            RecordReceive(now, timeoutSeconds);
             _receiveSequence++;
             if (_receiveMessageLength + data.Length > _receiveMessage.Length)
             {

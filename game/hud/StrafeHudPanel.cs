@@ -3,7 +3,10 @@ using Godot;
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Math;
 using VortexArena.Common.Services;
+using VortexArena.Engine.Audio;
 using VortexArena.Engine.Simulation;
+using VortexArena.Game.Audio;
+using VortexArena.Game.Loaders;
 using NVec3 = System.Numerics.Vector3;
 
 namespace VortexArena.Game.Hud;
@@ -74,6 +77,12 @@ public partial class StrafeHudPanel : HudPanel
     /// <summary>QC <c>hud_speed_unit</c> (1=qu/s … 5=knots) — selects the speed/length unit for the text readouts.</summary>
     public int SpeedUnit { get; set; } = 1;
 
+    /// <summary>The mounted game assets supplying the client-side strafe sonar.</summary>
+    public AssetLoader? SonarAssets { get; set; }
+
+    /// <summary>Client simulation time for the QC sonar cooldown, including pause and slow motion.</summary>
+    public double? SonarSimulationTime { get; set; }
+
     // ===== QC enum mirrors (strafehud.qh) =====
 
     private const int MODE_VIEW_CENTERED = 0, MODE_VELOCITY_CENTERED = 1;
@@ -103,6 +112,13 @@ public partial class StrafeHudPanel : HudPanel
     // text-indicator capture state (QC statics)
     private float _startSpeed, _startTime;
     private float _jumpHeight, _jumpTime, _jumpHeightMin, _jumpHeightMax;
+
+    private double _sonarTime;
+    private AssetLoader? _sonarCachedAssets;
+    private Func<string, AudioStream?>? _sonarAudioLoader;
+    private string? _sonarAudioSetting, _sonarSample;
+    private bool _sonarPrecachedOnMixer;
+    private AudioStream? _sonarFallbackStream;
 
     // per-frame projection cache (the QC autocvar read once per draw)
     private int _projection;
@@ -145,6 +161,19 @@ public partial class StrafeHudPanel : HudPanel
         c.Register(P + "timeout_turn", "0.1", S);
         c.Register(P + "antiflicker_angle", "0.01", S);
         c.Register(P + "fps_update", "0.5", S);
+
+        c.Register(P + "sonar", "0", S);
+        c.Register(P + "sonar_audio", "misc/talk", S);
+        c.Register(P + "sonar_start", "0.5", S);
+        c.Register(P + "sonar_interval_start", "0.333333", S);
+        c.Register(P + "sonar_interval_range", "-0.222222", S);
+        c.Register(P + "sonar_interval_exponent", "1", S);
+        c.Register(P + "sonar_volume_start", "0.333333", S);
+        c.Register(P + "sonar_volume_range", "0.666666", S);
+        c.Register(P + "sonar_volume_exponent", "1", S);
+        c.Register(P + "sonar_pitch_start", "0.9", S);
+        c.Register(P + "sonar_pitch_range", "0.1", S);
+        c.Register(P + "sonar_pitch_exponent", "1", S);
 
         // bar zones (color triples + alpha)
         c.Register(P + "bar_preaccel", "1", S);
@@ -808,7 +837,101 @@ public partial class StrafeHudPanel : HudPanel
         DrawJumpHeight(realOnGround, false, textOffsetTop, textOffsetBottom);
         EndBoldFont();
 
+        if (Player is not null)
+            UpdateSonar(strafeRatio, SonarSimulationTime ?? _localClock);
+
         _lastTime = time;
+    }
+
+    private void UpdateSonar(float strafeRatio, double time)
+    {
+        UpdateSonarSample();
+        if (!Cb("sonar", false))
+            return;
+
+        float start = Math.Clamp(Cf("sonar_start", 0.5f), 0f, 1f);
+        if (!(strafeRatio >= start))
+            return;
+
+        float ratio = start == 1f ? 1f : (strafeRatio - start) / (1f - start);
+        float interval = MathF.Max(0f, Cf("sonar_interval_start", 0.333333f))
+            + SonarRamp(ratio, "sonar_interval_exponent", "sonar_interval_range", -0.222222f);
+        if (_sonarTime != 0 && !(time - _sonarTime >= interval))
+            return;
+
+        // QC advances the cooldown even if the sample is missing or the volume is zero.
+        _sonarTime = time;
+        float volume = Math.Clamp(Cf("sonar_volume_start", 0.333333f), 0f, 1f)
+            + SonarRamp(ratio, "sonar_volume_exponent", "sonar_volume_range", 0.666666f);
+        if (_sonarSample is not { } sample || !(volume > 0f))
+            return;
+
+        float pitch = MathF.Max(0f, Cf("sonar_pitch_start", 0.9f))
+            + SonarRamp(ratio, "sonar_pitch_exponent", "sonar_pitch_range", 0.1f);
+        PlaySonar(sample, MathF.Min(volume, 1f) * 0.7f, MathF.Max(0.00000001f, pitch));
+    }
+
+    private float SonarRamp(float ratio, string exponentCvar, string rangeCvar, float rangeDefault)
+        => Cf(rangeCvar, rangeDefault) * MathF.Pow(ratio, MathF.Max(1f, Cf(exponentCvar, 1f)));
+
+    private static readonly string[] SonarSoundExtensions = [".wav", ".ogg", ".flac"];
+
+    private void UpdateSonarSample()
+    {
+        AssetLoader? assets = SonarAssets;
+        string setting = CvarStr("sonar_audio");
+        bool mixer = DpNative.Active;
+        if (ReferenceEquals(assets, _sonarCachedAssets) && setting == _sonarAudioSetting && mixer == _sonarPrecachedOnMixer)
+            return;
+
+        _sonarCachedAssets = assets;
+        _sonarAudioLoader = assets is null ? null : assets.LoadSoundFile;
+        _sonarAudioSetting = setting;
+        _sonarPrecachedOnMixer = mixer;
+        _sonarSample = null;
+        _sonarFallbackStream = null;
+        if (setting.Length == 0 || assets is null)
+            return;
+
+        // QC _Sound_fixpath probes the mounted sound directory in this order.
+        foreach (string extension in SonarSoundExtensions)
+        {
+            string sample = "sound/" + setting + extension;
+            if (!assets.Vfs.Exists(sample))
+                continue;
+
+            _sonarSample = sample;
+            if (mixer)
+                DpNative.Bank(_sonarAudioLoader)?.Get(sample, forPlay: false);
+            else
+            {
+                foreach (string candidate in DpSoundFiles.Candidates(sample))
+                    if ((_sonarFallbackStream = assets.LoadSoundFile(candidate)) is not null)
+                        break;
+            }
+            break;
+        }
+    }
+
+    private void PlaySonar(string sample, float volume, float pitch)
+    {
+        // CH_INFO (0) is an auto channel, so successive beeps can overlap.
+        if (DpNative.Active)
+        {
+            DpNative.Local(_sonarAudioLoader, sample, 0, volume, pitch);
+            return;
+        }
+        if (_sonarFallbackStream is not { } stream)
+            return;
+
+        var player = new AudioStreamPlayer
+        {
+            Name = "StrafeSonar", Bus = "SFX", Stream = stream,
+            VolumeDb = Mathf.LinearToDb(volume), PitchScale = pitch,
+        };
+        player.Finished += player.QueueFree;
+        AddChild(player);
+        player.Play();
     }
 
     // -------------------------------------------------------------------------------------------------

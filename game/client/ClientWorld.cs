@@ -118,20 +118,9 @@ public partial class ClientWorld : Node3D
     /// <summary>Per-player floating nameplates (ent_cs): a billboarded health/id label above the head.</summary>
     private readonly Dictionary<int, Label3D> _nameplates = new();
 
-    /// <summary>
-    /// Crosshair-chase local-body fade targets keyed by local net id (QC <c>crosshair_chase_playeralpha</c>): the
-    /// third-person crosshair-chase view fades the LOCAL player's own body so it doesn't block the aim. Maps a net
-    /// id to the desired RENDER alpha in (0,1] (1 = opaque; caller passes 1 − crosshair_chase_playeralpha, e.g. the
-    /// 0.25 default → 0.75). Populated/cleared by <see cref="SetLocalBodyAlpha"/>; the per-frame model pass eases
-    /// the matching <see cref="PlayerModel"/> toward it. Empty on a non-chase frame, so that path pays nothing.
-    /// </summary>
-    private readonly Dictionary<int, float> _bodyAlphaTarget = new();
-
-    /// <summary>The currently-EASED body-fade render alpha per local net id (1 = opaque), driven toward
-    /// <see cref="_bodyAlphaTarget"/> each frame so the fade-in/out is smooth (and so a cleared target eases back to
-    /// opaque before the entry is dropped). Removed once the model is opaque again with no live target.</summary>
-    private readonly Dictionary<int, float> _bodyAlphaCurrent = new();
-    private readonly List<int> _bodyAlphaScratch = new(); // reused: ids to drop after they reach opaque
+    private int _chaseBodyId;
+    private float _chaseBodyAlpha = 1f;
+    private float _chaseBodyTargetAlpha = 1f;
 
     /// <summary>Per-entity vehicle visual drivers (rotors/barrels/engine sound/gibs/heal-beam) for vehicle entities.</summary>
     private readonly Dictionary<int, VehicleVisuals> _vehicles = new();
@@ -287,9 +276,16 @@ public partial class ClientWorld : Node3D
     public AssetSystem? Assets
     {
         get => _assets;
-        set { _assets = value; WireEffectAssets(); }
+        set
+        {
+            if (_assets != value)
+                _onslaughtShieldMaterial = null;
+            _assets = value;
+            WireEffectAssets();
+        }
     }
     private AssetSystem? _assets;
+    private Material? _onslaughtShieldMaterial;
 
     /// <summary>Push the asset-backed texture/text loaders into the effect system so it can build the
     /// particlefont atlas and read effectinfo.txt from the mounted VFS. No-op until both Effects and Assets
@@ -506,7 +502,13 @@ public partial class ClientWorld : Node3D
         // Xonotic leaves it below the ultra preset.
         WorldLights = new WorldLightRenderer { Name = "WorldLights" };
         AddChild(WorldLights);
-        MapEmitters = new MapParticleEmitters { Name = "MapEmitters", Effects = Effects };
+        MapEmitters = new MapParticleEmitters
+        {
+            Name = "MapEmitters",
+            Effects = Effects,
+            EmissionSound = (sample, origin, volume, attenuation) =>
+                PlayRawSound(sample, origin, volume, attenuation, MapEmitterAmbientChannel, sourceNetId: 0, pitch: 1f),
+        };
         AddChild(MapEmitters);
 
         // Spawn-point idle glow (CSQC Spawn_Draw, gated by cl_spawn_point_particles).
@@ -538,6 +540,7 @@ public partial class ClientWorld : Node3D
 
     public override void _ExitTree()
     {
+        WorldTint.ResetDebugLighting();
         // (perf 2026-08-03) Exact effectiveness of the per-entity PVS memo — see the counter note. A timing
         // A/B cannot resolve this optimization against the benchmark's run-to-run spread; the hit rate can,
         // and it is deterministic.
@@ -710,6 +713,7 @@ public partial class ClientWorld : Node3D
     /// <summary>Remove by index (the net layer may only have the id by the time it's culled).</summary>
     public void OnEntityRemove(int index, NVec3 lastOrigin = default, string? impactEffect = null)
     {
+        _attachedDamage.Remove(index);
         _frameDriven.Remove(index);
         _graceHidden.Remove(index); // a net id is reusable — a stale grace mark would start the next tenant hidden
         _nameplates.Remove(index); // the Label3D is a child of the node — freed with it below
@@ -760,7 +764,11 @@ public partial class ClientWorld : Node3D
         // The grace set is consulted by the per-frame player pass — without it, that pass's
         // first-person visibility toggle force-shows a PVS-hidden player model every frame,
         // making the hide half of this mechanism a no-op for players.
-        if (hidden) _graceHidden.Add(index);
+        if (hidden)
+        {
+            _graceHidden.Add(index);
+            _attachedDamage.Remove(index);
+        }
         else _graceHidden.Remove(index);
         if (_animators.TryGetValue(index, out ModelAnimator? anim) && GodotObject.IsInstanceValid(anim))
             anim.Visible = !hidden;
@@ -884,7 +892,16 @@ public partial class ClientWorld : Node3D
         GameSound? reg = Sounds.ByName(sample);
         string bare = reg?.Sample ?? sample;
         if (reg is not null) { volume = reg.Volume; }
+        PlayRawSound(bare, origin, volume, attenuation, channel, sourceNetId, pitch);
+    }
 
+    // Map emitters supply a sample path and their own map-authored volume. They play at a fixed
+    // world position on the stacking CH_AMBIENT, with no server entity or sound packet involved.
+    private const int MapEmitterAmbientChannel = -(int)SoundChannel.AmbientSingle;
+
+    private void PlayRawSound(string bare, NVec3 origin, float volume, float attenuation,
+        int channel, int sourceNetId, float pitch)
+    {
         // snd_darkplaces 1: a channel of DarkPlaces' mixer (ClientWorld.DpSound.cs). What follows is the
         // previous engine-node path, kept for one release behind snd_darkplaces 0.
         if (VortexArena.Game.Audio.DpNative.Active && DpStartSound(bare, origin, volume, attenuation, channel, sourceNetId, pitch))
@@ -1027,7 +1044,7 @@ public partial class ClientWorld : Node3D
             1 or -1 => "Weapon",                    // WeaponSingle, WeaponAuto
             2 or -2 => "Voice",                     // Voice, VoiceAuto
             4 or 6 or 7 or -6 or -7 => "Player",    // Body, Pain, Player (+ PainAuto, PlayerAuto)
-            3 or -3 => "Ambient",                   // Item, TriggerAuto
+            3 or -3 or MapEmitterAmbientChannel => "Ambient", // Item and map effects
             _ => "SFX",                             // Auto (0), ShotsAuto (-4), Tuba (5), Bgm (8), etc.
         };
     }
@@ -1077,14 +1094,17 @@ public partial class ClientWorld : Node3D
     }
 
     /// <summary>
-    /// Stop the looping sound on (<paramref name="netId"/>, <paramref name="channel"/>) — DP
-    /// <c>sound(e, ch, SND_Null)</c> (the Arc beam on release/overheat). A no-op if nothing loops on that key.
+    /// Stop the sound on (<paramref name="netId"/>, <paramref name="channel"/>) — DP
+    /// <c>sound(e, ch, SND_Null)</c>.
     /// </summary>
     public void OnStopSound(int netId, int channel)
     {
         if (VortexArena.Game.Audio.DpNative.Active) DpStopSound(netId, channel);
         if (_loopingSounds.Remove((netId, channel), out LoopingSound? ls))
             DestroyLoop(ls);
+        if (_singleChannelPlayers.Remove((netId, channel), out var oneShot)
+            && GodotObject.IsInstanceValid(oneShot))
+            oneShot.Stop();
     }
 
     /// <summary>Build a dedicated looping <see cref="AudioStreamPlayer3D"/> for a (netId, channel) loop (NOT pooled —
@@ -1229,22 +1249,13 @@ public partial class ClientWorld : Node3D
     /// <summary>The local player fired — drive the view-model muzzle flash (CSQC W_MuzzleFlash).</summary>
     public void OnMuzzleFlash(string? effectOverride = null) => ViewModel?.Fire(effectOverride);
 
-    /// <summary>
-    /// Set / clear the crosshair-chase body fade target for the local player model (QC
-    /// <c>crosshair_chase_playeralpha</c>): in the third-person crosshair-chase view the local body is faded so it
-    /// doesn't block the aim. <paramref name="alpha"/> is the desired RENDER alpha in (0,1]; the caller passes
-    /// <c>1 − crosshair_chase_playeralpha</c> (the 0.25 default → 0.75). Pass <c>alpha &lt;= 0</c> to CLEAR the fade
-    /// (the model eases back to opaque). A non-positive <paramref name="localNetId"/> is ignored. The per-frame
-    /// model pass eases the matching <see cref="PlayerModel"/> toward this each frame; with no target set it no-ops.
-    /// </summary>
-    public void SetLocalBodyAlpha(int localNetId, float alpha)
+    /// <summary>Choose the viewed body to fade and its absolute render-alpha ceiling. Zero id clears the fade.</summary>
+    public void SetChaseBodyAlpha(int netId, float alpha)
     {
-        if (localNetId <= 0)
-            return;
-        if (alpha <= 0f)
-            _bodyAlphaTarget.Remove(localNetId);
-        else
-            _bodyAlphaTarget[localNetId] = Mathf.Clamp(alpha, 0f, 1f);
+        if (_chaseBodyId != netId)
+            _chaseBodyAlpha = 1f;
+        _chaseBodyId = netId;
+        _chaseBodyTargetAlpha = alpha;
     }
 
     /// <summary>
@@ -1261,6 +1272,42 @@ public partial class ClientWorld : Node3D
     //  Per-frame drive
     // =================================================================================================
 
+    private readonly OnslaughtGeneratorEffects _generatorEffects = new();
+    private readonly AttachedDamageEffects _attachedDamage = new();
+
+    internal Func<string, int, string?>? DamageModelSpecies { get; set; }
+    internal Func<int, bool?>? DamageSpawnParity { get; set; }
+
+    internal void OnAttachedDamage(VortexArena.Net.AttachedDamageWire hit) => _attachedDamage.Queue(hit);
+    internal bool HasAttachedDamage(int id) => _attachedDamage.HasTarget(id);
+    internal void ClearAttachedDamage() => _attachedDamage.Clear();
+
+    internal bool TryGetDamageTarget(int id, out Entity owner, out Node3D root)
+    {
+        if (!_graceHidden.Contains(id))
+        {
+            if (_entityNodes.TryGetValue(id, out EntityNode? node) && node.Entity is { } e
+                && (!_playerModels.TryGetValue(id, out PlayerModel? playerModel) || playerModel.Active))
+            {
+                owner = e;
+                root = node;
+                return true;
+            }
+            if (_vehicles.TryGetValue(id, out VehicleVisuals? vehicle) && vehicle.Bound is { } driver)
+            {
+                owner = driver;
+                root = vehicle;
+                return true;
+            }
+        }
+        owner = null!;
+        root = null!;
+        return false;
+    }
+
+    public void SetOnslaughtDestruction(OnslaughtDestruction? destruction, float serverTime) =>
+        _generatorEffects.Set(destruction, serverTime);
+
     public override void _Process(double delta)
     {
         using var _cwScope = FrameProfiler.Scope("cw.process"); // [profiling] whole ClientWorld._Process
@@ -1268,6 +1315,8 @@ public partial class ClientWorld : Node3D
         // of DP's cl.time — all CSQC animation freezes/slows with the sim). Audio spatialization below stays on
         // the raw delta (DP doesn't timescale sound envelopes).
         float dtAnim = ClientRenderTime.ScaleDelta((float)delta);
+        using (FrameProfiler.Scope("cw.onslaught"))
+            _generatorEffects.Advance(this, dtAnim);
         // The EffectSystem nodes and projectile trails advance themselves (they're Godot particle nodes);
         // ProjectileRenderer and the ModelAnimators also self-advance via their own _Process. We still poll
         // here for entity-bound animators that need their clip re-selected from movement each frame.
@@ -1331,16 +1380,14 @@ public partial class ClientWorld : Node3D
             }
         }
 
-        // Crosshair-chase local-body fade: ease each targeted local model toward its desired alpha (and back to
-        // opaque once the target clears). No-op while no chase target is set (the common case pays a single
-        // dictionary-count check).
-        DriveBodyAlpha(dtAnim);
+        DriveChaseBodyAlpha(dtAnim);
 
         // (R1/R2) central entity-node drive — folds the DP-faithful entity PVS cull into the same pass, so this
         // one call replaces the old separate ApplyEntityPvsCull. See DriveEntityNodes.
         using (FrameProfiler.Scope("entitynode")) DriveEntityNodes(localId);
         using (FrameProfiler.Scope("cw.csqc")) DriveCsqcModelHooks(dtAnim);
         using (FrameProfiler.Scope("cw.vehicles")) DriveVehicles(dtAnim);
+        _attachedDamage.Advance(this, dtAnim, serverNow, localId, _viewedFirstPersonNetId);
         // Live-poll the dynamic map/scene tint cvars so a console `set r_map_tint*` re-tints instantly (the
         // testing path); when the strength cvars are 0 this is a couple of cheap reads and leaves the map/code
         // baseline in place. See VortexArena.Game.WorldTint.
@@ -1369,61 +1416,17 @@ public partial class ClientWorld : Node3D
         }
     }
 
-    /// <summary>cl_rollkillspeed-style ease per second toward the body-fade target — fast enough to feel responsive
-    /// on a chase toggle, slow enough to not pop.</summary>
-    private const float BodyAlphaEaseRate = 8f;
-
-    /// <summary>
-    /// Ease each targeted local <see cref="PlayerModel"/>'s render alpha toward its crosshair-chase
-    /// <see cref="_bodyAlphaTarget"/> (QC <c>crosshair_chase_playeralpha</c>) and push it through
-    /// <see cref="PlayerModel.ApplyAlpha"/> (per-instance <c>GeometryInstance3D.Transparency</c> — never a shared
-    /// material edit, the same knob the alpha-net seam uses). A cleared target eases the model back to opaque (1)
-    /// and is then dropped, so a chase exit restores the body smoothly. Whole-method no-op when no fade is active —
-    /// non-chase frames pay only the two empty-dictionary checks.
-    /// </summary>
-    private void DriveBodyAlpha(float delta)
+    private void DriveChaseBodyAlpha(float delta)
     {
-        if (_bodyAlphaTarget.Count == 0 && _bodyAlphaCurrent.Count == 0)
+        if (_chaseBodyId <= 0 || !_playerModels.TryGetValue(_chaseBodyId, out PlayerModel? model)
+            || !GodotObject.IsInstanceValid(model) || model.Bound is not { IsFreed: false } body)
             return;
 
-        float step = Mathf.Clamp(delta * BodyAlphaEaseRate, 0f, 1f);
-        _bodyAlphaScratch.Clear();
-
-        // Walk every model that currently has an eased value OR a fresh target.
-        foreach (int netId in _bodyAlphaCurrent.Keys)
-            _bodyAlphaScratch.Add(netId);
-        foreach (int netId in _bodyAlphaTarget.Keys)
-            if (!_bodyAlphaCurrent.ContainsKey(netId))
-                _bodyAlphaScratch.Add(netId);
-
-        for (int i = 0; i < _bodyAlphaScratch.Count; i++)
-        {
-            int netId = _bodyAlphaScratch[i];
-            // Target render alpha: the stored fade while a chase is active, else 1 (opaque) so a cleared target
-            // eases the body back in.
-            float target = _bodyAlphaTarget.TryGetValue(netId, out float t) ? t : 1f;
-            float current = _bodyAlphaCurrent.TryGetValue(netId, out float c) ? c : 1f;
-            current = Mathf.Lerp(current, target, step);
-            // Snap when within a hair so we converge (and can drop a fully-restored entry instead of easing forever).
-            if (Mathf.Abs(current - target) < 0.002f)
-                current = target;
-
-            if (_playerModels.TryGetValue(netId, out PlayerModel? pm) && GodotObject.IsInstanceValid(pm))
-            {
-                // PlayerModel.Pose already pushed the networked Entity.Alpha (Cloaked / fades) this frame; COMPOSE the
-                // chase fade on top of it (multiply) so a cloaked-in-chase body honors the lower of the two instead
-                // of overwriting the networked alpha. Bound is the model's entity; missing → treat as opaque (1).
-                float netAlpha = pm.Bound is { IsFreed: false } be ? be.Alpha : 1f;
-                if (netAlpha < 0f) netAlpha = 0f; // a hidden/gib alpha clamps like PlayerModel.ApplyAlpha does
-                pm.ApplyAlpha(current * Mathf.Min(1f, netAlpha));
-            }
-
-            // Once opaque again with no live target, forget the model (back to the model's own networked alpha).
-            if (target >= 0.999f && current >= 0.999f && !_bodyAlphaTarget.ContainsKey(netId))
-                _bodyAlphaCurrent.Remove(netId);
-            else
-                _bodyAlphaCurrent[netId] = current;
-        }
+        // Pose applied the body's network alpha already. Chase must never brighten a transparent body.
+        float bodyAlpha = Mathf.Clamp(body.Alpha, 0f, 1f);
+        float target = Mathf.Min(bodyAlpha, _chaseBodyTargetAlpha);
+        _chaseBodyAlpha = Mathf.MoveToward(Mathf.Min(_chaseBodyAlpha, bodyAlpha), target, delta * 5f);
+        model.ApplyAlpha(_chaseBodyAlpha);
     }
 
     /// <summary>
@@ -1524,10 +1527,11 @@ public partial class ClientWorld : Node3D
                     _pvsTestsSaved++;
                 }
             }
-            node.SetPvsVisible(pvsVis);
+            bool firstPerson = e.Index == _viewedFirstPersonNetId;
+            node.SetPvsVisible(pvsVis && !firstPerson);
 
             // R1/R2: only an effectively-visible node pays the transform sync; a hidden one re-syncs on regain.
-            if (node.EffectiveVisible)
+            if (node.EffectiveVisible || firstPerson && _attachedDamage.HasTarget(e.Index))
                 node.DriveSync();
             else
                 node.ForceSync();
@@ -1683,6 +1687,10 @@ public partial class ClientWorld : Node3D
                                                                  // render-flags/visibility/light all reset (no stick)
             if (effectsActive)
             {
+                const int fullbright = CsqcModelEffectFlags.EF_FULLBRIGHT;
+                if (((e.Effects ^ st.Effects.LastEffects) & fullbright) != 0 && CosmeticModelLayer.IsBuffRelic(e.Model))
+                    ModelTint.SetRelicLighting(node, (e.Effects & fullbright) != 0);
+
                 // CSQCModel_Effects_Apply returns the trail-effect name for this model (csqcmodel_hooks.qc:611/554):
                 // EF_BRIGHTFIELD -> TR_NEXUIZPLASMA, and the client-re-derived jetpack MF_ROCKET -> TR_ROCKET. Entities
                 // in _entityNodes are non-projectiles (players/items/monsters) — projectiles own their trail via
@@ -1701,6 +1709,8 @@ public partial class ClientWorld : Node3D
             if (IsItemEntity(e))
             {
                 float distAlpha = ItemDistanceAlpha(e, viewOrigin); // QC lines 144-158 base alpha
+                if (CosmeticModelLayer.IsBuffRelic(e.Model))
+                    distAlpha *= Mathf.Clamp(e.Alpha, 0f, 1f);
                 if (e.ItemExpiringFx)
                 {
                     DriveItemDespawnFx(e, node, st, distAlpha);
@@ -1747,6 +1757,13 @@ public partial class ClientWorld : Node3D
                     // Change-gated inside, so this is a no-op after the first application.
                     ApplyRestingItemTint(e, node, st, weaponItemColors);
                 }
+            }
+
+            if (e.ClassName == OnslaughtControlPoint.IconClassName)
+            {
+                // cpicon_draw expresses build progress as the opacity of the world model.
+                SetTreeTransparency(node, st, 1f - e.Alpha);
+                node.SetGameplayVisible(e.Alpha > 0f);
             }
 
             // (5) STATUS-EFFECT BURNING: the flame visual is now driven by the networked EF_FLAME .effects bit
@@ -2005,11 +2022,24 @@ public partial class ClientWorld : Node3D
     /// Paint an item's RESTING tint — what an available, un-fx'd pickup looks like. Weapons get the two-tone
     /// paint (<see cref="TryGetItemDuotone"/>): a dropped weapon keeps its DROPPER's shirt/pants until it
     /// despawns or is picked up (the next owner's drop then carries THEIR colors), a map-spawned weapon wears
-    /// its HUD-icon-derived base/highlight. Everything else resets to the untinted shared material. Both
-    /// setters are change-gated, so calling this per frame is a no-op after the first paint.
+    /// its HUD-icon-derived base/highlight. Relics use the buff color associated with the networked skin.
+    /// Other items use the shared material. Setters are change-gated to avoid redundant material writes.
     /// </summary>
     private static void ApplyRestingItemTint(Entity e, EntityNode node, CsqcState st, bool colorsOn)
     {
+        if (string.Equals(e.Model, "models/relics/relic.md3", StringComparison.OrdinalIgnoreCase))
+        {
+            var buffs = StatusEffectsCatalog.All;
+            for (int i = 0; i < buffs.Count; i++)
+            {
+                var def = buffs[i];
+                if (!def.IsBuff || def.Skin != e.Skin)
+                    continue;
+                ApplyItemTint(node, st, ItemTintSpec.ForColormod(new Godot.Vector3(def.Color.R, def.Color.G, def.Color.B)));
+                return;
+            }
+        }
+
         ApplyItemTint(node, st, TryGetItemDuotone(e, st, colorsOn, out ItemPaint paint)
             ? ItemTintSpec.ForDuotone(paint)
             : ItemTintSpec.None);
@@ -2353,7 +2383,7 @@ public partial class ClientWorld : Node3D
         // real shirt/pants palette (Base: .colormap follows .clientcolors); 0 falls back to the team path.
         int packed = e.Colors != 0 ? 1024 + (e.Colors & 0xFF) : 0;
         AppearanceContext? ctx = AppearanceProvider?.Invoke();
-        if (ctx is null)
+        if (ctx is null || e.ClassName == PlayerBody.ClassName)
             return packed != 0 ? packed : NormalizeTeamColormap(own);
 
         // QC cl_survival.qc NET_HANDLE colormap override + ForcePlayercolors_Skip (CBC_ORDER_LAST): once a Survival
@@ -2405,7 +2435,7 @@ public partial class ClientWorld : Node3D
     private static bool HasStatusEffect(Entity e, StatusEffectDef? def)
         => def is not null && StatusEffectsCatalog.Has(e, def);
 
-    private static float CvarF(string name, float fallback)
+    internal static float CvarF(string name, float fallback)
     {
         if (Api.Services is null) return fallback;
         string s = Api.Cvars.GetString(name);
@@ -2704,7 +2734,8 @@ public partial class ClientWorld : Node3D
             anim.FollowEntityFrame = _frameDriven.Contains(entity.Index);
             // Non-local player MD3 models: route the raw frame through the CSQC fallback-frame remap so a model
             // missing the melee/duckwalk anims falls back to a present frame (csqcmodel_hooks.qc:702).
-            bool isPlayer = entity.ClassName.Equals("player", StringComparison.OrdinalIgnoreCase);
+            bool isPlayer = entity.ClassName.Equals("player", StringComparison.OrdinalIgnoreCase)
+                || entity.ClassName == PlayerBody.ClassName;
             anim.UseFallbackFrame = isPlayer && anim.FollowEntityFrame;
             if (isPlayer)
                 CsqcStateFor(entity).IsPlayerModel = true;
@@ -2714,7 +2745,19 @@ public partial class ClientWorld : Node3D
         }
         else
         {
-            node.AddChild(ModelLoader.BuildModel(md3, 0, Assets));
+            MeshInstance3D model = ModelLoader.BuildModel(md3, 0, Assets);
+            // The stock Onslaught shields' shared surface animates environment UVs without a blendFunc.
+            // Xonotic supplies the blend via EF_ADDITIVE on the shield entity. Keep the asset's shared
+            // material (also referenced by a CTF skin) intact and override only this native model instance.
+            if ((entity.Effects & CsqcModelEffectFlags.EF_ADDITIVE) != 0
+                && (entity.Model.Equals("models/onslaught/controlpoint_shield.md3", StringComparison.OrdinalIgnoreCase)
+                    || entity.Model.Equals("models/onslaught/generator_shield.md3", StringComparison.OrdinalIgnoreCase))
+                && Assets is { } assets && assets.GetShader("ons_shield") is { } shield)
+            {
+                _onslaughtShieldMaterial ??= DpSurfaceShader.Compile(shield, assets, forModel: true, entityAdditive: true);
+                model.MaterialOverride = _onslaughtShieldMaterial;
+            }
+            node.AddChild(model);
         }
     }
 
@@ -2810,8 +2853,20 @@ public partial class ClientWorld : Node3D
     private AudioStreamPlayer3D RentAudioPlayer()
     {
         foreach (AudioStreamPlayer3D p in _audioPool)
-            if (GodotObject.IsInstanceValid(p) && !p.Playing)
-                return p;
+        {
+            if (!GodotObject.IsInstanceValid(p) || p.Playing)
+                continue;
+
+            // A finished single-channel voice can be reassigned to an unrelated emitter.
+            foreach (var entry in _singleChannelPlayers)
+            {
+                if (entry.Value != p)
+                    continue;
+                _singleChannelPlayers.Remove(entry.Key);
+                break;
+            }
+            return p;
+        }
 
         // Godot's own distance attenuation is DISABLED (we apply the DP linear curve via SetSpatialVolume each
         // frame); MaxDistance 0 = no Godot cutoff, so our gain alone decides the audible radius.
@@ -2846,6 +2901,9 @@ public partial class ClientWorld : Node3D
             _world = world;
             Inner = inner;
         }
+
+        public void Emit(FireballBlastEffect effect) => Inner.Emit(effect);
+        public void Emit(AttachedDamageHit hit) => Inner.Emit(hit); // listen host uses its decoded recipient stream
 
         public void Emit(in EffectRequest request)
         {

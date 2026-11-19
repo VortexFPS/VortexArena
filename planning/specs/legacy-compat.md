@@ -398,14 +398,14 @@ This table is the plan of record; [`TODO.md`](../TODO.md) carries the same IDs.
 | LC-6 | Real answers without a renderer: collision, model data, image sizes; first live join through `begin` | **Done** — a headless client joins a live DarkPlaces dedicated server, plays for 30 s with 0 faults, and its position matches the server's record. Surface queries and clipping against engine-networked entities are not done. |
 | LC-7 | Godot bridge: scene submission, view properties, 2D draw list, fonts, sound, particles, lights | **Partial** — seen in a window and matched against DarkPlaces screenshots for HUD, view model, scoreboard, chat and player colours; several features built but unseen, extra views not built; sound checked by log only |
 | LC-8 | Join flow: browser → `LegacyGame`, loading screen, disconnect, error surfacing | **Done, unverified** — console command, command-line flags and browser routing exist and the failure paths were exercised windowless; no one has clicked through it |
-| LC-9 | `d0_blind_id` identity and encryption | Not started (open question Q8) |
+| LC-9 | `d0_blind_id` identity and encryption | Planned after the Q8 decision. [Delivery and test matrix](legacy-identity.md). |
 | LC-10 | HTTP map download | **Done** - §15: seen in a window against a local stock dedicated server (map and server package over HTTP, the in-band fallback, the refusal when nothing delivers the map, the cache on a second join); `LegacyDownloadTests` |
 | LC-11 | Xonotic 0.9 / current DarkPlaces master compatibility (extended opcodes, protocol changes) | Not started |
 | LC-12 | Menu program (`menu.dat`) and server program (`progs.dat`) hosting | **Working in the game window**: Xonotic's menu, server and client programs run in one process; a local game starts from the menu or `--legacy-map`, plays, changes level and shuts down cleanly, and a real DarkPlaces client has joined it. Gaps are listed under LC-19 to LC-21 in `TODO.md`. |
 
 ## 11. Open questions
 
-- **Player identity (Q8).** Port `d0_blind_id`, bind the BSD-licensed native library, or stay anonymous?
+- **Player identity (Q8), resolved 2026-11-19.** Original-compatible identity and encrypted connections are planned for legacy clients. [Implementation plan](legacy-identity.md).
 - **Which Xonotic default configuration to load in legacy mode.** The stock cfg files live in Xonotic's
   data, which Vortex does not ship unmodified ([ADR-0016](../decisions/ADR-0016-content-ownership.md),
   [ADR-0018](../decisions/ADR-0018-config-layer.md)). Legacy mode needs the stock cvar defaults and

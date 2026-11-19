@@ -1,0 +1,453 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: The separate rendering thread feature is experimental. Feel free to try it since it will eventually become a stable feature.
+However, bear in mind that at the moment it can lead to project crashes or instability.
+So, unless you want to test the engine, set the "rendering/driver/threads/thread_model" project setting to 'Safe'.
+     at: setup2 (main/main.cpp:3415)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Enabled maxfps=0 refresh=-1Hz cpu=6c gpu=
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag]
+=== VortexArena boot ===
+Weapons:   27
+Items:     21
+Mutators:  46
+GameTypes: 21
+Sounds:    223
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).
+[lb]MenuState] user gamedir mounted: /tmp/va-paired-20261119/published-crylink-native/crylink-native/server-user/data (drop .pk3 packs in its maps/ subfolder).
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"
+"maxplayers" set to "32"
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).
+[lb]MenuState] cvar help: 1386 engine descriptions.
+[lb]shell] --cvar sv_public = "0"
+[lb]shell] --cvar sv_eventlog = "1"
+[lb]shell] --cvar g_warmup = "0"
+[lb]shell] --cvar skill = "5"
+[lb]shell] --cvar sv_cheats = "1"
+[lb]shell] --cvar g_spawnshieldtime = "0"
+[lb]shell] --cvar g_buffs_random_location = "0"
+[lb]shell] --cvar g_buffs_randomize = "0"
+[lb]shell] --cvar g_buffs = "0"
+[lb]shell] --cvar bot_nofire = "1"
+[lb]shell] --cvar g_weaponarena = "crylink"
+[lb]shell] --cvar g_balance_crylink_primary_speed = "100"
+[lb]shell] --cvar g_balance_crylink_primary_refire = "3"
+[lb]shell] --cvar g_balance_crylink_primary_spread = "0.12"
+[lb]shell] --cvar g_balance_crylink_primary_middle_lifetime = "2"
+[lb]shell] --cvar g_balance_crylink_primary_other_lifetime = "2"
+[lb]shell] --cvar g_balance_crylink_primary_middle_fadetime = "1.5"
+[lb]shell] --cvar g_balance_crylink_primary_other_fadetime = "1.5"
+[lb]video] vid_vsync 0 → requested Disabled, actual Enabled (off — uncapped, may tear)
+[lb]video] cl_maxfps 256 -> Engine.MaxFps 144 (auto: nothing set a cap, using max(144, refresh); refresh -1Hz)
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)
+[lb]video] process priority boost unavailable: Permission denied
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] hosting listen server: gametype=dm map=stormkeep bots=1 skill=-1 timelimit=0 fraglimit=0
+[NetGame] dedicated slim: headless host — client render/audio asset loads are skipped (server keeps collision, entities, muzzle tags, waypoints). `sv_dedicated_slim 0` restores the full load.
+[lb]GameWorld] tick rate: sys_ticrate=0.015625 -> 64 Hz [lb]sharedStore=True, cfgLoaded=False]
+[NetGame] dedicated loop cap: Engine.MaxFps 64 (sim tickrate 64 Hz).
+[NetTransport.Server] listening on UDP 28086 (max 32).
+[ServerNet] LAN discovery: answering getinfo on UDP 28087 (game port 28086).
+[ServerConsole] reading commands from stdin (type 'status', 'help', 'quit'; --no-console to disable).
+[NetTransport.Client] connecting to 127.0.0.1:28086 …
+[MapLoader] 'stormkeep' dedicated slim: render geometry skipped (collision brushes + entities only; 39 bsp models).
+[lb]LightGrid] GPU lightgrid 54x61x39 (501 KB) bound — per-pixel model lighting active.
+[lb]WorldLights] stormkeep: no .rtlights and no importable light entities — realtime world lighting has nothing to render (this is the normal case).
+[Skybox] loaded 'env/extragalactic/asteroids'.
+[lb]WorldLights] realtime world lighting OFF — back to baked lightmaps.
+[MapEmitters] func_pointparticles 'sparks': 4 emissions/s (Absolute), count 6, velocity <50, -100, 30>, box <-1048.6946, 1458.194, 230.39345>..<-952, 1605.8062, 289.6066>, no brush: whole box
+[EffectInfo] parsed 'vortex/original/effectinfo.txt': 0 effects (process-lifetime, shared by every match).
+[EffectInfo] parsed 'effectinfo.txt': 0 effects (process-lifetime, shared by every match).
+[EffectSystem] effectinfo: 0 effects, particlefont atlas: MISSING (solid-quad fallback), style overlay: 0 effects
+[Particles] backend=original (cl_particles_modern=0)
+[NetGame] precached 0 weapon models, skipped 24 (lazy), 24 muzzle tags.
+[NetGame] listen server on 127.0.0.1:28086 (map 'stormkeep', dm, 1 bots) — self-connecting.
+[LoadTimeline] host stormkeep — load begin → ready, 1118 ms total
+    textures.compress: nothing compressed (gl_texturecompression 1, no eligible textures)
+    bsp.parse             29.7 ms    2.7 %
+    collision.build      161.5 ms   14.5 %
+    world.boot           135.1 ms   12.1 %
+  server.start           395.2 ms   35.4 %
+    world.attach           0.3 ms    0.0 %
+    editor.nodes          17.2 ms    1.5 %
+    light                171.8 ms   15.4 %
+  render.setup           253.6 ms   22.7 %
+  camera.hud             175.7 ms   15.7 %
+  precache.weapons       158.6 ms   14.2 %
+  (unaccounted: yields, present, unmeasured)      134.5 ms
+[ServerNet] peer 2120407502 connected (awaiting handshake).
+:connect:1:-1:
+:join:1:-1::player
+[ServerNet] peer 2120407502 accepted as 'player' (netId 2120407502, id 4dae80d4).
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+:connect:2:-2:bot
+:join:2:-2:bot:[BOT]Toxic
+[lb]bots] waypoints for 'stormkeep': nodes=122 (file=none/auto, cache=yes)
+[lb]hitch CPU-LOGIC] 750.5ms (44 dropped @60Hz) (med 15.6, ×48.0) — bots.fixcount 76.7ms | proc 3436.4 rcpu 0.0 gpu 0.0 rest 0.0 late 14.3 | alloc 318KB | ticks 1 | watchdog: 2815/2966 samples in 'start.bots' | DEBUG-BUILD
+[lb]hitch]   prev: 16.1 15.2 18.1 15.8 14.3 15.1 15.7 16.4
+[lb]hitch CPU-LOGIC ×2] 48.1–750.5ms over 0.0s (med 15.6) — bots.fixcount 76.7ms
+[lb]hitch MIXED] 31.7ms (1 dropped @60Hz) (med 15.6, ×2.0) — mixed — proc:other 6.0ms | proc 17.1 rcpu 0.0 gpu 0.0 rest 14.6 late 14.7 | alloc 24KB | ticks 1 | watchdog: 9/18 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.7 14.6 15.9 19.6 18.3 18.3 10.1 15.7
+[lb]hitch CPU-LOGIC] 33.1ms (1 dropped @60Hz) (med 15.6, ×2.1) — ng.process 22.2ms (typ 2.1ms, 11× over) | proc 28.3 rcpu 0.0 gpu 0.0 rest 4.9 late 4.9 | alloc 24KB | ticks 1 | watchdog: 14/24 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 15.0 16.2 16.0 14.3 15.6 15.6 16.1 15.6
+[lb]hitch MIXED] 30.5ms (1 dropped @60Hz) (med 15.6, ×1.9) — 28.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 1.9 rcpu 0.0 gpu 0.0 rest 28.5 late 28.5 | alloc 24KB | ticks 1 | watchdog: 22/22 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 19.2 20.4 22.8 14.0 17.2 23.7 16.5 18.1
+[lb]hitch CPU-LOGIC] 28.5ms (1 dropped @60Hz) (med 15.7, ×1.8) — proc:other 12.9ms (typ 2.8ms, 5× over) | proc 19.5 rcpu 0.0 gpu 0.0 rest 9.1 late 9.0 | alloc 32KB | ticks 2 | watchdog: 11/19 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch MIXED] 30.4ms (1 dropped @60Hz) (med 15.7, ×1.9) — 18.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 11.9 rcpu 0.0 gpu 0.0 rest 18.6 late 18.5 | alloc 24KB | ticks 1 | watchdog: 14/18 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×2] 28.8–30.4ms over 0.1s (med 15.7) — 18.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 31.0ms (1 dropped @60Hz) (med 15.7, ×2.0) — proc:other 24.9ms (typ 5.3ms, 5× over) | proc 27.2 rcpu 0.0 gpu 0.0 rest 3.8 late 3.7 | alloc 24KB | ticks 2 | watchdog: 12/14 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   prev: 30.4 26.6 23.5 28.8 26.5 15.2 21.1 26.9
+[lb]hitch MIXED] 29.3ms (1 dropped @60Hz) (med 15.7, ×1.9) — 22.7ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 6.6 rcpu 0.0 gpu 0.0 rest 22.7 late 16.2 | alloc 48KB | ticks 2 | watchdog: 13/19 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×2] 29.3–41.5ms over 0.1s (med 15.7) — 22.7ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 75.1ms (4 dropped @60Hz) (med 15.7, ×4.8) — ng.process 53.8ms (typ 3.8ms, 14× over) | proc 69.7 rcpu 0.0 gpu 0.0 rest 5.4 late 5.4 | alloc 16KB | ticks 2 | watchdog: 28/51 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch MIXED] 36.9ms (1 dropped @60Hz) (med 15.7, ×2.4) — mixed — ng.process 17.7ms | proc 19.2 rcpu 0.0 gpu 0.0 rest 17.7 late 17.7 | alloc 32KB | ticks 4 | watchdog: 14/26 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 28.4ms (1 dropped @60Hz) (med 15.7, ×1.8) — proc:other 18.8ms (typ 5.3ms, 4× over) | proc 20.3 rcpu 0.0 gpu 0.0 rest 8.1 late 8.1 | alloc 32KB | ticks 3 | watchdog: 7/11 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 9.5 15.6 15.6 16.8 16.1 16.9 75.1 36.9
+[lb]hitch CPU-LOGIC ×2] 28.4–40.4ms over 0.0s (med 15.7) — proc:other 18.8ms (typ 5.3ms, 4× over)
+[lb]hitch MIXED] 37.3ms (1 dropped @60Hz) (med 15.7, ×2.4) — 20.7ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 16.6 rcpu 0.0 gpu 0.0 rest 20.7 late 20.6 | alloc 24KB | ticks 2 | watchdog: 19/27 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 33.1ms (1 dropped @60Hz) (med 15.9, ×2.1) — proc:other 22.8ms (typ 7.4ms, 3× over) | proc 24.1 rcpu 0.0 gpu 0.0 rest 9.0 late 9.0 | alloc 24KB | ticks 2 | watchdog: 14/18 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×2] 32.6–33.1ms over 0.0s (med 15.9) — proc:other 22.8ms (typ 7.4ms, 3× over)
+[lb]hitch MIXED] 32.3ms (1 dropped @60Hz) (med 15.9, ×2.0) — mixed — proc:other 14.6ms | proc 16.1 rcpu 0.0 gpu 0.0 rest 16.2 late 16.2 | alloc 32KB | ticks 2 | watchdog: 10/19 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×4] 29.9–36.7ms over 0.1s (med 16.0) — mixed — proc:other 14.6ms
+[lb]hitch CPU-LOGIC] 30.3ms (1 dropped @60Hz) (med 16.0, ×1.9) — clientmisc 16.8ms (typ 1.0ms, 18× over) | proc 22.3 rcpu 0.0 gpu 0.0 rest 8.1 late 8.0 | alloc 24KB | ticks 2 | watchdog: 9/17 samples in 'clientmisc' | DEBUG-BUILD
+[lb]hitch MIXED] 105.6ms (5 dropped @60Hz) (med 16.0, ×6.6) — mixed — ng.process 42.0ms | proc 48.6 rcpu 0.0 gpu 0.0 rest 57.0 late 57.0 | alloc 24KB | ticks 2 | watchdog: 42/77 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 32.3 29.9 31.1 36.7 28.8 25.6 27.7 30.3
+[lb]hitch CPU-LOGIC] 37.2ms (1 dropped @60Hz) (med 16.0, ×2.3) — proc:other 21.7ms | proc 25.6 rcpu 0.0 gpu 0.0 rest 11.6 late 11.6 | alloc 56KB | ticks 6 | watchdog: 15/26 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×2] 33.0–37.2ms over 1.0s (med 16.0) — proc:other 21.7ms
+[lb]hitch CPU-LOGIC] 30.1ms (1 dropped @60Hz) (med 16.0, ×1.9) — proc:other 16.7ms (typ 2.7ms, 6× over) | proc 18.2 rcpu 0.0 gpu 0.0 rest 11.9 late 11.9 | alloc 24KB | ticks 2 | watchdog: 11/22 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   prev: 14.9 15.5 16.1 15.1 15.6 15.6 19.3 17.7
+[lb]hitch MIXED] 29.5ms (1 dropped @60Hz) (med 16.1, ×1.8) — 27.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.0 rcpu 0.0 gpu 0.0 rest 27.5 late 27.5 | alloc 24KB | ticks 1 | watchdog: 18/18 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×2] 28.9–29.5ms over 0.4s (med 16.0) — 27.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 30.0ms (1 dropped @60Hz) (med 16.0, ×1.9) — proc:other 15.0ms (typ 4.0ms, 4× over) | proc 18.6 rcpu 0.0 gpu 0.0 rest 11.4 late 11.3 | alloc 24KB | ticks 2 | watchdog: 10/16 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   prev: 14.8 15.8 16.7 14.4 22.5 26.3 28.9 23.2
+[lb]hitch CPU-LOGIC] 50.4ms (2 dropped @60Hz) (med 15.6, ×3.2) — ng.process 38.3ms (typ 4.2ms, 9× over) | proc 41.2 rcpu 0.0 gpu 0.0 rest 9.2 late 9.1 | alloc 24KB | ticks 1 | watchdog: 26/40 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 21.0 13.1 8.9 24.8 7.8 13.6 15.3 15.8
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 23.8ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 7.5 rcpu 0.0 gpu 0.0 rest 23.8 late 13.6 | alloc 16KB | ticks 1 | watchdog: 12/12 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch MIXED ×7] 31.3–31.3ms over 0.4s (med 15.6) — 23.8ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 57.9ms (2 dropped @60Hz) (med 15.6, ×3.7) — ng.process 38.0ms (typ 3.3ms, 11× over) | proc 47.3 rcpu 0.0 gpu 0.0 rest 10.6 late 10.6 | alloc 16KB | ticks 2 | watchdog: 24/48 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 14.9 17.8 19.4 20.0 23.3 19.2 27.2 22.1
+[lb]hitch CPU-LOGIC ×2] 31.7–57.9ms over 0.0s (med 15.6) — ng.process 38.0ms (typ 3.3ms, 11× over)
+[lb]hitch MIXED] 30.9ms (1 dropped @60Hz) (med 15.6, ×2.0) — mixed — proc:other 13.9ms | proc 15.4 rcpu 0.0 gpu 0.0 rest 15.5 late 15.5 | alloc 16KB | ticks 2 | watchdog: 15/23 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 43.1ms (2 dropped @60Hz) (med 15.6, ×2.8) — emitters 12.0ms (typ 0.6ms, 19× over) | proc 25.7 rcpu 0.0 gpu 0.0 rest 17.3 late 17.3 | alloc 24KB | ticks 2 | watchdog: 14/30 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED] 29.3ms (1 dropped @60Hz) (med 15.6, ×1.9) — 22.7ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 6.5 rcpu 0.0 gpu 0.0 rest 22.7 late 22.8 | alloc 16KB | ticks 2 | watchdog: 13/13 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 34.0ms (1 dropped @60Hz) (med 15.6, ×2.2) — proc:other 23.0ms (typ 5.6ms, 4× over) | proc 24.4 rcpu 0.0 gpu 0.0 rest 9.6 late 9.5 | alloc 24KB | ticks 2 | watchdog: 12/19 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×2] 28.4–34.0ms over 0.0s (med 15.6) — proc:other 23.0ms (typ 5.6ms, 4× over)
+[lb]hitch MIXED] 30.2ms (1 dropped @60Hz) (med 15.6, ×1.9) — 28.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.1 rcpu 0.0 gpu 0.0 rest 28.1 late 28.1 | alloc 16KB | ticks 2 | watchdog: 21/21 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 33.1ms (1 dropped @60Hz) (med 15.6, ×2.1) — proc:other 17.0ms | proc 21.5 rcpu 0.0 gpu 0.0 rest 11.7 late 11.6 | alloc 16KB | ticks 2 | watchdog: 14/25 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   prev: 25.3 23.4 29.3 34.0 25.0 28.4 25.3 30.2
+[lb]hitch MIXED] 46.0ms (2 dropped @60Hz) (med 15.6, ×2.9) — mixed — proc:other 12.8ms | proc 24.2 rcpu 0.0 gpu 0.0 rest 21.8 late 21.9 | alloc 40KB | ticks 2 | watchdog: 14/26 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 32.1ms (1 dropped @60Hz) (med 15.6, ×2.1) — proc:other 15.8ms | proc 20.5 rcpu 0.0 gpu 0.0 rest 11.6 late 11.7 | alloc 24KB | ticks 2 | watchdog: 13/21 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×2] 29.4–32.1ms over 0.0s (med 15.6) — proc:other 15.8ms
+[lb]hitch CPU-LOGIC] 29.0ms (1 dropped @60Hz) (med 15.6, ×1.9) — clientmisc 8.0ms (typ 0.6ms, 13× over) | proc 19.7 rcpu 0.0 gpu 0.0 rest 9.3 late 9.3 | alloc 24KB | ticks 2 | watchdog: 8/19 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 19.8 21.4 16.0 8.6 13.6 16.6 27.8 23.0
+[lb]hitch CPU-LOGIC ×2] 29.0–74.8ms over 0.0s (med 15.6) — clientmisc 8.0ms (typ 0.6ms, 13× over)
+[lb]hitch MIXED] 32.7ms (1 dropped @60Hz) (med 15.6, ×2.1) — 22.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 10.5 rcpu 0.0 gpu 0.0 rest 22.1 late 22.1 | alloc 16KB | ticks 2 | watchdog: 21/23 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×2] 32.7–36.3ms over 0.1s (med 16.1) — 22.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch MIXED] 32.8ms (1 dropped @60Hz) (med 16.3, ×2.0) — 19.0ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 13.8 rcpu 0.0 gpu 0.0 rest 19.0 late 19.0 | alloc 16KB | ticks 1 | watchdog: 18/24 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.7 22.9 28.9 22.6 24.9 18.3 24.5 21.4
+[lb]hitch MIXED ×3] 29.5–33.0ms over 0.1s (med 16.5) — 19.0ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 30.6ms (1 dropped @60Hz) (med 16.5, ×1.9) — fakeshadows 16.6ms (typ 1.1ms, 15× over) | proc 18.5 rcpu 0.0 gpu 0.0 rest 12.1 late 12.0 | alloc 16KB | ticks 1 | watchdog: 9/17 samples in 'fakeshadows' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×5] 30.0–78.3ms over 0.2s (med 16.9) — fakeshadows 16.6ms (typ 1.1ms, 15× over)
+[lb]hitch MIXED] 34.1ms (1 dropped @60Hz) (med 16.9, ×2.0) — 31.0ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 3.1 rcpu 0.0 gpu 0.0 rest 31.0 late 14.9 | alloc 16KB | ticks 1 | watchdog: 11/22 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   prev: 30.6 30.0 78.3 40.0 26.1 25.4 37.5 27.9
+[lb]hitch MIXED ×4] 31.0–36.8ms over 0.9s (med 16.3) — 31.0ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 32.6ms (1 dropped @60Hz) (med 16.3, ×2.0) — ng.process 18.9ms (typ 1.9ms, 10× over) | proc 20.2 rcpu 0.0 gpu 0.0 rest 12.4 late 12.4 | alloc 16KB | ticks 1 | watchdog: 12/19 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 14.3 15.8 16.5 17.2 14.3 16.0 16.0 13.6
+[lb]hitch MIXED] 37.5ms (1 dropped @60Hz) (med 16.2, ×2.3) — 25.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 12.0 rcpu 0.0 gpu 0.0 rest 25.5 late 25.5 | alloc 16KB | ticks 1 | watchdog: 23/27 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 17.9 15.4 13.6 16.2 15.1 17.6 21.5 16.3
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — ng.process 32.2ms (typ 2.9ms, 11× over) | proc 33.4 rcpu 0.0 gpu 0.0 rest 0.0 late 8.8 | alloc 16KB | ticks 1 | watchdog: 14/31 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch CPU-LOGIC] 46.9ms (2 dropped @60Hz) (med 15.6, ×3.0) — ng.process 30.3ms (typ 2.2ms, 14× over) | proc 44.2 rcpu 0.0 gpu 0.0 rest 2.7 late 10.4 | alloc 16KB | ticks 1 | watchdog: 19/37 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 23.7ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 7.6 rcpu 0.0 gpu 0.0 rest 23.7 late 15.5 | alloc 145KB | ticks 1 | watchdog: 15/15 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — proc:other 17.9ms (typ 2.7ms, 7× over) | proc 25.5 rcpu 0.0 gpu 0.0 rest 5.7 late 4.2 | alloc 24KB | ticks 2 | watchdog: 16/20 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×3] 31.3–46.9ms over 0.1s (med 15.6) — proc:other 17.9ms (typ 2.7ms, 7× over)
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — mixed — ng.process 12.8ms | proc 14.4 rcpu 0.0 gpu 0.0 rest 16.9 late 24.9 | alloc 16KB | ticks 1 | watchdog: 19/19 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×10] 28.8–31.3ms over 0.8s (med 15.6) — mixed — ng.process 12.8ms
+[lb]hitch CPU-LOGIC] 29.8ms (1 dropped @60Hz) (med 15.6, ×1.9) — ng.process 21.3ms (typ 2.6ms, 8× over) | proc 24.2 rcpu 0.0 gpu 0.0 rest 5.6 late 5.6 | alloc 56KB | ticks 1 | watchdog: 12/20 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 16.2 15.5 16.2 14.6 16.4 14.9
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 29.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.0 rcpu 0.0 gpu 0.0 rest 29.3 late 19.8 | alloc 16KB | ticks 2 | watchdog: 10/10 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×17] 31.3–31.3ms over 0.7s (med 15.6) — 29.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — clientmisc 16.3ms (typ 0.9ms, 18× over) | proc 22.6 rcpu 0.0 gpu 0.0 rest 8.6 late 9.2 | alloc 24KB | ticks 2 | watchdog: 13/22 samples in 'clientmisc' | DEBUG-BUILD
+[lb]hitch]   prev: 31.3 31.3 15.6 31.3 31.3 31.3 15.6 31.3
+[lb]hitch CPU-LOGIC ×2] 31.3–31.3ms over 0.0s (med 15.6) — clientmisc 16.3ms (typ 0.9ms, 18× over)
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 24.2ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 7.0 rcpu 0.0 gpu 0.0 rest 24.2 late 15.5 | alloc 16KB | ticks 1 | watchdog: 14/14 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 30.9ms (1 dropped @60Hz) (med 15.6, ×2.0) — proc:other 21.7ms (typ 2.4ms, 9× over) | proc 26.6 rcpu 0.0 gpu 0.0 rest 4.3 late 4.3 | alloc 16KB | ticks 1 | watchdog: 13/17 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   prev: 19.0 12.2 15.6 19.6 11.7 15.6 21.6 9.7
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 26.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 5.1 rcpu 0.0 gpu 0.0 rest 26.1 late 15.1 | alloc 16KB | ticks 1 | watchdog: 7/7 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch MIXED ×4] 31.3–46.9ms over 0.1s (med 15.6) — 26.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — proc:other 15.7ms (typ 3.3ms, 5× over) | proc 19.1 rcpu 0.0 gpu 0.0 rest 12.2 late 6.1 | alloc 16KB | ticks 2 | watchdog: 8/13 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×3] 31.3–62.5ms over 0.1s (med 15.6) — proc:other 15.7ms (typ 3.3ms, 5× over)
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 26.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 5.2 rcpu 0.0 gpu 0.0 rest 26.1 late 15.8 | alloc 24KB | ticks 2 | watchdog: 10/10 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 46.9ms (2 dropped @60Hz) (med 15.6, ×3.0) — ng.process 28.7ms (typ 2.7ms, 11× over) | proc 29.9 rcpu 0.0 gpu 0.0 rest 16.9 late 12.0 | alloc 16KB | ticks 1 | watchdog: 19/25 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — ng.process 31.2ms (typ 2.8ms, 11× over) | proc 32.4 rcpu 0.0 gpu 0.0 rest 0.0 late 17.6 | alloc 16KB | ticks 1 | watchdog: 20/37 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 25.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 6.1 rcpu 0.0 gpu 0.0 rest 25.1 late 22.9 | alloc 16KB | ticks 2 | watchdog: 21/21 samples in '(post-process)' | DEBUG-BUILD
+[ServerNet] peer 1175452306 connected (awaiting handshake).
+:connect:3:-3:
+:join:3:-3::ParityProbe
+[ServerNet] peer 1175452306 accepted as 'ParityProbe' (netId 1175452306, id bdeaef87).
+[lb]hitch MIXED ×7] 31.3–31.3ms over 0.4s (med 15.6) — 25.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — ng.process 16.1ms (typ 1.8ms, 9× over) | proc 17.3 rcpu 0.0 gpu 0.0 rest 14.0 late 15.5 | alloc 77KB | ticks 1 | watchdog: 15/24 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 29.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.2 rcpu 0.0 gpu 0.0 rest 29.1 late 17.8 | alloc 212KB | ticks 1 | watchdog: 12/12 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×6] 31.3–31.3ms over 0.2s (med 15.6) — 29.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — fakeshadows 21.6ms (typ 2.0ms, 11× over) | proc 23.5 rcpu 0.0 gpu 0.0 rest 7.8 late 3.5 | alloc 60KB | ticks 1 | watchdog: 14/17 samples in 'fakeshadows' | DEBUG-BUILD
+[lb]hitch MIXED] 46.9ms (2 dropped @60Hz) (med 15.6, ×3.0) — 44.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.6 rcpu 0.0 gpu 0.0 rest 44.3 late 41.4 | alloc 69KB | ticks 1 | watchdog: 16/16 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×3] 31.3–46.9ms over 0.1s (med 15.6) — 44.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — proc:other 20.1ms (typ 2.4ms, 8× over) | proc 23.5 rcpu 0.0 gpu 0.0 rest 7.7 late 4.6 | alloc 60KB | ticks 2 | watchdog: 16/18 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 46.9 46.9 31.3
+[lb]hitch MIXED] 46.9ms (2 dropped @60Hz) (med 15.6, ×3.0) — mixed — proc:other 17.8ms | proc 21.3 rcpu 0.0 gpu 0.0 rest 25.5 late 20.1 | alloc 69KB | ticks 2 | watchdog: 19/33 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — hud.mgr 19.2ms (typ 1.3ms, 15× over) | proc 22.0 rcpu 0.0 gpu 0.0 rest 9.2 late 13.4 | alloc 190KB | ticks 3 | watchdog: 14/27 samples in 'hud.mgr' | DEBUG-BUILD
+[lb]hitch MIXED] 36.2ms (1 dropped @60Hz) (med 15.6, ×2.3) — 24.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 11.9 rcpu 0.0 gpu 0.0 rest 24.3 late 24.3 | alloc 69KB | ticks 2 | watchdog: 14/19 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×2] 30.9–36.2ms over 0.1s (med 15.6) — 24.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 32.6ms (1 dropped @60Hz) (med 15.6, ×2.1) — clientmisc 17.8ms (typ 1.0ms, 18× over) | proc 22.3 rcpu 0.0 gpu 0.0 rest 10.3 late 10.2 | alloc 77KB | ticks 2 | watchdog: 14/24 samples in 'clientmisc' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×3] 29.5–32.6ms over 0.1s (med 15.6) — clientmisc 17.8ms (typ 1.0ms, 18× over)
+[lb]hitch MIXED] 75.0ms (3 dropped @60Hz) (med 15.6, ×4.8) — mixed — ng.process 37.2ms | proc 38.8 rcpu 0.0 gpu 0.0 rest 36.2 late 36.3 | alloc 69KB | ticks 2 | watchdog: 30/56 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 32.6 29.5 30.9 17.1 17.6 25.2 20.2 27.5
+[lb]hitch CPU-LOGIC] 29.4ms (1 dropped @60Hz) (med 15.6, ×1.9) — proc:other 18.4ms (typ 4.0ms, 5× over) | proc 19.6 rcpu 0.0 gpu 0.0 rest 9.8 late 9.8 | alloc 69KB | ticks 1 | watchdog: 11/16 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch MIXED] 37.4ms (1 dropped @60Hz) (med 15.6, ×2.4) — 21.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 15.7 rcpu 0.0 gpu 0.0 rest 21.6 late 21.6 | alloc 60KB | ticks 2 | watchdog: 18/26 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 28.8ms (1 dropped @60Hz) (med 15.6, ×1.8) — proc:other 15.0ms (typ 4.8ms, 3× over) | proc 16.5 rcpu 0.0 gpu 0.0 rest 12.3 late 12.3 | alloc 24KB | ticks 3 | watchdog: 11/18 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED] 28.2ms (1 dropped @60Hz) (med 15.6, ×1.8) — 24.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 4.1 rcpu 0.0 gpu 0.0 rest 24.1 late 24.1 | alloc 16KB | ticks 1 | watchdog: 16/16 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 17.0 14.9 14.9 15.6 16.2 15.1 23.3
+[lb]hitch MIXED ×3] 28.2–35.2ms over 0.1s (med 15.6) — 24.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 39.0ms (1 dropped @60Hz) (med 15.6, ×2.5) — proc:other 17.8ms (typ 3.5ms, 5× over) | proc 23.4 rcpu 0.0 gpu 0.0 rest 15.6 late 15.6 | alloc 16KB | ticks 2 | watchdog: 15/24 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×2] 33.4–39.0ms over 0.0s (med 15.6) — proc:other 17.8ms (typ 3.5ms, 5× over)
+[lb]hitch MIXED] 37.8ms (1 dropped @60Hz) (med 15.6, ×2.4) — 23.7ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 14.0 rcpu 0.0 gpu 0.0 rest 23.7 late 23.7 | alloc 24KB | ticks 2 | watchdog: 20/27 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 39.8ms (1 dropped @60Hz) (med 15.6, ×2.5) — proc:other 24.8ms (typ 5.7ms, 4× over) | proc 26.4 rcpu 0.0 gpu 0.0 rest 13.5 late 13.5 | alloc 24KB | ticks 2 | watchdog: 12/24 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch MIXED] 36.1ms (1 dropped @60Hz) (med 15.6, ×2.3) — 33.8ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.3 rcpu 0.0 gpu 0.0 rest 33.8 late 33.7 | alloc 32KB | ticks 3 | watchdog: 23/23 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 35.9ms (1 dropped @60Hz) (med 15.6, ×2.3) — hud.mgr 21.3ms (typ 1.1ms, 19× over) | proc 23.8 rcpu 0.0 gpu 0.0 rest 12.1 late 12.1 | alloc 24KB | ticks 2 | watchdog: 12/24 samples in 'hud.mgr' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×2] 35.9–101.8ms over 0.0s (med 15.6) — hud.mgr 21.3ms (typ 1.1ms, 19× over)
+[lb]hitch MIXED] 39.2ms (1 dropped @60Hz) (med 15.6, ×2.5) — mixed — ng.process 16.4ms | proc 17.7 rcpu 0.0 gpu 0.0 rest 21.6 late 21.6 | alloc 32KB | ticks 6 | watchdog: 20/30 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 35.2ms (1 dropped @60Hz) (med 15.6, ×2.3) — proc:other 25.2ms (typ 5.8ms, 4× over) | proc 26.7 rcpu 0.0 gpu 0.0 rest 8.5 late 8.4 | alloc 16KB | ticks 2 | watchdog: 19/25 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×3] 32.9–35.2ms over 0.1s (med 15.6) — proc:other 25.2ms (typ 5.8ms, 4× over)
+[lb]hitch MIXED] 30.2ms (1 dropped @60Hz) (med 15.6, ×1.9) — 28.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.1 rcpu 0.0 gpu 0.0 rest 28.1 late 28.1 | alloc 24KB | ticks 2 | watchdog: 19/19 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 35.9 101.8 39.2 35.2 32.9 34.9 22.0 23.2
+[lb]hitch MIXED ×6] 28.3–37.6ms over 0.5s (med 16.1) — 28.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 29.3ms (1 dropped @60Hz) (med 16.1, ×1.8) — fakeshadows 10.8ms (typ 1.0ms, 11× over) | proc 16.3 rcpu 0.0 gpu 0.0 rest 13.0 late 13.0 | alloc 24KB | ticks 1 | watchdog: 12/20 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 21.5 21.4 23.0 23.7 22.4 24.8 27.6 23.5
+[lb]hitch CPU-LOGIC ×2] 29.3–56.0ms over 0.5s (med 19.5) — fakeshadows 10.8ms (typ 1.0ms, 11× over)
+[lb]hitch MIXED] 40.0ms (1 dropped @60Hz) (med 19.5, ×2.0) — mixed — proc:other 15.2ms | proc 19.8 rcpu 0.0 gpu 0.0 rest 20.2 late 20.3 | alloc 48KB | ticks 2 | watchdog: 19/31 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 34.1 25.2 28.3 21.3 20.9 22.2 25.3 25.5
+[lb]hitch MIXED ×2] 40.0–41.7ms over 0.1s (med 19.9) — mixed — proc:other 15.2ms
+[lb]hitch GC-PAUSE] 68.9ms (3 dropped @60Hz) (med 19.9, ×3.5) — GC g0+2 g1+2 g2+1, pause 40.1ms, 22KB allocated | proc 50.4 rcpu 0.0 gpu 0.0 rest 18.5 late 18.5 | alloc 22KB | ticks 2 | watchdog: 14/20 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   gc: g0+2 g1+2 g2+1 pause 40.1ms alloc 22KB (rate 1MB/s, heap 51.9MB)
+[lb]hitch]   prev: 13.6 15.6 15.9 15.6 15.3 15.6 25.9 26.5
+[lb]hitch CPU-LOGIC] 37.9ms (1 dropped @60Hz) (med 20.0, ×1.9) — proc:other 13.0ms | proc 21.2 rcpu 0.0 gpu 0.0 rest 16.8 late 16.8 | alloc 24KB | ticks 4 | watchdog: 12/24 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×2] 33.6–37.9ms over 0.6s (med 17.7) — proc:other 13.0ms
+[lb]hitch MIXED] 46.9ms (2 dropped @60Hz) (med 17.7, ×2.7) — 35.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 11.8 rcpu 0.0 gpu 0.0 rest 35.1 late 21.6 | alloc 24KB | ticks 1 | watchdog: 19/24 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.0 17.5 13.6 17.7 16.3 13.3 15.3 21.0
+[lb]hitch MIXED ×4] 31.3–46.9ms over 0.7s (med 15.6) — 35.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 40.8ms (1 dropped @60Hz) (med 15.6, ×2.6) — ng.process 16.5ms (typ 2.6ms, 6× over) | proc 23.2 rcpu 0.0 gpu 0.0 rest 17.5 late 17.5 | alloc 51KB | ticks 1 | watchdog: 16/31 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 14.7 16.2 15.2 15.5 15.6 15.6 15.6 18.9
+[lb]hitch MIXED] 28.8ms (1 dropped @60Hz) (med 15.6, ×1.8) — mixed — proc:other 9.6ms | proc 13.4 rcpu 0.0 gpu 0.0 rest 15.4 late 15.4 | alloc 24KB | ticks 2 | watchdog: 14/20 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×3] 28.8–30.6ms over 0.5s (med 15.6) — mixed — proc:other 9.6ms
+[lb]hitch CPU-LOGIC] 29.5ms (1 dropped @60Hz) (med 15.6, ×1.9) — proc:other 18.7ms (typ 4.2ms, 4× over) | proc 20.3 rcpu 0.0 gpu 0.0 rest 9.2 late 9.2 | alloc 24KB | ticks 2 | watchdog: 12/21 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   prev: 17.8 13.4 25.6 11.0 18.0 19.7 29.4 27.3
+[lb]hitch MIXED] 30.7ms (1 dropped @60Hz) (med 15.6, ×2.0) — 27.9ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.8 rcpu 0.0 gpu 0.0 rest 27.9 late 27.8 | alloc 24KB | ticks 2 | watchdog: 18/18 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×5] 28.3–34.8ms over 0.4s (med 15.6) — 27.9ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — proc:other 16.7ms (typ 2.2ms, 8× over) | proc 22.0 rcpu 0.0 gpu 0.0 rest 9.2 late 7.0 | alloc 24KB | ticks 1 | watchdog: 10/14 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch CPU-LOGIC ×2] 31.3–31.3ms over 0.0s (med 15.6) — proc:other 16.7ms (typ 2.2ms, 8× over)
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 23.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 7.8 rcpu 0.0 gpu 0.0 rest 23.4 late 18.1 | alloc 24KB | ticks 2 | watchdog: 13/14 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED] 46.9ms (2 dropped @60Hz) (med 15.6, ×3.0) — 44.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.3 rcpu 0.0 gpu 0.0 rest 44.6 late 36.4 | alloc 16KB | ticks 1 | watchdog: 20/20 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — clientmisc 17.7ms (typ 0.9ms, 19× over) | proc 20.4 rcpu 0.0 gpu 0.0 rest 10.8 late 14.4 | alloc 32KB | ticks 3 | watchdog: 12/24 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 28.9ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.3 rcpu 0.0 gpu 0.0 rest 28.9 late 9.3 | alloc 134KB | ticks 2 | watchdog: 12/21 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch MIXED ×3] 31.3–31.3ms over 0.1s (med 15.6) — 28.9ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — emitters 7.7ms (typ 0.7ms, 10× over) | proc 17.4 rcpu 0.0 gpu 0.0 rest 13.8 late 11.6 | alloc 24KB | ticks 1 | watchdog: 11/21 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED] 46.9ms (2 dropped @60Hz) (med 15.6, ×3.0) — 44.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.4 rcpu 0.0 gpu 0.0 rest 44.4 late 35.1 | alloc 24KB | ticks 2 | watchdog: 23/23 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — fakeshadows 9.6ms (typ 1.2ms, 8× over) | proc 20.0 rcpu 0.0 gpu 0.0 rest 11.3 late 19.4 | alloc 32KB | ticks 3 | watchdog: 16/25 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 20.2ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 11.1 rcpu 0.0 gpu 0.0 rest 20.2 late 14.3 | alloc 24KB | ticks 1 | watchdog: 14/18 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — emitters 20.2ms (typ 1.9ms, 10× over) | proc 28.0 rcpu 0.0 gpu 0.0 rest 3.2 late 7.4 | alloc 24KB | ticks 2 | watchdog: 19/24 samples in 'emitters' | DEBUG-BUILD
+[lb]hitch MIXED] 46.9ms (2 dropped @60Hz) (med 15.6, ×3.0) — mixed — emitters 17.9ms | proc 24.7 rcpu 0.0 gpu 0.0 rest 22.2 late 14.4 | alloc 32KB | ticks 2 | watchdog: 16/26 samples in 'emitters' | DEBUG-BUILD
+[lb]hitch MIXED ×3] 31.3–46.9ms over 0.1s (med 15.6) — mixed — emitters 17.9ms
+[lb]hitch CPU-LOGIC] 35.0ms (1 dropped @60Hz) (med 15.6, ×2.2) — clientmisc 19.8ms (typ 1.4ms, 14× over) | proc 23.3 rcpu 0.0 gpu 0.0 rest 11.7 late 11.7 | alloc 32KB | ticks 2 | watchdog: 15/27 samples in 'clientmisc' | DEBUG-BUILD
+[lb]hitch MIXED] 37.9ms (1 dropped @60Hz) (med 15.6, ×2.4) — mixed — hud.mgr 14.9ms | proc 18.4 rcpu 0.0 gpu 0.0 rest 19.5 late 19.5 | alloc 16KB | ticks 2 | watchdog: 17/27 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 31.3 15.6 31.3 31.3 46.9 31.3 31.3 35.0
+[lb]hitch MIXED ×2] 37.9–41.7ms over 0.0s (med 15.6) — mixed — hud.mgr 14.9ms
+[lb]hitch CPU-LOGIC] 37.5ms (1 dropped @60Hz) (med 15.6, ×2.4) — fakeshadows 22.8ms (typ 2.0ms, 12× over) | proc 25.4 rcpu 0.0 gpu 0.0 rest 12.2 late 12.1 | alloc 134KB | ticks 3 | watchdog: 14/24 samples in 'fakeshadows' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×3] 29.9–37.5ms over 0.1s (med 15.6) — fakeshadows 22.8ms (typ 2.0ms, 12× over)
+[lb]hitch MIXED] 50.0ms (2 dropped @60Hz) (med 15.6, ×3.2) — mixed — clientmisc 14.0ms | proc 23.5 rcpu 0.0 gpu 0.0 rest 26.5 late 26.6 | alloc 24KB | ticks 1 | watchdog: 25/41 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 29.7ms (1 dropped @60Hz) (med 15.6, ×1.9) — proc:other 20.6ms (typ 4.5ms, 5× over) | proc 22.3 rcpu 0.0 gpu 0.0 rest 7.4 late 7.3 | alloc 24KB | ticks 4 | watchdog: 15/21 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch MIXED] 49.1ms (2 dropped @60Hz) (med 15.6, ×3.1) — 27.8ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 21.2 rcpu 0.0 gpu 0.0 rest 27.8 late 27.8 | alloc 32KB | ticks 2 | watchdog: 19/27 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×4] 31.4–49.1ms over 0.2s (med 15.6) — 27.8ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 40.0ms (1 dropped @60Hz) (med 15.6, ×2.6) — fakeshadows 14.9ms (typ 3.0ms, 5× over) | proc 24.5 rcpu 0.0 gpu 0.0 rest 15.5 late 15.4 | alloc 24KB | ticks 2 | watchdog: 14/30 samples in 'fakeshadows' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×5] 31.0–40.0ms over 0.7s (med 15.6) — fakeshadows 14.9ms (typ 3.0ms, 5× over)
+[lb]hitch MIXED] 29.0ms (1 dropped @60Hz) (med 15.6, ×1.9) — 26.7ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.3 rcpu 0.0 gpu 0.0 rest 26.7 late 26.7 | alloc 24KB | ticks 2 | watchdog: 16/16 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 17.3 14.0 15.6 25.7 26.0 25.0 26.0
+gametype: dm  time: 53.2
+players: 3 (1 bots)
+  [BOT]Toxic       score    0  k/d 0/0
+  ParityProbe      score    0  k/d 0/0
+"bot_nofire" is "1"
+"g_balance_crylink_primary_middle_fadetime" is "1.5"
+"g_balance_crylink_primary_middle_lifetime" is "2"
+"g_balance_crylink_primary_other_fadetime" is "1.5"
+"g_balance_crylink_primary_other_lifetime" is "2"
+"g_balance_crylink_primary_refire" is "3"
+"g_balance_crylink_primary_speed" is "100"
+"g_balance_crylink_primary_spread" is "0.12"
+"g_buffs" is "0"
+"g_buffs_random_location" is "0"
+"g_buffs_randomize" is "0"
+"g_spawnshieldtime" is "0"
+"g_warmup" is "0"
+"g_weaponarena" is "crylink"
+"skill" is "5"
+"sv_cheats" is "1"
+"sv_eventlog" is "1"
+"sv_public" is "0"
+[lb]hitch MIXED ×2] 29.0–29.0ms over 0.0s (med 15.6) — 26.7ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 36.0ms (1 dropped @60Hz) (med 15.6, ×2.3) — proc:other 25.8ms (typ 2.2ms, 12× over) | proc 27.2 rcpu 0.0 gpu 0.0 rest 8.8 late 8.7 | alloc 48KB | ticks 2 | watchdog: 12/18 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×2] 34.8–36.0ms over 0.4s (med 16.1) — proc:other 25.8ms (typ 2.2ms, 12× over)
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 16.1, ×1.9) — 26.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 4.8 rcpu 0.0 gpu 0.0 rest 26.5 late 22.4 | alloc 24KB | ticks 1 | watchdog: 19/19 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — ng.process 27.8ms (typ 2.5ms, 11× over) | proc 36.7 rcpu 0.0 gpu 0.0 rest 0.0 late 3.8 | alloc 24KB | ticks 1 | watchdog: 14/26 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch CPU-LOGIC ×2] 31.3–31.3ms over 0.3s (med 15.6) — ng.process 27.8ms (typ 2.5ms, 11× over)
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 29.0ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 2.3 rcpu 0.0 gpu 0.0 rest 29.0 late 18.9 | alloc 16KB | ticks 2 | watchdog: 11/11 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — proc:other 9.0ms | proc 22.8 rcpu 0.0 gpu 0.0 rest 8.4 late 11.0 | alloc 24KB | ticks 2 | watchdog: 12/25 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 23.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 7.8 rcpu 0.0 gpu 0.0 rest 23.5 late 14.4 | alloc 24KB | ticks 1 | watchdog: 13/14 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×5] 28.8–31.3ms over 0.8s (med 15.6) — 23.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 36.1ms (1 dropped @60Hz) (med 15.6, ×2.3) — proc:other 21.6ms (typ 4.8ms, 5× over) | proc 23.0 rcpu 0.0 gpu 0.0 rest 13.0 late 13.0 | alloc 16KB | ticks 2 | watchdog: 13/25 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   prev: 16.5 23.6 18.1 20.2 25.1 18.0 24.0 26.8
+[lb]hitch CPU-LOGIC ×3] 28.3–37.9ms over 0.1s (med 15.6) — proc:other 21.6ms (typ 4.8ms, 5× over)
+[lb]hitch MIXED] 29.7ms (1 dropped @60Hz) (med 15.6, ×1.9) — 20.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 9.3 rcpu 0.0 gpu 0.0 rest 20.4 late 20.3 | alloc 24KB | ticks 2 | watchdog: 14/16 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 29.4ms (1 dropped @60Hz) (med 15.6, ×1.9) — proc:other 12.7ms | proc 19.2 rcpu 0.0 gpu 0.0 rest 10.2 late 10.2 | alloc 16KB | ticks 2 | watchdog: 9/16 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×3] 28.7–65.9ms over 0.1s (med 15.6) — proc:other 12.7ms
+[lb]hitch MIXED] 31.7ms (1 dropped @60Hz) (med 15.6, ×2.0) — mixed — ng.process 8.4ms | proc 15.5 rcpu 0.0 gpu 0.0 rest 16.2 late 16.2 | alloc 24KB | ticks 1 | watchdog: 13/16 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 16.0 14.9 16.6 16.5 14.9 14.3 20.4
+[lb]hitch CPU-LOGIC] 31.9ms (1 dropped @60Hz) (med 15.6, ×2.0) — fakeshadows 10.5ms (typ 1.7ms, 6× over) | proc 19.8 rcpu 0.0 gpu 0.0 rest 12.2 late 12.2 | alloc 16KB | ticks 2 | watchdog: 12/24 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED] 33.9ms (1 dropped @60Hz) (med 15.6, ×2.2) — 22.8ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 11.1 rcpu 0.0 gpu 0.0 rest 22.8 late 22.8 | alloc 154KB | ticks 2 | watchdog: 20/21 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 32.0ms (1 dropped @60Hz) (med 15.6, ×2.0) — proc:other 15.0ms (typ 3.3ms, 5× over) | proc 26.2 rcpu 0.0 gpu 0.0 rest 5.8 late 5.7 | alloc 32KB | ticks 2 | watchdog: 11/20 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×3] 31.7–32.4ms over 0.2s (med 15.6) — proc:other 15.0ms (typ 3.3ms, 5× over)
+[lb]hitch MIXED] 28.5ms (1 dropped @60Hz) (med 15.6, ×1.8) — 19.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 9.1 rcpu 0.0 gpu 0.0 rest 19.4 late 19.4 | alloc 24KB | ticks 1 | watchdog: 19/20 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×2] 28.5–41.2ms over 0.0s (med 15.6) — 19.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 31.0ms (1 dropped @60Hz) (med 15.6, ×2.0) — proc:other 11.6ms | proc 18.3 rcpu 0.0 gpu 0.0 rest 12.6 late 12.6 | alloc 32KB | ticks 2 | watchdog: 12/22 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×3] 29.7–35.2ms over 0.1s (med 15.6) — proc:other 11.6ms
+[lb]hitch MIXED] 30.2ms (1 dropped @60Hz) (med 15.6, ×1.9) — 21.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 8.8 rcpu 0.0 gpu 0.0 rest 21.4 late 7.0 | alloc 16KB | ticks 2 | watchdog: 11/15 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch]   prev: 32.4 19.2 18.2 28.5 41.2 31.0 29.7 35.2
+[lb]hitch MIXED ×7] 30.2–49.0ms over 0.4s (med 15.6) — 21.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 36.7ms (1 dropped @60Hz) (med 15.6, ×2.3) — ng.process 19.8ms | proc 23.0 rcpu 0.0 gpu 0.0 rest 13.6 late 13.6 | alloc 24KB | ticks 2 | watchdog: 13/27 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×3] 36.7–48.1ms over 0.1s (med 15.6) — ng.process 19.8ms
+[lb]hitch CPU-LOGIC] 35.0ms (1 dropped @60Hz) (med 16.0, ×2.2) — emitters 8.8ms (typ 0.8ms, 11× over) | proc 19.7 rcpu 0.0 gpu 0.0 rest 15.3 late 15.3 | alloc 24KB | ticks 1 | watchdog: 15/24 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 22.0 20.0 23.0 23.0 20.0 23.7 20.3 11.0
+[lb]hitch CPU-LOGIC ×3] 34.0–36.8ms over 1.0s (med 17.0) — emitters 8.8ms (typ 0.8ms, 11× over)
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 17.0, ×1.8) — 24.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 6.9 rcpu 0.0 gpu 0.0 rest 24.3 late 12.6 | alloc 24KB | ticks 1 | watchdog: 9/9 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 11.0 14.0 13.0 14.0 11.0 15.2 17.8 13.4
+[lb]hitch MIXED ×6] 31.3–31.3ms over 0.5s (med 15.6) — 24.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — ng.process 28.3ms (typ 3.0ms, 9× over) | proc 34.8 rcpu 0.0 gpu 0.0 rest 0.0 late 7.8 | alloc 16KB | ticks 1 | watchdog: 20/33 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — mixed — ng.process 12.9ms | proc 15.0 rcpu 0.0 gpu 0.0 rest 16.3 late 3.3 | alloc 165KB | ticks 1 | watchdog: 4/8 samples in 'net.flush' | DEBUG-BUILD
+[lb]hitch MIXED ×9] 28.4–33.0ms over 0.7s (med 15.6) — mixed — ng.process 12.9ms
+[lb]hitch CPU-LOGIC] 66.0ms (3 dropped @60Hz) (med 15.6, ×4.2) — ng.process 44.6ms (typ 4.2ms, 11× over) | proc 54.0 rcpu 0.0 gpu 0.0 rest 12.0 late 12.0 | alloc 24KB | ticks 1 | watchdog: 27/50 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 20.0 8.0 25.0 20.0 23.1 15.9 26.0 15.0
+[lb]wf] first attack this session: crylink
+[lb]hitch MIXED] 56.0ms (2 dropped @60Hz) (med 15.6, ×3.6) — mixed — ng.process 26.7ms | proc 28.0 rcpu 0.0 gpu 0.0 rest 28.1 late 28.1 | alloc 48KB | ticks 1 | watchdog: 26/46 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.5 15.6 18.2 13.1 15.6 15.6 15.6 15.6
+[lb]hitch CPU-LOGIC] 36.2ms (1 dropped @60Hz) (med 15.6, ×2.3) — ng.process 25.5ms (typ 2.6ms, 10× over) | proc 26.8 rcpu 0.0 gpu 0.0 rest 9.4 late 9.4 | alloc 24KB | ticks 1 | watchdog: 11/27 samples in 'sim.integrate' | DEBUG-BUILD
+[lb]hitch]   prev: 15.7 15.6 15.6 15.6 16.8 17.4 12.6 15.6
+[lb]hitch CPU-LOGIC ×2] 36.2–42.8ms over 0.4s (med 15.6) — ng.process 25.5ms (typ 2.6ms, 10× over)
+[lb]hitch MIXED] 28.9ms (1 dropped @60Hz) (med 15.6, ×1.8) — mixed — ng.process 9.2ms | proc 14.3 rcpu 0.0 gpu 0.0 rest 14.6 late 14.6 | alloc 16KB | ticks 1 | watchdog: 14/21 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 10.5 15.1 24.0 26.6 15.4 15.0 16.4 17.6
+[lb]hitch CPU-LOGIC] 32.0ms (1 dropped @60Hz) (med 15.6, ×2.0) — fakeshadows 13.8ms (typ 2.3ms, 6× over) | proc 20.6 rcpu 0.0 gpu 0.0 rest 11.4 late 11.3 | alloc 16KB | ticks 2 | watchdog: 12/23 samples in 'fakeshadows' | DEBUG-BUILD
+[lb]hitch]   prev: 18.7 21.3 18.1 19.5 17.9 20.9 24.5 21.8
+[lb]hitch CPU-LOGIC ×7] 32.0–50.0ms over 1.0s (med 15.9) — fakeshadows 13.8ms (typ 2.3ms, 6× over)
+:kill:suicide:3:3:type=weapon/crylink|bounce|splash:items=3
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 21.9ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 9.3 rcpu 0.0 gpu 0.0 rest 21.9 late 14.0 | alloc 16KB | ticks 1 | watchdog: 13/15 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — proc:other 13.2ms (typ 2.5ms, 5× over) | proc 17.9 rcpu 0.0 gpu 0.0 rest 13.4 late 8.1 | alloc 16KB | ticks 1 | watchdog: 10/17 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC ×2] 31.3–31.3ms over 0.0s (med 15.6) — proc:other 13.2ms (typ 2.5ms, 5× over)
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 20.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 10.9 rcpu 0.0 gpu 0.0 rest 20.3 late 14.9 | alloc 24KB | ticks 1 | watchdog: 14/16 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×2] 31.3–31.3ms over 0.1s (med 15.6) — 20.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch GC-PAUSE] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — GC g0+1 g1+0 g2+0, pause 15.2ms, 31KB allocated | proc 36.7 rcpu 0.0 gpu 0.0 rest 0.0 late 3.1 | alloc 31KB | ticks 2 | watchdog: 19/22 samples in '(unscoped)' | DEBUG-BUILD
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — clientmisc 13.4ms (typ 0.7ms, 19× over) | proc 22.7 rcpu 0.0 gpu 0.0 rest 8.6 late 10.4 | alloc 24KB | ticks 2 | watchdog: 10/25 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 17.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 13.9 rcpu 0.0 gpu 0.0 rest 17.3 late 9.0 | alloc 32KB | ticks 2 | watchdog: 9/15 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×7] 31.3–31.3ms over 0.2s (med 15.6) — 17.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+[lb]hitch CPU-LOGIC] 29.9ms (1 dropped @60Hz) (med 15.6, ×1.9) — fakeshadows 12.3ms (typ 1.9ms, 6× over) | proc 21.8 rcpu 0.0 gpu 0.0 rest 8.1 late 8.1 | alloc 24KB | ticks 2 | watchdog: 11/21 samples in 'fakeshadows' | DEBUG-BUILD
+[lb]hitch]   prev: 31.3 15.6 31.3 15.6 24.8 22.0 19.1 27.1
+gametype: dm  time: 81.3
+players: 3 (1 bots)
+  [BOT]Toxic       score    0  k/d 0/0
+  ParityProbe      score   -1  k/d 0/1
+"bot_nofire" is "1"
+"g_balance_crylink_primary_middle_fadetime" is "1.5"
+"g_balance_crylink_primary_middle_lifetime" is "2"
+"g_balance_crylink_primary_other_fadetime" is "1.5"
+"g_balance_crylink_primary_other_lifetime" is "2"
+"g_balance_crylink_primary_refire" is "3"
+"g_balance_crylink_primary_speed" is "100"
+"g_balance_crylink_primary_spread" is "0.12"
+"g_buffs" is "0"
+"g_buffs_random_location" is "0"
+"g_buffs_randomize" is "0"
+"g_spawnshieldtime" is "0"
+"g_warmup" is "0"
+"g_weaponarena" is "crylink"
+"skill" is "5"
+"sv_cheats" is "1"
+"sv_eventlog" is "1"
+"sv_public" is "0"
+[lb]hitch CPU-LOGIC ×4] 29.6–38.4ms over 0.9s (med 15.6) — fakeshadows 12.3ms (typ 1.9ms, 6× over)
+[lb]hitch CPU-LOGIC] 46.9ms (2 dropped @60Hz) (med 15.6, ×3.0) — ng.process 33.6ms (typ 4.2ms, 8× over) | proc 34.8 rcpu 0.0 gpu 0.0 rest 12.1 late 7.3 | alloc 16KB | ticks 1 | watchdog: 19/32 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — mixed — ng.process 9.5ms | proc 16.5 rcpu 0.0 gpu 0.0 rest 14.8 late 12.7 | alloc 24KB | ticks 3 | watchdog: 12/21 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch MIXED ×6] 31.3–31.3ms over 0.3s (med 15.6) — mixed — ng.process 9.5ms
+[lb]hitch CPU-LOGIC] 37.0ms (1 dropped @60Hz) (med 15.6, ×2.4) — ng.process 24.9ms (typ 2.2ms, 11× over) | proc 26.2 rcpu 0.0 gpu 0.0 rest 10.8 late 10.8 | alloc 24KB | ticks 1 | watchdog: 16/28 samples in 'bot.rate' | DEBUG-BUILD
+[lb]hitch]   prev: 16.1 16.0 16.0 14.3 15.6 16.0 17.4 14.6
+:part:3
+:anticheat:_time:3:48.73438
+:anticheat:speedhack:0.010689:-
+:anticheat:speedhack_m1:0.626709:-
+:anticheat:speedhack_m2:0.755468:-
+:anticheat:speedhack_m3:0.823938:-
+:anticheat:speedhack_m4:0.863591:-
+:anticheat:speedhack_m5:0.888966:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+[ServerNet] peer 1175452306 disconnected (ParityProbe).
+[lb]hitch CPU-LOGIC ×2] 37.0–54.9ms over 0.5s (med 15.6) — ng.process 24.9ms (typ 2.2ms, 11× over)
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 29.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 1.9 rcpu 0.0 gpu 0.0 rest 29.4 late 17.1 | alloc 16KB | ticks 1 | watchdog: 7/7 samples in '(post-process)' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+shutting down…
+[lb]hitch MIXED ×4] 31.3–31.3ms over 0.2s (med 15.6) — 29.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)
+=== frame profiler session summary (94s, 5007 frames) ===
+  fps: avg 56.1  1%low 25  0.1%low 11  (median 15.6ms, worst 750.5ms)
+  hitches: 324 total — 324 primaries: 2 GC-PAUSE, 130 CPU-LOGIC, 192 MIXED
+    worst[lb]1]: 750.5ms CPU-LOGIC (bots.fixcount) @ t=8.7s
+    worst[lb]2]: 105.6ms MIXED (ng.process) @ t=15.3s
+    worst[lb]3]: 101.8ms CPU-LOGIC (ng.process) @ t=45.9s
+    worst[lb]4]: 78.3ms CPU-LOGIC (ng.process) @ t=26.8s
+    worst[lb]5]: 75.1ms CPU-LOGIC (ng.process) @ t=14.7s
+  gc: g0+38 g1+15 g2+6, total pause 252ms
+  alloc: 353.1MB total, 1MB/s recent, peak 88.6MB in one frame @ t=1.6s, heap 46.8MB
+  scope coverage debt: proc:other dominated 55 hitch(es), watchdog '(unscoped)' won 46 — add Prof scopes there
+  note: DEBUG build — frame times and the hitch census are NOT release-representative (run the release export via tools/perf-run.ps1 for real numbers)
+  [lb]vram census] 8 resident textures, est 2 MB (textures only; Godot's vram monitor adds mesh/render-target buffers)
+    compression: mode 1, s3tc unprobed (nothing compressed this session), ok 0, bc7-fallback 0, failed 0
+    TwoD                  1.8 MB in 8 textures
+    top 8:
+          1.3 MB  rgba8        gfx/blood.png
+          0.1 MB  rgba8        gfx/crosshair16.png
+          0.1 MB  rgba8        gfx/hud/luma/border_corner_northeast.png
+          0.1 MB  rgba8        gfx/hud/luma/border_default.png
+          0.1 MB  rgba8        gfx/hud/luma/strength.png
+          0.1 MB  rgba8        gfx/hud/luma/border_plain_north.png
+          0.1 MB  rgba8        gfx/hud/luma/weaponcrylink.png
+          0.0 MB  rgba8        gfx/hud/default/nametag_statusbar.png

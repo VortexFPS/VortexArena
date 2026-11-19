@@ -1,7 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using Godot;
 using VortexArena.Common.Gameplay;
+using VortexArena.Common.Menu;
+using VortexArena.Common.Services;
+using VortexArena.Formats.Bsp;
 
 namespace VortexArena.Game.Menu;
 
@@ -61,7 +66,8 @@ public partial class CreateGameScreen : MenuScreen
     //  Per-gametype menu config — QC gt.m_configuremenu → GameType_ConfigureSliders (label, cvar, range,
     //  teams cvar). Modes not listed fall back to the plain frag limit; "" frag cvar = no limit (cts).
     // ---------------------------------------------------------------------------------------------------
-    private sealed record ModeMenu(string FragLabel, string FragCvar, float Min, float Max, float Step, string? TeamsCvar);
+    private sealed record ModeMenu(string FragLabel, string FragCvar, float Min, float Max, float Step,
+        string? TeamsCvar, string Tooltip = "");
 
     private static readonly Dictionary<string, ModeMenu> ModeMenus = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -72,12 +78,12 @@ public partial class CreateGameScreen : MenuScreen
         ["ca"]        = new("Round limit:", "fraglimit_override", 5, 100, 5, "g_ca_teams_override"),
         ["freezetag"] = new("Round limit:", "fraglimit_override", 5, 100, 5, "g_freezetag_teams_override"),
         ["lms"]     = new("Lives:", "g_lms_lives_override", 3, 50, 1, null),
-        ["kh"]      = new("Point limit:", "fraglimit_override", 200, 1500, 50, "g_keyhunt_teams_override"),
+        ["kh"]      = PointsMenu(PointLimitSettings.KeyHunt),
         ["dom"]     = new("Point limit:", "fraglimit_override", 50, 500, 10, "g_domination_teams_override"),
         ["ka"]      = new("Point limit:", "fraglimit_override", 5, 100, 5, null),
         ["tka"]     = new("Point limit:", "fraglimit_override", 5, 100, 5, "g_tka_teams_override"),
-        ["mayhem"]  = new("Point limit:", "fraglimit_override", 5, 100, 5, null),
-        ["tmayhem"] = new("Point limit:", "fraglimit_override", 5, 100, 5, "g_tmayhem_teams_override"),
+        ["mayhem"]  = PointsMenu(PointLimitSettings.Mayhem),
+        ["tmayhem"] = PointsMenu(PointLimitSettings.TeamMayhem),
         ["nb"]      = new("Goals:", "g_nexball_goallimit", 1, 50, 1, null),
         ["race"]    = new("Laps:", "g_race_laps_limit", 1, 25, 1, null),
         ["cts"]     = new("", "", 0, 0, 0, null),
@@ -86,6 +92,11 @@ public partial class CreateGameScreen : MenuScreen
         // The live point-limit is set via g_invasion_point_limit / mapinfo pointlimit=50 at server start.
         ["inv"]     = new("Point limit:", "", 50, 500, 10, null),
     };
+
+    private static ModeMenu PointsMenu(PointLimitSettings mode) =>
+        new("Point limit:", mode.PointCvar, PointLimitSettings.SliderMin, mode.SliderMax,
+            mode.SliderStep, mode.TeamsCvar, mode == PointLimitSettings.KeyHunt
+                ? "The amount of points needed before the match will end" : "How much score is needed before the match will end");
 
     // QC: only "priority" gametypes show unless menu_create_show_all, in the QC menu order (the stock list).
     private static readonly string[] DefaultGametypeOrder =
@@ -123,6 +134,7 @@ public partial class CreateGameScreen : MenuScreen
     private LineEdit _mapFilter = null!;
     private Button _leaveButton = null!;
     private string _selectedMap = "";
+    private bool _loadingMapInfo;
     private bool _refreshing;
 
     protected override void BuildUi()
@@ -198,7 +210,7 @@ public partial class CreateGameScreen : MenuScreen
         // QC XonoticMapList_doubleClickListBoxItem: the map info dialog, with this tab's gametype as the one to play.
         _mapList.ItemActivated += i =>
         {
-            if (i < 0 || i >= _mapList.Entries.Count) return;
+            if (_loadingMapInfo || i < 0 || i >= _mapList.Entries.Count) return;
             _selectedMap = _mapList.Entries[i].Map;
             Menu?.Push(new DialogCreateGameMapInfo(_selectedMap, SelectedGametype()));
         };
@@ -289,7 +301,7 @@ public partial class CreateGameScreen : MenuScreen
         _refreshing = true;
         _gametypeList.SetEntries(_shownGametypes.ConvertAll(gt => new QcGametypeList.Entry(gt.NetName,
             string.IsNullOrEmpty(gt.DisplayName) ? gt.NetName : gt.DisplayName,
-            "gametype_" + GametypeIconName(gt.NetName), gt.TeamGame)));
+            "gametype_" + GametypeIconName(gt.NetName), gt.TeamGame, gt.MenuSummary)));
         int index = _shownGametypes.FindIndex(gt => gt.NetName == keep);
         _gametypeList.SelectedItem = Math.Max(0, index);
         _refreshing = false;
@@ -319,7 +331,8 @@ public partial class CreateGameScreen : MenuScreen
 
         _fragLabel.Text = Localization.Tr(cfg.FragLabel.Length > 0 ? cfg.FragLabel : "Frag limit:");
         Fill(_fragCell, _fragLabel, cfg.FragCvar.Length > 0
-            ? Widgets.MixedSlider(cfg.FragCvar).Add("Default", -1).AddRange(cfg.Min, cfg.Max, cfg.Step).Add("Unlimited", 0).Finish()
+            ? Widgets.MixedSlider(cfg.FragCvar, cfg.Tooltip)
+                .Add("Default", -1).AddRange(cfg.Min, cfg.Max, cfg.Step).Add("Unlimited", 0).Finish()
             : null);
         Fill(_teamsCell, _teamsLabel, cfg.TeamsCvar is { } teamsCvar
             ? Widgets.MixedSlider(teamsCvar).Add("Default", 0).Add("2 teams", 2).Add("3 teams", 3).Add("4 teams", 4).Finish()
@@ -360,27 +373,44 @@ public partial class CreateGameScreen : MenuScreen
             MenuState.Cvars.MarkArchived("g_maplist");
     }
 
-    /// <summary>Maps whose .mapinfo declares support for <paramref name="gametype"/> (no mapinfo = shown).</summary>
-    private static bool MapSupports(string map, string gametype)
-    {
-        MapInfoCache.Entry info = MapInfoCache.Get(map);
-        return info.Gametypes.Count == 0 || info.Gametypes.Contains(gametype);
-    }
-
     /// <summary>Rebuild the visible map rows from the gametype + text filter (QC refilter).</summary>
     private void RefilterMaps()
     {
-        if (_mapList is null)
+        if (_mapList is null || _loadingMapInfo)
             return;
+        IReadOnlyList<string> maps = MapList.Available();
+        MapInfoCatalog catalog = MapInfoCache.Catalog;
+        if (maps.Any(map => !catalog.IsLoaded(map)))
+        {
+            _loadingMapInfo = true;
+            _ = Task.Run(() =>
+            {
+                foreach (string map in maps)
+                {
+                    if (!ReferenceEquals(catalog, MapInfoCache.Catalog))
+                        break;
+                    catalog.Get(map);
+                }
+                Callable.From(() =>
+                {
+                    if (!IsInstanceValid(this) || !IsInsideTree())
+                        return;
+                    _loadingMapInfo = false;
+                    RefilterMaps();
+                }).CallDeferred();
+            });
+            return;
+        }
+
         string gametype = SelectedGametype() ?? "dm";
         string needle = _mapFilter.Text.Trim();
         HashSet<string> included = MaplistSet();
 
         var rows = new List<QcMapList.Entry>();
-        foreach (string map in MapList.Available())
+        foreach (string map in maps)
         {
-            MapInfoCache.Entry info = MapInfoCache.Get(map);
-            if (!MapSupports(map, gametype))
+            MapInfo info = catalog.Get(map);
+            if (!info.CanList(MenuState.Cvars, inMenu: true) || !MapInfoCache.Supports(info, gametype, MenuState.Cvars))
                 continue;
             if (needle.Length > 0
                 && !map.Contains(needle, StringComparison.OrdinalIgnoreCase)
@@ -403,6 +433,8 @@ public partial class CreateGameScreen : MenuScreen
     /// <summary>QC g_maplistCacheToggle: clicking a row's preview adds/removes that map from g_maplist.</summary>
     private void ToggleInclude(string map)
     {
+        if (_loadingMapInfo)
+            return;
         HashSet<string> set = MaplistSet();
         if (!set.Remove(map))
             set.Add(map);
@@ -413,14 +445,24 @@ public partial class CreateGameScreen : MenuScreen
     /// <summary>QC MapList_Add/Remove_Shown/All: bulk-edit g_maplist with the filtered (or full) map set.</summary>
     private void EditMaplist(bool add, bool shownOnly)
     {
+        if (_loadingMapInfo)
+            return;
         HashSet<string> set = MaplistSet();
-        IEnumerable<string> affected = shownOnly
-            ? new List<QcMapList.Entry>(_mapList.Entries).ConvertAll(r => r.Map)
-            : MapList.Available();
-        foreach (string map in affected)
+        if (!shownOnly)
         {
-            if (add) set.Add(map);
-            else set.Remove(map);
+            set.Clear();
+            if (add)
+                foreach (string map in MapList.Available())
+                    if (MapInfoCache.Get(map).CanList(MenuState.Cvars, inMenu: true, applyRequiredFlags: false))
+                        set.Add(map);
+        }
+        else
+        {
+            foreach (var entry in _mapList.Entries)
+            {
+                if (add) set.Add(entry.Map);
+                else set.Remove(entry.Map);
+            }
         }
         SaveMaplist(set);
         _mapList.SetEntries(new List<QcMapList.Entry>(_mapList.Entries), set.Contains);
@@ -432,6 +474,8 @@ public partial class CreateGameScreen : MenuScreen
 
     private void OnStart()
     {
+        if (_loadingMapInfo || _mapList.Entries.Count == 0)
+            return;
         string? gametype = SelectedGametype();
         if (string.IsNullOrEmpty(gametype))
         {
@@ -441,7 +485,7 @@ public partial class CreateGameScreen : MenuScreen
 
         // The match settings live in the same cvars the QC writes; gather the MatchConfig from them.
         float timeLimit = MenuState.Cvars.GetFloat("timelimit_override");
-        float fragLimit = MenuState.Cvars.GetFloat("fraglimit_override");
+        float fragLimit = PointLimitSettings.For(gametype) is null ? MenuState.Cvars.GetFloat("fraglimit_override") : 0;
         var config = new MatchConfig
         {
             Gametype = gametype!,
@@ -476,63 +520,23 @@ public partial class CreateGameScreen : MenuScreen
 }
 
 /// <summary>
-/// Per-map .mapinfo metadata (title / author / supported gametypes), parsed once from the VFS — the C#
-/// stand-in for the engine MapInfo cache the QC maplist reads. Maps without a .mapinfo get their file name
-/// as the title and an empty gametype set (treated as "supports everything", like MapInfo's autogeneration).
+/// Map metadata shared by the create-game list, installed-map commands and server rotation.
+/// Gametype overrides are evaluated at lookup so cvar changes never require a metadata rescan.
 /// </summary>
 public static class MapInfoCache
 {
-    public sealed class Entry
+    private static volatile MapInfoCatalog _catalog = new(null);
+    public static MapInfoCatalog Catalog => _catalog;
+
+    /// <summary>Start a fresh cache for the current VFS, including any changed sidecars or BSPs.</summary>
+    public static void Invalidate() => _catalog = new(MenuState.Vfs,
+        MenuState.Cvars.Has("g_mapinfo_q3compat") ? (int)MenuState.Cvars.GetFloat("g_mapinfo_q3compat") : 1);
+
+    public static MapInfo Get(string map) => _catalog.Get(map);
+
+    public static bool Supports(MapInfo info, string mode, ICvarService cvars)
     {
-        public string Title = "";
-        public string Author = "";
-        public readonly HashSet<string> Gametypes = new(StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static readonly Dictionary<string, Entry> Cache = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>Drop every parsed entry so the next <see cref="Get"/> re-reads from the CURRENT search path —
-    /// <c>fs_rescan</c> (<see cref="MenuState.RescanContent"/>). Needed because a miss is cached too: a map
-    /// listed before its pack was mounted is remembered as having no <c>.mapinfo</c> at all.</summary>
-    public static void Invalidate() => Cache.Clear();
-
-    public static Entry Get(string map)
-    {
-        if (Cache.TryGetValue(map, out Entry? hit))
-            return hit;
-
-        var e = new Entry { Title = map };
-        if (MenuState.Vfs is { } vfs && vfs.Exists($"maps/{map}.mapinfo"))
-        {
-            foreach (string raw in vfs.ReadText($"maps/{map}.mapinfo").Split('\n'))
-            {
-                string line = raw.Trim();
-                if (line.StartsWith("title ", StringComparison.OrdinalIgnoreCase))
-                    e.Title = line[6..].Trim();
-                else if (line.StartsWith("author ", StringComparison.OrdinalIgnoreCase))
-                    e.Author = line[7..].Trim();
-                else if (line.StartsWith("gametype ", StringComparison.OrdinalIgnoreCase)
-                         || line.StartsWith("type ", StringComparison.OrdinalIgnoreCase))
-                {
-                    // "gametype dm [options]" (new) / "type dm ..." (legacy) — the mode is the 2nd token.
-                    string[] tok = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (tok.Length >= 2)
-                        e.Gametypes.Add(tok[1]);
-                }
-            }
-        }
-        // QC Duel.m_isForcedSupported (duel.qh:15-28): any DM map also supports duel, unless
-        // g_duel_not_dm_maps is set. Mirrors MapInfoBackend.ApplyForcedGametypes.
-        bool forceDuelOnDm = MenuState.Cvars.GetFloat("g_duel_not_dm_maps") == 0f;
-        if (forceDuelOnDm && e.Gametypes.Contains("dm") && !e.Gametypes.Contains("duel"))
-            e.Gametypes.Add("duel");
-        // QC TeamDeathmatch.m_isForcedSupported (tdm.qh): any DM map also supports TDM when
-        // g_tdm_on_dm_maps is set (default 0 = off, opposite polarity to g_duel_not_dm_maps).
-        // Mirrors MapInfoBackend.ApplyForcedGametypes (the dead MapInfoBackend path; this is the live one).
-        bool forceTdmOnDm = MenuState.Cvars.GetFloat("g_tdm_on_dm_maps") != 0f;
-        if (forceTdmOnDm && e.Gametypes.Contains("dm") && !e.Gametypes.Contains("tdm"))
-            e.Gametypes.Add("tdm");
-        Cache[map] = e;
-        return e;
+        var required = MapInfo.RequiredFeatures(mode, cvars);
+        return (info.Features & required) == required && info.SupportsInCatalog(mode, MapForcedSupport.FromCvars(cvars));
     }
 }

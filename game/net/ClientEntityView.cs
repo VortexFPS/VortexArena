@@ -47,6 +47,28 @@ public sealed partial class ClientEntityView : Node
     private readonly Dictionary<int, Entity> _proxies = new();
     private readonly HashSet<int> _seen = new();
     private readonly List<int> _stale = new();
+    private readonly Dictionary<int, ControlPointIconAnimation> _controlPointIcons = new();
+    private float _iconTime;
+
+    // The render cache keeps some departed entries for PVS flicker. Diagnostics see this frame's set.
+    internal IEnumerable<Entity> VisibleEntities
+    {
+        get
+        {
+            foreach (int id in System.Linq.Enumerable.OrderBy(_seen, id => id))
+                if (_proxies.TryGetValue(id, out Entity? entity))
+                    yield return entity;
+        }
+    }
+
+    private sealed class ControlPointIconAnimation
+    {
+        public float Yaw;
+        public NVec3 Punch;
+        public float HitLift;
+        public byte Health;
+        public bool Captured;
+    }
 
     /// <summary>
     /// Resolve a networked model index (precache slot) to a classname + model name, so the renderer can pick
@@ -66,6 +88,11 @@ public sealed partial class ClientEntityView : Node
         set => _viewEntities.WeaponModelFactory = value;
     }
 
+    internal Func<int, bool>? LocalBgmModel { get; set; }
+    internal bool ShowLocalBody { get; set; }
+    internal Func<NVec3>? LocalViewLocationAim { get; set; }
+    private float? _attachedDamageMatchStart;
+
     public ClientEntityView(ClientNet net, ClientWorld render)
     {
         _net = net ?? throw new ArgumentNullException(nameof(net));
@@ -76,13 +103,25 @@ public sealed partial class ClientEntityView : Node
     public override void _Process(double delta)
     {
         if (!_net.Accepted)
+        {
+            _attachedDamageMatchStart = null;
+            _render.ClearAttachedDamage();
             return;
+        }
 
         using var _prof = FrameProfiler.Scope("cev.process");
+        if (_net.HasMatchState)
+        {
+            if (_attachedDamageMatchStart is float previous && previous != _net.MatchStartTime)
+                _render.ClearAttachedDamage();
+            _attachedDamageMatchStart = _net.MatchStartTime;
+        }
 
         // Interpolate remote entities at the latest server time (a one-snapshot delay falls out of the lerp).
         float now = _net.LatestServerTime;
         _seen.Clear();
+        float animationDelta = ClientRenderTime.ScaleDelta((float)delta);
+        _iconTime += animationDelta;
 
         // (perf-investigation) the remote-entity count drives this whole loop's cost; surface it as a marker so
         // the profiler shows how many entities catharsis carries at the spawn (estimates diverged 20x).
@@ -92,7 +131,7 @@ public sealed partial class ClientEntityView : Node
         {
             if (id == _net.LocalNetId)
                 continue;
-            if (!_net.TryGetRemoteState(id, out NetEntityState s))
+            if (LocalBgmModel?.Invoke(id) == true || !_net.TryGetRemoteState(id, out NetEntityState s))
                 continue;
 
             // Interpolated pose (origin + blended angles); fall back to the raw state if no interp yet.
@@ -106,7 +145,18 @@ public sealed partial class ClientEntityView : Node
             // (GC audit 2026-08-03) cev.drive: the per-entity proxy fill + render handoff — split from the
             // parent so the allocator census can tell the loop/interp half from the drive/render half.
             using (FrameProfiler.Scope("cev.drive"))
-                DriveEntity(id, s, origin, angles);
+                DriveEntity(id, s, origin, angles, animationDelta);
+        }
+
+        if (!_net.IsObserving && _net.SpectatingNetId == 0 && _net.LocalState is { Kind: NetEntityKind.Player } local
+            && (ShowLocalBody || _net.ActiveViewLocation is not null || _render.HasAttachedDamage(_net.LocalNetId)))
+        {
+            _seen.Add(_net.LocalNetId);
+            // The owner's body uses the current cursor aim while the server catches up.
+            NVec3 angles = _net.ActiveViewLocation is { SideScroll: true, FreeAim: true }
+                ? LocalViewLocationAim?.Invoke() ?? local.Angles
+                : local.Angles;
+            DriveEntity(_net.LocalNetId, local, _net.PredictedOrigin, angles, animationDelta);
         }
 
         using (FrameProfiler.Scope("cev.cull"))
@@ -120,7 +170,7 @@ public sealed partial class ClientEntityView : Node
     //  Per-entity drive
     // =====================================================================================
 
-    private void DriveEntity(int id, in NetEntityState s, NVec3 origin, NVec3 angles)
+    private void DriveEntity(int id, in NetEntityState s, NVec3 origin, NVec3 angles, float animationDelta)
     {
         Entity e = GetOrCreateProxy(id);
 
@@ -135,7 +185,7 @@ public sealed partial class ClientEntityView : Node
         // choke point both the pure client AND the listen host render players through. The pitch isn't lost: it
         // rides the separate render-only ViewPitch field, which PlayerModel's aim-bone layer reads (#7), so the
         // torso/arms still aim up/down while the legs stay upright — the body yaw-only, the aim layer pitched.
-        if (s.Kind == NetEntityKind.Player)
+        if (s.Kind is NetEntityKind.Player or NetEntityKind.Body)
         {
             e.Angles = new NVec3(0f, angles.Y, 0f);
             e.ViewPitch = angles.X;
@@ -147,8 +197,10 @@ public sealed partial class ClientEntityView : Node
         }
         e.Velocity = s.Velocity;
         e.Frame = s.Frame;
+        float oldSkin = e.Skin;
         e.Skin = s.Skin;
         e.ModelIndex = s.ModelIndex;
+        e.CountdownIndicator = s.CountdownIndicator;
         e.Effects = s.Effects;
         // [W5-cloaked] Decode the networked render alpha (QC csqcmodel m_alpha) onto the proxy so PlayerModel/
         // EntityNode renders the Cloaked / Invisibility / fade transparency. ServerNet.QuantizeAlpha sends 0 for
@@ -245,7 +297,29 @@ public sealed partial class ClientEntityView : Node
         // entity carries the same frozen/burning/buff set the server has — the data ClientWorld's overlay pass
         // (and any consumer of Entity.StatusEffects) reads to draw the burning particles / frozen tint.
         ApplyStatusEffects(e, s.StatusEffects);
+        string oldModel = e.Model;
+        if (e.ClassName == OnslaughtControlPoint.IconClassName)
+            e.ClassName = "";
         ApplyIdentity(e, s);
+
+        bool onslaughtModel = e.Model.StartsWith("models/onslaught/", StringComparison.Ordinal);
+        // The snapshot precaches a model name, not a classname. Identify the icon independently
+        // of which damage mesh is currently selected so a swap preserves the animation state.
+        if (s.ObjState is 1 or 2 && e.Model.StartsWith("models/onslaught/controlpoint_icon", StringComparison.Ordinal))
+        {
+            e.ClassName = OnslaughtControlPoint.IconClassName;
+            AnimateControlPointIcon(e, s, animationDelta);
+        }
+        else if (_controlPointIcons.Count > 0)
+        {
+            _controlPointIcons.Remove(id);
+        }
+
+        // OnEntityUpdate reuses the existing mesh. Rebind it when the server changes the
+        // objective model (pad capture/reset, damage/healing, or generator destruction).
+        if ((oldModel != e.Model && (onslaughtModel || oldModel.StartsWith("models/onslaught/", StringComparison.Ordinal)))
+            || (CosmeticModelLayer.IsBuffRelic(e.Model) && (oldModel != e.Model || oldSkin != e.Skin)))
+            _render.RebuildEntityModel(e);
 
         switch (s.Kind)
         {
@@ -274,9 +348,16 @@ public sealed partial class ClientEntityView : Node
             case NetEntityKind.Player:
                 // Animated networked actor + its held-weapon view-entity (wepent) attached third-person.
                 _render.OnEntityUpdate(e, frameDriven: true);
+                if (e.Presence is EntityNode node)
+                {
+                    int viewedId = _net.SpectatingNetId != 0 ? _net.SpectatingNetId : _net.LocalNetId;
+                    node.SetViewLocationYaw(id == viewedId
+                        && _net.ActiveViewLocation is { SideScroll: true, FreeAim: true });
+                }
                 _viewEntities.Update(e, s);
                 break;
 
+            case NetEntityKind.Body:
             case NetEntityKind.Generic:
             case NetEntityKind.Gib:
                 // Animated networked actors: drive the model frame straight from the network (autoupdate).
@@ -306,6 +387,53 @@ public sealed partial class ClientEntityView : Node
         }
     }
 
+    private void AnimateControlPointIcon(Entity e, in NetEntityState state, float delta)
+    {
+        if (!_controlPointIcons.TryGetValue(e.Index, out ControlPointIconAnimation? animation))
+        {
+            animation = new ControlPointIconAnimation();
+            _controlPointIcons.Add(e.Index, animation);
+        }
+
+        // QC cpicon_draw: the icon bobs even while building. Its opacity expresses build progress.
+        e.Origin.Z += 9f * (1f - MathF.Cos(1.875f * _iconTime));
+        if (state.ObjState == 2)
+        {
+            if (animation.Captured && state.ObjHealthByte < animation.Health)
+            {
+                animation.Punch = new NVec3(RandomPunchAngle(), RandomPunchAngle(), RandomPunchAngle());
+                animation.HitLift = (Random.Shared.NextSingle() * 2f - 1f) * 15f;
+            }
+
+            animation.HitLift = MathF.Max(0f, animation.HitLift - 3f * delta);
+            float step = 60f * delta;
+            animation.Punch = new NVec3(
+                Mathf.MoveToward(animation.Punch.X, 0f, step),
+                Mathf.MoveToward(animation.Punch.Y, 0f, step),
+                Mathf.MoveToward(animation.Punch.Z, 0f, step));
+            animation.Yaw = (animation.Yaw + animation.Punch.Y + 45f * delta) % 360f;
+            e.Angles += new NVec3(animation.Punch.X, animation.Yaw, animation.Punch.Z);
+            e.Origin.Z += animation.HitLift;
+            animation.Captured = true;
+        }
+        else
+        {
+            animation.Captured = false;
+            animation.Punch = NVec3.Zero;
+            animation.Yaw = 0f;
+            animation.HitLift = 0f;
+            if (state.ObjState == 1)
+                e.Alpha *= e.ObjHealthFrac;
+        }
+        animation.Health = state.ObjHealthByte;
+    }
+
+    private static float RandomPunchAngle()
+    {
+        float angle = 8f + 17f * Random.Shared.NextSingle();
+        return Random.Shared.Next(2) == 0 ? angle : -angle;
+    }
+
     /// <summary>Set the proxy's classname/model from the precache resolver, or a kind-derived default.</summary>
     private void ApplyIdentity(Entity e, in NetEntityState s)
     {
@@ -314,6 +442,12 @@ public sealed partial class ClientEntityView : Node
         // client/server split). ModelIndex stays available as the fallback below.
         if (!string.IsNullOrEmpty(s.Model))
             e.Model = s.Model;
+        if (s.Kind == NetEntityKind.Body)
+        {
+            e.ClassName = PlayerBody.ClassName;
+            if (!string.IsNullOrEmpty(e.Model))
+                return;
+        }
 
         if (ResolveModelIndex is not null && s.ModelIndex > 0)
         {
@@ -328,6 +462,7 @@ public sealed partial class ClientEntityView : Node
         {
             NetEntityKind.Projectile => "projectile",
             NetEntityKind.Player => "player",
+            NetEntityKind.Body => PlayerBody.ClassName,
             NetEntityKind.Item => "item",
             NetEntityKind.Gib => "gib",
             NetEntityKind.ViewModel => "weaponentity",
@@ -421,6 +556,7 @@ public sealed partial class ClientEntityView : Node
                 if (!_unseenSince.TryGetValue(id, out ulong since))
                 {
                     _unseenSince[id] = now;
+                    _controlPointIcons.Remove(id);
                     _render.SetEntityHidden(id, true);
                     continue;
                 }

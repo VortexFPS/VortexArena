@@ -1,0 +1,9 @@
+$ dotnet build VortexArena.csproj --no-restore -v:q
+Build succeeded.
+    31 Warning(s)
+    0 Error(s)
+Time Elapsed 00:00:21.02
+
+$ DOTNET_ROLL_FORWARD=Major dotnet test tests/VortexArena.Tests/VortexArena.Tests.csproj --no-restore --filter "FullyQualifiedName~MapBgmScriptTests|FullyQualifiedName~MusicSystemTests|FullyQualifiedName~ParticleDarkPlacesTests"
+Test run for VortexArena.Tests.dll (.NETCoreApp,Version=v8.0)
+Passed!  - Failed:     0, Passed:    49, Skipped:     0, Total:    49, Duration: 514 ms - VortexArena.Tests.dll (net8.0)

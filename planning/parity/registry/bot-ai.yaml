@@ -58,7 +58,6 @@ summary:
   feature_count: 29
   worst_gaps:
     - "Teamplay item-sharing missing: no friends-aware pickup check (bot_ai_friends_aware_pickup_radius) and no cross-bot per-item ratingscale dedup — team bots race teammates (and each other) for the same pickup. (NEW 2026-07-02 coverage fold.)"
-    - "Bot scripting entirely missing: the bot_cmd command queue does nothing, so map/console bot scripts, cutscene-driven bots, and g_waypointeditor bot driving are inert. (UNCHANGED.)"
     - "Jetpack NAVIGATION (cross jetpack-only gaps) is still missing; the trigger_hurt jetpack/rocketjump ESCAPE half is live (skill>6). (UNCHANGED 2026-06-28 fourth pass.)"
     - "wr_aim has no MAX_WEAPONSLOTS per-slot loop — only the ChosenWeapon's wr_aim is consulted each think; Base runs wr_aim for every owned slot. (Per-weapon coverage is faithful for the 18 headline weapons.) (UNCHANGED.)"
     - "havocbot_dodge is ported (SUPERBOT-gated projectile flight-path evade, live) and 15 port files flag Entity.BotDodge (all weapon projectiles + OkRpc + PhaserTurret beam) vs Base's 20 producers — missing: monsters (golem/spider), the napalm nade, the grappling hook, the generic sv_turrets producer. Non-SUPERBOT bots still only strafe via the generic CombatMovement. (NARROWED 2026-07-27: the SUPERBOT random-direction combat jitter is now ported, so the SUPERBOT side of this row is complete; only the 4 non-weapon producers and the invented non-SUPERBOT strafe remain.)"
@@ -506,7 +505,7 @@ features:
     base_refs:
       - "server/bot/default/havocbot/roles.qc:havocbot_role_ft_freeing"
       - "server/bot/default/havocbot/roles.qc:havocbot_role_ft_offense"
-      - "common/gamemodes/gamemode/freezetag/sv_freezetag.qc:havocbot_goalrating_freeplayers"
+      - "common/gametypes/gametype/freezetag/sv_freezetag.qc:havocbot_goalrating_ft_freeplayers"
     port_refs:
       - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleFreezeTag"
       - "src/VortexArena.Server/Bot/BotRoles.cs:ChooseRole"
@@ -727,23 +726,35 @@ features:
     base_refs:
       - "server/bot/default/scripting.qc:bot_execute_commands"
       - "server/bot/default/scripting.qc:bot_queuecommand"
-    port_refs: []
-    constants: []
+      - "server/bot/default/scripting.qc:bot_cmd_sound"
+    port_refs:
+      - "src/VortexArena.Server/Bot/BotCommandQueue.cs:TryThink"
+      - "src/VortexArena.Server/Bot/BotCommandQueue.cs:Enqueue"
+      - "game/client/ClientWorld.DpSound.cs:PrecacheSound"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:ThinkProduce"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:TryReleaseScriptBarrier"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:InputFor"
+    constants:
+      - { name: "queued verbs", base: "23 executable commands plus internal null", port: "23 executable commands", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
+      logic: partial
+      values: faithful
+      timing: faithful
       presentation: na
-      audio: na
-      liveness: na
+      audio: faithful
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Bot scripting entirely missing: the bot_cmd command queue does nothing, so map/console bot scripts, cutscene-driven bots, and g_waypointeditor bot driving are inert. (UNCHANGED.)"
+      - "The four assertion colors are verified on the bot entity. Their appearance on a remote player model has no paired capture."
     verification:
-      - { kind: code, ref: "no bot_cmd / scripting analogue anywhere in src/.../Bot", result: fail }
+      - { kind: test, ref: "BotLiveLoopTests.BotScript_LoadRoutesNamesAndRunsTimedSynchronizedInput / BotScript_AddressingPauseAndAim_ResumeThroughTheLiveBotThink", result: pass }
+      - { kind: test, ref: "BotLiveLoopTests.BotScript_SoundUsesPinnedMixDefaultsAndOptionalParameters and BotScript_CanFireDiagnosticDistinguishesInhibitors exercise registered commands through the game world, including the 0.7 base volume and four diagnostic colors.", result: pass }
+      - { kind: runtime, ref: "planning/parity/bot-scripting/README.md — paired Darkzone dedicated runs trace relative and barrier-relative waits, two barriers and default plus explicit positional cue packets delivered to a loopback observer.", result: pass }
+      - { kind: runtime, ref: "planning/parity/bot-scripting/precache.txt — mounted mixer sample warmed before cue release on listen and dedicated/remote paths. Late join receives a cue registered before connection.", result: pass }
+      - { kind: test, ref: "BotLiveLoopTests.BotScript_PrecachesSampleOnEnqueueAndPlaysAfterWait", result: pass }
     confidence: high
-    notes: "Unchanged — STILL MISSING. havocbot_ai runs bot_execute_commands before the AI; the port has no equivalent gate, so scripted bots fall through to normal AI."
+    notes: "The queue precedes strategy and movement selection. Waits hold input, and linked barriers share a simulation-clock epoch. Enqueue registers the parsed sample. Native omits the pinned execution-time lookup of the entire explicit mix argument string, which is separate from playback."
 
   - id: bot-ai.skill.modifiers
     name: "Skill model: single knob vs 12 per-bot skill columns + autoskill"
@@ -876,23 +887,28 @@ features:
       - "server/bot/default/scripting.qc:find_bot_by_name"
       - "server/bot/default/scripting.qc:find_bot_by_number"
       - "server/bot/default/havocbot/scripting.qh:bot_clearqueue"
-    port_refs: []
+    port_refs:
+      - "src/VortexArena.Server/Commands.BotScripts.cs:RunBotScriptCommand"
+      - "src/VortexArena.Server/Commands.BotScripts.cs:LoadBotScript"
+      - "src/VortexArena.Server/Commands.cs:Execute (trusted sv_cmd bot_cmd dispatch)"
+      - "src/VortexArena.Server/Bot/BotPopulation.cs:FindScriptBot"
+      - "game/console/ConsoleOverlay.cs:bot_cmd and sv_cmd dispatch"
     constants: []
     status:
-      logic: missing
-      values: missing
-      timing: missing
+      logic: faithful
+      values: na
+      timing: na
       presentation: na
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "The entire console-facing bot_cmd surface is missing along with the execution engine (bot-ai.scripting.commands): no command parser/queue (bot_queuecommand + the 24-entry BOT_CMD_* table), no `bot_cmd <n|name> ...` addressing via find_bot_by_name/find_bot_by_number, no bot_cmdhelp / bot_list_commands console help, no bot_clearqueue/bot_resetqueues reset, no barrier sync."
+    gaps: []
     verification:
-      - { kind: code, ref: "grep bot_cmd/queuecommand/clearqueue across src/ game/ tests/ (*.cs): only Commands.cs bot_add/bot_remove/setbots/removebots (population commands, a different feature) — no scripting queue surface", result: fail }
+      - { kind: test, ref: "BotLiveLoopTests.BotScript_LoadRoutesNamesAndRunsTimedSynchronizedInput / BotScript_AddressingPauseAndAim_ResumeThroughTheLiveBotThink", result: pass }
+      - { kind: runtime, ref: "planning/parity/bot-scripting/README.md — dedicated operator sv_cmd bot_cmd load reads all 25 lines of the same newline-terminated VFS script in both engines.", result: pass }
     confidence: high
-    notes: "added 2026-07-02 (coverage fold). Complements bot-ai.scripting.commands (the queue EXECUTION engine, also missing): this row owns the admin/map-facing entry points declared in scripting.qh + havocbot/scripting.qh."
+    notes: "The trusted server console supports the sv_cmd bot_cmd wrapper, per-bot number, name, all or wildcard selection, reset, setbots, help and VFS script loading. Client commands retain normal client permissions."
 
   - id: bot-ai.scripting.moveto_personal_waypoint
     name: "Scripted moveto via personal waypoint (havocbot_moveto / resetgoal, AI_STATUS_WAYPOINT_PERSONAL_*)"
@@ -904,23 +920,27 @@ features:
       - "server/bot/default/havocbot/havocbot.qh:.havocbot_personal_waypoint (+ searchtime/failcounter fields)"
       - "server/bot/default/havocbot/havocbot.qc:havocbot_moveto (havocbot.qc:1640)"
       - "server/bot/default/bot.qh:AI_STATUS_WAYPOINT_PERSONAL_LINKING/GOING/REACHED"
-    port_refs: []
-    constants: []
+    port_refs:
+      - "src/VortexArena.Server/Bot/BotCommandQueue.cs:MoveTo"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:SetGoal"
+      - "src/VortexArena.Server/Bot/BotNavigation.cs:Steer"
+    constants:
+      - { name: "route refresh and retry", base: "10 s refresh, 2 s failed retry, 30 failed attempts", port: "10 s refresh, 2 s stalled retry, 30 stalled attempts", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
+      logic: partial
+      values: faithful
+      timing: partial
       presentation: na
       audio: na
-      liveness: na
-    intended_divergence: false
-    divergence_rationale: null
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: "Script destinations use the native navigator and shared waypoint graph rather than spawning and linking a personal waypoint entity."
     gaps:
-      - "The BOT_CMD_MOVETO/MOVETOTARGET handler is missing: no personal-waypoint spawn+link (havocbot_personal_waypoint with its searchtime/failcounter retry), no cmd_moveto/cmd_resetgoal bindings, no AI_STATUS_WAYPOINT_PERSONAL_LINKING→GOING→REACHED progression — 'send this bot to X' (cutscenes, benchmarks, waypoint-editor driving) cannot work even once the command queue exists."
+      - "The native navigator retries stalled progress. QuakeC personal-waypoint link staging and teleport classification are absent."
     verification:
-      - { kind: code, ref: "grep moveto/personal.waypoint across src/VortexArena.Server/Bot: no analogue; BotNavigation.SetGoal only routes AI-chosen goals", result: fail }
+      - { kind: code, ref: "MoveTo routes to the resolved coordinate or target through BotNavigation.SetGoal and emits its movement until the goal is reached.", result: pass }
     confidence: high
-    notes: "added 2026-07-02 (coverage fold). Kept separate from bot-ai.scripting.console_interface because it is the havocbot-side handler (havocbot.qh/qc) a future queue port must call into."
+    notes: "Script routes use native traversability and waypoint logic and can be cleared with resetgoal."
 
   - id: bot-ai.cvars.dead_knobs
     name: "Bot cvar knobs declared but unread (bot_usemodelnames / bot_navigation_ignoreplayers / bot_wander_enable / bot_debug_*)"

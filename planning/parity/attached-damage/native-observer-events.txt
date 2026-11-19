@@ -1,0 +1,169 @@
+server.log
+[lb]::client::INFO] [lb]wf] first attack this session: devastator
+[attached probe] send recipient=shooter owner=2 weapon=devastator modelIndex=0 damage=44 time=40.39
+[attached probe] send recipient=shooter owner=1 weapon=devastator modelIndex=0 damage=26 time=40.39
+[attached probe] send recipient=victim owner=2 weapon=devastator modelIndex=0 damage=44 time=40.39
+[attached probe] send recipient=victim owner=1 weapon=devastator modelIndex=0 damage=26 time=40.39
+match restarted
+shooter.log
+[EffectSystem] effectinfo: 301 effects, particlefont atlas: loaded, style overlay: 0 effects
+[Particles] backend=original (cl_particles_modern=0)
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[lb]reconcile] origin SNAP 1067.3u (>32) — teleport/respawn or desync; smoothing reset
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+[NetGame] client loaded map 'stormkeep' (dm) for render + prediction collision.
+[lb]reconcile] origin SNAP 1226.5u (>32) — teleport/respawn or desync; smoothing reset
+[lb]reconcile] origin SNAP 1226.5u (>32) — teleport/respawn or desync; smoothing reset
+[attached probe] receive owner=2 damage=44 time=40.39 mode=1
+[attached probe] receive owner=1 damage=26 time=40.39 mode=1
+[attached probe] attach owner=2 bone=hand_R effect=damage_devastator duration=19.77 time=29.74
+[attached probe] emit owner=2 local=1 view=1 time=29.74 effect=damage_devastator at=<964.69775, 330.84906, 16.30093>
+[attached probe] emit owner=2 local=1 view=1 time=30.08 effect=damage_devastator at=<963.1402, 328.79605, 19.25024>
+[attached probe] emit owner=2 local=1 view=1 time=30.37 effect=damage_devastator at=<964.62445, 330.7756, 16.296455>
+[attached probe] attach owner=1 bone=spine3 effect=damage_devastator duration=18.89 time=30.62
+[attached probe] emit owner=2 local=1 view=1 time=30.62 effect=damage_devastator at=<964.60406, 330.75504, 16.2947>
+[attached probe] suppress owner=1 local=1 view=1 time=30.62
+[attached probe] emit owner=2 local=1 view=1 time=30.93 effect=damage_devastator at=<964.5896, 330.7404, 16.293306>
+[attached probe] suppress owner=1 local=1 view=1 time=30.93
+[attached probe] emit owner=2 local=1 view=1 time=31.24 effect=damage_devastator at=<964.58887, 330.73962, 16.29324>
+[attached probe] suppress owner=1 local=1 view=1 time=31.24
+[attached probe] emit owner=2 local=1 view=1 time=31.55 effect=damage_devastator at=<964.5988, 330.74966, 16.294205>
+[attached probe] suppress owner=1 local=1 view=1 time=31.55
+[attached probe] emit owner=2 local=1 view=1 time=31.86 effect=damage_devastator at=<964.61847, 330.7693, 16.295977>
+[attached probe] suppress owner=1 local=1 view=1 time=31.86
+[attached probe] emit owner=2 local=1 view=1 time=32.19 effect=damage_devastator at=<964.64777, 330.79898, 16.298208>
+[attached probe] suppress owner=1 local=1 view=1 time=32.19
+[attached probe] emit owner=2 local=1 view=1 time=32.49 effect=damage_devastator at=<964.67816, 330.82892, 16.300032>
+[attached probe] suppress owner=1 local=1 view=1 time=32.49
+[attached probe] emit owner=2 local=1 view=1 time=32.76 effect=damage_devastator at=<964.70355, 330.85458, 16.301167>
+[attached probe] suppress owner=1 local=1 view=1 time=32.76
+[attached probe] emit owner=2 local=1 view=1 time=32.98 effect=damage_devastator at=<964.7206, 330.87155, 16.301702>
+[attached probe] suppress owner=1 local=1 view=1 time=32.98
+[attached probe] emit owner=2 local=1 view=1 time=33.20 effect=damage_devastator at=<964.73315, 330.884, 16.302013>
+[attached probe] suppress owner=1 local=1 view=1 time=33.20
+[attached probe] emit owner=2 local=1 view=1 time=33.41 effect=damage_devastator at=<964.74176, 330.89252, 16.302176>
+[attached probe] suppress owner=1 local=1 view=1 time=33.41
+]cmd spectate victim
+[attached probe] emit owner=2 local=1 view=1 time=33.63 effect=damage_devastator at=<964.7471, 330.8978, 16.302256>
+[attached probe] suppress owner=1 local=1 view=1 time=33.63
+now spectating
+[lb]reconcile] origin SNAP 127.3u (>32) — teleport/respawn or desync; smoothing reset
+[attached probe] end owner=1 dead=False time=33.84
+[attached probe] suppress owner=2 local=1 view=2 time=33.84
+[attached probe] suppress owner=2 local=1 view=2 time=34.03
+[attached probe] suppress owner=2 local=1 view=2 time=34.24
+[attached probe] suppress owner=2 local=1 view=2 time=34.45
+[attached probe] suppress owner=2 local=1 view=2 time=34.63
+[attached probe] suppress owner=2 local=1 view=2 time=34.85
+[attached probe] suppress owner=2 local=1 view=2 time=35.02
+[attached probe] suppress owner=2 local=1 view=2 time=35.19
+[attached probe] suppress owner=2 local=1 view=2 time=35.39
+[attached probe] suppress owner=2 local=1 view=2 time=35.55
+[attached probe] suppress owner=2 local=1 view=2 time=35.71
+[attached probe] suppress owner=2 local=1 view=2 time=35.91
+[attached probe] suppress owner=2 local=1 view=2 time=36.11
+[attached probe] suppress owner=2 local=1 view=2 time=36.30
+[attached probe] suppress owner=2 local=1 view=2 time=36.52
+[attached probe] suppress owner=2 local=1 view=2 time=36.72
+[attached probe] suppress owner=2 local=1 view=2 time=36.89
+[attached probe] suppress owner=2 local=1 view=2 time=37.07
+[attached probe] suppress owner=2 local=1 view=2 time=37.24
+[attached probe] suppress owner=2 local=1 view=2 time=37.42
+]chase_active 1
+[attached probe] emit owner=2 local=1 view=0 time=37.58 effect=damage_devastator at=<964.75104, 330.90176, 16.302288>
+[attached probe] emit owner=2 local=1 view=0 time=37.75 effect=damage_devastator at=<964.72015, 330.8714, 16.301693>
+[attached probe] emit owner=2 local=1 view=0 time=37.90 effect=damage_devastator at=<964.703, 330.85382, 16.301142>
+[attached probe] emit owner=2 local=1 view=0 time=38.09 effect=damage_devastator at=<964.67975, 330.83054, 16.30011>
+[attached probe] emit owner=2 local=1 view=0 time=38.28 effect=damage_devastator at=<964.6558, 330.80673, 16.298744>
+[attached probe] emit owner=2 local=1 view=0 time=38.41 effect=damage_devastator at=<964.64087, 330.7922, 16.297695>
+[attached probe] emit owner=2 local=1 view=0 time=38.55 effect=damage_devastator at=<964.6261, 330.7772, 16.296598>
+[attached probe] emit owner=2 local=1 view=0 time=38.73 effect=damage_devastator at=<964.6098, 330.76068, 16.295212>
+[attached probe] emit owner=2 local=1 view=0 time=38.89 effect=damage_devastator at=<964.59863, 330.7494, 16.2942>
+[attached probe] emit owner=2 local=1 view=0 time=39.06 effect=damage_devastator at=<964.59174, 330.7425, 16.293514>
+[attached probe] emit owner=2 local=1 view=0 time=39.19 effect=damage_devastator at=<964.5888, 330.7396, 16.293236>
+[attached probe] emit owner=2 local=1 view=0 time=39.35 effect=damage_devastator at=<964.5879, 330.73865, 16.293135>
+[attached probe] emit owner=2 local=1 view=0 time=39.54 effect=damage_devastator at=<964.5908, 330.74158, 16.293427>
+[attached probe] emit owner=2 local=1 view=0 time=39.70 effect=damage_devastator at=<964.5961, 330.74692, 16.293966>
+[attached probe] emit owner=2 local=1 view=0 time=39.88 effect=damage_devastator at=<964.6058, 330.75653, 16.29486>
+[attached probe] emit owner=2 local=1 view=0 time=40.06 effect=damage_devastator at=<964.619, 330.7698, 16.296024>
+[lb]reconcile] origin SNAP 2323.1u (>32) — teleport/respawn or desync; smoothing reset
+[attached probe] end owner=2 dead=False time=40.26
+victim.log
+[EffectSystem] effectinfo: 301 effects, particlefont atlas: loaded, style overlay: 0 effects
+[Particles] backend=original (cl_particles_modern=0)
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 2, tickrate 64 Hz.
+[lb]reconcile] origin SNAP 1132.4u (>32) — teleport/respawn or desync; smoothing reset
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 2.
+[NetGame] client loaded map 'stormkeep' (dm) for render + prediction collision.
+[lb]reconcile] origin SNAP 1702.2u (>32) — teleport/respawn or desync; smoothing reset
+[lb]reconcile] origin SNAP 2323.1u (>32) — teleport/respawn or desync; smoothing reset
+[attached probe] receive owner=2 damage=44 time=40.39 mode=1
+[attached probe] receive owner=1 damage=26 time=40.39 mode=1
+[attached probe] attach owner=1 bone=spine3 effect=damage_devastator duration=19.83 time=29.48
+[attached probe] emit owner=1 local=2 view=2 time=29.48 effect=damage_devastator at=<1041.2787, 239.17744, 10.962664>
+[attached probe] emit owner=1 local=2 view=2 time=29.91 effect=damage_devastator at=<1041.2731, 239.17177, 10.963232>
+[attached probe] attach owner=2 bone=hand_R effect=damage_devastator duration=19.01 time=30.30
+[attached probe] emit owner=1 local=2 view=2 time=30.30 effect=damage_devastator at=<1041.2506, 239.14941, 10.965286>
+[attached probe] suppress owner=2 local=2 view=2 time=30.30
+[attached probe] emit owner=1 local=2 view=2 time=30.68 effect=damage_devastator at=<1041.217, 239.1157, 10.967861>
+[attached probe] suppress owner=2 local=2 view=2 time=30.68
+[attached probe] emit owner=1 local=2 view=2 time=31.00 effect=damage_devastator at=<1041.1849, 239.08366, 10.969715>
+[attached probe] suppress owner=2 local=2 view=2 time=31.00
+[attached probe] emit owner=1 local=2 view=2 time=31.29 effect=damage_devastator at=<1041.1584, 239.05714, 10.970821>
+[attached probe] suppress owner=2 local=2 view=2 time=31.29
+[attached probe] emit owner=1 local=2 view=2 time=31.62 effect=damage_devastator at=<1041.1364, 239.03508, 10.971445>
+[attached probe] suppress owner=2 local=2 view=2 time=31.62
+[attached probe] emit owner=1 local=2 view=2 time=31.92 effect=damage_devastator at=<1041.1241, 239.02286, 10.971668>
+[attached probe] suppress owner=2 local=2 view=2 time=31.92
+[attached probe] emit owner=1 local=2 view=2 time=32.17 effect=damage_devastator at=<1041.1188, 239.0175, 10.971739>
+[attached probe] suppress owner=2 local=2 view=2 time=32.17
+[attached probe] emit owner=1 local=2 view=2 time=32.39 effect=damage_devastator at=<1041.1146, 239.01335, 10.9717865>
+[attached probe] suppress owner=2 local=2 view=2 time=32.39
+[attached probe] emit owner=1 local=2 view=2 time=32.61 effect=damage_devastator at=<1041.111, 239.00967, 10.971821>
+[attached probe] suppress owner=2 local=2 view=2 time=32.61
+[attached probe] emit owner=1 local=2 view=2 time=32.84 effect=damage_devastator at=<1041.1075, 239.00623, 10.971842>
+[attached probe] suppress owner=2 local=2 view=2 time=32.84
+[attached probe] emit owner=1 local=2 view=2 time=33.06 effect=damage_devastator at=<1041.1047, 239.0035, 10.971859>
+[attached probe] suppress owner=2 local=2 view=2 time=33.06
+[attached probe] emit owner=1 local=2 view=2 time=33.26 effect=damage_devastator at=<1041.1025, 239.0013, 10.97187>
+[attached probe] suppress owner=2 local=2 view=2 time=33.26
+[attached probe] end owner=1 dead=False time=33.47
+[attached probe] suppress owner=2 local=2 view=2 time=33.47
+[attached probe] suppress owner=2 local=2 view=2 time=33.68
+[attached probe] suppress owner=2 local=2 view=2 time=33.90
+[attached probe] suppress owner=2 local=2 view=2 time=34.11
+[attached probe] suppress owner=2 local=2 view=2 time=34.32
+[attached probe] suppress owner=2 local=2 view=2 time=34.52
+[attached probe] suppress owner=2 local=2 view=2 time=34.72
+[attached probe] suppress owner=2 local=2 view=2 time=34.90
+[attached probe] suppress owner=2 local=2 view=2 time=35.07
+[attached probe] suppress owner=2 local=2 view=2 time=35.26
+[attached probe] suppress owner=2 local=2 view=2 time=35.43
+[attached probe] suppress owner=2 local=2 view=2 time=35.61
+[attached probe] suppress owner=2 local=2 view=2 time=35.81
+[attached probe] suppress owner=2 local=2 view=2 time=36.00
+[attached probe] suppress owner=2 local=2 view=2 time=36.16
+[attached probe] suppress owner=2 local=2 view=2 time=36.31
+[attached probe] suppress owner=2 local=2 view=2 time=36.46
+[attached probe] suppress owner=2 local=2 view=2 time=36.63
+[attached probe] suppress owner=2 local=2 view=2 time=36.79
+[attached probe] suppress owner=2 local=2 view=2 time=36.94
+[attached probe] suppress owner=2 local=2 view=2 time=37.11
+[attached probe] suppress owner=2 local=2 view=2 time=37.27
+[attached probe] suppress owner=2 local=2 view=2 time=37.44
+[attached probe] suppress owner=2 local=2 view=2 time=37.62
+[attached probe] suppress owner=2 local=2 view=2 time=37.78
+[attached probe] suppress owner=2 local=2 view=2 time=37.96
+[attached probe] suppress owner=2 local=2 view=2 time=38.12
+[attached probe] suppress owner=2 local=2 view=2 time=38.31
+[attached probe] suppress owner=2 local=2 view=2 time=38.48
+[attached probe] suppress owner=2 local=2 view=2 time=38.63
+[attached probe] suppress owner=2 local=2 view=2 time=38.80
+[attached probe] suppress owner=2 local=2 view=2 time=38.96
+[attached probe] suppress owner=2 local=2 view=2 time=39.14
+[attached probe] suppress owner=2 local=2 view=2 time=39.29
+[attached probe] suppress owner=2 local=2 view=2 time=39.46
+[attached probe] suppress owner=2 local=2 view=2 time=39.61
+[attached probe] suppress owner=2 local=2 view=2 time=39.78
+[lb]reconcile] origin SNAP 1294.6u (>32) — teleport/respawn or desync; smoothing reset
+[attached probe] end owner=2 dead=False time=39.96

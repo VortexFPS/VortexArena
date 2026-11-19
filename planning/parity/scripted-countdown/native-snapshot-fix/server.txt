@@ -1,0 +1,150 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: The separate rendering thread feature is experimental. Feel free to try it since it will eventually become a stable feature.
+However, bear in mind that at the moment it can lead to project crashes or instability.
+So, unless you want to test the engine, set the "rendering/driver/threads/thread_model" project setting to 'Safe'.
+     at: setup2 (main/main.cpp:3415)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Enabled maxfps=0 refresh=-1Hz cpu=6c gpu=[0m
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag][0m
+=== VortexArena boot ===[0m
+Weapons:   27[0m
+Items:     21[0m
+Mutators:  46[0m
+GameTypes: 21[0m
+Sounds:    223[0m
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).[0m
+[lb]MenuState] user gamedir mounted: /tmp/va-countdown-native9/server-user/data (drop .pk3 packs in its maps/ subfolder).[0m
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"[0m
+"maxplayers" set to "32"[0m
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).[0m
+[lb]MenuState] cvar help: 1386 engine descriptions.[0m
+[lb]shell] --cvar sv_public = "0"[0m
+[lb]shell] --cvar sv_cheats = "1"[0m
+[lb]shell] --cvar sv_eventlog = "1"[0m
+[lb]shell] --cvar g_start_delay = "0"[0m
+[lb]shell] --cvar g_warmup = "0"[0m
+[lb]shell] --cvar g_spawnshieldtime = "0"[0m
+[lb]shell] --cvar g_balance_teams_prevent_imbalance = "0"[0m
+[lb]shell] --cvar bot_number = "0"[0m
+[lb]shell] --cvar g_balance_kill_delay = "4"[0m
+[lb]shell] --cvar g_balance_kill_antispam = "0"[0m
+[lb]shell] --cvar sv_clones = "2"[0m
+[lb]shell] --cvar cl_frameprofiler = "0"[0m
+[lb]shell] --cvar bot_neural_bake = "0"[0m
+[lb]video] vid_vsync 0 → requested Disabled, actual Enabled (off — uncapped, may tear)[0m
+[lb]video] cl_maxfps 256 -> Engine.MaxFps 144 (auto: nothing set a cap, using max(144, refresh); refresh -1Hz)[0m
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)[0m
+[lb]video] process priority boost unavailable: Permission denied[0m
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] hosting listen server: gametype=dm map=runningmanctf bots=0 skill=-1 timelimit=0 fraglimit=0[0m
+[NetGame] dedicated slim: headless host — client render/audio asset loads are skipped (server keeps collision, entities, muzzle tags, waypoints). `sv_dedicated_slim 0` restores the full load.
+[NetGame] DEDICATED: no local client — no loopback connection, carrier, camera, HUD or prediction. All player slots are available to real clients.
+[lb]GameWorld] tick rate: sys_ticrate=0.015625 -> 64 Hz [lb]sharedStore=True, cfgLoaded=False][0m
+[NetGame] dedicated loop cap: Engine.MaxFps 64 (sim tickrate 64 Hz).
+[NetTransport.Server] listening on UDP 26918 (max 32).
+[ServerNet] LAN discovery: answering getinfo on UDP 26919 (game port 26918).
+[ServerConsole] reading commands from stdin (type 'status', 'help', 'quit'; --no-console to disable).
+[NetGame] precached 0 weapon models, skipped 24 (lazy), 24 muzzle tags.
+[NetGame] listen server on 127.0.0.1:26918 (map 'runningmanctf', dm, 0 bots) — self-connecting.
+[LoadTimeline] host runningmanctf — load begin → ready, 1210 ms total
+    textures.compress: nothing compressed (gl_texturecompression 1, no eligible textures)
+    bsp.parse             40.2 ms    3.3 %
+    collision.build      395.1 ms   32.7 %
+    world.boot           376.2 ms   31.1 %
+  server.start           868.7 ms   71.8 %
+  precache.weapons       287.8 ms   23.8 %
+  (unaccounted: yields, present, unmeasured)       53.6 ms
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 30.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 0.8 rcpu 0.0 gpu 0.0 rest 30.5 late 23.2 | alloc 0B | ticks 1 | watchdog: 11/11 samples in '(post-process)' | DEBUG-BUILD[0m
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6[0m
+[lb]hitch MIXED ×2] 31.3–78.1ms over 0.1s (med 15.6) — 30.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[ServerNet] peer 1671934045 connected (awaiting handshake).
+:connect:1:-1:
+:join:1:-1::RedProbe
+[ServerNet] peer 1671934045 accepted as 'RedProbe' (netId 1671934045, id 573489ae).
+[ServerNet] peer 203110334 connected (awaiting handshake).
+:connect:2:-2:
+:join:2:-2::BlueProbe
+[ServerNet] peer 203110334 accepted as 'BlueProbe' (netId 203110334, id 749318e8).
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — ng.process 30.3ms (typ 2.1ms, 15× over) | proc 30.9 rcpu 0.0 gpu 0.0 rest 0.4 late 1.9 | alloc 195KB | ticks 1 | watchdog: 5/22 samples in 'net.poll' | DEBUG-BUILD[0m
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6[0m
+gametype: dm  time: 25.4
+players: 2 (0 bots)
+  BlueProbe        score    0  k/d 0/0
+"g_balance_kill_delay" is "4"
+"g_balance_kill_antispam" is "0"
+"sv_clones" is "2"
+:kill:suicide:2:2:type=kill:items=21
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — net.send 7.8ms (typ 0.9ms, 9× over) | proc 49.1 rcpu 0.0 gpu 0.0 rest 0.0 late 2.3 | alloc 149KB | ticks 1 | watchdog: 30/41 samples in 'sim.start' | DEBUG-BUILD[0m
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6[0m
+[lb]hitch MIXED] 281.3ms (16 dropped @60Hz) (med 15.6, ×18.0) — 261.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 19.9 rcpu 0.0 gpu 0.0 rest 261.4 late 269.3 | alloc 0B | ticks 1 | watchdog: 235/247 samples in '(post-process)' | DEBUG-BUILD[0m
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6[0m
+[lb]hitch MIXED ×16…] ongoing 93.8–359.4ms over 3.1s — 261.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+gametype: dm  time: 71.0
+players: 2 (0 bots)
+  BlueProbe        score   -1  k/d 0/1
+:part:2
+:anticheat:_time:2:50.67188
+:anticheat:speedhack:0.004266:-
+:anticheat:speedhack_m1:0.849927:-
+:anticheat:speedhack_m2:0.85201:-
+:anticheat:speedhack_m3:0.854031:-
+:anticheat:speedhack_m4:0.855996:-
+:anticheat:speedhack_m5:0.85791:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0.134881:-
+:anticheat:div0_evade:0.263449:-
+:anticheat:idle_snapaim:12.362159:-
+:anticheat:idle_snapaim_signal:12.409738:-
+:anticheat:idle_snapaim_noise:0.047578:-
+:anticheat:idle_snapaim_m2:1.540389:-
+:anticheat:idle_snapaim_m3:4.909499:-
+:anticheat:idle_snapaim_m4:8.764771:-
+:anticheat:idle_snapaim_m7:18.46542:-
+:anticheat:idle_snapaim_m10:24.877494:-
+:anticheat:div0_snapback:0:-
+[ServerNet] peer 203110334 disconnected (BlueProbe).
+[lb]hitch MIXED ×27…] ongoing 93.8–359.4ms over 6.7s — 261.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch MIXED ×27] 93.8–359.4ms over 6.7s (med 15.6) — 261.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch CPU-LOGIC] 718.8ms (42 dropped @60Hz) (med 15.6, ×46.0) — ng.process 365.4ms (typ 27.1ms, 13× over) | proc 418.0 rcpu 0.0 gpu 0.0 rest 300.8 late 313.7 | alloc 16KB | ticks 6 | watchdog: 278/647 samples in '(post-process)' | DEBUG-BUILD[0m
+[lb]hitch]   prev: 296.9 187.5 234.4 296.9 218.8 359.4 343.8 359.4[0m
+[lb]hitch MIXED] 546.9ms (32 dropped @60Hz) (med 15.6, ×35.0) — 394.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 152.8 rcpu 0.0 gpu 0.0 rest 394.1 late 393.2 | alloc 16KB | ticks 6 | watchdog: 349/486 samples in '(post-process)' | DEBUG-BUILD[0m
+[lb]hitch]   prev: 187.5 234.4 296.9 218.8 359.4 343.8 359.4 718.8[0m
+:part:1
+:anticheat:_time:1:52.17188
+:anticheat:speedhack:0.089426:-
+:anticheat:speedhack_m1:0.693798:-
+:anticheat:speedhack_m2:0.71215:-
+:anticheat:speedhack_m3:0.729432:-
+:anticheat:speedhack_m4:0.745914:-
+:anticheat:speedhack_m5:0.761714:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0.134461:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:8.663807:-
+:anticheat:idle_snapaim_signal:8.71543:-
+:anticheat:idle_snapaim_noise:0.051623:-
+:anticheat:idle_snapaim_m2:1.273495:-
+:anticheat:idle_snapaim_m3:3.707218:-
+:anticheat:idle_snapaim_m4:6.32519:-
+:anticheat:idle_snapaim_m7:12.571642:-
+:anticheat:idle_snapaim_m10:16.547004:-
+:anticheat:div0_snapback:0:-
+[ServerNet] peer 1671934045 disconnected (RedProbe).
+[lb]hitch MIXED ×4] 46.9–546.9ms over 0.8s (med 15.6) — 394.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+=== frame profiler session summary (83s, 4564 frames) ===[0m
+  fps: avg 56.5  1%low 48  0.1%low 1  (median 15.6ms, worst 776.3ms)[0m
+  hitches: 36 total — 36 primaries: 3 CPU-LOGIC, 33 MIXED[0m
+    worst[lb]1]: 718.8ms CPU-LOGIC (ng.process) @ t=80.5s[0m
+    worst[lb]2]: 546.9ms MIXED (proc:other) @ t=81.1s[0m
+    worst[lb]3]: 468.8ms MIXED (proc:other) @ t=81.5s[0m
+    worst[lb]4]: 375.0ms MIXED (proc:other) @ t=81.8s[0m
+    worst[lb]5]: 359.4ms MIXED (proc:other) @ t=76.5s[0m
+  gc: g0+23 g1+12 g2+4, total pause 202ms[0m
+  alloc: 200.3MB total, 0MB/s recent, peak 88.1MB in one frame @ t=2.6s, heap 57.1MB[0m
+  note: DEBUG build — frame times and the hitch census are NOT release-representative (run the release export via tools/perf-run.ps1 for real numbers)[0m
+  [lb]vram census] 0 resident textures, est 0 MB (textures only; Godot's vram monitor adds mesh/render-target buffers)[0m
+    compression: mode 1, s3tc unprobed (nothing compressed this session), ok 0, bc7-fallback 0, failed 0[0m
+    top 0:[0m

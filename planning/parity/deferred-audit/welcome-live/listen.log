@@ -1,0 +1,15 @@
+[lb]shell] --cvar hostname = "Loopback Welcome Fixture"
+[lb]shell] --cvar sv_motd = "Local Boil greeting\nSecond line from server config."
+[lb]shell] --cvar cl_welcome = "1"
+[lb]Shell] hosting listen server: gametype=dm map=boil bots=0 skill=-1 timelimit=0 fraglimit=0
+[NetTransport.Client] connecting to 127.0.0.1:27979 …
+[ClientNet] handshake accepted by '^2Loopback Welcome Fixture': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by '^2Loopback Welcome Fixture': netId 1.
+]set cl_welcome 0
+]set sv_motd "Opium replacement MOTD"
+]map opium
+[lb]Shell] hosting listen server: gametype=dm map=opium bots=0 skill=-1 timelimit=0 fraglimit=0
+[NetTransport.Client] connecting to 127.0.0.1:27979 …
+[ClientNet] handshake accepted by '^2Loopback Welcome Fixture': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by '^2Loopback Welcome Fixture': netId 1.
+]menu_showwelcomedialog

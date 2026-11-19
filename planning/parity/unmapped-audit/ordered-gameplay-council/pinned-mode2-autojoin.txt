@@ -1,0 +1,31 @@
+Pinned Xonotic Mode 2 autojoin and preference delivery
+DarkPlaces d93f9c4292039354a2b8d40d11bc386891e55fe5
+Xonotic data 863cd3e8456e18f577f7fe5fef857ff55ae62cc0
+
+Both local dedicated servers used Stormkeep TDM.
+The disposable SVQC build logged the preference immediately before Join
+and immediately after GetCvars handled this peer's sentcvar command.
+The stock run used unmodified pinned CSQC.
+The held run skipped only the automatic CSQC send for this preference.
+Its scripted console commands invoked the unchanged sendcvar handler.
+
+Stock CSQC, server log excerpt in order
++g_balance_teams 1 +sv_spectate 0 +g_spawn_near_teammate 1 +g_spawn_near_teammate_ignore_spawnpoint 2 +g_tdm 1 +map stormkeep
+:gamestart:tdm_stormkeep:0.1795067216.629170
+:team:1:-1:4
+[Mode2Probe] sentcvar name=Mode2Probe pref=1 time=6.7782
+[Mode2Probe] autojoin name=Mode2Probe pref=1 time=7.0126
+:team:1:14:2
+Mode2Probe is now playing on the BLUE team
+
+Held preference, server log excerpt in order
++g_balance_teams 1 +sv_spectate 0 +g_spawn_near_teammate 1 +g_spawn_near_teammate_ignore_spawnpoint 2 +g_tdm 1 +map stormkeep
+:gamestart:tdm_stormkeep:0.1795067271.914243
+:team:1:-1:4
+[Mode2Probe] autojoin name=Mode2Probe pref=0 time=7.0126
+:team:1:5:2
+Mode2Probe is now playing on the RED team
+[Mode2Probe] sentcvar name=Mode2Probe pref=1 time=8.4813
+[Mode2Probe] sentcvar name=Mode2Probe pref=0 time=9.1220
+client console: cl_cmd sendcvar cl_spawn_near_teammate
+client console: cl_spawn_near_teammate 0; cl_cmd sendcvar cl_spawn_near_teammate

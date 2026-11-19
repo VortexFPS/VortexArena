@@ -206,10 +206,12 @@ public sealed class Onslaught : GameType
         // placement near the player's death location). See OnPlayerSpawn.
         _spawnHandler = OnPlayerSpawn;
         MutatorHooks.PlayerSpawn.Add(_spawnHandler);
+        MutatorHooks.PlayerUseKey.Add(OnUseKey, HookOrder.Last);
     }
 
     public override void Deactivate()
     {
+        MutatorHooks.PlayerUseKey.Remove(OnUseKey);
         if (_spawnHandler is not null)
         {
             MutatorHooks.PlayerSpawn.Remove(_spawnHandler);
@@ -654,12 +656,15 @@ public sealed class Onslaught : GameType
             NotificationSystem.Send(broadcast, null, type, name, args);
     }
 
-    /// <summary>Player kills don't decide Onslaught (the generators do); the handler just notifies the host.</summary>
+    /// <summary>Report the frag and offer a respawn destination when the victim's team owns a choice.</summary>
     private bool OnDeath(ref DeathEvent ev)
     {
         if (ev.Victim is not Player victim)
             return false;
         Events?.OnFrag(ev.Attacker as Player, victim, ev.DeathType);
+        if (RadarRequested is { } request && Cvar(CvarSpawnChoose, 1f) != 0f
+            && CountSelfControlPoints((int)victim.Team) > 1)
+            request(victim);
         return false;
     }
 
@@ -842,16 +847,12 @@ public sealed class Onslaught : GameType
     /// </summary>
     public int CountSelfControlPoints(int team)
     {
+        if (Api.Services is null) return 0;
         int n = 0;
-        foreach (OnsNode node in Nodes)
-        {
-            if (node.IsGenerator)
-            {
-                if (node.Team == team) ++n; // QC: every same-team generator counts
-            }
-            else if (node.Captured && node.Team == team)
-                ++n; // QC: a same-team CAPTURED control point counts
-        }
+        foreach (Entity cp in Api.Entities.FindByClass("onslaught_controlpoint"))
+            if (!cp.IsFreed && (int)cp.Team == team && ControlPointNode(cp.GtPointId) is { Captured: true }) ++n;
+        foreach (Entity gen in Api.Entities.FindByClass("onslaught_generator"))
+            if (!gen.IsFreed && (gen.GtHomeTeam != 0 ? gen.GtHomeTeam : (int)gen.Team) == team) ++n;
         return n;
     }
 
@@ -997,8 +998,7 @@ public sealed class Onslaught : GameType
     /// <paramref name="pos"/>) and either teleports to it (if alive, between own CPs within teleport_radius) or
     /// queues a respawn AT it (if dead — sets <see cref="Entity.GtOnsSpawnBy"/> + forces respawn so the
     /// <see cref="OnPlayerSpawn"/> hook teleports them there). Returns a player-facing message (or null on a
-    /// successful silent action). This is the server side of the click-radar feature — the HUD that generates
-    /// the clicked <paramref name="pos"/> is a CSQC/client concern (see the spec's deferred note).
+    /// successful silent action). The owning client's radar supplies the clicked <paramref name="pos"/>.
     /// </summary>
     public string? HandleOnsSpawnCommand(Player player, Vector3 pos)
     {
@@ -1035,12 +1035,18 @@ public sealed class Onslaught : GameType
         return null;
     }
 
-    /// <summary>
-    /// QC MUTATOR_HOOKFUNCTION(ons, PlayerUseKey) (sv_onslaught.qc:1990): the +use key, while alive, not in a
-    /// vehicle, and past the teleport antispam, opens the click-radar IF the player is standing next to one of
-    /// their own control points. Returns true if the press is consumed (a source point was found). The HUD that
-    /// the QC then stuffcmds (<c>qc_cmd_cl hud clickradar</c>) is client-side; the server-side gate is faithful.
-    /// </summary>
+    /// <summary>The owning player's client should show the Onslaught destination picker.</summary>
+    public event Action<Player>? RadarRequested;
+
+    private bool OnUseKey(ref MutatorHooks.PlayerUseKeyArgs args)
+    {
+        if (args.Handled || RadarRequested is not { } request
+            || args.Player is not Player player || !HandleUseKey(player)) return false;
+        request(player);
+        return true;
+    }
+
+    /// <summary>Check the PlayerUseKey requirements before requesting a destination.</summary>
     public bool HandleUseKey(Player player)
     {
         if (Api.Services is null || MatchEnded)

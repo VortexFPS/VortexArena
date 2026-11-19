@@ -1,0 +1,56 @@
+[
+  {
+    "seconds": 13.786,
+    "frame": "RedProbe/0008.webp",
+    "sample": 13.752,
+    "label": "shielded"
+  },
+  {
+    "seconds": 18.298,
+    "frame": "BlueProbe/0033.webp",
+    "sample": 18.265,
+    "label": "building"
+  },
+  {
+    "seconds": 21.362,
+    "frame": "BlueProbe/0050.webp",
+    "sample": 21.329,
+    "label": "captured"
+  },
+  {
+    "seconds": 25.359,
+    "frame": "RedProbe/0072.webp",
+    "sample": 25.286,
+    "label": "exposed"
+  },
+  {
+    "seconds": 27.311,
+    "frame": "RedProbe/0083.webp",
+    "sample": 27.278,
+    "label": "damaged-one"
+  },
+  {
+    "seconds": 29.515,
+    "frame": "RedProbe/0095.webp",
+    "sample": 29.446,
+    "label": "damaged-two"
+  },
+  {
+    "seconds": 32.019,
+    "frame": "RedProbe/0109.webp",
+    "sample": 31.987,
+    "label": "damaged-late"
+  },
+  {
+    "seconds": 35.119,
+    "frame": "RedProbe/0126.webp",
+    "sample": 35.055,
+    "label": "destroyed"
+  },
+  {
+    "seconds": 35.073,
+    "frame": "BlueProbe/0126.webp",
+    "sample": 35.041,
+    "label": "other-view"
+  }
+]

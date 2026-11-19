@@ -8,8 +8,7 @@ namespace VortexArena.Engine.Collision;
 public enum PatchCollisionMode
 {
     /// <summary>The port's own: each triangle of a fine tessellation becomes a thick convex slab (a 24-unit
-    /// skirt under a walkable triangle, a 2-unit wall otherwise). The default, and what the native game's
-    /// movement was validated on.</summary>
+    /// skirt under a walkable triangle, a 2-unit wall otherwise). The former native profile.</summary>
     Slabs,
 
     /// <summary>DarkPlaces' own (<see cref="DarkPlacesPatchCollision"/>): the coarse collision tessellation
@@ -22,7 +21,7 @@ public enum PatchCollisionMode
 /// <summary>How a built <see cref="CollisionWorld"/> finds the brushes near a move.</summary>
 public enum CollisionBroadphase
 {
-    /// <summary>The 128x128 grid over the map's XY extent. The default.</summary>
+    /// <summary>The 128x128 grid over the map's XY extent.</summary>
     Grid,
 
     /// <summary>DarkPlaces' bounding interval hierarchy (<see cref="CollisionBih"/>): candidates along the
@@ -31,8 +30,8 @@ public enum CollisionBroadphase
 }
 
 /// <summary>
-/// The choices <see cref="BspCollisionBuilder.Build"/> offers. The defaults are the builder's behaviour
-/// before the options existed, bit for bit; nothing in the native game passes anything else.
+/// The choices <see cref="BspCollisionBuilder.Build"/> offers. A default-constructed instance
+/// reproduces the former native slab profile. The native map builder uses <see cref="Default"/>.
 /// </summary>
 public sealed class BspCollisionOptions
 {
@@ -43,9 +42,8 @@ public sealed class BspCollisionOptions
     /// Mark every brush of the map <see cref="Brush.HasAabbPlanes"/>, as DarkPlaces does
     /// (Mod_Q3BSP_LoadBrushes passes hasaabbplanes = true): a box is then swept against a brush's own planes
     /// only - the map compiler's bevel planes standing in for the box's faces and the edge cross products -
-    /// which is both what a DarkPlaces server computes and several times cheaper. Off by default: the native
-    /// game sweeps a box against a brush on every separating axis, which is geometrically exact where the
-    /// bevels are an approximation.
+    /// which is both what a DarkPlaces server computes and several times cheaper. The slab profile
+    /// sweeps on every separating axis, which is geometrically exact where the bevels are an approximation.
     /// </summary>
     public bool CompiledBrushesHaveAabbPlanes { get; init; }
 
@@ -54,28 +52,18 @@ public sealed class BspCollisionOptions
     /// (<see cref="DarkPlacesBrushGeometry"/>: Collision_NewBrushFromPlanes) instead of by intersecting every
     /// three planes. The brush is the same solid either way; the floats that describe it are not, and the
     /// sweep measures a brush by its corners. Also drops the few brushes DarkPlaces fails to build (256
-    /// planes or more, and so on), which a DarkPlaces server does not collide with. Off by default.
+    /// planes or more, and so on), which a DarkPlaces server does not collide with.
     /// </summary>
     public bool DarkPlacesBrushPoints { get; init; }
 
-    /// <summary>
-    /// The bytes of the map file the <see cref="BspData"/> was read from. Only
-    /// <see cref="PatchCollisionMode.DarkPlacesTriangles"/> looks at it, for one thing the parsed map does
-    /// not keep: each patch's LOD bounds, by which DarkPlaces groups patches so that neighbours tessellate
-    /// alike and leave no seam. Without it no two patches are grouped (each keeps its own level).
-    /// </summary>
-    public ReadOnlyMemory<byte> MapFile { get; init; }
+    /// <summary>Use DarkPlaces' arithmetic for traces against the built world.</summary>
+    public bool DarkPlacesArithmetic { get; init; }
 
     /// <summary>
-    /// What <see cref="BspCollisionBuilder.Build"/> uses when it is given no options: the defaults above -
-    /// unless the process was started with the environment variable <see cref="TrialVariable"/> set, which
-    /// exists so that the alternatives can be tried on the whole native game (and its whole test suite)
-    /// without a code change: <c>triangles</c> for DarkPlaces' patch triangles, <c>triangles+bih</c> to find
-    /// them through the hierarchy as well. (Without the map file's bytes no two patches are grouped for
-    /// seamless tessellation, which moves a few triangle seams by a unit; see <see cref="MapFile"/>.)
-    /// Unset, empty or anything else: the defaults.
+    /// The native BSP builder uses the DarkPlaces profile. Set <see cref="TrialVariable"/> to <c>slabs</c> to
+    /// use the former native collision or to <c>triangles</c> / <c>triangles+bih</c> to isolate those options.
     /// </summary>
-    public static BspCollisionOptions Default { get; } = FromEnvironment();
+    public static BspCollisionOptions Default => NativeProfile;
 
     /// <summary>The environment variable <see cref="Default"/> reads once, at first use.</summary>
     public const string TrialVariable = "VORTEX_PATCH_COLLISION";
@@ -89,13 +77,22 @@ public sealed class BspCollisionOptions
         {
             "triangles" => new BspCollisionOptions { PatchCollision = PatchCollisionMode.DarkPlacesTriangles },
             "triangles+bih" => new BspCollisionOptions { PatchCollision = PatchCollisionMode.DarkPlacesTriangles, Broadphase = CollisionBroadphase.Bih },
-            _ => new BspCollisionOptions(),
+            "slabs" => new BspCollisionOptions(),
+            _ => DarkPlaces,
         };
     }
 
     /// <summary>A map as a DarkPlaces server collides with it: its patch triangles, found through its hierarchy.</summary>
-    public static BspCollisionOptions DarkPlaces(ReadOnlyMemory<byte> mapFile) =>
-        new() { PatchCollision = PatchCollisionMode.DarkPlacesTriangles, Broadphase = CollisionBroadphase.Bih, CompiledBrushesHaveAabbPlanes = true, DarkPlacesBrushPoints = true, MapFile = mapFile };
+    public static BspCollisionOptions DarkPlaces { get; } = new()
+    {
+        PatchCollision = PatchCollisionMode.DarkPlacesTriangles,
+        Broadphase = CollisionBroadphase.Bih,
+        CompiledBrushesHaveAabbPlanes = true,
+        DarkPlacesBrushPoints = true,
+        DarkPlacesArithmetic = true,
+    };
+
+    private static readonly BspCollisionOptions NativeProfile = FromEnvironment();
 }
 
 /// <summary>
@@ -156,20 +153,20 @@ public static class BspCollisionBuilder
     /// gametype it doesn't belong to. Null/empty → keep every submodel (prior behavior).
     ///
     /// <paramref name="options"/> (optional) chooses the patch collision and the broadphase; null is
-    /// <see cref="BspCollisionOptions.Default"/>, the behaviour of this method before it took options.
+    /// <see cref="BspCollisionOptions.Default"/>.
     /// </summary>
     public static Result Build(BspData bsp, IReadOnlySet<int>? droppedSubmodels = null, BspCollisionOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(bsp);
         options ??= BspCollisionOptions.Default;
-        var world = new CollisionWorld();
+        var world = new CollisionWorld { DarkPlacesArithmetic = options.DarkPlacesArithmetic };
         var submodels = new List<Submodel>();
 
         // DarkPlaces' patch triangles are made for the whole map at once (neighbouring patches settle
         // their tessellation together), then handed out per model; the slabs are made per model below.
         bool triangles = options.PatchCollision == PatchCollisionMode.DarkPlacesTriangles;
-        List<Brush>[]? patchTriangles = triangles ? DarkPlacesPatchCollision.Build(bsp, options.MapFile.Span) : null;
-        (Vector3 Mins, Vector3 Maxs)[]? modelBounds = triangles && bsp.Models.Length > 0 ? DarkPlacesPatchCollision.ModelBounds(bsp, options.MapFile.Span) : null;
+        List<Brush>[]? patchTriangles = triangles ? DarkPlacesPatchCollision.Build(bsp) : null;
+        (Vector3 Mins, Vector3 Maxs)[]? modelBounds = triangles && bsp.Models.Length > 0 ? DarkPlacesPatchCollision.ModelBounds(bsp) : null;
         if (options.Broadphase == CollisionBroadphase.Bih) world.UseBih = true;
 
         if (bsp.Models.Length == 0)

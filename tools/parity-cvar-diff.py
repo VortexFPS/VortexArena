@@ -26,7 +26,8 @@ Outputs planning/parity/CVAR-DIFF.md (+ _cvar-diff.json full lists).
 Run: python tools/parity-cvar-diff.py
 """
 from __future__ import annotations
-import datetime, json, os, pathlib, re, sys
+import argparse, datetime, json, os, pathlib, re, subprocess, sys
+from parity_reference import PIN, require_reference
 try:
     import yaml
 except ImportError:
@@ -158,8 +159,9 @@ def tokenize(line: str) -> list[str]:
 class CfgSim:
     """Python mirror of ConfigInterpreter over one data tree. values[name] = (value, source_file)."""
 
-    def __init__(self, root: pathlib.Path):
+    def __init__(self, root: pathlib.Path, revision: str | None = None):
         self.root = root
+        self.revision = revision
         self.values: dict[str, tuple[str, str]] = {}
         self.aliases: dict[str, str] = {"if_client": "${* asis}", "if_dedicated": "${* asis}"}
         self.executed: list[str] = []
@@ -170,6 +172,10 @@ class CfgSim:
         self._canon: dict[str, str] = {}
 
     def read(self, path: str) -> str | None:
+        if self.revision:
+            value = subprocess.run(["git", "-C", str(self.root), "cat-file", "blob", f"{self.revision}:{path}"],
+                                   capture_output=True)
+            return value.stdout.decode("utf-8", errors="replace") if value.returncode == 0 else None
         p = self.root / path
         try:
             return p.read_text(encoding="utf-8", errors="replace") if p.is_file() else None
@@ -313,6 +319,7 @@ def scan_code_literals() -> tuple[dict[str, list[tuple[str, str, str]]], set[str
     (b) the set of ALL string literals, and (c) dynamic-name patterns from interpolated strings
     ($"g_balance_{NetName}_reload_ammo" -> ^g_balance_.+_reload_ammo$) — both used by never-read."""
     reg_re = re.compile(r'\bRegister\(\s*"([A-Za-z_][\w+.]*)"\s*,\s*"([^"]*)"')
+    table_re = re.compile(r'\bCvarDef\[\]\s+\w+\s*=\s*\{(.*?)^\s*\};', re.S | re.M)
     new_re = re.compile(r'\bnew\(\s*"([A-Za-z_][\w+.]*)"\s*,\s*"([^"]*)"')
     fb_re = re.compile(r'\b(?:GetFloat|GetInt|Float|Int|CvarOr|Cvar)\(\s*"([A-Za-z_][\w+.]*)"\s*,\s*(-?\d+(?:\.\d+)?)f?\s*[),]')
     lit_re = re.compile(r'"([A-Za-z_][\w+.]*)"')
@@ -321,7 +328,7 @@ def scan_code_literals() -> tuple[dict[str, list[tuple[str, str, str]]], set[str
     literals: set[str] = set()
     dynamic_srcs: set[str] = set()
     for top in ("src", "game"):
-        for p in (ROOT / top).rglob("*.cs"):
+        for p in sorted((ROOT / top).rglob("*.cs")):
             if any(part in ("obj", "bin", ".godot") for part in p.parts):
                 continue
             try:
@@ -333,8 +340,10 @@ def scan_code_literals() -> tuple[dict[str, list[tuple[str, str, str]]], set[str
             for m in interp_re.finditer(text):
                 dynamic_srcs.add(m.group(1))
             rel = p.relative_to(ROOT).as_posix()
-            for regex, kind in ((reg_re, "Register"), (new_re, "table"), (fb_re, "fallback")):
-                for m in regex.finditer(text):
+            tables = (m for table in table_re.finditer(text)
+                      for m in new_re.finditer(text, table.start(1), table.end(1)))
+            for matches, kind in ((reg_re.finditer(text), "Register"), (tables, "table"), (fb_re.finditer(text), "fallback")):
+                for m in matches:
                     line = text.count("\n", 0, m.start()) + 1
                     defaults.setdefault(m.group(1).lower(), []).append((m.group(2), f"{rel}:{line}", kind))
     dynamic = []
@@ -348,7 +357,14 @@ def scan_code_literals() -> tuple[dict[str, list[tuple[str, str, str]]], set[str
 def main():
     # Before anything else: prove there are two distinct trees to compare. Subsumes the old
     # BASE_DATA.is_dir() check and adds the same-directory case, which is the one that was live.
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--verify-pin", action="store_true", help="check upstream commit and cfg inputs")
+    args = parser.parse_args()
     assert_distinct_roots()
+    reference = "unverified source tree"
+    if args.verify_pin:
+        require_reference(BASE_DATA)
+        reference = PIN
     print(f"port: {PORT_DATA}\nbase: {BASE_DATA}")
 
     known_patterns: list[tuple[str, str]] = []
@@ -361,10 +377,13 @@ def main():
         low = name.lower()
         return any(_fn.fnmatch(low, pat) for pat, _ in known_patterns)
 
-    base, port = CfgSim(BASE_DATA), CfgSim(PORT_DATA)
+    base, port = CfgSim(BASE_DATA, PIN if args.verify_pin else None), CfgSim(PORT_DATA)
     for entry in ENTRIES:
-        base.exec_file(entry)
+        if entry != "vortex-common.cfg":
+            base.exec_file(entry)
         port.exec_file(entry)
+    if base.missing or port.missing:
+        sys.exit(f"Incomplete cfg comparison: missing Base {sorted(set(base.missing))}, port {sorted(set(port.missing))}")
 
     # 1. chain divergence
     bset, pset = {f.lower() for f in base.executed}, {f.lower() for f in port.executed}
@@ -411,11 +430,12 @@ def main():
     md = [
         "# Cvar default diff — Base vs port",
         "",
-        f"_Generated {today} by `tools/parity-cvar-diff.py`. Entries simulated on both trees:"
-        f" {', '.join(f'`{e}`' for e in ENTRIES)} (the port's real boot chain — ConfigLoader/MenuState)._",
+        f"_Generated {today} by `tools/parity-cvar-diff.py`. Simulated entries (Vortex layer on port only):"
+        f" {', '.join(f'`{e}`' for e in ENTRIES)}. This compares equivalent configuration inputs. "
+        "It does not simulate the original engine's entire startup or a saved player profile._",
         "",
-        f"Base tree: `{BASE_DATA}` — {len(base.values)} effective cvars from {len(base.executed)} files.",
-        f"Port tree: `{PORT_DATA}` — {len(port.values)} effective cvars from {len(port.executed)} files.",
+        f"Upstream (`{reference}`) — {len(base.values)} effective cvars from {len(base.executed)} files.",
+        f"Port — {len(port.values)} effective cvars from {len(port.executed)} files.",
         "",
         "Findings are LEADS for triage, not verdicts: confirm each on the live path, then either fix it",
         "or record it in [cvar-diff-known.yaml](cvar-diff-known.yaml) (intended divergences) so it stops",
@@ -429,8 +449,6 @@ def main():
     md += [f"- text differs: `{f}`" for f in differing_text] or []
     if not (only_base or only_port or differing_text):
         md.append("- none — the trees exec identical files with identical text")
-    if base.missing or port.missing:
-        md.append(f"- missing exec targets: Base {sorted(set(base.missing))} / port {sorted(set(port.missing))}")
 
     md += ["", f"## 2. Effective value diffs ({len(value_diffs)})", ""]
     if value_diffs:
@@ -476,7 +494,7 @@ def main():
 
     (OUT / "CVAR-DIFF.md").write_text("\n".join(md), encoding="utf-8")
     (OUT / "_cvar-diff.json").write_text(json.dumps({
-        "generated": today,
+        "generated": today, "reference": reference,
         "value_diffs": [{"name": n, "base": b, "port": p, "src": s} for n, b, p, s in value_diffs],
         "base_only": base_only, "port_only": port_only,
         "code_mismatch": [{"name": n, "base": b, "code": d, "where": w, "kind": k}

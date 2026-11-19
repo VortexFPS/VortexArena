@@ -1076,7 +1076,8 @@ public sealed partial class ParticleSim
         _highWater = 0;
         _freeParticle = 0;
         LiveCount = 0;
-        _updateTime = 0f;
+        // Atlas changes can clear a live pool while the render clock keeps running.
+        _updateTime = _currentTime;
         _lastActiveCount = 0;   // rings fully covered again (parity state)
         _traceCursor = _contentCursor = 0;
     }

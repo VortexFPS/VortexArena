@@ -151,15 +151,28 @@ public partial class HudConfigEditor : Control
         interp.RegisterCommand("menu_showhudexit", _ => Menu.MenuCommand.Run("menu_showhudexit"));
         interp.RegisterCommand("menu_showhudoptions", a => Menu.MenuCommand.Run(
             a.Count > 1 ? "menu_showhudoptions " + a[1] : "menu_showhudoptions"));
+        // The shared console survives map changes. Resolve the editor at invocation so a menu command
+        // after disconnect cannot enable the editor for the next match or keep the old HUD alive.
+        ulong editorId = GetInstanceId();
         interp.RegisterCommand("hud", a =>
         {
-            if (a.Count >= 3 && a[1] == "save")
+            if (a.Count >= 2 && a[1] == "configure")
+            {
+                if (GodotObject.InstanceFromId(editorId) is HudConfigEditor editor && editor.IsInsideTree())
+                    MenuState.Cvars.Set("_hud_configure", editor.Configuring ? "0" : "1");
+            }
+            else if (a.Count >= 3 && a[1] == "save" && a[2].Length != 0)
                 ExportCfg(a[2]);
+            else if (GodotObject.InstanceFromId(editorId) is HudConfigEditor current
+                 && current.IsInsideTree() && current.HandleGameplayHudCommand?.Invoke(a) == true)
+                return;
             else
                 VortexArena.Common.Diagnostics.Log.Info(
-                    "Usage: hud save <configname> — export the current HUD layout (QC `hud save`)");
+                    "Usage: hud configure | hud save <configname> | hud quickmenu [mode [submenu [filename]]] | hud radar [on/off] | hud clickradar");
         });
     }
+
+    internal Func<IReadOnlyList<string>, bool>? HandleGameplayHudCommand { get; set; }
 
     // =================================================================================================
     //  Public accessors / cvar gate

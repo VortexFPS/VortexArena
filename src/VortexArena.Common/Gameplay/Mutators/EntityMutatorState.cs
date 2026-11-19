@@ -152,8 +152,8 @@ namespace VortexArena.Common.Framework
         // --- buffs (sv_buffs.qc + buff/*) ---
         /// <summary>QC .buff_shield — until this time the player can't pick up / be given a buff (drop cooldown).</summary>
         public float BuffShield;
-        /// <summary>QC .buff_effect_delay — throttle for the buff particle effect.</summary>
-        public float BuffEffectDelay;
+        /// <summary>Map-authored duration in seconds for a buff pickup.</summary>
+        public float BuffsFinished;
         /// <summary>QC .buff_flight_oldgravity — the player's gravity before the flight buff flipped it.</summary>
         public float BuffFlightOldGravity;
         /// <summary>QC .buff_flight_crouchheld — crouch was held this frame (one flight gravity-flip per press).</summary>

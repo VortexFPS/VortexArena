@@ -232,12 +232,7 @@ public sealed class BallStealer : Weapon
             mul = mi + (ma - mi) * phase;
         }
 
-        // QC: DropBall(ball, w_shotorg, W_CalculateProjectileVelocity(actor, actor.velocity,
-        // w_shotdir*speed*mul, /*forceAbsolute*/false)). Every projectile in this port routes velocity through
-        // WeaponFiring.ProjectileVelocity, which models g_projectiles_newton_style as OFF (no owner-velocity
-        // inheritance) — the same convention the secondary tackle uses below. Use it here too so the primary
-        // launch is internally consistent with the secondary and the rest of the port (plain shotdir * speed*mul).
-        Vector3 projVel = WeaponFiring.ProjectileVelocity(shot.Dir, Vector3.UnitZ, PrimarySpeed * mul);
+        Vector3 projVel = WeaponFiring.CalculateProjectileVelocity(actor, shot.Dir * (PrimarySpeed * mul));
 
         // QC: play shoot sound, then DropBall at w_shotorg with the computed velocity.
         SoundSystem.PlayOn(actor, Sounds.ByName("NB_SHOOT1"), SoundChannel.WeaponAuto,
@@ -298,7 +293,7 @@ public sealed class BallStealer : Weapon
         Api.Entities.SetOrigin(missile, shot.Origin);
 
         // QC W_SetupProjVelocity_Basic(missile, secondary_speed, 0): velocity = shotdir * speed.
-        missile.Velocity = shot.Dir * SecondarySpeed;
+        missile.Velocity = shot.Dir * (SecondarySpeed * WeaponFiring.WeaponSpeedFactor(actor));
         missile.Angles = QMath.VecToAngles(missile.Velocity);
         missile.Effects = EfBrightField | EfLowPrecision; // QC EF_BRIGHTFIELD | EF_LOWPRECISION
         missile.Flags = EntFlags.Item; // QC FL_PROJECTILE

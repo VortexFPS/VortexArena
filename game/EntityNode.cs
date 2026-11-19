@@ -76,6 +76,7 @@ public partial class EntityNode : Node3D, IEntityPresence
     private float _lastScale;
     private byte _lastItemAnimate;
     private bool _syncValid;
+    private bool _viewLocationYaw;
 
     /// <summary>Drive one frame of transform sync (called from <c>ClientWorld._Process</c>'s central loop),
     /// skipping the interop writes when nothing the sync reads has changed. An animating pickup
@@ -102,6 +103,17 @@ public partial class EntityNode : Node3D, IEntityPresence
     /// <summary>Force the next <see cref="DriveSync"/> to re-sync regardless of the dirty-gate (model swap /
     /// visibility regain — see <see cref="ApplyVisible"/>).</summary>
     public void ForceSync() => _syncValid = false;
+
+    internal void SetViewLocationYaw(bool enabled)
+    {
+        if (_viewLocationYaw == enabled)
+            return;
+        _viewLocationYaw = enabled;
+        ForceSync();
+    }
+
+    internal float RenderYaw(float quakeYaw)
+        => Mathf.DegToRad(_viewLocationYaw ? quakeYaw : -quakeYaw);
 
     // (perf 2026-08-03) PVS-test memo. BoxAnyClusterVisibleFrom is a recursive BSP descent per entity per
     // frame — the dominant cost of the entity drive at ~165 entities. Its result is a pure function of
@@ -179,9 +191,8 @@ public partial class EntityNode : Node3D, IEntityPresence
         }
         else
         {
-            // Quake yaw is rotation about +Z (up). Under ToGodot=(x,z,-y), +Z maps to Godot +Y, and a
-            // positive Quake yaw (+X toward +Y) becomes a negative rotation about Godot +Y.
-            Rotation = new Vector3(0f, -Mathf.DegToRad(yawDeg), 0f);
+            // Rail avatar yaw follows the Quake forward vector under ToGodot=(x,z,-y).
+            Rotation = new Vector3(0f, RenderYaw(yawDeg), 0f);
         }
 
         // [T48] Prop scale (QC .scale → Entity.ScaleFactor, models.qc g_model_init): applied for the

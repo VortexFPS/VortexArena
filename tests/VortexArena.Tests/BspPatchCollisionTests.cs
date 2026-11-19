@@ -13,9 +13,8 @@ namespace VortexArena.Tests;
 
 /// <summary>
 /// Regression tests for bezier-PATCH collision. Q3 patches carry no brushes; DP makes them collidable by
-/// tessellating the curve and tracing its triangles. The port builds collision from brushes only, so patch
-/// floors/grates/platforms (e.g. Stormkeep's grate over lava, the ring platform around a pillar) fell through.
-/// <see cref="BspCollisionBuilder"/> now tessellates solid patches into thin slab brushes.
+/// tessellating the curve and tracing its triangles. A brush-only build lets traces fall through
+/// patch floors, grates and platforms, such as Stormkeep's grate over lava.
 /// </summary>
 public class BspPatchCollisionTests
 {
@@ -51,11 +50,11 @@ public class BspPatchCollisionTests
     {
         // floor-grate01: SOLID|TRANSLUCENT → solid, walkable.
         var world = BspCollisionBuilder.Build(FlatPatchBsp(0x20000001)).World;
-        Assert.NotEmpty(world.Brushes);              // tessellated into slab brushes
+        Assert.NotEmpty(world.Brushes);
 
         TraceResult tr = Drop(new TraceService(world), 64, 64);
         Assert.True(tr.Fraction < 1f, "player should land on the patch floor, not fall through");
-        // Box bottom rests on the slab top (≈ z=+1); origin ≈ +9. Allow slack for the impact nudge.
+        // Box bottom rests on the patch surface. Allow for the impact nudge.
         Assert.True(tr.EndPos.Z is > 0f and < 18f, $"landed at z={tr.EndPos.Z}, expected near the patch plane");
     }
 
@@ -120,8 +119,7 @@ public class BspPatchCollisionTests
 
         // Drop a player hull onto a grid over the pillar-platform region; wherever it lands, the RESTING
         // position must not be inside solid. An embedded rest = the server sticks while the client predicts
-        // forward → reconcile snap (the reported landing glitch). Walkable patch slabs are extruded downward
-        // (front face on the surface) precisely so a landing never sits inside the volume.
+        // forward, causing a reconcile snap (the reported landing glitch).
         int landed = 0, embedded = 0;
         for (float x = 860; x <= 1030; x += 8)
         for (float y = 830; y <= 1000; y += 8)

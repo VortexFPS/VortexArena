@@ -1,0 +1,14 @@
+Pinned DarkPlaces dedicated, _hudsetup to stormkeep
+"bot_number" is "0" ["0"]
+"minplayers" is "0" ["0"]
+Map switch will happen after scoreboard.
+Switching to map stormkeep
+"bot_number" is "3" ["0"]
+"minplayers" is "4" ["0"]
+
+Native Godot dedicated, _hudsetup to stormkeep
+"bot_number" is "0"
+"minplayers" is "0"
+changing to stormkeep
+"bot_number" is "3"
+"minplayers" is "4"

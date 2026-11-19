@@ -1,0 +1,50 @@
+[
+  {
+    "seconds": 9.419,
+    "frame": "RedProbe/0004.webp",
+    "sample": 9.382,
+    "label": "before"
+  },
+  {
+    "seconds": 10.106,
+    "frame": "BlueProbe/0007.webp",
+    "sample": 10.035,
+    "label": "shot-start"
+  },
+  {
+    "seconds": 10.75,
+    "frame": "BlueProbe/0012.webp",
+    "sample": 10.686,
+    "label": "flight"
+  },
+  {
+    "seconds": 11.215,
+    "frame": "RedProbe/0031.webp",
+    "sample": 11.151,
+    "label": "effect-late"
+  },
+  {
+    "seconds": 15.172,
+    "frame": "RedProbe/0092.webp",
+    "sample": 15.14,
+    "label": "repeat-before"
+  },
+  {
+    "seconds": 15.958,
+    "frame": "RedProbe/0104.webp",
+    "sample": 15.925,
+    "label": "repeat-flight"
+  },
+  {
+    "seconds": 16.35,
+    "frame": "RedProbe/0110.webp",
+    "sample": 16.317,
+    "label": "repeat-late"
+  },
+  {
+    "seconds": 17.528,
+    "frame": "RedProbe/0128.webp",
+    "sample": 17.495,
+    "label": "repeat-end"
+  }
+]

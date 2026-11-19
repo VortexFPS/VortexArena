@@ -1,4 +1,5 @@
 using Godot;
+using System.Collections.Generic;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
 using VortexArena.Common.Math;
@@ -30,8 +31,7 @@ namespace VortexArena.Game.Hud;
 /// Rifle gets <c>crosshair_ring_rifle</c>). These are fed by the weapon/net layer via the public ring stat
 /// setters (<see cref="ClipLoad"/>/<see cref="ClipSize"/>, <see cref="HagarLoad"/>/<see cref="HagarLoadMax"/>,
 /// <see cref="MineCount"/>/<see cref="MineLimit"/>, <see cref="ArcHeat"/>, <see cref="ChargePool"/>) since the
-/// per-slot weapon state is networked. The legacy <see cref="ChargeFraction"/>/<see cref="FiringRing"/>
-/// drawing is preserved as a fallback when no ring stat is fed.</para>
+/// per-slot weapon state is networked.</para>
 ///
 /// <para><b>T21 — true-aim coloring (QC <c>TrueAimCheck</c>/<c>EnemyHitCheck</c>).</b> Each frame the panel
 /// runs a forward trace from the eye (<see cref="Api.Trace"/>, the same client trace service the rest of the
@@ -246,21 +246,45 @@ public partial class CrosshairPanel : HudPanel
     /// <summary>The latest true-aim classification (QC <c>shottype</c>), recomputed each <see cref="_Process"/>.</summary>
     public ShotType ShotResult { get; private set; } = ShotType.HitWorld;
 
-    // ---- crosshair_chase: third-person crosshair re-projection (QC crosshair.qc HUD_Crosshair chase block) ----
+    private readonly record struct StatRing(Vector2 Center, float HalfSize, float Fraction, Texture2D Texture, Color Tint);
+    private readonly List<StatRing> _statRings = new(2);
+    private Control? _statRingLayer;
 
-    /// <summary>
-    /// QC <c>chase_active</c>: true while the third-person chase camera is live. Fed by the view layer (NetGame).
-    /// When set (and <see cref="ChaseCamera3D"/> + <see cref="Player"/> are present and <c>crosshair_chase</c> is on)
-    /// the crosshair is drawn at the screen-projection of the chase impact point rather than the geometric panel
-    /// centre, so it tracks where the shot would actually land from the offset chase eye.
-    /// </summary>
-    public bool ChaseActive { get; set; }
+    public override void _Ready()
+    {
+        _statRingLayer = new Control
+        {
+            MouseFilter = MouseFilterEnum.Ignore,
+            ShowBehindParent = true,
+            Material = new CanvasItemMaterial { BlendMode = CanvasItemMaterial.BlendModeEnum.Add },
+        };
+        Control layer = _statRingLayer;
+        layer.Draw += () =>
+        {
+            foreach (StatRing ring in _statRings)
+                DrawStatRingPicture(layer, ring);
+        };
+        AddChild(layer);
+    }
 
-    /// <summary>
-    /// The live render camera used to re-project the chase impact point to screen space (QC <c>project_3d_to_2d</c>).
-    /// Fed by the view layer (NetGame) alongside <see cref="ChaseActive"/>; <c>null</c> = no chase re-projection.
-    /// </summary>
-    public Camera3D? ChaseCamera3D { get; set; }
+    // The net view projects the chase impact in viewport coordinates.
+    private Vector2? _chaseScreenPoint;
+    internal bool ClassicChase { get; set; }
+
+    internal void SetChaseScreenPoint(Vector2? point)
+    {
+        if (_chaseScreenPoint == point)
+            return;
+        _chaseScreenPoint = point;
+        QueueRedraw();
+    }
+
+    internal void ResetCrosshairTransition()
+    {
+        _crossPrev = _lastResolved = null;
+        _changeDoneTime = _changeDoneTimeGoal = 0f;
+        _smoothSeeded = _ringPrev = _trueAimHaveCache = false;
+    }
 
     // ---- T21: weapon-switch cross-fade (QC wcross_name_changestarttime / changedonetime) ----
 
@@ -337,10 +361,6 @@ public partial class CrosshairPanel : HudPanel
         c.Register("crosshair_alpha", "0.8", save);
         c.Register("crosshair_size", "0.4", save);
         c.Register("crosshair_per_weapon", "1", save);
-        // crosshairs.cfg:48,51,52 — registered for parity/config faithfulness. crosshair_2d selects the
-        // side-scroller (FREEAIM viewloc) crosshair; crosshair_chase/_playeralpha drive the third-person chase
-        // crosshair re-projection + body-alpha fade. The side-scroller view-state and chase trace are not yet
-        // wired in this port, so these cvars are settable but their special behaviour is inert here.
         c.Register("crosshair_2d", "54", save);
         c.Register("crosshair_chase", "1", save);
         c.Register("crosshair_chase_playeralpha", "0.25", save);
@@ -430,8 +450,12 @@ public partial class CrosshairPanel : HudPanel
         RefreshCvarCache();
         _cvarCacheHook = name =>
         {
-            if (name.StartsWith("crosshair_", StringComparison.OrdinalIgnoreCase))
+            if (name.Equals("crosshair", StringComparison.OrdinalIgnoreCase)
+                || name.StartsWith("crosshair_", StringComparison.OrdinalIgnoreCase))
+            {
                 RefreshCvarCache();
+                QueueRedraw();
+            }
         };
         Menu.MenuState.Cvars.Changed += _cvarCacheHook;
     }
@@ -495,10 +519,11 @@ public partial class CrosshairPanel : HudPanel
             dirty = true;
         }
 
-        // True-aim classification (QC: run TrueAimCheck every frame while the crosshair is live). Gated on the
-        // master toggle so the two forward traces don't fire when the crosshair is disabled (QC runs TrueAimCheck
-        // only inside the HUD_Crosshair draw guard, after the crosshair_enabled check).
-        ShotType newShot = _cvEnabled != 0f ? ComputeShotType() : ShotType.HitWorld;
+        if (!Visible || !NormalCrosshairEnabled())
+            return;
+
+        // QC runs the true-aim classifier after the normal crosshair draw guards.
+        ShotType newShot = ComputeShotType();
         if (newShot != ShotResult)
         {
             ShotResult = newShot;
@@ -582,38 +607,49 @@ public partial class CrosshairPanel : HudPanel
         return v switch { 1 => ColorMode.Weapon, 2 => ColorMode.Health, 3 => ColorMode.Rainbow, _ => ColorMode.Fixed };
     }
 
-    protected override void DrawPanel()
+    internal bool NormalCrosshairEnabled()
     {
-        Vector2 center = Size2 * 0.5f;
+        EnsureCvarCache();
+        return _cvEnabled != 0f && GlobalStr("crosshair") != "0"
+            && GlobalF("crosshair_size", 0.4f) != 0f && GlobalF("crosshair_alpha", Color.A) != 0f;
+    }
 
-        // crosshair_chase (QC crosshair.qc HUD_Crosshair, the chase_active block + crosshairs.cfg:51): in third
-        // person the geometric panel centre no longer matches where the shot lands, so re-project. Trace forward
-        // from the player origin (CrosshairTrace.ChaseImpact does the eye-height + max_shot_distance worldonly
-        // trace) and project the impact through the live chase camera; draw the crosshair there instead of dead
-        // centre. Falls back to the geometric centre when chase is off, the cvar disables it, no camera is fed, or
-        // the impact projects off-screen (behind the camera). This closes registry cl-crosshair.core.origin_chase.
-        // DEFERRED (Phase 2 third-person wiring): the crosshair_chase_playeralpha 0.25 body-alpha fade while the
-        // chase view is obstructed needs a player-model alpha hook that does not exist on this path yet.
-        if (GlobalF("crosshair_chase", 1f) != 0f && ChaseActive && ChaseCamera3D is not null && Player is not null
-            && TryGetChaseForward(out NVec3 chaseForward))
-        {
-            NVec3 impact = CrosshairTrace.ChaseImpact(Player.Origin, ViewHeight, chaseForward);
-            if (CrosshairTrace.ProjectToScreen(ChaseCamera3D, impact, out Vector2 sp))
-                center = sp;
-        }
-
-        // [T41] objective rings (QC view.qc HUD_Draw 1006-1022): NADE_TIMER > CAPTURE_PROGRESS > REVIVE_PROGRESS,
-        // drawn FIRST so they're independent of the crosshair master toggle below — in QC these live in HUD_Draw,
-        // not HUD_Crosshair, so a hidden crosshair (crosshair_enabled 0) still shows the life-or-death nade ring.
-        DrawObjectiveRings(center);
-
-        // QC: crosshair_enabled is the master toggle; crosshair "0" / size 0 / alpha 0 hide it.
-        if (GlobalF("crosshair_enabled", 1f) == 0f) return;
+    internal void DrawViewLocationCursor(CanvasItem target, Vector2 center)
+    {
+        EnsureCvarCache();
+        string style = GlobalStr("crosshair_2d");
+        if (string.IsNullOrEmpty(style))
+            style = GlobalStr("crosshair");
+        float scale = GlobalF("crosshair_size", 0.4f);
+        float alpha = GlobalF("crosshair_alpha", Color.A);
+        if (_cvEnabled == 0f || style == "0" || !(scale > 0f) || !(alpha > 0f))
+            return;
 
         Weapon? weapon = ActiveWeapon();
+        Texture2D? pic = ResolveCrosshair(weapon, style);
+        if (pic is null)
+            return;
+        Vector2 size = pic.GetSize() * scale * PerWeaponSizeMult(weapon);
+        Color color = BaseColor(ColorModeCvar(), weapon, alpha);
+        target.DrawTextureRect(pic, new Rect2(center - size * 0.5f, size), false, color);
+    }
 
+    protected override void DrawPanel()
+    {
+        _statRings.Clear();
+        _statRingLayer?.QueueRedraw();
+
+        Vector2 center = Size2 * 0.5f;
+        DrawObjectiveRings(center);
+
+        if (!NormalCrosshairEnabled())
+            return;
+
+        if (_chaseScreenPoint is { } point)
+            center = GetGlobalTransformWithCanvas().AffineInverse() * point;
+
+        Weapon? weapon = ActiveWeapon();
         float baseAlpha = GlobalF("crosshair_alpha", Color.A);
-        if (baseAlpha <= 0f) baseAlpha = Color.A;
 
         // ---- base color (QC crosshair_getcolor: weapon / health / fixed) ----
         ColorMode mode = ColorModeCvar();
@@ -661,7 +697,7 @@ public partial class CrosshairPanel : HudPanel
             if (ShotResult == ShotType.HitTeam && hittestDiv > 0f)
                 scale /= hittestDiv;
             if ((ShotResult == ShotType.HitTeam && BlurTeammateCvar())
-                || (ShotResult == ShotType.HitObstruction && BlurWallCvar()))
+                || (ShotResult == ShotType.HitObstruction && !ClassicChase && BlurWallCvar()))
                 blur = true;
         }
         float goalAlpha = baseAlpha * (blur ? 0.75f : 1f); // QC wcross_alpha *= 0.75 on a blurred target
@@ -686,7 +722,7 @@ public partial class CrosshairPanel : HudPanel
         if (!(drawScale >= 0.001f) || !(c.A >= 0.001f)) return;
 
         // ---- weapon-stat rings (QC crosshair_ring block) — drawn UNDER the crosshair pic, like QC ----
-        DrawWeaponRings(center, weapon, c, baseAlpha, drawScale, pic);
+        DrawWeaponRings(center, weapon, c, drawScale, pic);
 
         // ---- weapon-switch cross-fade (QC wcross_name_changedonetime block) ----
         float effectTime = EffectTimeCvar();
@@ -721,7 +757,10 @@ public partial class CrosshairPanel : HudPanel
     //  Color (QC crosshair_getcolor)
     // -------------------------------------------------------------------------------------------------
 
-    private Color BaseColor(ColorMode mode, Weapon? weapon, float alpha)
+    internal Color VehicleColor(float health, float alpha)
+        => BaseColor((ColorMode)(int)GlobalF("crosshair_color_special", 1f), null, alpha, health);
+
+    private Color BaseColor(ColorMode mode, Weapon? weapon, float alpha, float? vehicleHealth = null)
     {
         switch (mode)
         {
@@ -730,10 +769,10 @@ public partial class CrosshairPanel : HudPanel
                     return WeaponHud.ColorOf(weapon, alpha);
                 break;
             case ColorMode.Health:
-                if (Player is not null)
+                if (Player is not null || vehicleHealth.HasValue)
                 {
-                    float h = Player.GetResource(ResourceType.Health);
-                    float a = Player.GetResource(ResourceType.Armor);
+                    float h = vehicleHealth ?? Player!.GetResource(ResourceType.Health);
+                    float a = Player?.GetResource(ResourceType.Armor) ?? 0f;
                     return HealthArmorColor(h, a, alpha);
                 }
                 break;
@@ -883,23 +922,15 @@ public partial class CrosshairPanel : HudPanel
     /// <summary>
     /// Resolve which weapon-stat ring to draw and paint it (QC the big <c>crosshair_ring</c> if/else chain).
     /// Priority matches QC: Vortex/Overkill charge (with an optional inner chargepool ring) → Mine Layer →
-    /// Hagar → reload ammo ring → Arc heat. Falls back to the legacy <see cref="ChargeFraction"/> /
-    /// <see cref="FiringRing"/> drawing when no networked ring stat is fed.
+    /// Hagar → reload ammo ring → Arc heat.
     /// </summary>
-    private void DrawWeaponRings(Vector2 center, Weapon? weapon, Color crossColor, float baseAlpha,
+    private void DrawWeaponRings(Vector2 center, Weapon? weapon, Color crossColor,
         float drawScale, Texture2D? pic)
     {
         bool ringEnabled = GlobalF("crosshair_ring", 1f) != 0f;
         bool reloadEnabled = GlobalF("crosshair_ring_reload", 1f) != 0f;
-        bool drewStatRing = false;
-
         if ((ringEnabled || reloadEnabled) && weapon is not null)
-            drewStatRing = DrawStatRing(center, weapon, crossColor, baseAlpha, drawScale, pic, ringEnabled, reloadEnabled);
-
-        // Legacy fallback rings (kept so existing ChargeFraction/FiringRing feeders still render).
-        if (!drewStatRing && weapon is not null && ChargeFraction >= 0f && WeaponHud.IsChargeWeapon(weapon))
-            DrawRing(center, RingRadius, Mathf.Clamp(ChargeFraction, 0f, 1f),
-                new Color(crossColor.R, crossColor.G, crossColor.B, 0.9f * crossColor.A));
+            DrawStatRing(center, weapon, crossColor, drawScale, pic, ringEnabled, reloadEnabled);
 
         if (FiringRing > 0f)
         {
@@ -953,7 +984,7 @@ public partial class CrosshairPanel : HudPanel
             DrawRingPic(center, radius, revive, "gfx/crosshair_ring", new Color(0.25f, 0.90f, 1f, alpha));
     }
 
-    private bool DrawStatRing(Vector2 center, Weapon weapon, Color crossColor, float baseAlpha, float drawScale,
+    private void DrawStatRing(Vector2 center, Weapon weapon, Color crossColor, float drawScale,
         Texture2D? pic, bool ringEnabled, bool reloadEnabled)
     {
         // The ring radius scales with the crosshair pic size like QC (wcross_size.x * resolution * ring_scale).
@@ -1046,24 +1077,80 @@ public partial class CrosshairPanel : HudPanel
             ringImage = "gfx/crosshair_ring";
         }
 
-        if (ringValue <= 0f && innerValue <= 0f) return false;
+        if (ringValue <= 0f && innerValue <= 0f) return;
 
         // QC weapon-switch ring fade (fade the ring out then in across the switch window).
         float ringFade = SwitchRingFade(ringValue > 0f);
 
-        // Ring radius in pixels: half of (pic width * ring_scale), scaled by the live draw scale.
-        float ringRadius = picW * drawScale * ringScale * 0.5f;
-        float innerRadius = picW * drawScale * ringScale * 0.5f;
+        // QC ringsize is the width of the reticle quad times the ring scale.
+        float halfSize = picW * drawScale * ringScale * 0.5f;
+        float alpha = crossColor.A * ringFade;
 
         if (GlobalF("crosshair_ring_inner", 0f) != 0f && hasInner && innerValue > 0f)
-            DrawRingPic(center, innerRadius, innerValue, innerImage,
-                new Color(innerRgb.R, innerRgb.G, innerRgb.B, baseAlpha * innerAlpha * ringFade));
+            QueueStatRing(center, halfSize, innerValue, innerImage, new Color(innerRgb, alpha * innerAlpha));
 
         if (ringValue > 0f)
-            DrawRingPic(center, ringRadius, ringValue, ringImage,
-                new Color(ringRgb.R, ringRgb.G, ringRgb.B, baseAlpha * ringAlpha * ringFade));
+            QueueStatRing(center, halfSize, ringValue, ringImage, new Color(ringRgb, alpha * ringAlpha));
+    }
 
-        return true;
+    private void QueueStatRing(Vector2 center, float halfSize, float fraction, string image, Color tint)
+    {
+        if (!float.IsFinite(halfSize) || halfSize <= 0f || !(tint.A > 0f))
+            return;
+        if (TextureCache.Get(image) is { } picture)
+            _statRings.Add(new StatRing(center, halfSize, fraction, picture, tint));
+        else
+            DrawRing(center, halfSize, fraction, new Color(tint, Mathf.Min(1f, tint.A * 4f)));
+    }
+
+    private static readonly Vector2[] RingCorners = [Vector2.Right, Vector2.Down, Vector2.Left, Vector2.Up];
+
+    // DrawCircleClippedPic maps the texture square onto a diamond. The cut sweeps from the right
+    // toward the bottom in screen space, with its moving vertex constrained to the diamond edge.
+    private static void DrawStatRingPicture(CanvasItem canvas, StatRing ring)
+    {
+        if (ring.Fraction >= 1f)
+        {
+            DrawRingPolygon(canvas, ring, RingCorners);
+            return;
+        }
+
+        float quadrants = ring.Fraction * 4f;
+        int complete = (int)quadrants;
+        int start = 0;
+        if (complete >= 2)
+        {
+            DrawRingPolygon(canvas, ring, RingCorners.AsSpan(0, 3));
+            start = 2;
+        }
+        if (quadrants == start)
+            return;
+
+        Span<Vector2> polygon = stackalloc Vector2[4];
+        int count = 1;
+        polygon[0] = Vector2.Zero;
+        for (int i = start; i <= complete; ++i)
+            polygon[count++] = RingCorners[i];
+        if (quadrants != complete)
+        {
+            float angle = ring.Fraction * Mathf.Tau;
+            var edge = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+            polygon[count++] = edge / (Mathf.Abs(edge.X) + Mathf.Abs(edge.Y));
+        }
+        DrawRingPolygon(canvas, ring, polygon[..count]);
+    }
+
+    private static void DrawRingPolygon(CanvasItem canvas, StatRing ring, ReadOnlySpan<Vector2> vertices)
+    {
+        Span<Vector2> points = stackalloc Vector2[vertices.Length];
+        Span<Vector2> uvs = stackalloc Vector2[vertices.Length];
+        for (int i = 0; i < vertices.Length; ++i)
+        {
+            var (x, y) = (vertices[i].X, vertices[i].Y);
+            points[i] = ring.Center + vertices[i] * ring.HalfSize;
+            uvs[i] = new Vector2(0.5f + 0.5f * (x + y), 0.5f + 0.5f * (x - y));
+        }
+        canvas.DrawColoredPolygon(points, ring.Tint, uvs, ring.Texture);
     }
 
     /// <summary>The Vortex-family charge fraction: the networked <see cref="ChargeFraction"/> when fed, else 0.</summary>
@@ -1224,29 +1311,6 @@ public partial class CrosshairPanel : HudPanel
     }
 
     /// <summary>
-    /// Resolve the look direction used to re-project the chase crosshair (QC <c>view_forward</c>). Prefers the
-    /// view-layer-fed <see cref="AimForward"/> (the authoritative render look direction); otherwise derives it from
-    /// the <see cref="Player"/>'s view angles (QC <c>AngleVectors(view_angles)</c>). Returns false when neither a
-    /// fed forward nor a player is available (the caller then keeps the geometric centre).
-    /// </summary>
-    private bool TryGetChaseForward(out NVec3 forward)
-    {
-        if (AimForward is { } f && f != NVec3.Zero)
-        {
-            forward = System.Numerics.Vector3.Normalize(f);
-            return true;
-        }
-        if (Player is null)
-        {
-            forward = default;
-            return false;
-        }
-        QMath.AngleVectors(Player.Angles, out NVec3 fq, out _, out _);
-        forward = fq;
-        return forward != NVec3.Zero;
-    }
-
-    /// <summary>
     /// Classify a completed trace by the entity it hit (QC <c>EnemyHitCheck</c>): a same-team player is HITTEAM,
     /// any other player is HITENEMY, anything else (world / no entity / spectator) is HITWORLD.
     /// </summary>
@@ -1366,9 +1430,9 @@ public partial class CrosshairPanel : HudPanel
     /// Resolve the crosshair texture. In per-weapon mode (QC <c>crosshair_per_weapon</c>) the active weapon's own
     /// <c>w_crosshair</c> pic wins (QC <c>wcross_name = e.w_crosshair</c>); a per-weapon-number override still
     /// applies if one was injected via <see cref="PerWeaponNumber"/>; otherwise the numbered <c>gfx/crosshair&lt;N&gt;</c>
-    /// art. Returns null (→ vector crosshair) when the number is 0.
+    /// art. Returns null when the selected texture is unavailable.
     /// </summary>
-    private Texture2D? ResolveCrosshair(Weapon? weapon)
+    private Texture2D? ResolveCrosshair(Weapon? weapon, string? viewLocationStyle = null)
     {
         int number = (int)GlobalF("crosshair", CrosshairNumber);
 
@@ -1393,6 +1457,9 @@ public partial class CrosshairPanel : HudPanel
                 // Fall through to the numbered art if the per-weapon pic isn't in the mounted data.
             }
         }
+
+        if (!string.IsNullOrEmpty(viewLocationStyle))
+            return TextureCache.GetFirst($"gfx/crosshair{viewLocationStyle}", $"res://art/hud/crosshairs/crosshair{viewLocationStyle}.png");
 
         if (number <= 0) return null;
         // VFS art first (gfx/crosshair<N>), then a project override under res://.
@@ -1474,8 +1541,8 @@ public partial class CrosshairPanel : HudPanel
 
     /// <summary>
     /// Draw a partially-filled ring using the <c>gfx/crosshair_ring*</c> art (QC <c>DrawCircleClippedPic</c>):
-    /// the ring pic clipped to a clockwise pie wedge of <paramref name="fraction"/> of the full circle, drawn
-    /// additively. Falls back to the procedural <see cref="DrawRing"/> arc when the art is missing.
+    /// the ring pic clipped to a clockwise pie wedge of <paramref name="fraction"/> of the full circle.
+    /// Falls back to the procedural <see cref="DrawRing"/> arc when the art is missing.
     /// </summary>
     private void DrawRingPic(Vector2 center, float radius, float fraction, string image, Color color)
     {
@@ -1492,7 +1559,7 @@ public partial class CrosshairPanel : HudPanel
             return;
         }
 
-        // Build a textured pie-wedge fan (a center point + arc points). QC sweeps clockwise from 12 o'clock.
+        // Keep the objective ring's existing pie-wedge presentation.
         int segments = Mathf.Max(2, (int)(48 * fraction));
         float arc = Mathf.Tau * fraction;
         float start = -Mathf.Pi / 2f;
@@ -1510,8 +1577,6 @@ public partial class CrosshairPanel : HudPanel
             uvs[i + 1] = new Vector2(0.5f + 0.5f * dir.X, 0.5f + 0.5f * dir.Y);
         }
 
-        // QC draws the ring additively (DRAWFLAG_ADDITIVE); without a per-draw blend material Godot's
-        // immediate-mode draw is alpha-blended, which reads fine for the low-alpha ring stats.
         DrawColoredPolygon(pts, color, uvs, tex);
     }
 

@@ -1,0 +1,62 @@
+[
+  {
+    "seconds": 7.302,
+    "frame": "RedProbe/0003.webp",
+    "sample": 7.182,
+    "label": "before"
+  },
+  {
+    "seconds": 7.709,
+    "frame": "RedProbe/0006.webp",
+    "sample": 7.593,
+    "label": "early"
+  },
+  {
+    "seconds": 7.997,
+    "frame": "RedProbe/0008.webp",
+    "sample": 7.829,
+    "label": "full"
+  },
+  {
+    "seconds": 8.328,
+    "frame": "RedProbe/0010.webp",
+    "sample": 8.161,
+    "label": "middle"
+  },
+  {
+    "seconds": 8.666,
+    "frame": "RedProbe/0012.webp",
+    "sample": 8.5,
+    "label": "late"
+  },
+  {
+    "seconds": 9.231,
+    "frame": "RedProbe/0015.webp",
+    "sample": 9.06,
+    "label": "expired"
+  },
+  {
+    "seconds": 12.646,
+    "frame": "RedProbe/0032.webp",
+    "sample": 12.474,
+    "label": "repeat-early"
+  },
+  {
+    "seconds": 13.166,
+    "frame": "RedProbe/0035.webp",
+    "sample": 12.999,
+    "label": "repeat-middle"
+  },
+  {
+    "seconds": 13.449,
+    "frame": "RedProbe/0037.webp",
+    "sample": 13.33,
+    "label": "repeat-late"
+  },
+  {
+    "seconds": 7.981,
+    "frame": "BlueProbe/0007.webp",
+    "sample": 7.815,
+    "label": "shooter"
+  }
+]

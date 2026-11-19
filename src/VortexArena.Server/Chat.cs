@@ -414,6 +414,14 @@ public sealed class Chat
                 {
                     Sprint(source, sourcemsgstr);
                     DedicatedPrint(msgstr);
+                    if (_world.Commands.MatrixCanRelay)
+                    {
+                        // MX_Say uses playername with automatic team coloring, independently of g_chat_teamcolors.
+                        string matrixName = teamplay && IsPlayer(source) && !_world.Intermission.Running
+                            ? TeamColorCode((int)source.Team) + Log.StripColors(source.NetName)
+                            : source.NetName;
+                        _world.Commands.SendMatrixChat($"{matrixName}^7: {msgin}");
+                    }
                 }
                 foreach (Player it in RealClients())
                 {

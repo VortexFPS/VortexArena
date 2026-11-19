@@ -226,7 +226,7 @@ public sealed class Devastator : Weapon
         missile.Health = Cvars.Health;
 
         // W_SetupProjVelocity_Basic(missile, speedstart, 0) — launches at speedstart, the think accelerates it.
-        missile.Velocity = shot.Dir * Cvars.SpeedStart;
+        missile.Velocity = WeaponFiring.CalculateProjectileVelocity(actor, shot.Dir * Cvars.SpeedStart);
         missile.Angles = QMath.VecToAngles(missile.Velocity);
 
         // QC devastator.qc:301-302 — flag the rocket as a dodgeable hazard; rating = damage * 2 ("* 2 because it
@@ -291,7 +291,7 @@ public sealed class Devastator : Weapon
 
         // accelerate: velspeed = speed*W_WeaponSpeedFactor - (velocity . forward); add up to
         // speedaccel*W_WeaponSpeedFactor*frametime along forward (QC W_Devastator_Think:198-200).
-        float speedFactor = WeaponSpeedFactor();
+        float speedFactor = WeaponFiring.WeaponSpeedFactor(owner);
         Vector3 forward = QMath.Normalize(self.Velocity);
         if (forward == Vector3.Zero) forward = QMath.Forward(self.Angles);
         float velAlong = QMath.Dot(self.Velocity, forward);
@@ -530,15 +530,6 @@ public sealed class Devastator : Weapon
         for (int i = 0; i < MutatorConstants.MaxWeaponSlots; ++i)
             if (owner.WeaponState(new WeaponSlot(i)) is { } s && ReferenceEquals(s.LastRocket, self))
                 s.LastRocket = null;
-    }
-
-    // QC W_WeaponSpeedFactor: g_weaponspeedfactor (default 1) — multiplies the rocket's target speed + per-tick
-    // acceleration. Mirrors the WeaponImpulses reader (only positive values take effect).
-    private static float WeaponSpeedFactor()
-    {
-        if (Api.Services is null) return 1f;
-        float f = Api.Cvars.GetFloat("g_weaponspeedfactor");
-        return f > 0f ? f : 1f;
     }
 
     // bool IsFlying(entity) — common/physics/player.qc, the airshot test: airborne, not swimming, and at least

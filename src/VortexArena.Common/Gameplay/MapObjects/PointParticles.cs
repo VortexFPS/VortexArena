@@ -11,7 +11,7 @@
 //    the NAME on Entity.Mdl and the client resolves it from effectinfo.
 //  * pointparticles_think only nets origin moves (SendFlags) — unnecessary on the shared-entity seam, so
 //    no think is installed.
-//  * .noise (a per-emission positional sound) and bgmscript ADSR are out of scope (documented residual).
+//  * The renderer starts per-emission .noise at the sampled point through the client sound player.
 
 using System.Numerics;
 using VortexArena.Common.Framework;
@@ -65,11 +65,8 @@ public static class PointParticles
         if (!string.IsNullOrEmpty(this_.TargetName))
             this_.Use = LegacyUse; // backwards compatibility (generic_netlinked_legacy_use)
 
-        // generic_netlinked_reset: targetname set => active iff START_ON; else always on.
-        if (!string.IsNullOrEmpty(this_.TargetName))
-            this_.Active = (this_.SpawnFlags & StartOn) != 0 ? MapMover.ActiveActive : MapMover.ActiveNot;
-        else
-            this_.Active = MapMover.ActiveActive;
+        this_.Reset = Reset;
+        Reset(this_);
 
         MapMover.IndexRegister(this_);
     }
@@ -92,6 +89,13 @@ public static class PointParticles
         // (QC cnt = 0 — use mdl.)
 
         PointParticlesSetup(this_);
+    }
+
+    /// <summary>QC generic_netlinked_reset, used both at spawn and on round reset.</summary>
+    private static void Reset(Entity self)
+    {
+        bool active = string.IsNullOrEmpty(self.TargetName) || (self.SpawnFlags & StartOn) != 0;
+        self.Active = active ? MapMover.ActiveActive : MapMover.ActiveNot;
     }
 
     /// <summary><c>generic_netlinked_legacy_use</c> (triggers.qc): old maps toggle via a direct trigger.</summary>

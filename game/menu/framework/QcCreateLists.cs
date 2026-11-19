@@ -11,13 +11,14 @@ namespace VortexArena.Game.Menu;
 /// </summary>
 public partial class QcGametypeList : MenuListBox
 {
-    public readonly record struct Entry(string NetName, string Name, string Icon, bool TeamPlay);
+    public readonly record struct Entry(string NetName, string Name, string Icon, bool TeamPlay, string? Summary = null);
 
     private readonly List<Entry> _entries = new();
 
     public QcGametypeList()
     {
         ItemHeight = 2f * MenuMetrics.FontNormalU; // rowsPerItem 2
+        FocusedItemChanged += SetDescriptionTooltip;
     }
 
     public IReadOnlyList<Entry> Entries => _entries;
@@ -27,8 +28,13 @@ public partial class QcGametypeList : MenuListBox
         _entries.Clear();
         _entries.AddRange(entries);
         ItemCount = _entries.Count;
+        SetDescriptionTooltip(FocusedItem);
         QueueRedraw();
     }
+
+    private void SetDescriptionTooltip(int index) =>
+        TooltipText = (uint)index < (uint)_entries.Count && _entries[index].Summary is { } summary
+            ? Localization.Tr(summary) : "";
 
     protected override void DrawItem(int index, Rect2 rect, bool isSelected, bool isFocused)
     {

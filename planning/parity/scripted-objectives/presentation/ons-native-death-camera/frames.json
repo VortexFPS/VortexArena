@@ -1,0 +1,50 @@
+[
+  {
+    "seconds": 32.445,
+    "frame": "RedProbe/0109.webp",
+    "sample": 32.377,
+    "label": "red-before"
+  },
+  {
+    "seconds": 32.424,
+    "frame": "BlueProbe/0109.webp",
+    "sample": 32.356,
+    "label": "blue-before"
+  },
+  {
+    "seconds": 33.397,
+    "frame": "RedProbe/0114.webp",
+    "sample": 33.278,
+    "label": "red-cut"
+  },
+  {
+    "seconds": 33.329,
+    "frame": "BlueProbe/0114.webp",
+    "sample": 33.26,
+    "label": "blue-cut"
+  },
+  {
+    "seconds": 34.791,
+    "frame": "RedProbe/0122.webp",
+    "sample": 34.72,
+    "label": "red-burst"
+  },
+  {
+    "seconds": 35.641,
+    "frame": "BlueProbe/0127.webp",
+    "sample": 35.606,
+    "label": "blue-burst"
+  },
+  {
+    "seconds": 37.461,
+    "frame": "RedProbe/0137.webp",
+    "sample": 37.424,
+    "label": "red-sustained"
+  },
+  {
+    "seconds": 40.543,
+    "frame": "BlueProbe/0154.webp",
+    "sample": 40.478,
+    "label": "blue-sustained"
+  }
+]

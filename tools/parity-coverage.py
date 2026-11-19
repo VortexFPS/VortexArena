@@ -12,7 +12,7 @@ planning/parity/coverage-scope.yaml, and buckets every Base file as:
   cited     — at least one registry row cites it (the unit audit is the coverage claim)
   excluded  — deliberately out of parity scope, with a written rationale (coverage-scope.yaml)
   deferred  — known-uncovered, an audit is scheduled/pending (coverage-scope.yaml)
-  UNMAPPED  — nobody has ever looked. The actionable number. Target: 0.
+  UNMAPPED  — no registry citation or scope entry. Separate pinned source reviews can cover these paths.
 
 Also lints STALE citations (a base_refs path that matches no Base file — typo or moved file).
 
@@ -25,7 +25,8 @@ Run after any registry change (parity-diff --update, new units) alongside parity
     python tools/parity-coverage.py --base <path-to-qcsrc>   # override the Base tree location
 """
 from __future__ import annotations
-import argparse, datetime, fnmatch, json, pathlib, re, sys
+import argparse, csv, datetime, fnmatch, json, pathlib, re, sys
+from parity_reference import PIN, QC_EXTENSIONS, verify_qc_inputs
 try:
     import yaml
 except ImportError:
@@ -38,7 +39,6 @@ SCOPE_FILE = OUT / "coverage-scope.yaml"
 DEFAULT_BASE = ROOT.parent / "Base" / "data" / "xonotic-data.pk3dir" / "qcsrc"
 
 
-SRC_EXTS = (".qc", ".qh", ".inc")  # .inc: the all.inc registries (deathtypes/effects/models/...) are real source
 PATH_RE = re.compile(r"[\w][\w./-]*\.(?:qc|qh|inc)\b")
 
 
@@ -46,12 +46,10 @@ def enumerate_base(base: pathlib.Path) -> dict[str, int]:
     """relative-posix-path -> line count, for every QC source file under qcsrc."""
     files = {}
     for p in base.rglob("*"):
-        if p.suffix.lower() in SRC_EXTS and p.is_file():
+        if p.suffix.lower() in QC_EXTENSIONS and p.is_file():
             rel = p.relative_to(base).as_posix()
-            try:
-                files[rel] = sum(1 for _ in p.open("r", encoding="utf-8", errors="replace"))
-            except OSError:
-                files[rel] = 0
+            with p.open("r", encoding="utf-8", errors="replace") as source:
+                files[rel] = sum(1 for _ in source)
     return files
 
 
@@ -70,7 +68,7 @@ def extract_paths(ref: str) -> list[str]:
 
 
 def collect_citations() -> tuple[dict[str, set[str]], list[str]]:
-    """normalized-path -> set(units citing it); plus per-shard parse warnings."""
+    """Match explicit path:symbol anchors. Free-text descriptions still count as file citations."""
     cited: dict[str, set[str]] = {}
     warnings = []
     for shard in sorted(REG.glob("*.yaml")):
@@ -79,11 +77,18 @@ def collect_citations() -> tuple[dict[str, set[str]], list[str]]:
         except yaml.YAMLError as e:
             warnings.append(f"{shard.name}: YAML parse error: {e}")
             continue
-        unit = (doc or {}).get("unit", shard.stem)
         for f in (doc or {}).get("features") or []:
             for ref in f.get("base_refs") or []:
-                for path in extract_paths(ref):
-                    cited.setdefault(path, set()).add(unit)
+                for match in PATH_RE.finditer(ref.replace("\\", "/")):
+                    for path in extract_paths(match[0]):
+                        anchors = cited.setdefault(path, set())
+                        tail = ref[match.end():]
+                        if symbol := re.match(r":\s*([A-Za-z_]\w*)", tail):
+                            anchors.add(symbol[1])
+                        if pair := re.match(r":\s*(METHOD|MUTATOR_HOOKFUNCTION)\s*\(\s*(\w+)\s*,\s*(\w+)\b", tail):
+                            anchors.add(f"{pair[1]}({pair[2]}, {pair[3]})")
+                        if reg := re.match(r":\s*(REGISTER_[A-Z_0-9]+)\s*\(\s*(\w+)\s*[,)]", tail):
+                            anchors.add(f"{reg[1]}({reg[2]})")
     return cited, warnings
 
 
@@ -108,17 +113,64 @@ def match_scope(path: str, entries: list[dict]) -> dict | None:
     return None
 
 
+# Deliberately conservative: ordinary typed function bodies only. Macros, methods, hooks and
+# registrations require the per-unit inventory. A row may cover a helper implicitly.
+DEFINITION = re.compile(
+    r"^\s*(?:static\s+)?(?:void|bool|int|float|vector|string|entity)\s+"
+    r"([A-Za-z_]\w*)\s*\([^(){};]*\)\s*\{", re.MULTILINE)
+QC_TEXT = re.compile(r'//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"', re.DOTALL)
+
+
+NAMED_METHOD = re.compile(r"^\s*(METHOD|MUTATOR_HOOKFUNCTION)\s*\(\s*(\w+)\s*,\s*(\w+)\s*[,)]", re.MULTILINE)
+REGISTRATION = re.compile(r"^\s*(REGISTER_[A-Z_0-9]+)\s*\(\s*(\w+)\s*[,)]", re.MULTILINE)
+
+
+def uncited_symbols(base, cited, cited_paths):
+    """Find local symbol names without matching tokens in this file's registry citations."""
+    result = {}
+    macros = {}
+    tokens = {}
+    for path, names in cited.items():
+        tokens.setdefault(path.lower(), set()).update(names)
+    for path in sorted(cited_paths):
+        source = (base / path).read_text(encoding="utf-8", errors="replace")
+        code = QC_TEXT.sub(" ", source)
+        definitions = set(DEFINITION.findall(code))
+        missing = definitions - tokens[path.lower()]
+        if missing:
+            result[path] = sorted(missing)
+        names = tokens[path.lower()]
+        declarations = {f"{kind}({owner}, {name})" for kind, owner, name in NAMED_METHOD.findall(code)}
+        declarations.update(f"{kind}({name})" for kind, name in REGISTRATION.findall(code))
+        unreferenced = declarations - names
+        if unreferenced:
+            macros[path] = sorted(unreferenced)
+    return result, macros
+
+
 def main():
     ap = argparse.ArgumentParser(description="Base->registry coverage ledger")
     ap.add_argument("--base", type=pathlib.Path, default=DEFAULT_BASE,
                     help=f"Base qcsrc tree (default {DEFAULT_BASE})")
+    ap.add_argument("--verify-pin", action="store_true", help="require a complete, clean QC tree at the registry pin")
     ap.add_argument("--top", type=int, default=50, help="how many largest unmapped files to list")
     args = ap.parse_args()
     if not args.base.is_dir():
         sys.exit(f"Base qcsrc tree not found: {args.base} (pass --base)")
 
+    reference = "unverified source tree"
+    if args.verify_pin:
+        if args.base.name != "qcsrc":
+            sys.exit("Expected qcsrc/ in the pinned data repository.")
+        verify_qc_inputs(args.base.parent)
+        reference = PIN
     base_files = enumerate_base(args.base)
+    if not base_files:
+        sys.exit("No QuakeC source files found in the supplied tree.")
     cited, warnings = collect_citations()
+    if warnings or not cited:
+        sys.exit("\n".join(warnings) or "No registry citations found.")
+
     scope = load_scope()
 
     # case-insensitive resolution: Base is the canonical case
@@ -166,13 +218,13 @@ def main():
         "# Base coverage ledger",
         "",
         f"_Generated {today} by `tools/parity-coverage.py` from {len(list(REG.glob('*.yaml')))} registry shards"
-        f" against `{args.base}`._",
+        f" against `{reference}`._",
         "",
         "A Base file is **cited** when any registry row's `base_refs` names it, **excluded** when",
         "[coverage-scope.yaml](coverage-scope.yaml) declares it out of parity scope (with rationale),",
-        "**deferred** when an audit is scheduled but not yet landed, and **UNMAPPED** when nobody has",
-        "ever looked — the actionable number. Citation is a *claim* that the owning unit audited the",
-        "file; it does not by itself prove row-level completeness (the adversarial verify passes do that).",
+        "**deferred** when an audit is scheduled and **UNMAPPED** when the registry has no",
+        "citation or scope entry. These counts measure traceability. Checking behavior requires",
+        "following the original and native callers or exercising them.",
         "",
         "## Summary",
         "",
@@ -184,6 +236,34 @@ def main():
         label = b.upper() if b == "unmapped" else b
         md.append(f"| {label} | {n} | {ln} | {ln / max(1, total_lines) * 100:.1f}% |")
     md += [f"| **total** | {total_files} | {total_lines} | 100% |", ""]
+
+    audit_coverage = None
+    if reference == PIN:
+        ledger = json.loads((OUT / "unmapped-audit/dispositions.json").read_text(encoding="utf-8"))
+        if ledger["reference"] != PIN:
+            sys.exit("Source review and coverage report use different upstream pins.")
+        reviewed = {row["path"] for row in ledger["files"]}
+        uncited = set(buckets["unmapped"])
+        with (OUT / "deferred-audit/cohort.tsv").open(encoding="utf-8", newline="") as cohort:
+            deferred_review = {row["path"] for row in csv.DictReader(cohort, delimiter="\t")}
+        scheduled = set(buckets["deferred"])
+        audit_coverage = {
+            "source_review_files": len(reviewed),
+            "unmapped_with_source_review": len(uncited & reviewed),
+            "unmapped_without_source_review": sorted(uncited - reviewed),
+            "deferred_review_files": len(deferred_review),
+            "deferred_with_source_review": len(scheduled & deferred_review),
+            "deferred_without_source_review": sorted(scheduled - deferred_review),
+        }
+        md += ["## Separate source review", "",
+               f"The [directory audit](unmapped-audit/README.md) assessed {len(reviewed)} files at this pin. "
+               f"It includes {len(uncited & reviewed)} of the {len(uncited)} files currently marked UNMAPPED. "
+               f"{len(uncited - reviewed)} uncited files fall outside that review. "
+               "The [ordered follow-up](unmapped-audit/S1-REVIEW.md) records behavioral comparisons within "
+               "that inventory.", "",
+               f"The [deferred menu audit](deferred-audit/README.md) assessed {len(deferred_review)} additional files. "
+               f"It covers {len(scheduled & deferred_review)} of the {len(scheduled)} current deferred entries. "
+               "A per-file source assessment establishes the scope of review. Runtime checks are listed separately.", ""]
 
     md += ["## Per-directory", "",
            "| dir | total files | cited | excluded | deferred | UNMAPPED files | UNMAPPED lines |",
@@ -200,6 +280,38 @@ def main():
         for p in unmapped_sorted[:args.top]:
             md.append(f"| `{p}` | {base_files[p]} |")
         md.append("")
+
+    # Generated include lists are common among uncited files. Preserve each path in the ledger,
+    # but distinguish a file consisting only of includes/pragma once/comments from a behavior lead.
+    include_only = []
+    for path in buckets["unmapped"] + buckets["deferred"]:
+        source = (args.base / path).read_text(encoding="utf-8", errors="replace")
+        code = QC_TEXT.sub(" ", source)
+        if all(re.fullmatch(r"\s*(?:#\s*(?:include\b.*|pragma\s+once))?\s*", line)
+               for line in code.splitlines()):
+            include_only.append(path)
+    md += [f"Of the {len(buckets['unmapped']) + len(buckets['deferred'])} unmapped or deferred files, "
+           f"{len(include_only)} contain only comments, whitespace, include directives or pragma once. "
+           "The JSON lists those paths separately. Keep the files they include in scope.", ""]
+
+    candidates, macro_candidates = uncited_symbols(args.base, cited, cited_paths)
+    md += ["## Functions inside cited files", "",
+           f"{sum(map(len, candidates.values()))} ordinary function names in {len(candidates)} cited files "
+           "lack a path:symbol anchor naming the function immediately after the colon. "
+           "A prose note, line reference or caller may already cover the behavior. "
+           "The full per-file list is in `_coverage.json` under `uncited_functions`.", "",
+           "| file | names to inspect |", "|---|---:|"]
+    for path in sorted(candidates, key=lambda p: -len(candidates[p]))[:args.top]:
+        md.append(f"| `{path}` | {len(candidates[path])} |")
+    md.append("")
+
+    md += ["## Macro declarations inside cited files", "",
+           f"{sum(map(len, macro_candidates.values()))} distinct declarations in {len(macro_candidates)} "
+           "cited files lack an explicit same-file macro anchor. This scan recognizes "
+           "line-leading METHOD, MUTATOR_HOOKFUNCTION and REGISTER_* calls with literal identifiers. "
+           "For a method or hook it checks both the owner and member names. Conditionals, other macro "
+           "families and token-pasted names require inspection. The JSON lists the declarations "
+           "under `uncited_macro_declarations`.", ""]
 
     if buckets["deferred"]:
         md += ["## Deferred (audit scheduled)", "",
@@ -229,10 +341,13 @@ def main():
 
     (OUT / "COVERAGE.md").write_text("\n".join(md), encoding="utf-8")
     (OUT / "_coverage.json").write_text(json.dumps({
-        "generated": today,
+        "generated": today, "reference": reference, "source_review": audit_coverage,
         "summary": {b: {"files": len(v), "lines": lines_of(v)} for b, v in buckets.items()},
         "unmapped": [{"path": p, "lines": base_files[p]} for p in unmapped_sorted],
         "deferred": sorted(buckets["deferred"]),
+        "uncited_functions": candidates,
+        "uncited_macro_declarations": macro_candidates,
+        "include_only_among_unmapped_or_deferred": sorted(include_only),
         "stale_citations": stale,
     }, indent=1), encoding="utf-8")
 

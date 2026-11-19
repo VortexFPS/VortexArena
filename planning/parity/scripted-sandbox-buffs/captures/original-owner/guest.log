@@ -1,0 +1,1179 @@
+DarkPlaces Linux d93f9c4 Nov 19 2026 release GCC 
+Game is Xonotic using gamedir [0;1mdata[m
+gamename for server filtering: Xonotic
+Package /tmp/va-sandbox-original-light1/original/data/shared.pk3 contains the file models/xonotic_jumppad01/xonotic_jumppads01_readme.txt several times
+Package /tmp/va-sandbox-original-light1/original/data/shared.pk3 contains the file textures/phillipk1x/_GPL.txt several times
+Package /tmp/va-sandbox-original-light1/original/data/shared.pk3 contains the file textures/phillipk1x/_readme.txt several times
+Package /tmp/va-sandbox-original-light1/original/data/shared.pk3 contains the file textures/phillipk2x/_GPL.txt several times
+Package /tmp/va-sandbox-original-light1/original/data/shared.pk3 contains the file textures/phillipk2x/_readme.txt several times
+Current nice level is below the soft limit - cannot use niceness
+Loaded library "libd0_blind_id.so.0"
+Loaded library "libd0_rijndael.so.0"
+-ip option used, setting net_address to "127.0.0.3"
+Loaded library "libcurl.so.4"
+Skeletal animation uses SSE code path
+Initializing client
+Linked against SDL version 2.30.0
+Using SDL library version 2.30.0
+Loaded library "libfreetype.so.6"
+Loaded library "libogg.so.0"
+Loaded library "libtheora.so.0"
+Loaded library "libvorbis.so.0"
+Loaded library "libvorbisenc.so.2"
+Loaded public key key_0.d0pk (fingerprint: Xon//KssdlzGkFKdnnN4sgg8H+koTbBn5JTi37BAW1Q=)
+Loaded private ID key_0.d0si for key_0.d0pk (public key fingerprint: LwdkO8NaEQaSh/Prt9G6LGzMgEiG79KfYE7m1ZQrkig=)
+NOTE: this ID has not yet been signed!
+Client using an automatically assigned port
+Client opened a socket on address 127.0.0.3:0
+Client opened a socket on address [0:0:0:0:0:0:0:0]:0
+execing quake.rc
+execing default.cfg
+execing xonotic-common.cfg
+execing commands.cfg
+execing xonotic-server.cfg
+"maxplayers" set to "16"
+execing testing.cfg
+execing balance-xonotic.cfg
+execing bal-wep-xonotic.cfg
+execing physicsX.cfg
+execing turrets.cfg
+execing vehicles.cfg
+execing gametypes-server.cfg
+execing ctfscoring-samual.cfg
+execing mutators.cfg
+execing randomitems-xonotic.cfg
+execing monsters.cfg
+execing minigames.cfg
+execing physics.cfg
+[1;33mcouldn't exec cdtracks.cfg[m
+execing xonotic-client.cfg
+execing sRGB-disable.cfg
+[1;33mUnknown command "cd"[m
+execing binds-xonotic.cfg
+execing _hud_common.cfg
+execing _hud_descriptions.cfg
+execing hud_luma.cfg
+execing effects-normal.cfg
+execing crosshairs.cfg
+execing gametypes-client.cfg
+execing notifications.cfg
+[1;33mcouldn't exec config.cfg[m
+execing data/campaign.cfg
+execing config_update.cfg
+[1;33mcouldn't exec font-xolonium.cfg[m
+execing autoexec/empty.cfg
+execing autoexec.cfg
+execing parity-capture.cfg
+[1;33mUnknown command "showposition"[m
+[1;33mUnknown command "in_mouse"[m
+Only need a signature for an existing key...
+Signature generation in progress...
+execing post-config.cfg
+[1;31mERROR: can't deactivate vsync because That operation is not supported[m
+GL_VENDOR: Mesa
+GL_RENDERER: llvmpipe (LLVM 20.1.2, 256 bits)
+GL_VERSION: 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4
+GL_EXTENSIONS:
+ GL_3DFX_texture_compression_FXT1 GL_AMD_conservative_depth GL_AMD_draw_buffers_blend GL_AMD_gpu_shader_int64
+ GL_AMD_multi_draw_indirect GL_AMD_pinned_memory GL_AMD_query_buffer_object
+ GL_AMD_seamless_cubemap_per_texture GL_AMD_shader_stencil_export GL_AMD_shader_trinary_minmax
+ GL_AMD_texture_texture4 GL_AMD_vertex_shader_layer GL_AMD_vertex_shader_viewport_index
+ GL_ANGLE_texture_compression_dxt3 GL_ANGLE_texture_compression_dxt5 GL_ARB_ES2_compatibility
+ GL_ARB_ES3_1_compatibility GL_ARB_ES3_2_compatibility GL_ARB_ES3_compatibility
+ GL_ARB_arrays_of_arrays GL_ARB_base_instance GL_ARB_blend_func_extended
+ GL_ARB_buffer_storage GL_ARB_clear_buffer_object GL_ARB_clear_texture
+ GL_ARB_clip_control GL_ARB_compressed_texture_pixel_storage GL_ARB_compute_shader
+ GL_ARB_conditional_render_inverted GL_ARB_conservative_depth GL_ARB_copy_buffer
+ GL_ARB_copy_image GL_ARB_cull_distance GL_ARB_debug_output
+ GL_ARB_depth_buffer_float GL_ARB_depth_clamp GL_ARB_derivative_control
+ GL_ARB_direct_state_access GL_ARB_draw_buffers GL_ARB_draw_buffers_blend
+ GL_ARB_draw_elements_base_vertex GL_ARB_draw_indirect GL_ARB_draw_instanced
+ GL_ARB_enhanced_layouts GL_ARB_explicit_attrib_location GL_ARB_explicit_uniform_location
+ GL_ARB_fragment_coord_conventions GL_ARB_fragment_layer_viewport GL_ARB_fragment_shader
+ GL_ARB_framebuffer_no_attachments GL_ARB_framebuffer_object GL_ARB_framebuffer_sRGB
+ GL_ARB_get_program_binary GL_ARB_get_texture_sub_image GL_ARB_gl_spirv
+ GL_ARB_gpu_shader5 GL_ARB_gpu_shader_fp64 GL_ARB_gpu_shader_int64
+ GL_ARB_half_float_pixel GL_ARB_half_float_vertex GL_ARB_indirect_parameters
+ GL_ARB_instanced_arrays GL_ARB_internalformat_query GL_ARB_internalformat_query2
+ GL_ARB_invalidate_subdata GL_ARB_map_buffer_alignment GL_ARB_map_buffer_range
+ GL_ARB_multi_bind GL_ARB_multi_draw_indirect GL_ARB_occlusion_query2
+ GL_ARB_parallel_shader_compile GL_ARB_pipeline_statistics_query GL_ARB_pixel_buffer_object
+ GL_ARB_point_sprite GL_ARB_polygon_offset_clamp GL_ARB_post_depth_coverage
+ GL_ARB_program_interface_query GL_ARB_provoking_vertex GL_ARB_query_buffer_object
+ GL_ARB_robust_buffer_access_behavior GL_ARB_robustness GL_ARB_sample_shading
+ GL_ARB_sampler_objects GL_ARB_seamless_cube_map GL_ARB_seamless_cubemap_per_texture
+ GL_ARB_separate_shader_objects GL_ARB_shader_atomic_counter_ops GL_ARB_shader_atomic_counters
+ GL_ARB_shader_ballot GL_ARB_shader_bit_encoding GL_ARB_shader_clock
+ GL_ARB_shader_draw_parameters GL_ARB_shader_group_vote GL_ARB_shader_image_load_store
+ GL_ARB_shader_image_size GL_ARB_shader_objects GL_ARB_shader_precision
+ GL_ARB_shader_stencil_export GL_ARB_shader_storage_buffer_object GL_ARB_shader_subroutine
+ GL_ARB_shader_texture_image_samples GL_ARB_shader_texture_lod GL_ARB_shader_viewport_layer_array
+ GL_ARB_shading_language_420pack GL_ARB_shading_language_include GL_ARB_shading_language_packing
+ GL_ARB_spirv_extensions GL_ARB_stencil_texturing GL_ARB_sync
+ GL_ARB_tessellation_shader GL_ARB_texture_barrier GL_ARB_texture_border_clamp
+ GL_ARB_texture_buffer_object GL_ARB_texture_buffer_object_rgb32 GL_ARB_texture_buffer_range
+ GL_ARB_texture_compression_bptc GL_ARB_texture_compression_rgtc GL_ARB_texture_cube_map_array
+ GL_ARB_texture_filter_anisotropic GL_ARB_texture_filter_minmax GL_ARB_texture_float
+ GL_ARB_texture_gather GL_ARB_texture_mirror_clamp_to_edge GL_ARB_texture_multisample
+ GL_ARB_texture_non_power_of_two GL_ARB_texture_query_levels GL_ARB_texture_query_lod
+ GL_ARB_texture_rectangle GL_ARB_texture_rg GL_ARB_texture_rgb10_a2ui
+ GL_ARB_texture_stencil8 GL_ARB_texture_storage GL_ARB_texture_storage_multisample
+ GL_ARB_texture_swizzle GL_ARB_texture_view GL_ARB_timer_query
+ GL_ARB_transform_feedback2 GL_ARB_transform_feedback3 GL_ARB_transform_feedback_instanced
+ GL_ARB_transform_feedback_overflow_query GL_ARB_uniform_buffer_object GL_ARB_vertex_array_bgra
+ GL_ARB_vertex_array_object GL_ARB_vertex_attrib_64bit GL_ARB_vertex_attrib_binding
+ GL_ARB_vertex_buffer_object GL_ARB_vertex_shader GL_ARB_vertex_type_10f_11f_11f_rev
+ GL_ARB_vertex_type_2_10_10_10_rev GL_ARB_viewport_array GL_ARM_shader_framebuffer_fetch_depth_stencil
+ GL_ATI_blend_equation_separate GL_ATI_meminfo GL_ATI_texture_float
+ GL_ATI_texture_mirror_once GL_EXT_EGL_image_storage GL_EXT_EGL_image_storage_compression
+ GL_EXT_EGL_sync GL_EXT_abgr GL_EXT_blend_equation_separate
+ GL_EXT_debug_label GL_EXT_draw_buffers2 GL_EXT_draw_instanced
+ GL_EXT_framebuffer_blit GL_EXT_framebuffer_multisample GL_EXT_framebuffer_multisample_blit_scaled
+ GL_EXT_framebuffer_object GL_EXT_framebuffer_sRGB GL_EXT_memory_object
+ GL_EXT_memory_object_fd GL_EXT_packed_depth_stencil GL_EXT_packed_float
+ GL_EXT_pixel_buffer_object GL_EXT_polygon_offset_clamp GL_EXT_provoking_vertex
+ GL_EXT_shader_clock GL_EXT_shader_framebuffer_fetch GL_EXT_shader_framebuffer_fetch_non_coherent
+ GL_EXT_shader_image_load_formatted GL_EXT_shader_integer_mix GL_EXT_texture_array
+ GL_EXT_texture_compression_dxt1 GL_EXT_texture_compression_rgtc GL_EXT_texture_compression_s3tc
+ GL_EXT_texture_filter_anisotropic GL_EXT_texture_filter_minmax GL_EXT_texture_integer
+ GL_EXT_texture_mirror_clamp GL_EXT_texture_sRGB GL_EXT_texture_sRGB_R8
+ GL_EXT_texture_sRGB_RG8 GL_EXT_texture_sRGB_decode GL_EXT_texture_shadow_lod
+ GL_EXT_texture_shared_exponent GL_EXT_texture_snorm GL_EXT_texture_storage
+ GL_EXT_texture_swizzle GL_EXT_timer_query GL_EXT_transform_feedback
+ GL_EXT_vertex_array_bgra GL_EXT_vertex_attrib_64bit GL_IBM_multimode_draw_arrays
+ GL_INTEL_shader_atomic_float_minmax GL_KHR_blend_equation_advanced GL_KHR_blend_equation_advanced_coherent
+ GL_KHR_context_flush_control GL_KHR_debug GL_KHR_no_error
+ GL_KHR_parallel_shader_compile GL_KHR_robust_buffer_access_behavior GL_KHR_robustness
+ GL_KHR_texture_compression_astc_ldr GL_KHR_texture_compression_astc_sliced_3d GL_MESA_framebuffer_flip_y
+ GL_MESA_pack_invert GL_MESA_shader_integer_functions GL_MESA_texture_signed_rgba
+ GL_NVX_gpu_memory_info GL_NV_alpha_to_coverage_dither_control GL_NV_conditional_render
+ GL_NV_copy_image GL_NV_depth_clamp GL_NV_packed_depth_stencil
+ GL_NV_shader_atomic_float GL_NV_texture_barrier GL_OES_EGL_image
+ GL_OVR_multiview GL_OVR_multiview2 GL_S3_s3tc
+
+Checking OpenGL extensions...
+Detected GLSL version 450
+checking for GL_AMD_texture_texture4...  enabled
+checking for GL_ARB_texture_gather...  enabled
+checking for GL_EXT_texture_compression_s3tc...  enabled
+checking for GL_EXT_texture_filter_anisotropic...  enabled
+checking for GL_ARB_debug_output...  enabled
+GL_MAX_CUBE_MAP_TEXTURE_SIZE = 16384
+GL_MAX_3D_TEXTURE_SIZE = 2048
+Using GL32 rendering path
+Display 0: screen
+Fullscreen deactivated on display 0
+Video Mode: window 640x480 24bpp on display 0
+Starting render module "Palette"
+[1;33mCouldn't load gfx/palette.lmp, falling back on internal palette[m
+Starting render module "GL_Backend"
+OpenGL backend started
+Starting render module "R_Textures"
+Trying to load library... "libjpeg.so.62" "libjpeg.so" "/tmp/va-paired-20261119/upstream-engine/libjpeg.so.62" "/tmp/va-paired-20261119/upstream-engine/libjpeg.so" - failed.
+Trying to load library... "libpng16.so.16" - loaded.
+Loaded library "libpng16.so.16"
+Trying to load library... "libpng16.so.16" - loaded.
+Loaded library "libpng16.so.16"
+Starting render module "GL_Main"
+Starting render module "GL_Draw"
+Failed to load font-file for 'gfx/conchars', it will not support as many characters.
+Draw_CachePic("gfx/conchars"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_console', it will not support as many characters.
+Draw_CachePic("gfx/font_console"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_sbar', it will not support as many characters.
+Draw_CachePic("gfx/font_sbar"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_notify', it will not support as many characters.
+Draw_CachePic("gfx/font_notify"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_chat', it will not support as many characters.
+Draw_CachePic("gfx/font_chat"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_centerprint', it will not support as many characters.
+Draw_CachePic("gfx/font_centerprint"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_infobar', it will not support as many characters.
+Draw_CachePic("gfx/font_infobar"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_menu', it will not support as many characters.
+Draw_CachePic("gfx/font_menu"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_user0', it will not support as many characters.
+Draw_CachePic("gfx/font_user0"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_user1', it will not support as many characters.
+Draw_CachePic("gfx/font_user1"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_user2', it will not support as many characters.
+Draw_CachePic("gfx/font_user2"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_user3', it will not support as many characters.
+Draw_CachePic("gfx/font_user3"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_user4', it will not support as many characters.
+Draw_CachePic("gfx/font_user4"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_user5', it will not support as many characters.
+Draw_CachePic("gfx/font_user5"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_user6', it will not support as many characters.
+Draw_CachePic("gfx/font_user6"): frame 1: loading pic
+Failed to load font-file for 'gfx/font_user7', it will not support as many characters.
+Draw_CachePic("gfx/font_user7"): frame 1: loading pic
+Starting render module "R_Shadow"
+Starting render module "R_Sky"
+Starting render module "sbar"
+Draw_CachePic("gfx/disc"): frame 1: loading pic
+Draw_CachePic("gfx/num_0"): frame 1: loading pic
+Draw_CachePic("gfx/anum_0"): frame 1: loading pic
+Draw_CachePic("gfx/num_1"): frame 1: loading pic
+Draw_CachePic("gfx/anum_1"): frame 1: loading pic
+Draw_CachePic("gfx/num_2"): frame 1: loading pic
+Draw_CachePic("gfx/anum_2"): frame 1: loading pic
+Draw_CachePic("gfx/num_3"): frame 1: loading pic
+Draw_CachePic("gfx/anum_3"): frame 1: loading pic
+Draw_CachePic("gfx/num_4"): frame 1: loading pic
+Draw_CachePic("gfx/anum_4"): frame 1: loading pic
+Draw_CachePic("gfx/num_5"): frame 1: loading pic
+Draw_CachePic("gfx/anum_5"): frame 1: loading pic
+Draw_CachePic("gfx/num_6"): frame 1: loading pic
+Draw_CachePic("gfx/anum_6"): frame 1: loading pic
+Draw_CachePic("gfx/num_7"): frame 1: loading pic
+Draw_CachePic("gfx/anum_7"): frame 1: loading pic
+Draw_CachePic("gfx/num_8"): frame 1: loading pic
+Draw_CachePic("gfx/anum_8"): frame 1: loading pic
+Draw_CachePic("gfx/num_9"): frame 1: loading pic
+Draw_CachePic("gfx/anum_9"): frame 1: loading pic
+Draw_CachePic("gfx/num_minus"): frame 1: loading pic
+Draw_CachePic("gfx/anum_minus"): frame 1: loading pic
+Draw_CachePic("gfx/num_colon"): frame 1: loading pic
+Draw_CachePic("gfx/num_slash"): frame 1: loading pic
+Draw_CachePic("gfx/inv_shotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inv_sshotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inv_nailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inv_snailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inv_rlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inv_srlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inv_lightng"): frame 1: loading pic
+Draw_CachePic("gfx/inv2_shotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inv2_sshotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inv2_nailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inv2_snailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inv2_rlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inv2_srlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inv2_lightng"): frame 1: loading pic
+Draw_CachePic("gfx/inva1_shotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva1_sshotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva1_nailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva1_snailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva1_rlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inva1_srlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inva1_lightng"): frame 1: loading pic
+Draw_CachePic("gfx/inva2_shotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva2_sshotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva2_nailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva2_snailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva2_rlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inva2_srlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inva2_lightng"): frame 1: loading pic
+Draw_CachePic("gfx/inva3_shotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva3_sshotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva3_nailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva3_snailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva3_rlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inva3_srlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inva3_lightng"): frame 1: loading pic
+Draw_CachePic("gfx/inva4_shotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva4_sshotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva4_nailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva4_snailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva4_rlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inva4_srlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inva4_lightng"): frame 1: loading pic
+Draw_CachePic("gfx/inva5_shotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva5_sshotgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva5_nailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva5_snailgun"): frame 1: loading pic
+Draw_CachePic("gfx/inva5_rlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inva5_srlaunch"): frame 1: loading pic
+Draw_CachePic("gfx/inva5_lightng"): frame 1: loading pic
+Draw_CachePic("gfx/sb_shells"): frame 1: loading pic
+Draw_CachePic("gfx/sb_nails"): frame 1: loading pic
+Draw_CachePic("gfx/sb_rocket"): frame 1: loading pic
+Draw_CachePic("gfx/sb_cells"): frame 1: loading pic
+Draw_CachePic("gfx/sb_armor1"): frame 1: loading pic
+Draw_CachePic("gfx/sb_armor2"): frame 1: loading pic
+Draw_CachePic("gfx/sb_armor3"): frame 1: loading pic
+Draw_CachePic("gfx/sb_key1"): frame 1: loading pic
+Draw_CachePic("gfx/sb_key2"): frame 1: loading pic
+Draw_CachePic("gfx/sb_invis"): frame 1: loading pic
+Draw_CachePic("gfx/sb_invuln"): frame 1: loading pic
+Draw_CachePic("gfx/sb_suit"): frame 1: loading pic
+Draw_CachePic("gfx/sb_quad"): frame 1: loading pic
+Draw_CachePic("gfx/sb_sigil1"): frame 1: loading pic
+Draw_CachePic("gfx/sb_sigil2"): frame 1: loading pic
+Draw_CachePic("gfx/sb_sigil3"): frame 1: loading pic
+Draw_CachePic("gfx/sb_sigil4"): frame 1: loading pic
+Draw_CachePic("gfx/face1"): frame 1: loading pic
+Draw_CachePic("gfx/face_p1"): frame 1: loading pic
+Draw_CachePic("gfx/face2"): frame 1: loading pic
+Draw_CachePic("gfx/face_p2"): frame 1: loading pic
+Draw_CachePic("gfx/face3"): frame 1: loading pic
+Draw_CachePic("gfx/face_p3"): frame 1: loading pic
+Draw_CachePic("gfx/face4"): frame 1: loading pic
+Draw_CachePic("gfx/face_p4"): frame 1: loading pic
+Draw_CachePic("gfx/face5"): frame 1: loading pic
+Draw_CachePic("gfx/face_p5"): frame 1: loading pic
+Draw_CachePic("gfx/face_invis"): frame 1: loading pic
+Draw_CachePic("gfx/face_invul2"): frame 1: loading pic
+Draw_CachePic("gfx/face_inv2"): frame 1: loading pic
+Draw_CachePic("gfx/face_quad"): frame 1: loading pic
+Draw_CachePic("gfx/sbar"): frame 1: loading pic
+Draw_CachePic("gfx/ibar"): frame 1: loading pic
+Draw_CachePic("gfx/scorebar"): frame 1: loading pic
+Draw_CachePic("gfx/ranking"): frame 1: loading pic
+Draw_CachePic("gfx/complete"): frame 1: loading pic
+Draw_CachePic("gfx/inter"): frame 1: loading pic
+Draw_CachePic("gfx/finale"): frame 1: loading pic
+Starting render module "R_Particles"
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool texture management, file ../../../gl_textures.c:830, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool texture management, file ../../../gl_textures.c:831, size 16777216.000000 bytes (16.000000 MB)
+Starting render module "R_Explosions"
+Starting render module "R_LightningBeams"
+Starting render module "CL_MeshEntities"
+Starting render module "Models"
+Starting render module "CL_Video"
+Display 0 mode 0: 640x480 24bpp 0hz
+PRVM_Prog_Load: no cvar for autocvar global autocvar_matrix_server in menu, creating...
+PRVM_Prog_Load: no cvar for autocvar global autocvar_menu_scroll_averaging_time in menu, creating...
+PRVM_Prog_Load: no cvar for autocvar global autocvar_menu_scroll_averaging_time_pressed in menu, creating...
+PRVM_Prog_Load: no cvar for autocvar global autocvar_test_XonoticDecibelsSlider in menu, creating...
+menu: program loaded (crc 4486, size 2090K)
+PRVM_SetTempString menu: enlarging tempstrings buffer (0KB -> 64KB)
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [m_m_init[0;1m(./menu/menu.qc[m:[0;1m77[m)
+[1;34mMQC Build information: [1;31mv0.8.6-1779-g863cd3e84[m
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [m_static_register_weapons_done_1[0;1m(./common/weapons/all.qh[m:[0;1m384[m)
+Impulse limit exceeded, weapon(s) will not be directly accessible: 
+blaster
+shotgun
+machinegun
+mortar
+minelayer
+electro
+crylink
+vortex
+hagar
+devastator
+porto
+vaporizer
+hook
+hlac
+tuba
+rifle
+fireball
+seeker
+arc
+okhmg
+okmachinegun
+oknex
+okrpc
+okshotgun
+PRVM_SetTempString menu: enlarging tempstrings buffer (64KB -> 128KB)
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [m_static_compressShortVector_1[0;1m(./common/util.qc[m:[0;1m564[m)
+Verifying vector compression table...
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [m_static_compressShortVector_1[0;1m(./common/util.qc[m:[0;1m575[m)
+Done.
+========Initialized=========
+Downloading https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758pwEWGxVcLuVqA3cY0DlwRNd2/eyCC7rFSHMYnwAy/F6siaAVsoBM1Q1KnXDKd5GT19nFZeZofaA9C8lOZVo4bNZ55jKKHY= -> memory
+Draw_CachePic("gfx/loading"): frame 2: loading pic
+Compiling shader mode 0 permutation 5
+[1;36mGLSL shader glsl/combined_crc59807.glsl generic diffuse viewtint compiled (1 textures).[m
+scripts/common.shader parsing warning: unknown surfaceparm "monsterclip"
+Mod_LoadQ3Shaders: unknown wavefunc 0
+Shader 'textures/eX/eXmetal_plate01B' already defined, ignoring mismatching redeclaration
+Mod_LoadQ3Shaders: unknown wavefunc 0
+Mod_LoadQ3Shaders: unknown wavefunc 1
+Shader 'rocketThrust' already defined, ignoring mismatching redeclaration
+Shader 'textures/skies/exosystem' already defined
+Shader 'textures/skies/exosystem2' already defined, ignoring mismatching redeclaration
+Shader 'textures/skies/heaven' already defined
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+Compiling shader mode 0 permutation 4
+[1;36mGLSL shader glsl/combined_crc59807.glsl generic viewtint compiled (0 textures).[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+Draw_CachePic("white"): frame 2: loading pic
+Compiling shader mode 4 permutation 20000000
+[1;36mGLSL shader glsl/combined_crc59807.glsl vertexcolor alphagenvertex compiled (1 textures).[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+"challenge " received, sending connect request back to 127.0.0.1:26706
+Authenticated connection to 127.0.0.1:26706 has been established: server is cBoGN4xY4IPO7F1zX9b5UNiMUE+ijeAeGd9jDe+wBWA=@~Xon//Ks, I am LwdkO8N@~Xon//Ks
+--> client to server keepalive
+<-- server to client keepalive
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;33mCurl_GetDownloadInfo:1640: src string unterminated or truncated to 127 bytes: "https://ca.xonotic.org/?ca=0&key=ZDBpcYQAAACCAQEBKnkusEXZDgcO8PHIBfGirZzIkBk3EviYChJQY9X9xZba0mDoASa6633znwAp++xC0K8kUJV8bU758p"[m
+[1;31mError response from keygen server: Not allowed[m
+
+Server: Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC  (progs 51381 crc)
+Serverinfo packet received.
+CSQC [1;31munloaded[m
+Server protocol is DP7
+
+<===================================>
+
+[1;33mStormkeep[m
+Auto-recording to demos/2026-11-19_04-56_stormkeep.dem.
+Connect: signon stage 1 of 4CL_SignonReply: 1
+scripts/common.shader parsing warning: unknown surfaceparm "monsterclip"
+Mod_LoadQ3Shaders: unknown wavefunc 0
+Shader 'textures/eX/eXmetal_plate01B' already defined, ignoring mismatching redeclaration
+Mod_LoadQ3Shaders: unknown wavefunc 0
+Mod_LoadQ3Shaders: unknown wavefunc 1
+Shader 'rocketThrust' already defined, ignoring mismatching redeclaration
+Shader 'textures/skies/exosystem' already defined
+Shader 'textures/skies/exosystem2' already defined, ignoring mismatching redeclaration
+Shader 'textures/skies/heaven' already defined
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;31mdds/textures/trak5x/base/base_base1b_norm.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/base/base_holes1b_gloss.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/light/light_light2a_gloss.dds: not a DDS image[m
+[1;31mdds/textures/exx/base/base_metal01_norm.dds: not a DDS image[m
+[1;31mdds/textures/exx/floor/floor_clang01_norm.dds: not a DDS image[m
+[1;31mdds/textures/exx/base/base_metal04_norm.dds: not a DDS image[m
+[1;31mdds/textures/exx/floor/floor_wrn01_norm.dds: not a DDS image[m
+[1;31mdds/textures/exx/floor/floor_wrn01_gloss.dds: not a DDS image[m
+[1;31mdds/textures/exx/base/base_metal05rust_norm.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/panel/panel_comp1c_glow.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/trim/trim_trim7c_norm.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/trim/trim_basictrim1b_gloss.dds: not a DDS image[m
+[1;31mdds/textures/exx/floor/floor_wrn01-blue_norm.dds: not a DDS image[m
+[1;31mdds/textures/exx/floor/floor_wrn01-blue_gloss.dds: not a DDS image[m
+[1;31mdds/textures/trak4x/wall/wall_door1_gloss.dds: not a DDS image[m
+[1;31mdds/textures/exx/floor/floor_crete01_norm.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/base/base_pipe1e_norm.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/base/base_pipe1a_norm.dds: not a DDS image[m
+[1;31mdds/textures/trak5x/wall/wall_wall1a_norm.dds: not a DDS image[m
+[1;31mdds/textures/effects_warpzone/wavy_norm.dds: not a DDS image[m
+Error loading image maps/stormkeep/lm_0000.jpg (file loaded but decode failed)
+Stats for q3bsp model "maps/stormkeep.bsp": 6139 faces, 1910 nodes, 1912 leafs, 730 clusters, 0 clusterportals, mesh: 55814 vertices, 39052 triangles, 6139 surfaces
+Error loading image env/extragalactic/asteroids_rt.jpg (file loaded but decode failed)
+Error loading image env/extragalactic/asteroids_lf.jpg (file loaded but decode failed)
+Error loading image env/extragalactic/asteroids_bk.jpg (file loaded but decode failed)
+Error loading image env/extragalactic/asteroids_ft.jpg (file loaded but decode failed)
+Error loading image env/extragalactic/asteroids_up.jpg (file loaded but decode failed)
+Error loading image env/extragalactic/asteroids_dn.jpg (file loaded but decode failed)
+Not using buffered "dlcache/csprogs.dat.4098797.54264" (buffered: (nil), 0)
+PRVM_Prog_Load: no cvar for autocvar global autocvar_xon_sys_phys_dt in client, creating...
+PRVM_Prog_Load: no cvar for autocvar global autocvar_xon_sys_phys_minfps in client, creating...
+PRVM_Prog_Load: no cvar for autocvar global autocvar__scoreboard_team_selection in client, creating...
+PRVM_Prog_Load: no cvar for autocvar global autocvar_r_fakelight in client, creating...
+PRVM_Prog_Load: no cvar for autocvar global autocvar__movetype_debug in client, creating...
+PRVM_Prog_Load: no cvar for autocvar global autocvar_xon_com_phys_interpolate in client, creating...
+client: program loaded (crc 54264, size 4002K) EXT_CSQC
+PRVM_SetTempString client: enlarging tempstrings buffer (0KB -> 64KB)
+[0;1m[::[mCSQC[0;1m::[1;35mTRACE[0;1m] [m_CSQC_Init[0;1m(./client/main.qc[m:[0;1m51[m)
+[1;34mCSQC Build information: [1;31mv0.8.6-1779-g863cd3e84[m
+PRVM_SetTempString client: enlarging tempstrings buffer (64KB -> 128KB)
+PRVM_SetTempString client: enlarging tempstrings buffer (128KB -> 256KB)
+Draw_CachePic("gfx/hud/luma/armor_small"): frame 10: loading pic
+Draw_CachePic("gfx/hud/luma/armor_medium"): frame 10: loading pic
+Draw_CachePic("gfx/hud/luma/armor_big"): frame 10: loading pic
+Draw_CachePic("gfx/hud/luma/armor_mega"): frame 10: loading pic
+Draw_CachePic("gfx/hud/luma/health_small"): frame 10: loading pic
+Draw_CachePic("gfx/hud/luma/health_medium"): frame 10: loading pic
+Draw_CachePic("gfx/hud/luma/health_big"): frame 10: loading pic
+Draw_CachePic("gfx/hud/luma/health_mega"): frame 10: loading pic
+PRVM_SetTempString client: enlarging tempstrings buffer (256KB -> 512KB)
+Draw_CachePic("gfx/reticle_nex"): frame 10: loading pic
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool csprogs.dat, file ../../../prvm_edict.c:118, size 19031040.000000 bytes (18.149414 MB)
+Mem_Alloc: pool csprogs.dat, file ../../../prvm_edict.c:118, size 21749760.000000 bytes (20.742188 MB)
+PRVM_SetTempString client: enlarging tempstrings buffer (512KB -> 1024KB)
+Mem_Alloc: pool csprogs.dat, file ../../../prvm_edict.c:118, size 24468480.000000 bytes (23.334961 MB)
+Mem_Alloc: pool csprogs.dat, file ../../../prvm_edict.c:118, size 27187200.000000 bytes (25.927734 MB)
+Mem_Alloc: pool csprogs.dat, file ../../../prvm_edict.c:118, size 29905920.000000 bytes (28.520508 MB)
+PRVM_SetTempString client: enlarging tempstrings buffer (1024KB -> 2048KB)
+Mem_Alloc: pool csprogs.dat, file ../../../prvm_edict.c:118, size 32624640.000000 bytes (31.113281 MB)
+PRVM_SetTempString client: enlarging tempstrings buffer (2048KB -> 4096KB)
+[0;1m[::[mCSQC[0;1m::[1;35mTRACE[0;1m] [m_static_compressShortVector_1[0;1m(./common/util.qc[m:[0;1m564[m)
+Verifying vector compression table...
+[0;1m[::[mCSQC[0;1m::[1;35mTRACE[0;1m] [m_static_compressShortVector_1[0;1m(./common/util.qc[m:[0;1m575[m)
+Done.
+Error loading image textures/domination/dom_base_glow.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool texture management, file ../../../gl_textures.c:830, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool texture management, file ../../../gl_textures.c:831, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image env/exomorph/exomorphpx.jpg (file loaded but decode failed)
+Error loading image env/exomorph/exomorphnx.jpg (file loaded but decode failed)
+Error loading image env/exomorph/exomorphpy.jpg (file loaded but decode failed)
+Error loading image env/exomorph/exomorphny.jpg (file loaded but decode failed)
+Error loading image env/exomorph/exomorphpz.jpg (file loaded but decode failed)
+Error loading image env/exomorph/exomorphnz.jpg (file loaded but decode failed)
+failed to load cubemap "env/exomorph/exomorph"
+Error loading image textures/bloodyskull.jpg (file loaded but decode failed)
+Error loading image textures/bloodyskull_pants.jpg (file loaded but decode failed)
+Error loading image textures/eye.jpg (file loaded but decode failed)
+Error loading image textures/eyeblood.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/raptor_bump.jpg (file loaded but decode failed)
+Error loading image textures/raptor_gloss.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/invincible.jpg (file loaded but decode failed)
+Error loading image textures/invincible_glow.jpg (file loaded but decode failed)
+Error loading image textures/strength.jpg (file loaded but decode failed)
+Error loading image textures/strength_glow.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/f_shotgun.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+[1;31mdds/textures/facility114invx/trim/trim01invg_norm.dds: not a DDS image[m
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../gl_rmain.c:2459, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/cleanskull.jpg (file loaded but decode failed)
+--> client to server keepalive
+Draw_CachePic("gfx/reticle_normal"): frame 10: loading pic
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Draw_CachePic("gfx/stormkeep_radar"): frame 10: loading pic
+Draw_CachePic("gfx/stormkeep_mini"): frame 10: loading pic
+Error loading image gfx/stormkeep_mini.jpg (file loaded but decode failed)
+<-- server to client keepalive
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/pyriahair.jpg (file loaded but decode failed)
+Error loading image textures/pyriahair_norm.jpg (file loaded but decode failed)
+Error loading image textures/pyriahair_gloss.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/pyriafullbright_gloss.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/pyriafullbright_reflect.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/pyria_gloss.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/pyria_reflect.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/seraphina_gloss.jpg (file loaded but decode failed)
+Error loading image textures/seraphina_reflect.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/umbrafullbright_gloss.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/umbrafullbright_reflect.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../fs.c:3519, size 16777261.000000 bytes (16.000043 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/umbra_gloss.jpg (file loaded but decode failed)
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 16777216.000000 bytes (16.000000 MB)
+Error loading image textures/umbra_reflect.jpg (file loaded but decode failed)
+Error loading image models/containers/crate01_bump.jpg (file loaded but decode failed)
+Connect: signon stage 2 of 4CL_SignonReply: 2
+Connect: signon stage 3 of 4CL_SignonReply: 3
+[1;33mUnknown command "cd"[m
+ParityGuest is connecting...
+[1;33m[mParityOwner[1;34m connected[m
+[1;33m[mParityGuest[1;34m connected[m
+Connect: signon stage 4 of 4CL_SignonReply: 4
+Compiling shader mode 2 permutation 0
+[1;36mGLSL shader glsl/combined_crc59807.glsl depth/shadow compiled (0 textures).[m
+Compiling shader mode 4 permutation 0
+[1;36mGLSL shader glsl/combined_crc59807.glsl vertexcolor compiled (1 textures).[m
+Compiling shader mode 4 permutation 800
+[1;36mGLSL shader glsl/combined_crc59807.glsl vertexcolor glow compiled (2 textures).[m
+Compiling shader mode 4 permutation 400000
+[1;36mGLSL shader glsl/combined_crc59807.glsl vertexcolor alphakill compiled (1 textures).[m
+Compiling shader mode 11 permutation 0
+[1;36mGLSL shader glsl/combined_crc59807.glsl lightdirection compiled (1 textures).[m
+Compiling shader mode 13 permutation 0
+[1;36mGLSL shader glsl/combined_crc59807.glsl refraction compiled (2 textures).[m
+Compiling shader mode 11 permutation 800
+[1;36mGLSL shader glsl/combined_crc59807.glsl lightdirection glow compiled (2 textures).[m
+Draw_CachePic("gfx/menu/luma/background.tga"): frame 12: loading pic
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 20971520.000000 bytes (20.000000 MB)
+Draw_CachePic("gfx/menu/luma/background_ingame.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/background_ingame_l2.tga"): frame 12: loading pic
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 20971520.000000 bytes (20.000000 MB)
+Draw_CachePic("gfx/menu/luma/background_l2.tga"): frame 12: loading pic
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 20971520.000000 bytes (20.000000 MB)
+Draw_CachePic("gfx/menu/luma/bigbutton_c.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/bigbutton_d.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/bigbutton_f.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/bigbutton_n.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/bigbuttongray_c.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/bigbuttongray_d.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/bigbuttongray_f.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/bigbuttongray_n.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/border.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/button_c.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/button_d.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/button_f.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/button_n.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/buttongray_c.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/buttongray_d.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/buttongray_f.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/buttongray_n.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/checkbox_c0.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/checkbox_c1.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/checkbox_d0.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/checkbox_d1.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/checkbox_f0.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/checkbox_f1.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/checkbox_n0.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/checkbox_n1.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/checkmark.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/clearbutton_c.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/clearbutton_f.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/clearbutton_n.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/closebutton_c.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/closebutton_f.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/closebutton_n.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/colorbutton_c.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/colorbutton_f.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/colorbutton_n.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/colorpicker.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/colorpicker_m.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/colorpicker_selected.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/cursor.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/cursor_move.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/cursor_resize.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/cursor_resize2.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_as.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_ca.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_ctf.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_cts.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_dm.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_dom.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_duel.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_ft.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_inf.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_inv.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_jb.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_ka.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_kh.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_lms.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_mayhem.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_nb.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_ons.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_rc.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_surv.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_tdm.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_tka.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_tmayhem.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/gametype_vip.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_aeslevel1.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_aeslevel2.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_aeslevel3.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_aeslevel4.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_aeslevel5.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_ipv4.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_ipv6.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_mod_.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_mod_instagib.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_mod_minstagib.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_mod_newtoys.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_mod_overkill.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_mod_quake.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_mod_xdf.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_mod_xpm.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_pure1.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/icon_stats1.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/inputbox_f.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/inputbox_n.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/nopreview_map.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/nopreview_menuskin.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/nopreview_player.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/radiobutton_c0.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/radiobutton_c1.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/radiobutton_d0.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/radiobutton_d1.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/radiobutton_f0.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/radiobutton_f1.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/radiobutton_n0.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/radiobutton_n1.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/scrollbar_c.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/scrollbar_f.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/scrollbar_n.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/scrollbar_s.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/skinpreview.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/slider_c.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/slider_d.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/slider_f.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/slider_n.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/slider_s.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/tooltip.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/tree_branch.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/tree_branch_start.tga"): frame 12: loading pic
+Draw_CachePic("gfx/menu/luma/tree_elbow.tga"): frame 12: loading pic
+Mem_Alloc: pool menu.dat, file ../../../prvm_edict.c:118, size 18030408.000000 bytes (17.195137 MB)
+Mem_Alloc: pool menu.dat, file ../../../prvm_edict.c:118, size 20604744.000000 bytes (19.650215 MB)
+Draw_CachePic("maps/stormkeep"): frame 12: loading pic
+Error loading image maps/stormkeep.jpg (file loaded but decode failed)
+Draw_CachePic("levelshots/stormkeep"): frame 12: loading pic
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mXonoticStatsList_getStats[0;1m(./menu/xonotic/statslist.qc[m:[0;1m54[m)
+XonoticStatsList_getStats() at time: 0
+PRVM_SetTempString menu: enlarging tempstrings buffer (128KB -> 256KB)
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mXonoticResolutionSlider_loadResolutions[0;1m(./menu/xonotic/slider_resolution.qc[m:[0;1m202[m)
+Added default resolutions.
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mXonoticResolutionSlider_loadResolutions[0;1m(./menu/xonotic/slider_resolution.qc[m:[0;1m204[m)
+Total number of resolutions detected: 1
+Mem_Alloc: pool menu.dat, file ../../../prvm_edict.c:118, size 23179080.000000 bytes (22.105293 MB)
+[0;1m[::[mMENUQC[0;1m::[1;36mINFO[0;1m] [mRebound MOUSE4 to "weapon_last", replacing legacy "weaplast"
+Draw_CachePic("gfx/menu/luma/skinpreview"): frame 12: loading pic notpersist
+Draw_CachePic("gfx/menu/luminos/skinpreview"): frame 12: loading pic notpersist
+Error loading image gfx/menu/luminos/skinpreview.jpg (file loaded but decode failed)
+Draw_CachePic("gfx/menu/wickedx/skinpreview"): frame 12: loading pic notpersist
+Error loading image gfx/menu/wickedx/skinpreview.jpg (file loaded but decode failed)
+Draw_CachePic("gfx/menu/xaw/skinpreview"): frame 12: loading pic notpersist
+Error loading image gfx/menu/xaw/skinpreview.jpg (file loaded but decode failed)
+PRVM_SetTempString menu: enlarging tempstrings buffer (256KB -> 512KB)
+Draw_CachePic("gfx/hud/luma/weaponlaser"): frame 12: loading pic
+Draw_CachePic("gfx/scoreboard/player_ready"): frame 12: loading pic notpersist
+Draw_CachePic("gfx/winner"): frame 12: loading pic notpersist
+scripts/common.shader parsing warning: unknown surfaceparm "monsterclip"
+Mod_LoadQ3Shaders: unknown wavefunc 0
+Shader 'textures/eX/eXmetal_plate01B' already defined, ignoring mismatching redeclaration
+Mod_LoadQ3Shaders: unknown wavefunc 0
+Mod_LoadQ3Shaders: unknown wavefunc 1
+Shader 'rocketThrust' already defined, ignoring mismatching redeclaration
+Shader 'textures/skies/exosystem' already defined
+Shader 'textures/skies/exosystem2' already defined, ignoring mismatching redeclaration
+Shader 'textures/skies/heaven' already defined
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+[1;33mMod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "[m
+Downloading https://update.xonotic.org/checkupdate.txt -> memory
+ParityOwner is connecting...
+Mem_Alloc: pool csprogs.dat, file ../../../prvm_edict.c:118, size 35343360.000000 bytes (33.706055 MB)
+Compiling shader mode 10 permutation 2801
+[1;36mGLSL shader glsl/combined_crc59807.glsl lightgrid diffuse glow specular compiled (5 textures).[m
+Compiling shader mode 10 permutation 802801
+[1;36mGLSL shader glsl/combined_crc59807.glsl lightgrid diffuse glow specular reflectcube compiled (7 textures).[m
+Compiling shader mode 10 permutation 802809
+[1;36mGLSL shader glsl/combined_crc59807.glsl lightgrid diffuse colormapping glow specular reflectcube compiled (9 textures).[m
+[0;1m[::[mCSQC[0;1m::[1;35mTRACE[0;1m] [mHUD_Main[0;1m(./client/hud/hud.qc[m:[0;1m780[m)
+Automatically fixed wrong/missing panel numbers in _hud_panelorder
+Draw_CachePic("gfx/hud/luma/border_default"): frame 13: loading pic
+Draw_CachePic("gfx/hud/luma/strength"): frame 13: loading pic
+Draw_CachePic("gfx/hud/luma/border_corner_northeast"): frame 13: loading pic
+Draw_CachePic("gfx/hud/luma/border_plain_north"): frame 13: loading pic
+Draw_Frame(16): Unloading "gfx/menu/luma/skinpreview"
+Draw_Frame(16): Unloading "gfx/menu/luminos/skinpreview"
+Draw_Frame(16): Unloading "gfx/menu/wickedx/skinpreview"
+Draw_Frame(16): Unloading "gfx/menu/xaw/skinpreview"
+Draw_Frame(16): Unloading "gfx/scoreboard/player_ready"
+Draw_Frame(16): Unloading "gfx/winner"
+[1;33m[mParityOwner[1;34m is now playing[m
+[1;33m[mParityGuest[1;34m is now playing[m
+Compiling shader mode 10 permutation 2001
+[1;36mGLSL shader glsl/combined_crc59807.glsl lightgrid diffuse specular compiled (4 textures).[m
+Draw_CachePic("gfx/hud/luma/buff_vampire"): frame 20: loading pic
+Draw_CachePic("gfx/hud/luma/border_default_south"): frame 20: loading pic
+Draw_CachePic("gfx/hud/luma/health"): frame 20: loading pic
+Draw_CachePic("gfx/hud/luma/border_tab_south"): frame 20: loading pic
+Draw_CachePic("gfx/hud/luma/ammo_current_bg"): frame 20: loading pic
+Draw_CachePic("gfx/hud/luma/ammo_shells"): frame 20: loading pic
+Draw_CachePic("gfx/hud/luma/ammo_bullets"): frame 20: loading pic
+Draw_CachePic("gfx/hud/luma/ammo_rockets"): frame 20: loading pic
+Draw_CachePic("gfx/hud/luma/ammo_cells"): frame 20: loading pic
+Draw_CachePic("gfx/hud/luma/border_default_east"): frame 20: loading pic
+Draw_CachePic("gfx/hud/luma/weapon_current_bg"): frame 20: loading pic
+Draw_CachePic("gfx/hud/luma/weaponshotgun"): frame 20: loading pic
+Draw_CachePic("gfx/crosshairshotgun"): frame 20: loading pic notpersist
+Compiling shader mode 10 permutation 2809
+[1;36mGLSL shader glsl/combined_crc59807.glsl lightgrid diffuse colormapping glow specular compiled (7 textures).[m
+Compiling shader mode 11 permutation 808
+[1;36mGLSL shader glsl/combined_crc59807.glsl lightdirection colormapping glow compiled (4 textures).[m
+Draw_CachePic("gfx/hud/luma/progressbar"): frame 21: loading pic
+Compiling shader mode 11 permutation 802801
+[1;36mGLSL shader glsl/combined_crc59807.glsl lightdirection diffuse glow specular reflectcube compiled (6 textures).[m
+Compiling shader mode 11 permutation 801
+[1;36mGLSL shader glsl/combined_crc59807.glsl lightdirection diffuse glow compiled (3 textures).[m
+Draw_CachePic("gfx/hud/luma/armor"): frame 54: loading pic
+[1;32mSANDBOX - INFO: [mObject is owned by "ParityOwner", created "[1;33m19-11-2026 04:57:05[m", last edited "[1;33m19-11-2026 04:57:05[m"
+[1;31mSANDBOX - WARNING: [mObject could not be edited. Make sure you are facing an object that you have edit rights over
+ParityOwner[1;31m drew first blood! [m
+ParityGuest[1;31m was telefragged by [mParityOwner[1;31m[m
+Compiling shader mode 10 permutation 2009
+[1;36mGLSL shader glsl/combined_crc59807.glsl lightgrid diffuse colormapping specular compiled (6 textures).[m
+Draw_CachePic("gfx/blood"): frame 260: loading pic notpersist
+Draw_CachePic("gfx/hud/luma/notify_telefrag"): frame 260: loading pic
+[1;33mServer lag report: 85.6% CPU, 29.92% lost, offset avg 14.3ms, max 120.7ms, sdev 25.8ms[m
+CL_Disconnect
+CSQC [1;31munloaded[m
+Completed demo
+Disconnect: Server disconnected
+[1;31mERROR: can't deactivate vsync because That operation is not supported[m
+Draw_CachePic("gfx/menu/luma/background"): frame 261: loading pic notpersist
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 20971520.000000 bytes (20.000000 MB)
+Draw_CachePic("gfx/menu/luma/background_l2"): frame 261: loading pic notpersist
+Mem_Alloc: pool Temporary Memory, file ../../../image.c:539, size 20971520.000000 bytes (20.000000 MB)
+Draw_Frame(263): Unloading "gfx/crosshairshotgun"
+Draw_Frame(264): Unloading "gfx/blood"
+Draw_CachePic("gfx/menu/luma/border"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/bigbutton_n"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/button_n"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/scrollbar_s"): frame 269: loading pic notpersist
+Draw_CachePic("maps/boil"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/gametype_dm"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/nopreview_map"): frame 269: loading pic notpersist
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Campaign Difficulty: too wide for label, condensed by factor 0.936667
+Draw_CachePic("gfx/menu/luma/radiobutton_n0"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/radiobutton_n1"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/closebutton_n"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/button_c"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/checkbox_n0"): frame 269: loading pic notpersist
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Categories too wide for label, condensed by factor 0.530847
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Filter: too wide for label, condensed by factor 0.585234
+Draw_CachePic("gfx/menu/luma/inputbox_n"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/checkbox_n1"): frame 269: loading pic notpersist
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Empty too wide for label, condensed by factor 0.706783
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Full too wide for label, condensed by factor 0.661660
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Laggy too wide for label, condensed by factor 0.706783
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Refresh too wide for label, condensed by factor 0.822639
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Pause too wide for label, condensed by factor 0.795511
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Ping too wide for label, condensed by factor 0.500000
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Type too wide for label, condensed by factor 0.750000
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Players too wide for label, condensed by factor 0.571428
+LHNET_Write: sendto returned error: Invalid argument
+LHNET_Write: sendto returned error: Invalid argument
+LHNET_Write: sendto returned error: Invalid argument
+LHNET_Write: sendto returned error: Network is unreachable
+LHNET_Write: sendto returned error: Network is unreachable
+LHNET_Write: sendto returned error: Network is unreachable
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Address: too wide for label, condensed by factor 0.622990
+Draw_CachePic("gfx/menu/luma/button_d"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/scrollbar_n"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/gametype_tdm"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/gametype_inv"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/gametype_duel"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/gametype_kh"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/gametype_dom"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/gametype_ka"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/gametype_ft"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/gametype_lms"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/gametype_rc"): frame 269: loading pic notpersist
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Filter: too wide for label, condensed by factor 0.366296
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Full screen too wide for label, condensed by factor 0.682942
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Borderless window too wide for label, condensed by factor 0.989086
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Resolution: too wide for label, condensed by factor 0.814760
+Draw_CachePic("gfx/menu/luma/slider_s"): frame 269: loading pic notpersist
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Font/UI size: too wide for label, condensed by factor 0.689412
+Draw_CachePic("gfx/menu/luma/slider_n"): frame 269: loading pic notpersist
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Resolution scaling: too wide for label, condensed by factor 0.569620
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Anisotropy: too wide for label, condensed by factor 0.983889
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Depth first: too wide for label, condensed by factor 0.746863
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Disabled too wide for label, condensed by factor 0.551457
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text World too wide for label, condensed by factor 0.882331
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Wait for GPU to finish each frame too wide for label, condensed by factor 0.791412
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Brightness: too wide for label, condensed by factor 0.814760
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Contrast: too wide for label, condensed by factor 0.995818
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Contrast boost: too wide for label, condensed by factor 0.597491
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Saturation: too wide for label, condensed by factor 0.814760
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Intensity: too wide for label, condensed by factor 0.896236
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Idle limit: too wide for label, condensed by factor 0.814760
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Are you sure you want to quit? too wide for label, condensed by factor 0.952778
+Draw_CachePic("gfx/menu/luma/buttongray_n"): frame 269: loading pic notpersist
+Draw_CachePic("gfx/menu/luma/cursor"): frame 269: loading pic notpersist
+Downloading https://update.xonotic.org/tos.txt -> memory
+[1;33mUnknown command "cd"[m
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Leave current match too wide for label, condensed by factor 0.894737
+[0;1m[::[mMENUQC[0;1m::[1;35mTRACE[0;1m] [mLabel_recalcPositionWithText[0;1m(./menu/item/label.qc[m:[0;1m38[m)
+NOTE: label text Don't accept (quit the game) too wide for label, condensed by factor 0.803572
+Mem_Alloc: pool menu.dat, file ../../../prvm_edict.c:118, size 25753416.000000 bytes (24.560371 MB)
+Mem_Alloc: pool menu.dat, file ../../../prvm_edict.c:118, size 28327752.000000 bytes (27.015450 MB)
+[1;33mWARNING: dpmaster dpm4.xonotic.xyz:27777 query timed out[m
+[1;33mWARNING: dpmaster master1.xonotic.org:42863 query timed out[m
+[1;33mWARNING: dpmaster master2.xonotic.org:27950 query timed out[m
+CL_Disconnect
+CSQC [1;31munloaded[m
+[1;31mERROR: can't deactivate vsync because That operation is not supported[m
+[1;33mWarning: Cvar_SetQuick() cannot set unregistered cvar "snd_initialized"[m
+Stopping render module "CL_Video"
+Stopping render module "Models"
+Stopping render module "CL_MeshEntities"
+Stopping render module "R_LightningBeams"
+Stopping render module "R_Explosions"
+Stopping render module "R_Particles"
+Stopping render module "sbar"
+Stopping render module "R_Sky"
+Stopping render module "R_Shadow"
+Stopping render module "GL_Draw"
+Stopping render module "GL_Main"
+Stopping render module "R_Textures"
+Stopping render module "GL_Backend"
+OpenGL backend shutting down
+Stopping render module "Palette"
+Saving command history to darkplaces_history.txt ...
+Saving config to config.cfg ...

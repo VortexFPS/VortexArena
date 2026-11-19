@@ -1,0 +1,38 @@
+[
+  {
+    "seconds": 19.481,
+    "frame": "RedProbe/0004.webp",
+    "sample": 19.359,
+    "label": "shielded"
+  },
+  {
+    "seconds": 20.504,
+    "frame": "RedProbe/0010.webp",
+    "sample": 20.439,
+    "label": "shielded-shot"
+  },
+  {
+    "seconds": 22.854,
+    "frame": "RedProbe/0023.webp",
+    "sample": 22.79,
+    "label": "approach"
+  },
+  {
+    "seconds": 24.049,
+    "frame": "BlueProbe/0029.webp",
+    "sample": 23.871,
+    "label": "build"
+  },
+  {
+    "seconds": 30.276,
+    "frame": "BlueProbe/0044.webp",
+    "sample": 29.669,
+    "label": "build-late"
+  },
+  {
+    "seconds": 45.26,
+    "frame": "BlueProbe/0053.webp",
+    "sample": 42.948,
+    "label": "last"
+  }
+]

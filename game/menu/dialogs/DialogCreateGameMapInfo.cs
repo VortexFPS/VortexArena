@@ -24,7 +24,7 @@ public partial class DialogCreateGameMapInfo : MenuScreen, IQcDialog
     // MapInfo_Type_ToText fallback when the registry lacks it).
     private static readonly (string Net, string Name)[] MenuGametypes =
     {
-        ("dm", "Deathmatch"), ("tdm", "Team Deathmatch"), ("ctf", "Capture the Flag"), ("ca", "Clan Arena"),
+        ("dm", "Deathmatch"), ("duel", "Duel"), ("tdm", "Team Deathmatch"), ("ctf", "Capture the Flag"), ("ca", "Clan Arena"),
         ("freezetag", "Freeze Tag"), ("mayhem", "Mayhem"), ("tmayhem", "Team Mayhem"), ("ka", "Keepaway"),
         ("tka", "Team Keepaway"), ("kh", "Key Hunt"), ("lms", "Last Man Standing"), ("dom", "Domination"),
         ("nb", "Nexball"), ("ons", "Onslaught"), ("as", "Assault"), ("surv", "Survival"),
@@ -55,14 +55,9 @@ public partial class DialogCreateGameMapInfo : MenuScreen, IQcDialog
     {
         Name = "DialogCreateGameMapInfo"; // QC XonoticMapInfoDialog
 
-        var backend = new MapInfoBackend(MenuDataBridge.ReadText, MenuDataBridge.ImageExists)
-        {
-            // QC Duel.m_isForcedSupported: g_duel_not_dm_maps (default 0 → forced support active).
-            ForceDuelOnDmMaps = MenuState.Cvars.GetFloat("g_duel_not_dm_maps") == 0f,
-            // QC TeamDeathmatch.m_isForcedSupported: g_tdm_on_dm_maps (opposite polarity).
-            ForceTdmOnDmMaps = MenuState.Cvars.GetFloat("g_tdm_on_dm_maps") != 0f,
-        };
-        MapInfo info = backend.Get(_bspName);                 // MapInfo_Get_ByID
+        var backend = new MapInfoBackend(MenuDataBridge.ReadText, MenuDataBridge.ImageExists);
+        MapInfo info = MapInfoCache.Get(_bspName);            // MapInfo_Get_ByID
+        MapForcedSupport settings = MapForcedSupport.FromCvars(MenuState.Cvars);
         string previewBase = backend.PreviewImage(_bspName);  // the preview fallback chain
 
         var me = new QcGrid(QcRows, 10);
@@ -104,7 +99,7 @@ public partial class DialogCreateGameMapInfo : MenuScreen, IQcDialog
                 me.TDempty(0.2f);
             }
             (string net, string name) = MenuGametypes[i];
-            me.TD(1, wgt, new QcLabel(GametypeName(net, name)) { Disabled = !info.Supports(net) });
+            me.TD(1, wgt, new QcLabel(GametypeName(net, name)) { Disabled = !info.SupportsInDetails(net, settings) });
         }
 
         me.GotoRC(me.Rows - 2, 0);
@@ -135,7 +130,7 @@ public partial class DialogCreateGameMapInfo : MenuScreen, IQcDialog
         string gametype = ChooseGametype(info);
 
         float timeLimit = MenuState.Cvars.GetFloat("timelimit_override");
-        float fragLimit = MenuState.Cvars.GetFloat("fraglimit_override");
+        float fragLimit = PointLimitSettings.For(gametype) is null ? MenuState.Cvars.GetFloat("fraglimit_override") : 0;
         var config = new MatchConfig
         {
             Gametype = gametype,
@@ -151,7 +146,8 @@ public partial class DialogCreateGameMapInfo : MenuScreen, IQcDialog
 
     private string ChooseGametype(MapInfo info)
     {
-        if (!string.IsNullOrEmpty(_preferredGametype) && info.Supports(_preferredGametype!))
+        if (!string.IsNullOrEmpty(_preferredGametype)
+            && info.SupportsInDetails(_preferredGametype, MapForcedSupport.FromCvars(MenuState.Cvars)))
             return _preferredGametype!;
         foreach (string gt in info.SupportedGametypes)
             return gt; // first supported

@@ -1,0 +1,83 @@
+Stock controlled only: shot origin; shooter origin, eye offset, mins, maxs, aim; carrier origin, mins, maxs, aim; gravity and tick
+INPUTS attached 
+1216 306 27.03125
+1216 248 -7.96875
+0 0 35
+-16 -16 -24
+16 16 45
+0 90 0
+1216 328 -7.96874905
+-16 -16 -24
+16 16 45
+0 -90 0
+"sv_gravity" is "800" ["800"]
+"sys_ticrate" is "0.015625" ["0.015625"]
+--
+INPUTS moved 
+1216 306 27.03125
+1216 248 -7.96875
+0 0 35
+-16 -16 -24
+16 16 45
+0 90 0
+1216 448 -7.96875
+-16 -16 -24
+16 16 45
+0 90 0
+"sv_gravity" is "800" ["800"]
+"sys_ticrate" is "0.015625" ["0.015625"]
+--
+INPUTS dead 
+1216 306 27.03125
+1216 248 -7.96875
+0 0 35
+-16 -16 -24
+16 16 45
+0 90 0
+1216 448 -7.96875
+-16 -16 -24
+16 16 5
+0 90 0
+"sv_gravity" is "800" ["800"]
+"sys_ticrate" is "0.015625" ["0.015625"]
+
+Stock controlled snapshots and receiver counts
+Stock pinned server
+attached: edict 3853 {'origin': "'1216 316 26.9902344'", 'nextthink': '32.4188499', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '105.840729', 'move_movetype': '12', 'creationtime': '30.8407249'}
+moved: edict 3853 {'origin': "'1216 460 26.9902344'", 'nextthink': '34.1532249', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '105.840729', 'move_movetype': '12', 'creationtime': '30.8407249'}
+dead: edict 3853 {'origin': "'1216 460 -27.96875'", 'nextthink': '105.840729', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '105.840729', 'move_movetype': '6', 'creationtime': '30.8407249'}
+reattached: edict 3846 {'origin': "'1216 316 26.9902344'", 'nextthink': '46.4344749', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '119.856354', 'move_movetype': '12', 'creationtime': '44.8563499'}
+disconnected: 1 remaining
+disconnected: edict 3846 {'origin': "'12 -7.34788112e-16 -27.96875'", 'nextthink': '119.856354', 'aiment': 'entity 2', 'owner': 'entity 1', 'death_time': '119.856354', 'move_movetype': '6', 'creationtime': '44.8563499'}
+Alpha: 1 impact at cap eviction
+Alpha: 0 impacts after Beta's disconnect notification
+Beta: 1 impact at cap eviction
+
+
+Native baseline inputs
+INPUTS shooter=<1216, 248, -8> eye=<0, 0, 35> hull=<-16, -16, -24>/<16, 16, 45> yaw=90 carrier=<1216, 328, -8> hull=<-16, -16, -24>/<16, 16, 45> yaw=0 gravity=800 tick=0.013888889
+LAUNCH origin=<1216, 260, 19> velocity=<-1.3113417E-05, 300, 0> hull=<-4, -4, -4>/<4, 4, 4>
+STICKY order=1 deadline=80.15276 offset=<0, -12, 16.753998> attachYaw=0
+FOLLOW moved owner=Alpha target=Beta targetFreed=False order=1 move=Follow solid=Not origin=<1216, 436, 8.753998> next=6.514
+LOSS firstStep=0.013888836 move=Toss
+FOLLOW dead owner=Alpha target= targetFreed= order=1 move=Toss solid=Corpse origin=<1216, 436, -27.96875> next=80.153
+DROPPED order=1 deadline=80.15276
+INPUTS shooter=<1216, 248, -8> eye=<0, 0, 35> hull=<-16, -16, -24>/<16, 16, 45> yaw=90 carrier=<1216, 328, -8> hull=<-16, -16, -24>/<16, 16, 45> yaw=0 gravity=800 tick=0.013888889
+LAUNCH origin=<1216, 260, 19> velocity=<-1.3113417E-05, 300, 0> hull=<-4, -4, -4>/<4, 4, 4>
+FOLLOW disconnected owner=Alpha target=Beta targetFreed=True order=2 move=Follow solid=Not origin=<1216, 316, 8.753998> next=0.000
+
+Native controlled inputs and attachment timeline
+INPUTS shooter=<1216, 248, -8> eye=<0, 0, 35> hull=<-16, -16, -24>/<16, 16, 45> yaw=90 carrier=<1216, 328, -8> hull=<-16, -16, -24>/<16, 16, 45> yaw=0 gravity=800 tick=0.015625
+LAUNCH origin=<1216, 306, 27> velocity=<-1.3113417E-05, 300, 0> hull=<-4, -4, -4>/<4, 4, 4>
+STICKY order=1 deadline=80.156235 offset=<0, -12, 34.958984> attachYaw=270
+CARRIER moved origin=<1216, 448, -8> yaw=90 inputYaw=90
+FOLLOW moved owner=Alpha target=Beta targetFreed=False order=1 move=Follow solid=Not origin=<1216, 460, 26.958984> next=6.672
+LOSS firstStep=0.015625 move=Toss
+FOLLOW dead owner=Alpha target= targetFreed= order=1 move=Toss solid=Corpse origin=<1216, 460, -22.455078> next=80.156
+DROPPED order=1 deadline=80.156235
+INPUTS shooter=<1216, 248, -8> eye=<0, 0, 35> hull=<-16, -16, -24>/<16, 16, 45> yaw=90 carrier=<1216, 328, -8> hull=<-16, -16, -24>/<16, 16, 45> yaw=0 gravity=800 tick=0.015625
+LAUNCH origin=<1216, 306, 27> velocity=<-1.3113417E-05, 300, 0> hull=<-4, -4, -4>/<4, 4, 4>
+BLAST receiver=Alpha origin=<1216, 460, -22.455078>
+BLAST receiver=Beta origin=<1216, 460, -22.455078>
+FOLLOW disconnected owner=Alpha target=Beta targetFreed=True order=2 move=Follow solid=Not origin=<1216, 316, 26.958984> next=0.000
+PASS disconnect removes the attachment without another impact

@@ -160,6 +160,10 @@ public partial class DialogSettingsEffects : QcTab
                 "Particles further away than this will not be drawn", "%s qu"))
                 .Dep("cl_particles", 1, 1);
 
+        GotoRC(Rows - 2, 0);
+            TD(1, Columns, Qc.CheckEx(1, 0, VortexArena.Common.Menu.MapClientVisualSettings.ServerSuggestionsCvar,
+                "Use server map visual suggestions", "Accept map-specific bloom, sky and depth fog suggestions. Your explicit settings take priority."));
+
         GotoRC(Rows - 1, 0);
             TD(1, Columns, apply);
     }

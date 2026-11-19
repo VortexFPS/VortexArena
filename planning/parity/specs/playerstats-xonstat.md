@@ -133,7 +133,7 @@ unimplemented TODO); ints reject leading zeros. Consumers: playerbasic handler, 
 | HTTP submission (`url_multi_fopen` POST, async DelayMapVote) | NOT IMPLEMENTED — `GameReport` returns the body; both callers (`GameWorld.cs:4067`, `:1823`) discard it; `DelayMapVote` cleared synchronously; `g_playerstats_gamereport_uri` defaults `""` (Cvars.cs:431) vs Base submit URL; `ServerFlags.PlayerStats*` bits defined (ServerFlags.cs:29-33) but never set | **Missing** |
 | Playerbasic skill fetch | NOT IMPLEMENTED — SP_SKILL column registered (`GameScores.cs:166`) and preserved by score clears (`:597`) but never fed; no `g_playerstats_playerbasic_uri` cvar | **Missing** (stub column) |
 | Playerdetail profile fetch | NOT IMPLEMENTED — `DialogMultiplayerProfile.cs:134-151` honest placeholder + inert `menu_cmd playerstats_update` (`MenuCommand.cs:281` logs it) | **Missing** (dialog chrome live) |
-| lib/urllib.qc | NOT IMPLEMENTED (no async HTTP facility anywhere in src/ or game/) | **Missing** |
+| lib/urllib.qc | The XonStat consumers lack the request and failover behavior. Matrix has a dedicated HTTP client. | **Missing for XonStat** |
 | lib/json.qc | intended divergence — .NET `System.Text.Json` replaces it (already used, `CameraTrace.cs:65`) | **N/A by design** |
 
 ## Parity assessment
@@ -162,8 +162,7 @@ unimplemented TODO); ints reject leading zeros. Consumers: playerbasic handler, 
 - `tests/VortexArena.Tests/ServerInfraTests.cs:444-490` — disabled-without-uri, accumulate+build,
   warmup-discard (pass; covers the accumulator row).
 - Code reads with line refs as cited per row: grep sweeps for `EventPlayer/EventTeam` emitters,
-  `allow_uid`, `g_playerstats_gametype` (single read, zero writes), `urllib|HttpClient|crypto_uri`
-  (comments only), `playerstats_update` (single inert call site).
+  `allow_uid`, `g_playerstats_gametype`, and the profile menu’s `playerstats_update` call.
 - Boot-log observation: `[MenuCommand] 'playerstats_update' has no client backend yet (inert)`.
 - Unverified at runtime: none of the missing pieces need a runtime check; the alivetime last-life-only
   claim is a code-path deduction (BeginAlivetime overwrite without intermediate flush) — a live match

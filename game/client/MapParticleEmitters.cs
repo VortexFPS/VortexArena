@@ -15,12 +15,11 @@
 // faithful simulation (src/VortexArena.Engine/Particles/ParticleSim.cs) draws them exactly as it draws a
 // weapon impact; the emission arithmetic itself is PointParticleEmitter (Godot-free, unit-tested).
 //
-// Scans the ambient entity facade like LaserRenderer/TriggerTouch.Predict*Ambient — live on the
-// listen-server/demo paths only (a pure --connect client has no facade/BSP yet; the established seam).
+// Native listen clients scan the live map entities through the ambient facade. The standalone client
+// loads the BSP but has no point-particle entity state in its snapshots.
 //
-// What still differs from the QuakeC (documented residuals): the per-emission .noise sound and the bgmscript
-// envelope are not played; a ROTATED brush entity emits from its whole bounding box (the brush test is done
-// for unrotated entities, which is every stock emitter).
+// A rotated brush entity emits from its whole bounding box. The brush test covers unrotated entities,
+// including all emitters in the installed stock map packs.
 
 using System;
 using System.Collections.Generic;
@@ -39,6 +38,17 @@ public partial class MapParticleEmitters : Node3D
 {
     /// <summary>The effect system the emissions are played through.</summary>
     public EffectSystem? Effects { get; set; }
+    internal Action<string, NVec3, float, float>? EmissionSound { get; set; }
+
+    private MapBgmScript? _bgmScript;
+
+    internal void SetBgmScript(MapBgmScript? script)
+    {
+        _bgmScript = script;
+        foreach (MapEmitter emitter in _emitters.Values)
+            emitter.BgmPlayback = script?.Bind(emitter.Entity.BgmScript);
+    }
+    internal MusicPlayer? Music { get; set; }
 
     private const float RescanInterval = 2f;
 
@@ -50,6 +60,7 @@ public partial class MapParticleEmitters : Node3D
     {
         public Entity Entity = null!;
         public readonly PointParticleEmitter Emission = new();
+        public MapBgmScript.Playback? BgmPlayback;
         public bool WasActive;
         public NVec3 BuiltAt;                             // entity origin the box/brush were taken at
         // (draws 2026-08-02) PVS gating state: the cluster of the emitter's position (re-derived when it
@@ -94,6 +105,7 @@ public partial class MapParticleEmitters : Node3D
         bool pvsGate = culler is { CullActive: true }
             && Api.Cvars.GetFloat("r_pvs_cull_emitters") != 0f;
 
+        float musicTime = _bgmScript is not null ? Music?.PlaybackPosition ?? -1f : -1f;
         foreach (MapEmitter em in _emitters.Values)
         {
             Entity e = em.Entity;
@@ -102,8 +114,16 @@ public partial class MapParticleEmitters : Node3D
 
             // QC: "if (i && !this.impulse) this.just_toggled = 1" — the entity went from off to on.
             bool active = e.Active == MapMover.ActiveActive;
-            if (active && !em.WasActive)
+            MapBgmScript.Sample music = MapBgmScript.Sample.Unscripted;
+            if (em.BgmPlayback is { } playback)
+            {
+                music = playback.Advance(musicTime, frametime);
+                em.Emission.JustToggled = music.NoteOn;
+            }
+            else if (active && !em.WasActive)
+            {
                 em.Emission.JustToggled = true;
+            }
             em.WasActive = active;
             if (!active)
                 continue;
@@ -123,7 +143,7 @@ public partial class MapParticleEmitters : Node3D
                     continue;
             }
 
-            if (em.Emission.Step(frametime, _rng, _points) == 0)
+            if (em.Emission.Step(frametime, _rng, _points, music.Amplitude) == 0)
                 continue;
 
             foreach (NVec3 point in _points)
@@ -148,6 +168,8 @@ public partial class MapParticleEmitters : Node3D
         if (e.ParticleJitter != 0f)
             velocity += PointParticleEmitter.RandomVec(_rng) * e.ParticleJitter;   // randomvec() * waterlevel
         fx.Spawn(e.Mdl, p, velocity, e.ParticleCount);
+        if (!string.IsNullOrEmpty(e.Noise))
+            EmissionSound?.Invoke(e.Noise, p, MapMover.VolBase * e.Volume, e.Atten);
     }
 
     // =================================================================================================
@@ -174,7 +196,12 @@ public partial class MapParticleEmitters : Node3D
         {
             if (e.IsFreed || _emitters.ContainsKey(e) || string.IsNullOrEmpty(e.Mdl))
                 continue;
-            var em = new MapEmitter { Entity = e, WasActive = e.Active == MapMover.ActiveActive };
+            var em = new MapEmitter
+            {
+                Entity = e,
+                WasActive = e.Active == MapMover.ActiveActive,
+                BgmPlayback = _bgmScript?.Bind(e.BgmScript),
+            };
             Place(em);
             _emitters[e] = em;
             GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,

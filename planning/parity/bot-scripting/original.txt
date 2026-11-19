@@ -1,0 +1,15 @@
++0.004 25 commands read
++0.534 [BOT]Gator BOTPROBE_start
++0.534 [BOT]Hellfire BOTPROBE_start
++1.201 [BOT]Hellfire BOTPROBE_relative_wait_done
++1.201 [BOT]Hellfire BOTPROBE_barrier_one
++1.234 [BOT]Gator BOTPROBE_barrier_one
++1.568 [BOT]Gator BOTPROBE_absolute_wait_done
++1.601 [BOT]Hellfire BOTPROBE_absolute_wait_done
++2.134 [BOT]Hellfire BOTPROBE_cue_release
++2.139 CUE botprobe/default.wav server_time=18.067 entity=3 channel=-1 volume=178/255 attenuation=0.015625
++2.168 [BOT]Gator BOTPROBE_cue_release
++2.170 CUE botprobe/explicit.wav server_time=18.100 entity=2 channel=4 volume=127/255 attenuation=2
++2.534 [BOT]Gator BOTPROBE_end
++2.534 [BOT]Hellfire BOTPROBE_end
++3.034 players:  3 active (16 max)

@@ -74,7 +74,7 @@ public sealed class AssetLoader
     private readonly Dictionary<string, bool?> _rigBucketCache = new(StringComparer.Ordinal);
     // Resolved sample -> decoded AudioStream (or null when the sample resolves to nothing). The stream is
     // immutable and safe to share across many AudioStreamPlayer3D, so unlike models we cache the built resource.
-    private readonly Dictionary<string, AudioStream?> _soundCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string Path, bool Exact), AudioStream?> _soundCache = new();
     // Written from the streamer's worker lane too (WarmSoundOffThread — the menu warm decodes the whole
     // registered sound set), so every read/write takes this gate. A double-build race is harmless: the streams
     // are immutable and last writer wins.
@@ -407,6 +407,55 @@ public sealed class AssetLoader
         }
         _rigBucketCache[key] = result;
         return result;
+    }
+
+    /// <summary>Read unscaled Quake-space model bounds without loading any render assets.</summary>
+    public (System.Numerics.Vector3 Mins, System.Numerics.Vector3 Maxs)? LoadSandboxModelBounds(string path)
+    {
+        try
+        {
+            ReadOnlySpan<byte> bytes = ReadModelBytes(AssetPaths.Normalize(path));
+            string magic = ReadMagic(bytes);
+            if (magic.StartsWith(MagicDpm, StringComparison.Ordinal))
+            {
+                DpmData model = DpmReader.Read(bytes);
+                return (model.Mins, model.Maxs);
+            }
+
+            var mins = new System.Numerics.Vector3(float.PositiveInfinity);
+            var maxs = new System.Numerics.Vector3(float.NegativeInfinity);
+            if (magic.StartsWith(MagicMd3, StringComparison.Ordinal))
+            {
+                foreach (Md3Frame frame in Md3Reader.Read(bytes).Frames)
+                    Include(frame.Mins, frame.Maxs);
+            }
+            else if (magic.StartsWith(MagicIqm, StringComparison.Ordinal))
+            {
+                IqmData model = IqmReader.Read(bytes);
+                if (model.Bounds is { Length: > 0 } bounds)
+                {
+                    foreach (IqmBounds frame in bounds)
+                        Include(frame.Mins, frame.Maxs);
+                }
+                else
+                {
+                    foreach (System.Numerics.Vector3 position in model.Positions)
+                        Include(position, position);
+                }
+            }
+            return float.IsFinite(mins.X) ? (mins, maxs) : null;
+
+            void Include(System.Numerics.Vector3 lo, System.Numerics.Vector3 hi)
+            {
+                mins = System.Numerics.Vector3.Min(mins, lo);
+                maxs = System.Numerics.Vector3.Max(maxs, hi);
+            }
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[AssetLoader] sandbox model '{path}' bounds read failed: {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>Read+magic-dispatch a single model file into a Godot-free <see cref="VortexArena.Formats.MuzzleTag.Model"/>
@@ -756,8 +805,7 @@ public sealed class AssetLoader
             return null;
         try
         {
-            byte[] bytes = _vfs.ReadBytes(key);
-            return BspReader.Read(bytes);
+            return BspMapSource.Read(_vfs, key);
         }
         catch (Exception ex)
         {
@@ -854,20 +902,27 @@ public sealed class AssetLoader
     /// <c>.ogg</c> then <c>.wav</c>. Returns a cached stream (shared, immutable) or <c>null</c> when the
     /// sample resolves to no file / fails to decode, so callers can fall back or stay silent.
     /// </summary>
-    public AudioStream? LoadSound(string sample)
+    public AudioStream? LoadSound(string sample) => LoadSound(sample, exactPath: false);
+
+    /// <summary>Load a resolved VFS sound path, preserving the caller's choice of format.</summary>
+    public AudioStream? LoadSoundFile(string path) => LoadSound(path, exactPath: true);
+
+    private AudioStream? LoadSound(string sample, bool exactPath)
     {
         if (string.IsNullOrWhiteSpace(sample))
             return null;
 
-        string cacheKey = AssetPaths.Normalize(sample);
-        if (cacheKey.Length == 0)
+        string path = AssetPaths.Normalize(sample);
+        if (path.Length == 0)
             return null;
+
+        var cacheKey = (path, exactPath);
         lock (_soundCacheGate)
             if (_soundCache.TryGetValue(cacheKey, out AudioStream? cached))
                 return cached;
 
         AudioStream? stream = null;
-        string? vpath = ResolveSoundVpath(cacheKey);
+        string? vpath = exactPath ? (_vfs.Exists(path) ? path : null) : ResolveSoundVpath(path);
         if (vpath is not null)
         {
             try

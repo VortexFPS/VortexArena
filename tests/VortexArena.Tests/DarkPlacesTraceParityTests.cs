@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Services;
 using VortexArena.Engine.Collision;
@@ -39,7 +41,7 @@ public class DarkPlacesTraceParityTests
     private readonly ITestOutputHelper _output;
     public DarkPlacesTraceParityTests(ITestOutputHelper output) => _output = output;
 
-    private sealed record Golden(string Kind, int Type, Vector3 Start, Vector3 Mins, Vector3 Maxs, Vector3 End, float Extend, int Mask,
+    private sealed record Golden(int FileLine, string Kind, int Type, Vector3 Start, Vector3 Mins, Vector3 Maxs, Vector3 End, float Extend, int Mask,
         float Fraction, Vector3 EndPos, bool StartSolid, bool AllSolid, Vector3 Normal);
 
     private static string GoldenDir([CallerFilePath] string thisFile = "") => Path.Combine(Path.GetDirectoryName(thisFile)!, "golden", "dp-traces");
@@ -48,8 +50,10 @@ public class DarkPlacesTraceParityTests
     {
         map = "";
         List<Golden> traces = new();
+        int lineNumber = 0;
         foreach (string line in File.ReadLines(Path.Combine(GoldenDir(), name + ".txt")))
         {
+            lineNumber++;
             if (line.StartsWith('#'))
             {
                 int at = line.IndexOf("map=", StringComparison.Ordinal);
@@ -62,7 +66,7 @@ public class DarkPlacesTraceParityTests
             string[] o = parts[2].Split(' ', StringSplitOptions.RemoveEmptyEntries);
             // the reference prints doubles; what a program sees, and what is compared, is the nearest float
             float F(int i) => (float)double.Parse(o[i], CultureInfo.InvariantCulture);
-            traces.Add(new Golden(parts[0], (int)a[0], new Vector3(a[2], a[3], a[4]), new Vector3(a[5], a[6], a[7]), new Vector3(a[8], a[9], a[10]),
+            traces.Add(new Golden(lineNumber, parts[0], (int)a[0], new Vector3(a[2], a[3], a[4]), new Vector3(a[5], a[6], a[7]), new Vector3(a[8], a[9], a[10]),
                 new Vector3(a[11], a[12], a[13]), a[14], (int)a[15], F(0), new Vector3(F(1), F(2), F(3)), o[4] != "0", o[5] != "0", new Vector3(F(12), F(13), F(14))));
         }
         return traces;
@@ -123,21 +127,22 @@ public class DarkPlacesTraceParityTests
         _output.WriteLine($"{"all",-18} {all}");
     }
 
-    private sealed record Config(string Name, BspCollisionOptions? Options, bool Arithmetic);
+    private sealed record Config(string Name, BspCollisionOptions Options);
 
-    private static Config[] Configs(ReadOnlyMemory<byte> file) => new[]
+    private static readonly Config[] Configs =
     {
-        new Config("native default (slabs, grid)", new BspCollisionOptions(), false),
-        new Config("DarkPlaces triangles", new BspCollisionOptions { PatchCollision = PatchCollisionMode.DarkPlacesTriangles, MapFile = file }, false),
-        new Config("triangles + hierarchy", new BspCollisionOptions { PatchCollision = PatchCollisionMode.DarkPlacesTriangles, Broadphase = CollisionBroadphase.Bih, MapFile = file }, false),
-        new Config("triangles + hierarchy + DarkPlaces brushes", new BspCollisionOptions { PatchCollision = PatchCollisionMode.DarkPlacesTriangles, Broadphase = CollisionBroadphase.Bih, DarkPlacesBrushPoints = true, MapFile = file }, false),
-        new Config("everything (as legacy mode)", BspCollisionOptions.DarkPlaces(file), true),
+        new("former native default (slabs, grid)", new BspCollisionOptions()),
+        new("DarkPlaces triangles", new BspCollisionOptions { PatchCollision = PatchCollisionMode.DarkPlacesTriangles }),
+        new("triangles + hierarchy", new BspCollisionOptions { PatchCollision = PatchCollisionMode.DarkPlacesTriangles, Broadphase = CollisionBroadphase.Bih }),
+        new("triangles + hierarchy + DarkPlaces brushes", new BspCollisionOptions
+            { PatchCollision = PatchCollisionMode.DarkPlacesTriangles, Broadphase = CollisionBroadphase.Bih, DarkPlacesBrushPoints = true }),
+        new("DarkPlaces profile", BspCollisionOptions.DarkPlaces),
     };
 
     /// <summary>
     /// The measurement behind "should the native game use DarkPlaces' curved-surface collision": the
-    /// shared trace library as the native game builds it, and with each option added, against the
-    /// recorded answers. Only the last configuration is held to anything; the rest is printed.
+    /// former native collision profile with each option added, against the recorded answers.
+    /// The full DarkPlaces profile is asserted. Intermediate profiles are measured for comparison.
     /// (Every configuration is traced with the recorded trace's extension, so that what varies is the
     /// collision and nothing else; the native game does not extend its traces today.)
     /// </summary>
@@ -152,13 +157,12 @@ public class DarkPlacesTraceParityTests
             List<Golden> traces = Load(set, out string map);
             byte[] file = env.Files.ReadBytes($"maps/{map}.bsp");
             BspData bsp = BspReader.Read(file);
-            Config[] configs = Configs(file);
-            totals ??= configs.Select(_ => new Tally()).ToArray();
+            totals ??= Configs.Select(_ => new Tally()).ToArray();
             _output.WriteLine($"== {set}");
-            for (int c = 0; c < configs.Length; c++)
+            for (int c = 0; c < Configs.Length; c++)
             {
-                CollisionWorld world = BspCollisionBuilder.Build(bsp, null, configs[c].Options).World;
-                var service = new TraceService(world) { DarkPlacesArithmetic = configs[c].Arithmetic };
+                CollisionWorld world = BspCollisionBuilder.Build(bsp, null, Configs[c].Options).World;
+                var service = new TraceService(world);
                 var mover = new Entity();
                 Tally tally = new();
                 foreach (Golden g in traces)
@@ -168,13 +172,78 @@ public class DarkPlacesTraceParityTests
                     tally.Add(g, t.Fraction, t.EndPos, t.StartSolid, t.AllSolid);
                     totals[c].Add(g, t.Fraction, t.EndPos, t.StartSolid, t.AllSolid);
                 }
-                _output.WriteLine($"  {configs[c].Name,-44} {tally}");
-                if (c == configs.Length - 1) Assert.True(tally.Differ == 0, $"{set}: {tally}");
+                _output.WriteLine($"  {Configs[c].Name,-44} {tally}");
+                if (c == Configs.Length - 1) Assert.True(tally.Differ == 0, $"{set}: {tally}");
             }
         }
         _output.WriteLine("== all sets");
-        Config[] names = Configs(default);
-        for (int c = 0; c < names.Length; c++) _output.WriteLine($"  {names[c].Name,-44} {totals[c]}");
+        for (int c = 0; c < Configs.Length; c++) _output.WriteLine($"  {Configs[c].Name,-44} {totals[c]}");
+    }
+
+    [Fact]
+    public void Rebuilt_Stormkeep_differences_follow_the_compiled_brushes()
+    {
+        if (!Directory.Exists(TestPaths.BaseData) || !Directory.Exists(TestPaths.Data))
+            return;
+
+        using var originalFiles = new SvEnvironment(TestPaths.BaseData, writeRoot: null);
+        const string mapPath = "maps/stormkeep.bsp";
+        string rebuiltPack = Path.Combine(TestPaths.Data, "maps", "stormkeep.pk3");
+        if (!originalFiles.Files.Exists(mapPath) || !File.Exists(rebuiltPack))
+            return;
+
+        byte[] original = originalFiles.Files.ReadBytes(mapPath);
+        using var pack = ZipFile.OpenRead(rebuiltPack);
+        var bspEntry = pack.GetEntry(mapPath);
+        Assert.NotNull(bspEntry);
+        using var entry = bspEntry.Open();
+        using var contents = new MemoryStream();
+        entry.CopyTo(contents);
+        byte[] rebuilt = contents.ToArray();
+        if (Convert.ToHexString(SHA256.HashData(original)) != "20B1AAE86C9E1D4D08FA02CC7EBF6894578C4FD8680AF586CFAAAFED96127CA1" ||
+            Convert.ToHexString(SHA256.HashData(rebuilt)) != "15B669AC3B8574C7F905F99F7CF8B4A6504B90F5EC19B6B1445A6EDF02462E69")
+        {
+            _output.WriteLine("Stormkeep BSPs do not match the maps-2026.07 and maps-2026.08 fixtures.");
+            return;
+        }
+
+        List<Golden> traces = Load("patch-stormkeep", out _);
+        CollisionWorld Build(byte[] file) => BspCollisionBuilder.Build(BspReader.Read(file), null, BspCollisionOptions.DarkPlaces).World;
+        CollisionWorld originalWorld = Build(original);
+        CollisionWorld rebuiltWorld = Build(rebuilt);
+        int[] changedLines = { 99, 127, 180, 204, 228, 370 };
+        Assert.Empty(Differences(originalWorld));
+        Assert.Equal(changedLines, Differences(rebuiltWorld));
+        Assert.Empty(Differences(Combine(originalWorld, rebuiltWorld)));
+        Assert.Equal(changedLines, Differences(Combine(rebuiltWorld, originalWorld)));
+
+        int[] Differences(CollisionWorld world)
+        {
+            var differences = new List<int>();
+            var trace = new TraceService(world) { DarkPlacesArithmetic = true };
+            var mover = new Entity();
+            foreach (Golden g in traces)
+            {
+                mover.DpHitContentsMask = BspLegacyWorld.ContentsToEngine(g.Mask);
+                TraceResult t = trace.TraceExtended(g.Start, g.Mins, g.Maxs, g.End, MoveFilter.WorldOnly, mover, g.Extend, out _);
+                if (Vector3.Distance(g.EndPos, t.EndPos) >= 0.01f || g.StartSolid != t.StartSolid || g.AllSolid != t.AllSolid)
+                {
+                    differences.Add(g.FileLine);
+                    _output.WriteLine(FormattableString.Invariant(
+                        $"line {g.FileLine} {g.Kind}: {g.Fraction:R} {g.EndPos} {g.StartSolid}/{g.AllSolid} -> {t.Fraction:R} {t.EndPos} {t.StartSolid}/{t.AllSolid} [{t.DpHitTextureName}]"));
+                }
+            }
+            return differences.ToArray();
+        }
+
+        static CollisionWorld Combine(CollisionWorld compiled, CollisionWorld patches)
+        {
+            var world = new CollisionWorld { UseBih = true };
+            world.AddBrushes(compiled.Brushes.Where(b => !b.IsTriangle));
+            world.AddBrushes(patches.Brushes.Where(b => b.IsTriangle));
+            world.BuildGrid();
+            return world;
+        }
     }
 
     private sealed class Barrels : TraceService.IEntityProvider
@@ -209,7 +278,7 @@ public class DarkPlacesTraceParityTests
         using SvEnvironment env = new(TestPaths.BaseData, writeRoot: null);
         List<Golden> traces = Load("barrels-catharsis", out string map);
         byte[] file = env.Files.ReadBytes($"maps/{map}.bsp");
-        CollisionWorld world = BspCollisionBuilder.Build(BspReader.Read(file), null, BspCollisionOptions.DarkPlaces(file)).World;
+        CollisionWorld world = BspCollisionBuilder.Build(BspReader.Read(file), null, BspCollisionOptions.DarkPlaces).World;
         SvModelCollision models = new(env.Files);
         CollisionMesh? mesh = models.Get("models/containers/barrel01.md3");
         Assert.NotNull(mesh);
@@ -297,7 +366,7 @@ public class DarkPlacesTraceParityTests
 #else
             "Release build");
 #endif
-        foreach (Config config in Configs(file))
+        foreach (Config config in Configs)
         {
             long before = GC.GetTotalMemory(true);
             Stopwatch build = Stopwatch.StartNew();
@@ -305,7 +374,7 @@ public class DarkPlacesTraceParityTests
             _ = world.Bih;   // built on first use
             build.Stop();
             long held = GC.GetTotalMemory(true) - before;
-            var service = new TraceService(world) { DarkPlacesArithmetic = config.Arithmetic };
+            var service = new TraceService(world);
             var mover = new Entity { Solid = Solid.SlideBox };
             double Time(Func<int, TraceResult> trace, out double sum)
             {

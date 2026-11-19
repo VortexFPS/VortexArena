@@ -67,6 +67,67 @@ public class WarpzoneSpawnTests
     }
 
     [Fact]
+    public void FixedCamera_UsesDeferredTargetPoseWithoutTouchingPlayers()
+    {
+        (EngineServices svc, WarpzoneManager manager) = Setup();
+        MapObjectsRegistry.RegisterAll();
+
+        Entity brush = svc.Entities.Spawn();
+        brush.Model = "*1";
+        brush.Target = "fixture-camera-view";
+        Assert.True(SpawnFuncs.TrySpawn("func_camera", brush));
+        WarpzoneCamera camera = Assert.Single(manager.Cameras);
+        Assert.Null(camera.View);
+        Assert.Equal(Solid.Bsp, brush.Solid);
+        Assert.Null(brush.Touch);
+
+        Entity target = svc.Entities.Spawn();
+        target.TargetName = brush.Target;
+        target.Origin = new Vector3(150f, 300f, 450f);
+        target.Angles = new Vector3(13f, -44f, 9f);
+        Assert.True(SpawnFuncs.TrySpawn("target_position", target));
+
+        manager.InitMapZones();
+
+        Assert.Empty(manager.Zones);
+        Assert.Equal(new WarpzoneCamera.Pose(target.Origin, target.Angles), camera.View);
+
+        target.Origin += Vector3.UnitX * 10f;
+        manager.ThinkMovingZones();
+        Assert.NotEqual(target.Origin, camera.View!.Origin);
+        manager.ReconnectByTarget(brush.Target);
+        Assert.Equal(target.Origin, camera.View!.Origin);
+        brush.SpawnFlags |= 1;
+        target.Angles += Vector3.UnitY * 10f;
+        manager.ThinkMovingZones();
+        Assert.Equal(target.Angles, camera.View!.Angles);
+    }
+
+    [Fact]
+    public void ViewClip_UsesExpandedCornerPenetrationBeforeEyeCrosses()
+    {
+        var manager = new WarpzoneManager();
+        var a = manager.Add(new Warpzone
+        {
+            Trigger = new Entity { Mins = new Vector3(-8f, -16f, -16f), Maxs = new Vector3(0f, 16f, 16f) },
+        });
+        var b = manager.Add(new Warpzone { InOrigin = new Vector3(100f, 0f, 0f) });
+        manager.LinkPair(a, b);
+
+        var eye = new Vector3(0.5f, 0f, 0f);
+        Vector3[] corners = { new(-0.75f, -1f, -1f), new(-0.25f, 1f, 1f) };
+        Assert.Null(WarpzoneView.FindCrossedZone(manager, eye));
+        Assert.Equal(new Vector3(0.75f, 0f, 0f), WarpzoneView.NearClipShift(manager, eye, corners));
+
+        eye.X = -0.25f;
+        Assert.Same(a, WarpzoneView.FindCrossedZone(manager, eye));
+        Assert.Equal(Vector3.Zero, WarpzoneView.NearClipShift(manager, eye, corners));
+
+        eye.Y = 30f;
+        Assert.Null(WarpzoneView.FindCrossedZone(manager, eye));
+    }
+
+    [Fact]
     public void MapWarpzones_Spawn_Orient_And_Link_FromBrushGeometry()
     {
         (EngineServices svc, WarpzoneManager mgr) = Setup();

@@ -34,13 +34,12 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "QC gates on actor.iscreature || actor.damagedbytriggers; the port has no damagedbytriggers field and substitutes IsPushable (projectiles/loot/bodies) — same intent, slightly different membership."
+    gaps: []
     verification:
-      - { kind: test, ref: "tests/VortexArena.Tests/TargetUtilitiesTests.cs:TargetKill_DamagesCreatureActorToDeath", result: pass }
+      - { kind: test, ref: "TargetUtilitiesTests.TargetKill_DamagesCreatureActorToDeath and HurtAndKill_RequireExplicitNonCreatureEligibility_AndAttributeDamage cover the creature path, opt-in, and sender.", result: pass }
       - { kind: code, ref: "KillUse gate + Combat.Damage(...,1000,DeathTypes.Void); registered MapObjectsRegistry.cs; reached via MapObjectsCommon.UseTargets (t.Use(t,actor))", result: pass }
     confidence: high
-    notes: "Re-verified 2026-06-27 unchanged. Reached on the live path via SUB_UseTargets from a trigger/button."
+    notes: "SUB_UseTargets supplies the firing trigger as the damage attacker. Damageable non-creatures must have DamagedByTriggers set."
 
   - id: mapobject-target.speed.use
     name: "target_speed — reproject the activator's velocity from speed + axis mask"

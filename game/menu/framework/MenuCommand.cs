@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Godot;
+using VortexArena.Common.Config;
 
 namespace VortexArena.Game.Menu;
 
@@ -49,6 +50,9 @@ public static class MenuCommand
     /// <summary><c>connect ADDR</c> — connect to a server.</summary>
     public static Action<string>? Connect;
 
+    /// <summary>Play a demo selected from the mounted native game data. The second argument enables timedemo.</summary>
+    public static Action<string, bool>? PlayDemo;
+
     /// <summary>
     /// QC <c>menu_restart</c> — rebuild the menu (re-runs <c>m_init_delayed</c>: re-apply the skin + rebuild the
     /// window). The faithful effect of a skin or language change: re-translate / re-style the live front-end.
@@ -64,7 +68,7 @@ public static class MenuCommand
     /// pause-menu "Servers"/"Profile"/"Input" drops the player back INTO the match on Back). Wired by
     /// <see cref="Shell"/> to push the registered dialog with resume-on-close bookkeeping.
     /// </summary>
-    public static Action<string>? OpenDialog;
+    public static Action<string, IReadOnlyList<string>>? OpenDialog;
 
     /// <summary>
     /// QC <c>m_goto(name, false)</c> — open the named dialog OVER the menu, keeping the menu open when the dialog
@@ -73,8 +77,8 @@ public static class MenuCommand
     /// </summary>
     public static Action<string>? OpenDialogOverlay;
 
-    /// <summary>QC <c>closemenu &lt;name&gt;</c> — close the named dialog if it's open/focused.</summary>
-    public static Action<string>? CloseDialog;
+    /// <summary>QC <c>closemenu &lt;name&gt; [args]</c> — deliver input and close the named dialog if focused.</summary>
+    public static Action<string, IReadOnlyList<string>>? CloseDialog;
 
     /// <summary>
     /// The menu → live-match gameplay-command channel: the C# stand-in for the engine command layer that the QC
@@ -101,6 +105,9 @@ public static class MenuCommand
     /// </summary>
     public static Func<bool>? ScoreboardEscape;
 
+    /// <summary>Apply a temporary scoreboard layout in the current native match. Null reloads the saved layout.</summary>
+    public static Action<string?>? ApplyScoreboardColumns;
+
     /// <summary>
     /// QC gamestatus test (<c>gamestatus &amp; (GAME_ISSERVER|GAME_CONNECTED)</c>): is a match currently live?
     /// Drives the Leave-match button's disabled state (leavematchbutton.qc). Wired by <see cref="Shell"/>;
@@ -126,9 +133,9 @@ public static class MenuCommand
             return;
         try
         {
-            foreach (string statement in SplitStatements(command))
+            foreach (string statement in ConfigInterpreter.SplitIntoCommands(command))
             {
-                List<string> tokens = Tokenize(Expand(statement));
+                List<string> tokens = ConfigInterpreter.Tokenize(Expand(statement));
                 if (tokens.Count > 0)
                     Dispatch(tokens);
             }
@@ -137,6 +144,13 @@ public static class MenuCommand
         {
             GD.PushWarning($"[MenuCommand] '{command}' failed: {ex.Message}");
         }
+    }
+
+    /// <summary>Dispatch an already parsed console command without expanding or tokenizing its values again.</summary>
+    internal static void RunArguments(IReadOnlyList<string> arguments)
+    {
+        if (arguments.Count > 0)
+            Dispatch(new List<string>(arguments));
     }
 
     private static void Dispatch(List<string> t)
@@ -214,14 +228,14 @@ public static class MenuCommand
 
             // directmenu <name> [args] → m_goto(name, true): open + HIDE-menu-on-close (drops back into match).
             case "directmenu":
-                if (t.Count > 1) OpenDialog?.Invoke(t[1]);
+                if (t.Count > 1) OpenDialog?.Invoke(t[1], t.GetRange(2, t.Count - 2));
                 break;
 
             // directpanelhudmenu <panel> → the HUD-prefixed variant: QC menu_cmd.qc sets filter = "HUD" and
             // resolves the dialog named "HUD<panel>" (each dialog_hudpanel_<p>.qh registers e.g. "HUDweapons").
             // The registry carries the same names, so the HUD editor's double-click/Enter opens the RIGHT dialog.
             case "directpanelhudmenu":
-                if (t.Count > 1) OpenDialog?.Invoke("HUD" + t[1]);
+                if (t.Count > 1) OpenDialog?.Invoke("HUD" + t[1], t.GetRange(2, t.Count - 2));
                 break;
 
             // QC the DP `togglemenu [0]` command (bound to Escape; also issued by QC HUDSetup_Start to drop the
@@ -230,9 +244,9 @@ public static class MenuCommand
                 ToggleMenu?.Invoke(t.Count > 1 && int.TryParse(t[1], out int tmArg) ? tmArg : -1);
                 break;
 
-            // closemenu <name> → close that dialog if open/focused (QC close_mode).
+            // closemenu <name> [args] → initialize the dialog even when it is not open (QC close_mode).
             case "closemenu":
-                if (t.Count > 1) CloseDialog?.Invoke(t[1]);
+                if (t.Count > 1) CloseDialog?.Invoke(t[1], t.GetRange(2, t.Count - 2));
                 break;
 
             // The m_goto(name, false) family: open OVER the menu, keep the menu open on close. QC remaps
@@ -248,24 +262,32 @@ public static class MenuCommand
 
             // QC dialog_gamemenu.qc "Quit" → "menu_showquitdialog" opens the quit confirmation.
             case "menu_showquitdialog":
-                OpenDialog?.Invoke("quitdialog");
+                OpenDialog?.Invoke("quitdialog", []);
+                break;
+
+            case "menu_showwelcomedialog":
+                OpenDialog?.Invoke("Welcome", []);
+                break;
+
+            case "menu_showgamemenudialog":
+                OpenDialog?.Invoke("GameMenu", []);
                 break;
 
             // QC commands.cfg aliases `menu_showsandboxtools "menu_cmd directmenu SandboxTools"` (bound to F7 in
             // binds-xonotic.cfg). The alias normally expands through the directmenu verb above, but route the bare
             // command here too so the keybind opens the Sandbox Tools dialog even if the cfg alias isn't loaded.
             case "menu_showsandboxtools":
-                OpenDialog?.Invoke("SandboxTools");
+                OpenDialog?.Invoke("SandboxTools", []);
                 break;
 
             case "menu_showbotpolicies":
-                OpenDialog?.Invoke("BotPolicies");
+                OpenDialog?.Invoke("BotPolicies", []);
                 break;
 
             // QC commands.cfg `alias team_selection_show "menu_cmd directmenu TeamSelect"` (bound to F5 in
             // binds-xonotic.cfg). The dialog existed but nothing invoked it, leaving F5 a dead key.
             case "team_selection_show":
-                OpenDialog?.Invoke("TeamSelect");
+                OpenDialog?.Invoke("TeamSelect", []);
                 break;
 
             // QC commands.cfg `alias menu_showhudoptions "menu_cmd directpanelhudmenu ${* ?}"`: with a panel
@@ -274,7 +296,7 @@ public static class MenuCommand
             case "menu_showhudpanels":
             case "menu_showhudoptions":
                 if (t.Count > 1 && MenuDialogRegistry.Has("HUD" + t[1]))
-                    OpenDialog?.Invoke("HUD" + t[1]);
+                    OpenDialog?.Invoke("HUD" + t[1], []);
                 else
                     OpenDialogOverlay?.Invoke("hudpanels");
                 break;
@@ -282,7 +304,7 @@ public static class MenuCommand
             // QC commands.cfg `alias menu_showhudexit "menu_cmd directmenu HUDExit"`: ESC in the live HUD
             // editor opens the hudsetup-exit dialog (grid/dock/panel-bg defaults + the Exit-setup button).
             case "menu_showhudexit":
-                OpenDialog?.Invoke("HUDExit");
+                OpenDialog?.Invoke("HUDExit", []);
                 break;
 
             // ---- live-match gameplay commands (dialog_gamemenu / teamselect COMMANDBUTTON strings) ----------
@@ -333,9 +355,24 @@ public static class MenuCommand
                 else GD.Print("[MenuCommand] menu_restart: no menu host wired (inert).");
                 break;
 
-            // QC `saveconfig`: persist the user's archived cvars + binds (DP's config.cfg archive dump).
+            // Config actions are issued by the local menu and share the native interpreter and user paths.
             case "saveconfig":
-                MenuState.SaveUserConfig();
+                if (t.Count > 1 && !t[1].Equals("config.cfg", StringComparison.OrdinalIgnoreCase))
+                    MenuState.SaveNamedConfig(t[1]);
+                else MenuState.SaveUserConfig();
+                break;
+
+            case "exec":
+                if (t.Count == 2) MenuState.ExecuteMenuConfig(t[1]);
+                else GD.Print("exec <filename>: execute a script file");
+                break;
+
+            case "r_restart":
+                MenuState.Interp?.ExecuteLine("r_restart");
+                break;
+
+            // The native widgets already observe the cvar store that the cfg just updated.
+            case "sync":
                 break;
 
             default:
@@ -358,7 +395,9 @@ public static class MenuCommand
     /// <summary>Send a gameplay command to the live match, or log it inert when there's no channel wired.</summary>
     private static void SendGame(string line)
     {
-        if (SendGameCommand is not null)
+        if (VortexArena.Server.Commands.IsLocalDiagnosticLine(line))
+            VortexArena.Common.Diagnostics.Log.Help($"Unknown command \"{VortexArena.Server.Commands.Tokenize(line)[0]}\"");
+        else if (SendGameCommand is not null)
             SendGameCommand(line);
         else
             GD.Print($"[MenuCommand] gameplay command '{line}' dropped — no live match channel (inert).");
@@ -385,21 +424,6 @@ public static class MenuCommand
 
     // ---- parsing -----------------------------------------------------------------------------------------
 
-    /// <summary>Split on <c>;</c> at top level (quotes protect a literal semicolon).</summary>
-    private static IEnumerable<string> SplitStatements(string command)
-    {
-        var sb = new StringBuilder();
-        bool inQuote = false;
-        foreach (char c in command)
-        {
-            if (c == '"') { inQuote = !inQuote; sb.Append(c); }
-            else if (c == ';' && !inQuote) { yield return sb.ToString(); sb.Clear(); }
-            else sb.Append(c);
-        }
-        if (sb.Length > 0)
-            yield return sb.ToString();
-    }
-
     /// <summary>Replace <c>$name</c> / <c>${name}</c> with the cvar's current value (DP-style expansion).</summary>
     private static string Expand(string s)
     {
@@ -422,19 +446,4 @@ public static class MenuCommand
         return sb.ToString();
     }
 
-    /// <summary>Whitespace tokenizer honoring <c>"double quoted"</c> tokens.</summary>
-    private static List<string> Tokenize(string s)
-    {
-        var tokens = new List<string>();
-        var sb = new StringBuilder();
-        bool inQuote = false, has = false;
-        foreach (char c in s)
-        {
-            if (c == '"') { inQuote = !inQuote; has = true; }
-            else if (char.IsWhiteSpace(c) && !inQuote) { if (has) { tokens.Add(sb.ToString()); sb.Clear(); has = false; } }
-            else { sb.Append(c); has = true; }
-        }
-        if (has) tokens.Add(sb.ToString());
-        return tokens;
-    }
 }

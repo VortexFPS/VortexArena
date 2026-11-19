@@ -1,0 +1,23 @@
+{
+  "original_data_git": "863cd3e8456e18f577f7fe5fef857ff55ae62cc0",
+  "fixture_bsp_sha256": "179143560afea9b37fe725f9ccdb73c2686f9dab86e45d35ce77883e3dd719d1",
+  "sha256": {
+    "/tmp/va-fireball-pair-stock8/original/data/stormkeep.pk3": "46d6f3c308bf923defeb3f667b67f7dd87bdaabc0fe87079af77b3feb1dbe1d1",
+    "/tmp/va-fireball-pair-stock8/native-data/maps/stormkeep.pk3": "8e40af8a9469b5ddd0e76ae21680704923cb11c5ed4853b679005db0b8354cfe",
+    "/tmp/vortex-parity-base/models/sphere/sphere.md3": "750370454fb53c6d928556fdd23ea1534cfccea7148eae81eab6fc24de02a7d6",
+    "/home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/data/core.pk3dir/models/sphere/sphere.md3": "750370454fb53c6d928556fdd23ea1534cfccea7148eae81eab6fc24de02a7d6",
+    "/tmp/va-reviewed-stock/compiled/progs.dat": "c4a5a9e85598333568183779c06446b2d03f056d2da71636b6f86150ed1202f7",
+    "/tmp/va-reviewed-stock/compiled/csprogs.dat": "cbc9fd9a4e2c7fc8f02f4aab6e5883e549790eb24e71be2bc0b8a0b0fea89999",
+    "/tmp/va-reviewed-stock/xonotic-linux64-sdl": "79e38b239b8dc5d5ee1ac8ada8245a51381ce27277dc165645fea0e69fed4312",
+    "/tmp/vortex-parity-godot/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64": "cabf9ac16c55f8ca662da62e1f5908d3c35f765e312be62f104097bd8f78b987",
+    "/home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/.godot/mono/temp/bin/Debug/VortexArena.Server.dll": "2bd2c1aeaf931e6b033bcbfbfbbc6f8f8666182d41fce037ac10c00e44514801",
+    "/home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/.godot/mono/temp/bin/Debug/VortexArena.Engine.dll": "f6d9306797d88d864b038c1098689a214e304d4b042620357cbe252e52f625b1",
+    "/home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/.godot/mono/temp/bin/Debug/VortexArena.QuakeC.dll": "be6230ecdcb71bf3a8b69bf5f866c1231d281f41031f92c7a072670e88a0bfd4",
+    "/home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/.godot/mono/temp/bin/Debug/VortexArena.Net.dll": "b744d67c6ef1b6029ce150eea133741e9d9c10a0384f98837315e94e3a485984",
+    "/home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/.godot/mono/temp/bin/Debug/VortexArena.Formats.dll": "a013c4e684227d18754da96e4638ff5868e9a9e88d223de32aab2ff292452eba",
+    "/home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/.godot/mono/temp/bin/Debug/VortexArena.Legacy.dll": "2570d9cf3dd2a0401202cc7b8d219330372c72bf77aa6398c9b276c224b674c1",
+    "/home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/.godot/mono/temp/bin/Debug/VortexArena.Modding.dll": "cc7eae203c0380ef818af8dad9271b6f907c22b1bee9d6fd0d8deb5e76ed6629",
+    "/home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/.godot/mono/temp/bin/Debug/VortexArena.Common.dll": "1a52edcc3c7d0b765f6ba286caf515a523a7470b5c1b7a359af8055e0ae76606",
+    "/home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/.godot/mono/temp/bin/Debug/VortexArena.dll": "227edca6e1cbcb35f21173ed1beb42577709fb572e833b2840cad280281cf3f3"
+  }
+}

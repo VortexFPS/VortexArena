@@ -179,15 +179,8 @@ public static class WeaponImpulses
     private static void DropHandle(Entity actor)
     {
         VortexArena.Common.Math.QMath.AngleVectors(actor.Angles, out System.Numerics.Vector3 forward, out _, out _);
-        // QC W_WeaponSpeedFactor: g_weaponspeedfactor (default 1) — the only live term of
-        // W_CalculateProjectileVelocity with newton_style 0.
-        float factor = 1f;
-        if (Api.Services is not null)
-        {
-            float f = Api.Cvars.GetFloat("g_weaponspeedfactor");
-            if (f > 0f) factor = f;
-        }
-        WeaponThrowing.ThrowWeapon(actor, new WeaponSlot(0), forward * (750f * factor),
+        var velocity = WeaponFiring.CalculateProjectileVelocity(actor, forward * 750f);
+        WeaponThrowing.ThrowWeapon(actor, new WeaponSlot(0), velocity,
             System.Numerics.Vector3.Zero, doreduce: true);
     }
 

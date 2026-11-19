@@ -822,7 +822,10 @@ features:
     base_refs:
       - "common/vehicles/cl_vehicles.qc:121 (Vehicles_drawHUD)"
       - "common/vehicles/cl_vehicles.qc:293 (Vehicles_drawCrosshair)"
-      - "common/vehicles/cl_vehicles.qc:12 (AuxiliaryXhair_Draw2D)"
+      - "common/vehicles/cl_vehicles.qc:12–61 (AuxiliaryXhair draw, refresh and expiry)"
+      - "common/vehicles/cl_vehicles.qh (reticle size and MAX_AXH)"
+      - "common/vehicles/vehicle/raptor.qc:767–832 (dropmark color, blend and expiry)"
+      - "common/vehicles/vehicle/racer.qc:331–339 (lock colors)"
       - "common/vehicles/cl_vehicles.qc:230 (low-health/shield alarm)"
       - "common/vehicles/sv_vehicles.qc:78 (CSQCVehicleSetup)"
     port_refs:
@@ -841,7 +844,9 @@ features:
       - "src/VortexArena.Net/VehicleViewCodec.cs (11-byte wire codec, EntityField.VehicleView=1<<24 — NEW)"
     constants:
       - { name: "cl_vehicles_hudscale", base: "0.5", port: "0.5 (in VehicleHud)", match: true }
-      - { name: "cl_vehicles_crosshair_size", base: "0.5", port: "0.5", match: true }
+      - { name: "cl_vehicles_crosshair_size", base: "0.5", port: "0.5 for main, auxiliary and drop markers. Zero hides the marker.", match: true }
+      - { name: "reticle alpha and expiry", base: "crosshair_alpha × marker alpha, aux expiry 0.1s, Raptor linger 5s", port: "live alpha and simulation-time deadlines", match: true }
+      - { name: "Racer lock tint", base: "blue below half, green above half, red locked; half sends no refresh", port: "same", match: true }
       - { name: "cl_vehicles_alarm", base: "0 (default-off)", port: "0 (default-off; framework alarm NOW WIRED + gated, VehicleHud.cs:196-247)", match: true }
       - { name: "low-health/shield alarm gate (<25%, +2s health / +1s shield re-arm, SND_Null stop on recover)", base: "yes (cl_vehicles.qc:228-267)", port: "yes (VehicleHud.UpdateAlarms — bit-faithful)", match: true }
       - { name: "cl_eventchase_vehicle (cockpit/chase cam) + viewoffset 0 0 80 / distance 250 / speed 1.3", base: "1 / 0 0 80 / 250 / 1.3 (xonotic-client.cfg:221-223)", port: "1 / 0 0 80 / 250 / 1.3 (ChaseCamera.ApplyVehicle code fallbacks — NOW PORTED + LIVE)", match: true }
@@ -865,6 +870,7 @@ features:
       - { kind: code, ref: "Vehicles_drawCrosshair PORTED + LIVE: Raptor (Wave 12a, VehicleHud.DrawMainReticle + DrawBombDropmark, tracetoss dropmark via BombDropPredict) AND — Wave 17, 2f0bfdb — Spiderbot (NetGame.FeedSpiderbotReticle:3477, vCROSS_BURST/_RAIN/_GUIDE by VehW2Mode rocket mode) + Bumblebee (crosshair_heal:3511); both feeders run at the tail of UpdateVehicleHud (NetGame.cs:3467-3468), fed every frame. Bit-faithful to cl_vehicles.qc:293 + raptor.qc:767-833 + spiderbot.qc vr_crosshair", result: pass }
       - { kind: code, ref: "cockpit/chase camera NOW LIVE (this wave): FirstPersonView.UpdateCamera:416-422 calls ChaseCamera.ApplyVehicle (ChaseCamera.cs:189) when InVehicle && cl_eventchase_vehicle!=0 (default 1); FirstPersonView.InVehicle set every frame from NetGame.cs:5769 (_view.InVehicle = _fullHud.Vehicle.InVehicle), which resolves on the host (Player.Vehicle), pure-remote (VehicleViewState.IsActive) and spectator paths. Clean rebuild 0 errors", result: pass }
       - { kind: code, ref: "cross-client VEHICLESTAT_* NOW LIVE (this wave): VehicleViewResolver.Resolve(p) (ServerNet.cs:2150) -> VehicleViewCodec Write/Read (NetEntity.cs:471/557, bit 24) -> ClientEntityView.cs:163 -> NetGame.UpdateVehicleHudRemote:3687 + FeedRemoteReticle:3746 — full producer->codec->consumer chain traced; owner-private (ServerNet.cs:2459 zeroes for non-owner remotes)", result: pass }
+      - { kind: test, ref: "planning/parity/vehicle-reticles/probe.txt (34 Godot/.NET 8 viewport checks)", result: pass }
     confidence: high
     notes: "FIXED vs baseline (the two longest-standing STILL-OPEN items closed; presentation STAYS partial only for the remote aux-xhair/dropmark nicety): THIS wave wired (1) the in-vehicle COCKPIT/CHASE camera (ChaseCamera.ApplyVehicle <- FirstPersonView.UpdateCamera <- _view.InVehicle, cl_eventchase_vehicle default 1) — the headline DEAD gap across every prior pass, now LIVE on host+remote+spectator; and (2) the CROSS-CLIENT VEHICLESTAT_* networking via the per-player VehicleViewState entity-state block (resolver/codec/consumer, bit 24), so a pure-remote pilot OR a followed spectatee draws the vehicle HUD/bars/reticle from the wire. Presentation REMAINS partial ONLY because the per-target aux lock-crosshair WORLD position is intentionally host-only and the live bomb-dropmark tracetoss is suppressed on the remote path (both documented). Audio faithful (Wave 11 alarm); Vehicles_drawCrosshair live for all three reticle vehicles; all four vehicles' HUD shows correct shield/energy/ammo."
 

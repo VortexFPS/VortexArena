@@ -39,7 +39,7 @@ public class InputCommandImpulseTests
             Forward = 1f,
             Side = -1f,
             Up = 0f,
-            Buttons = (int)(InputButtons.Attack | InputButtons.Jump),
+            Buttons = (int)(InputButtons.Attack | InputButtons.Jump | InputButtons.Drag),
             Impulse = 230, // weapon_byid_0 (common/impulses/all.qh) — a real weapon-select impulse
             DeltaTime = 1f / 72f,
         };
@@ -48,7 +48,7 @@ public class InputCommandImpulseTests
         Assert.Equal(230, got.Impulse);
         // adding the impulse byte must not disturb the other fields the predictor/server read.
         Assert.Equal(c.Seq, got.Seq);
-        Assert.Equal((int)(InputButtons.Attack | InputButtons.Jump), got.Buttons);
+        Assert.Equal(c.Buttons, got.Buttons);
         Assert.True(MathF.Abs(got.DeltaTime - c.DeltaTime) < 1e-6f);
     }
 

@@ -256,8 +256,11 @@ public sealed partial class QcStringBuiltins
                 return;
             }
         }
-        vm.ReturnFloat((float)QcSprintfNumbers.Atof(VarText(0)));
+        vm.ReturnFloat(StringToFloat(VarText(0)));
     }
+
+    /// <summary>DarkPlaces stof converts the leading number using atof, then rounds it to a QC float.</summary>
+    public static float StringToFloat(ReadOnlySpan<char> text) => (float)QcSprintfNumbers.Atof(text);
 
     // vector(string) stov = #117
     private void Stov(QcVm vm)

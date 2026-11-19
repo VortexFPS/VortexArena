@@ -147,7 +147,18 @@ public static class NetProtocol
     /// server with no mod configured (the default) never sends one and a client never sends one unprompted, so
     /// apart from this number the traffic of such a pair is unchanged. Additive, but bumped so that a server
     /// offering a mod is never talking to a build that would silently drop the offer.
-    public const uint ProtocolVersion = 21;
+    /// v22: widened the held-input field to carry the Sandbox drag button.
+    /// v23: snapshot countdown sprites and player bodies.
+    /// v24: owner snapshot view-location region and join notice.
+    /// v25: Fireball's transient BFG sphere event.
+    /// v26: absolute map-vote deadline and server simulation time sample in the ballot.
+    /// v27: per-player welcome text in HandshakeAccept.
+    /// v28: opt-in map visual subscription and bounded suggestions in ClientInit.
+    /// v29: waypoint snapshots carry a server time, plus an event sequence for each active radar ping.
+    /// v30: waypoint snapshots have a per-peer sequence shared by reliable clears and best-effort updates.
+    /// v31: snapshot solid inline brush poses for client presentation collision.
+    /// v32: radar-link snapshots have a sequence shared by reliable clears and best-effort updates.
+    public const uint ProtocolVersion = 32;
 
     /// <summary>Ordered, reliable ENet channel — handshake, spawns/removes, notifications, scores.</summary>
     public const int ReliableChannel = 0;
@@ -278,10 +289,10 @@ public enum NetControl : byte
     ItemsTime = 20,
 
     // ---- client init constants (the C# port of QC's ENT_CLIENT_INIT / ClientInit_misc bundle) ----
-    /// <summary>Server → client (reliable): the one-shot ClientInit_misc constant bundle (QC server/client.qc:907) —
+    /// <summary>Server → client (reliable): the ClientInit_misc constant bundle (QC server/client.qc:907) —
     /// the per-server gameplay constants the client needs at session init: the hook + arc shot origins, the fog
     /// string, armor blockpercent, damagepush speedfactor, serverflags, g_trueaim_minrange, and the nexball meter
-    /// period. Sent once right after <see cref="HandshakeAccept"/> (the welcome/accept handshake). Decoded into
+    /// period. Sent after <see cref="HandshakeAccept"/> and refreshed when serverflags change. Decoded into
     /// <see cref="ClientNet"/>'s client-init constant stores; unknown to old clients (dispatch falls through).</summary>
     ClientInit = 21,
 
@@ -297,13 +308,8 @@ public enum NetControl : byte
     MapVote = 22,
 
     // ---- onslaught radar links (the C# port of QC's networked ENT_CLIENT_RADARLINK entities) ----
-    /// <summary>Server → client (unreliable): the live Onslaught control-point/generator connection lines (QC
-    /// <c>ENT_CLIENT_RADARLINK</c> + <c>draw_teamradar_link</c>, client/teamradar.qc). Each entry is one power
-    /// link — the two endpoint world positions (XY) plus each end's owning team color code — so the radar can
-    /// draw the per-end team-colored connection quad between two linked nodes. Sent per-peer each network tick on
-    /// the unreliable channel (the graph + ownership change as points are captured); only emitted in Onslaught.
-    /// Decoded into <see cref="ClientNet"/>'s <c>RadarLinks</c> list; unknown to old clients (dispatch falls
-    /// through harmlessly).</summary>
+    /// <summary>Server → client: sequenced Onslaught power lines for the radar. Ordinary graph updates are
+    /// best effort; the empty graph that follows a populated graph is reliable.</summary>
     RadarLinks = 23,
 
     // ---- map-editor co-editing (design doc §11.7, phase E6) ----
@@ -323,4 +329,34 @@ public enum NetControl : byte
     /// do all the validation. Only a server with <c>sv_mod_module</c>/<c>sv_mod_packs</c> set ever sends the first
     /// one; a client only ever answers. A server without a mod ignores the id.</summary>
     ModFrame = 25,
+
+    /// <summary>Server → client (reliable): the new view pitch and yaw after a respawn or teleport.</summary>
+    FixAngle = 26,
+
+    /// <summary>Server → joining client (reliable): configured welcome notice and display time.</summary>
+    JoinNotice = 27,
+
+    /// <summary>Server → client (reliable): spawn the Fireball BFG sphere at the blast origin.</summary>
+    FireballBlast = 28,
+
+    /// <summary>Server → client (reliable): generator death presentation, cleared by a round reset.</summary>
+    OnslaughtDestruction = 29,
+
+    /// <summary>Server → owning client (reliable): open Onslaught's radar destination picker.</summary>
+    OnslaughtRadar = 30,
+
+    /// <summary>Server → joining client (reliable): a suggested mounted QuickMenu filename.</summary>
+    QuickMenuFile = 31,
+
+    /// <summary>Client → server (reliable): one byte (0 or 1) for map visual suggestions only.</summary>
+    MapVisualSubscription = 34,
+
+    /// <summary>Server → client (reliable): changed fixed-monitor poses keyed by BSP inline model.</summary>
+    WarpzoneCameraPoses = 35,
+
+    /// <summary>Server → client (reliable): warm one mounted sample in the client sound cache.</summary>
+    SoundPrecache = 36,
+
+    /// <summary>Server → owner (reliable): replacement set of currently connected ignored player net IDs.</summary>
+    ScoreboardIgnores = 37,
 }

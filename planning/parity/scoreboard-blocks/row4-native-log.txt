@@ -1,0 +1,86 @@
+native · Running Man DM · independent local profiles
+
+run.log
+Viewer JOIN
+Zebra JOIN
+Viewer scoreboard_columns_set name | score | deaths
+Viewer IGNORE
+Zebra BLOCKED
+Viewer UNIGNORE
+Zebra ALLOWED
+Zebra IGNORE
+Zebra UNIGNORE
+Viewer AGAIN
+Viewer CLEAR
+Viewer quit
+Viewer JOIN
+Viewer scoreboard_columns_set name | score | deaths
+Viewer bind F6 +showscores
+Viewer bind w "echo SB_NAV_KEY_LEAK"
+Viewer unbind q
+Viewer cl_cmd hud clickradar
+Viewer cl_cmd hud clickradar
+Viewer cl_cmd hud clickradar
+Viewer echo SB_CONSOLE_REACHABLE
+Viewer cl_cmd hud clickradar
+Viewer cl_deathscoreboard 0
+Viewer KILL
+Viewer cl_cmd hud clickradar
+PASS: owner chat filtering, revert, console focus and gameplay bind ownership
+
+server.log
+[NetTransport.Server] listening on UDP 36317 (max 32).
+[ServerNet] peer 912121025 accepted as 'Viewer'.
+[ServerNet] peer 403400547 accepted as 'Zebra'.
+[ServerNet] peer 912121025 disconnected (Viewer).
+[ServerNet] peer 293933637 accepted as 'Viewer'.
+
+Viewer-initial.log
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+[NetGame] client loaded map 'runningman' (dm) for render + prediction collision.
+SB_VIEWER_JOIN
+SB_VIEWER_IGNORE
+joined the game
+You will no longer receive messages from Zebra for this match, use unignore to hear them again.
+SB_VIEWER_UNIGNORE
+You can now receive messages from Zebra again.
+Zebra: SB_ALLOWED
+SB_VIEWER_AGAIN
+You will no longer receive messages from Zebra for this match, use unignore to hear them again.
+SB_VIEWER_CLEAR
+All ignores cleared!
+
+Viewer.log
+SB_VIEWER_CLEAR
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 3, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 3.
+[NetGame] client loaded map 'runningman' (dm) for render + prediction collision.
+SB_VIEWER_JOIN
+joined the game
+]bind w "echo SB_NAV_KEY_LEAK"
+]cl_cmd hud clickradar
+]cl_cmd hud clickradar
+]cl_cmd hud clickradar
+]echo SB_CONSOLE_REACHABLE
+SB_CONSOLE_REACHABLE
+]cl_cmd hud clickradar
+SB_NAV_KEY_LEAK
+]cl_deathscoreboard 0
+SB_VIEWER_KILL
+]cl_cmd hud clickradar
+
+Zebra.log
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 2, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 2.
+[NetGame] client loaded map 'runningman' (dm) for render + prediction collision.
+SB_ACTOR_JOIN
+joined the game
+SB_ACTOR_BLOCKED
+Zebra: SB_BLOCKED
+SB_ACTOR_ALLOWED
+Zebra: SB_ALLOWED
+SB_ACTOR_IGNORE
+You will no longer receive messages from Viewer for this match, use unignore to hear them again.
+SB_ACTOR_UNIGNORE
+You can now receive messages from Viewer again.

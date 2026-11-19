@@ -18,6 +18,8 @@ public enum NetEntityKind : byte
     ViewModel = 6,   // a weapon view-entity owned by a player (CL_SpawnWeaponentity / wepent)
     Nameplate = 7,   // ent_cs lightweight: position+team+health only (radar/nameplate, no model)
     NadeOrb = 8,     // a nade_orb effect entity (heal/ammo/entrap/veil orb — model + color-flash containment field)
+    Body = 9,        // CopyBody clone (frozen player pose, no nameplate or carried weapon)
+    BrushCollider = 10, // a solid inline BSP pose consumed by client presentation traces
 }
 
 /// <summary>
@@ -43,6 +45,7 @@ public enum NetEntityFlags : ushort
     // drives the rocket trail AND the looping jetpack-fly sound (csqcmodel_hooks.qc:611/645). The port networks it
     // here so the client can re-derive MF_ROCKET per player (ComposeForcedAppearance) instead of networking MF_*.
     UsingJetpack = 1 << 8,
+    SpawnParity = 1 << 9, // persistent across the life, including when the first spawn snapshot is lost
 }
 
 /// <summary>
@@ -157,6 +160,7 @@ public enum EntityField : uint
     // documented as "player clientcolors". 0 = no colormap (the bit stays clear, costs nothing — the overwhelming
     // majority of entities). Bit 26, verified free.
     ColormapOverride = 1 << 26,
+    CountdownIndicator = 1 << 27,
 }
 
 /// <summary>
@@ -182,6 +186,7 @@ public struct NetEntityState
     public int Effects;          // EF_* render flags bitfield
     public int Colormap;         // player colors (top/bottom) or team tint
     public int Colors;           // [r15 #43] packed 16*shirt+pants clientcolors (0 = colorless, bit stays clear)
+    public CountdownIndicatorState CountdownIndicator;
     public int ColorMapOverride; // full Entity.ColorMapOverride for RENDER_COLORMAPPED non-players (0 = none)
     public int Health;           // for nameplates / the owner HUD (0 when not applicable)
     public int Armor;            // [T68] QC entcs RES_ARMOR slice — the shownames teammate status bar (0 when N/A)
@@ -347,6 +352,7 @@ public struct NetEntityState
         if (baseline.Effects != current.Effects) m |= EntityField.Effects;
         if (baseline.Colormap != current.Colormap) m |= EntityField.Colormap;
         if (baseline.Colors != current.Colors) m |= EntityField.Colors;
+        if (baseline.CountdownIndicator != current.CountdownIndicator) m |= EntityField.CountdownIndicator;
         if (baseline.ColorMapOverride != current.ColorMapOverride) m |= EntityField.ColormapOverride;
         if (baseline.Health != current.Health) m |= EntityField.Health;
         if (baseline.Armor != current.Armor) m |= EntityField.Armor;
@@ -459,6 +465,11 @@ public static class EntityStateCodec
         if ((mask & EntityField.Colormap) != 0) w.WriteByte(current.Colormap & 0xFF);
         if ((mask & EntityField.Colors) != 0) w.WriteByte(current.Colors & 0xFF);
         if ((mask & EntityField.ColormapOverride) != 0) w.WriteUShort((ushort)(current.ColorMapOverride & 0xFFFF));
+        if ((mask & EntityField.CountdownIndicator) != 0)
+        {
+            w.WriteByte(current.CountdownIndicator.Digit);
+            w.WriteSByte(current.CountdownIndicator.TargetTeam);
+        }
         if ((mask & EntityField.Health) != 0) w.WriteShort(current.Health);
         if ((mask & EntityField.Armor) != 0) w.WriteShort(current.Armor);
         if ((mask & EntityField.Alpha) != 0) w.WriteByte(current.Alpha & 0xFF); // 0 = opaque; 1..254 = alpha/255; 255 = hidden (-1)
@@ -553,6 +564,8 @@ public static class EntityStateCodec
         if ((mask & EntityField.Colormap) != 0) s.Colormap = r.ReadByte();
         if ((mask & EntityField.Colors) != 0) s.Colors = r.ReadByte();
         if ((mask & EntityField.ColormapOverride) != 0) s.ColorMapOverride = r.ReadUShort();
+        if ((mask & EntityField.CountdownIndicator) != 0)
+            s.CountdownIndicator = new((byte)r.ReadByte(), r.ReadSByte());
         if ((mask & EntityField.Health) != 0) s.Health = r.ReadShort();
         if ((mask & EntityField.Armor) != 0) s.Armor = r.ReadShort();
         if ((mask & EntityField.Alpha) != 0) s.Alpha = r.ReadByte();

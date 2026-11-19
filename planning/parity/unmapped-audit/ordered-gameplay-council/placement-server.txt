@@ -1,0 +1,28 @@
+[S1Probe] Alpha slot=-1 net=1 team=13 spectatee=1 region=-1 pref=False origin=<1040, 240, 0> serverTime=6.97
+[lb]S1Probe live-spawn] Alpha slot=-1 team=13 origin=<-1040, -448, 9>
+[S1Probe] Alpha slot=-1 net=1 team=13 spectatee=0 region=-1 pref=False origin=<-1040, -448, 9> serverTime=7.95
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=False origin=<464, 528, 0> serverTime=14.52
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=True origin=<464, 528, 0> serverTime=15.31
+[lb]S1Probe live-spawn] Beta slot=-2 team=4 origin=<-1184, 1248, 1>
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=True origin=<-1184, 1248, 1> serverTime=15.50
+[S1Probe] Alpha slot=-1 net=1 team=4 spectatee=0 region=-1 pref=False origin=<-1040, -448, -7.96875> serverTime=15.62
+[lb]S1Probe live-spawn] Alpha slot=-1 team=4 origin=<-736, 1152, 161>
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=True origin=<-1184, 1248, -7.968749> serverTime=19.42
+[lb]S1Probe relocation] for=Beta from=<-472, 1376, 161>
+[lb]S1Probe relocation] for=Beta resolved=<-1040, -256, -7.96875>
+[lb]S1Probe live-spawn] Beta slot=-2 team=4 origin=<-1040, -256, -7.96875>
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=True origin=<-1040, -256, -7.9880376> serverTime=21.83
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=True origin=<-1040, -256, -7.9880376> serverTime=22.62
+[lb]S1Probe relocation] for=Beta from=<1760, 336, 1>
+[lb]S1Probe relocation] for=Beta resolved=<-1184, 1440, -7.96875>
+[lb]S1Probe live-spawn] Beta slot=-2 team=4 origin=<-1184, 1440, -7.96875>
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=True origin=<-1184, 1440, -7.9880376> serverTime=25.03
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=True origin=<-1184, 1440, -7.9880376> serverTime=25.83
+[lb]S1Probe relocation] for=Beta from=<-472, 1376, 161>
+[lb]S1Probe relocation] for=Beta resolved=<-1190, 757, -7.96875>
+[lb]S1Probe live-spawn] Beta slot=-2 team=4 origin=<-1190, 757, -7.96875>
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=True origin=<-1190, 757, -7.9880376> serverTime=28.23
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=False origin=<-1190, 757, -7.9880376> serverTime=28.64
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=2 region=-1 pref=False origin=<-1190, 757, -7.9880376> serverTime=29.05
+[lb]S1Probe live-spawn] Beta slot=-2 team=4 origin=<-1184, 1248, 1>
+[S1Probe] Beta slot=-2 net=2 team=4 spectatee=0 region=-1 pref=False origin=<-1184, 1248, 1> serverTime=31.44

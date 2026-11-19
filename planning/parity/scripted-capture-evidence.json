@@ -1,0 +1,417 @@
+{
+  "sandbox-owner": {
+    "original": {
+      "image": "scripted-sandbox-buffs/captures/original-owner/owner-carry.jpg",
+      "sha256": "266d32540ede538352b2d4729a542b655acb72dfc86f4664c48aab9e20df54df",
+      "montage": {
+        "geometry": "400x300+2+2",
+        "quality": 85
+      },
+      "samples": [
+        {
+          "seconds": 38.946,
+          "client": "owner",
+          "frame": "03-owner-held-owner.webp",
+          "sha256": "60c3f2b18687af07d1b64593b2b652bcff58c1ea24f84512c9c6b26bae0ee5d1",
+          "tile": true
+        },
+        {
+          "seconds": 39.74,
+          "client": "guest",
+          "frame": "03-owner-held-guest.webp",
+          "sha256": "9c9860b739f8b6d0b41264451c27d020e780ce5bee1ff428cee0df92cf787f33",
+          "tile": true
+        },
+        {
+          "seconds": 44.155,
+          "client": "owner",
+          "frame": "03-owner-released-owner.webp",
+          "sha256": "f6a509161132342971a46a63782f891bc11088efa72ad12bc1662e3606cbe231",
+          "tile": true
+        },
+        {
+          "seconds": 45.986,
+          "client": "guest",
+          "frame": "03-owner-released-guest.webp",
+          "sha256": "d6911ccf9d7ce1aebcc10b65496de594fb09364eed47690654d1e32780ee4328",
+          "tile": true
+        }
+      ]
+    },
+    "native": {
+      "image": "scripted-sandbox-buffs/captures/native/owner-carry.jpg",
+      "sha256": "587556ef01e24dd336635c6e2463aaeef94a6c820cbf7d69cf7a30e4513914cb",
+      "montage": {
+        "geometry": "400x300+2+2",
+        "quality": 85
+      },
+      "samples": [
+        {
+          "seconds": 36.324,
+          "client": "owner",
+          "frame": "01-spawn-owner.webp",
+          "sha256": "80548c5649d1392a42bde9927b1e5acc8b4886435d80837ef948a7bb564ff513",
+          "tile": true
+        },
+        {
+          "seconds": 36.414,
+          "client": "guest",
+          "frame": "01-spawn-guest.webp",
+          "sha256": "086f807ab127c6385357e50e141c0c826f2160900f03e6f7037f8d221dde82cc",
+          "tile": true
+        },
+        {
+          "seconds": 39.944,
+          "client": "owner",
+          "frame": "02-nonowner-held-owner.webp",
+          "sha256": "b9ed2220d0db1e7385caa0cc6a0614002e55a1160a68e82bbda03d8c8b87e4c8",
+          "tile": true
+        },
+        {
+          "seconds": 40.038,
+          "client": "guest",
+          "frame": "02-nonowner-held-guest.webp",
+          "sha256": "5b507086bd0b559a2cbc1e8d19a37c973ed21a095f7ba3fa73c8c9ca7fea9b2b",
+          "tile": true
+        },
+        {
+          "seconds": 45.132,
+          "client": "owner",
+          "frame": "03-owner-held-owner.webp",
+          "sha256": "81cb75a2eb871a70d88d8ba983a99a9f35990e85d6da1cbe9a141d28f7932546",
+          "tile": true
+        },
+        {
+          "seconds": 45.227,
+          "client": "guest",
+          "frame": "03-owner-held-guest.webp",
+          "sha256": "ab617b761d32dc617e9faf8f4ff246e03e24f0c918a3641cf5cdbc0e87bbfc21",
+          "tile": true
+        },
+        {
+          "seconds": 48.487,
+          "client": "owner",
+          "frame": "03-owner-released-owner.webp",
+          "sha256": "91a012829a5d5c9f4f26c46c235240d760e828b1194773e7eeb92624a49310b2",
+          "tile": true
+        },
+        {
+          "seconds": 48.868,
+          "client": "guest",
+          "frame": "03-owner-released-guest.webp",
+          "sha256": "2042d155f61d84f85ca940c4f4a87ce3227c2bbba5f78b6dfd1bc3c6950069f8",
+          "tile": true
+        }
+      ]
+    }
+  },
+  "sandbox-readonly": {
+    "original": {
+      "image": "scripted-sandbox-buffs/captures/original/sandbox.jpg",
+      "sha256": "14ad71d6adeba72c8ad9d3999069ba586a18980f2a20cc73a219aea795ac15b5",
+      "montage": {
+        "geometry": "400x300+2+2",
+        "quality": 85
+      },
+      "samples": [
+        {
+          "seconds": 17.765,
+          "client": "owner",
+          "frame": "01-spawn-owner.webp",
+          "sha256": "1b38e9349fa6af2f38d6070f8d7b3e318b14e7e43652301774ee391efb8122e0",
+          "tile": true
+        },
+        {
+          "seconds": 17.857,
+          "client": "guest",
+          "frame": "01-spawn-guest.webp",
+          "sha256": "9ebc01e494c1229238a2c0c02a61873e34a404288f6b7c6891d8ea257319d588",
+          "tile": true
+        },
+        {
+          "seconds": 33.72,
+          "client": "owner",
+          "frame": "04-free-held-owner.webp",
+          "sha256": "ed38fd83749350c0a1c638d933bd701d3433da4e413cf05c06e6721b455ac39e",
+          "tile": true
+        },
+        {
+          "seconds": 33.778,
+          "client": "guest",
+          "frame": "04-free-held-guest.webp",
+          "sha256": "4f0376e9826918902add2982530e5634b5eb7c87107b75b17ff800af6bd470b0",
+          "tile": true
+        },
+        {
+          "seconds": 35.86,
+          "client": "owner",
+          "frame": "04-free-readonly-held-owner.webp",
+          "sha256": "30bdca136598661386e8396b33fc8a0a433a8069812b62c6c674aa1a14c65ce0",
+          "tile": true
+        },
+        {
+          "seconds": 35.948,
+          "client": "guest",
+          "frame": "04-free-readonly-held-guest.webp",
+          "sha256": "1cfd8d99a047751e731fa5970d4488dd3124b0804978620e8f833c1c8e6db4d8",
+          "tile": true
+        },
+        {
+          "seconds": 37.571,
+          "client": "owner",
+          "frame": "04-free-released-owner.webp",
+          "sha256": "0bd1ff262c75f36bb56ffe6b0ac4416a7da49d7904a4d053dfddda7f91b59808",
+          "tile": true
+        },
+        {
+          "seconds": 37.656,
+          "client": "guest",
+          "frame": "04-free-released-guest.webp",
+          "sha256": "de715b6b7e973a99363d728a6c7f288ca7e0d0aa567b83ec253939661bf89eea",
+          "tile": true
+        },
+        {
+          "seconds": 40.4,
+          "client": "owner",
+          "frame": "05-readonly-held-owner.webp",
+          "sha256": "303335419bf64ad0659f6734ccc6ca11a3a406458c163034eadb7ceaba10236c",
+          "tile": false
+        },
+        {
+          "seconds": 40.491,
+          "client": "guest",
+          "frame": "05-readonly-held-guest.webp",
+          "sha256": "a4fec69006c9ac464656c5cb3c54fc80e640000047baaf5ed643c5e8232adeec",
+          "tile": false
+        }
+      ]
+    },
+    "native": {
+      "image": "scripted-sandbox-buffs/captures/native/free-and-readonly.jpg",
+      "sha256": "0079f0acadedbef50b9d4c9dfeea4a925ad4ff39697cf51ae138ff5a06ce0990",
+      "montage": {
+        "geometry": "400x300+2+2",
+        "quality": 85
+      },
+      "samples": [
+        {
+          "seconds": 55.717,
+          "client": "owner",
+          "frame": "04-free-held-owner.webp",
+          "sha256": "18470d3cd591e31c05e76d8eabffe5e832c23a84a692fee6129bce7fdcea8b43",
+          "tile": true
+        },
+        {
+          "seconds": 56.211,
+          "client": "guest",
+          "frame": "04-free-held-guest.webp",
+          "sha256": "735ace88fb81d451c94b124ce4407e9323c31dfced5e36d6ab20038d50bb562c",
+          "tile": true
+        },
+        {
+          "seconds": 59.195,
+          "client": "owner",
+          "frame": "04-free-readonly-held-owner.webp",
+          "sha256": "a8e7313bfaf788e50f98283464be36a763b4207bbcc0ef54b28486dd5c254db2",
+          "tile": true
+        },
+        {
+          "seconds": 59.947,
+          "client": "guest",
+          "frame": "04-free-readonly-held-guest.webp",
+          "sha256": "59d0fcbbd82a46d4b536d791d4b5e2f079fa1a936dd5b9d09b83cf5525ca6c86",
+          "tile": true
+        },
+        {
+          "seconds": 63.075,
+          "client": "owner",
+          "frame": "04-free-released-owner.webp",
+          "sha256": "90d820577c46a996ee9c4c259d15d38e1cb12c61a8ad45dd71407475cee1669a",
+          "tile": true
+        },
+        {
+          "seconds": 64.263,
+          "client": "guest",
+          "frame": "04-free-released-guest.webp",
+          "sha256": "e271c542d715ff89b72e51d0d468638d47a1eae94fcb89efd3344970250cd8f3",
+          "tile": true
+        },
+        {
+          "seconds": 68.031,
+          "client": "owner",
+          "frame": "05-readonly-held-owner.webp",
+          "sha256": "6e8a790ecfb71efb40e1171bfd68a9877c9f6278702a414931f42721e3550ec9",
+          "tile": true
+        },
+        {
+          "seconds": 68.711,
+          "client": "guest",
+          "frame": "05-readonly-held-guest.webp",
+          "sha256": "e1b4be16999f964bbaa06b788d20b4c9d2b79a8f28bbe8e8a3042987e98e8fc1",
+          "tile": true
+        }
+      ]
+    }
+  },
+  "vampire": {
+    "original": {
+      "image": "scripted-sandbox-buffs/captures/original/buff.jpg",
+      "sha256": "a55b7db6653d8e1bb49542a1df07f44805ccfcae3a36e011c8cdf72f92d9a595",
+      "montage": {
+        "geometry": "480x360+2+2",
+        "quality": 86
+      },
+      "samples": [
+        {
+          "seconds": 46.005,
+          "client": "owner",
+          "frame": "06-buff-before-owner.webp",
+          "sha256": "a425b36d37f77835151063e7a7a877de64ff3e5c4be99354664ad9bc562ed3f3",
+          "tile": true
+        },
+        {
+          "seconds": 47.487,
+          "client": "owner",
+          "frame": "07-buff-after-owner.webp",
+          "sha256": "875a75e4fe975371b703c9e9e584545dd6d31bf08bbbdbae522e7f34ff37bf4c",
+          "tile": true
+        },
+        {
+          "seconds": 46.06,
+          "client": "guest",
+          "frame": "06-buff-before-guest.webp",
+          "sha256": "462701028759e2d19b2a0b544792865c550e4ae65ad8048caee733ee8346aa98",
+          "tile": true
+        },
+        {
+          "seconds": 47.576,
+          "client": "guest",
+          "frame": "07-buff-after-guest.webp",
+          "sha256": "4dcc61ed479dd76362092b6b62b0b57eb7ba675489e77bcd1044784827ad3f77",
+          "tile": true
+        }
+      ]
+    },
+    "native": {
+      "image": "scripted-sandbox-buffs/captures/relic-render-fixed/buff.jpg",
+      "sha256": "34d224e12a1d96de6bc37f188c75e796cf9f260bcc72a023893e3f65ed96a0f0",
+      "montage": {
+        "geometry": "400x300+1+1",
+        "quality": 92,
+        "font": "DejaVu-Sans",
+        "pointsize": 12
+      },
+      "raw_sheet": "/tmp/va-relic-render5.jpg",
+      "samples": [
+        {
+          "seconds": 35.404,
+          "client": "guest",
+          "frame": "06-buff-before-guest.webp",
+          "sha256": "b6972042076a4e37f7c2e7b4ff3e7183d2a897187403b0c7b99677e437a9e826",
+          "tile": true
+        },
+        {
+          "seconds": 35.348,
+          "client": "owner",
+          "frame": "06-buff-before-owner.webp",
+          "sha256": "556695219691bae58d1a01d13ddc8aba1dfa28e84a4f964426c6f45a40aee67b",
+          "tile": true
+        },
+        {
+          "seconds": 40.193,
+          "client": "guest",
+          "frame": "07-buff-after-guest.webp",
+          "sha256": "902c17c31a42ae10ac6e0427c7443b568bf261f78973a1778c98d160fbcbf792",
+          "tile": true
+        },
+        {
+          "seconds": 40.082,
+          "client": "owner",
+          "frame": "07-buff-after-owner.webp",
+          "sha256": "9925cb8c365bf4375bbc996cdf5ce6efa02c9b139e2ce4a5459c186a699043ee",
+          "tile": true
+        }
+      ]
+    }
+  },
+  "crylink": {
+    "original": {
+      "image": "scripted-objectives/presentation/crylink-original-matched/flight.webp",
+      "sha256": "c2b1049ebcb7014dd0398f97c8d2bd9e130c46f21ef5c30306d58ce3ccb5e2a0",
+      "sample": {
+        "seconds": 13.254,
+        "frame": "RedProbe/0092.webp",
+        "sample": 13.219
+      }
+    },
+    "native": {
+      "image": "scripted-objectives/presentation/crylink-native-mesh/flight.webp",
+      "sha256": "25cd291464b3130900f89e95220681c227d4e67fee61ee273b2c059e3f4b22c9",
+      "sample": {
+        "seconds": 16.192,
+        "frame": "RedProbe/0110.webp",
+        "sample": 16.12
+      }
+    }
+  },
+  "onslaught-point": {
+    "original": {
+      "image": "scripted-objectives/ons-original/cracked.webp",
+      "sha256": "b88802d05ff9fa416af99b53493c17d2e16fce48dca3616841d7760b9ed2b65e",
+      "sample": {
+        "seconds": 23.544,
+        "frame": "BlueProbe/0074.webp",
+        "sample": 23.478
+      }
+    },
+    "native": {
+      "image": "scripted-objectives/ons-native/cracked.webp",
+      "sha256": "1665f024f27d2e4e96d6829e2d1a1fff4731486febaeb365ce7fe688b83b8618",
+      "sample": {
+        "seconds": 26.444,
+        "frame": "BlueProbe/0077.webp",
+        "sample": 26.412
+      }
+    }
+  },
+  "onslaught-generator": {
+    "original": {
+      "image": "scripted-objectives/ons-original-generator-matched/dead-camera.webp",
+      "sha256": "25c1a55b92c36a623d976d4d1fc0c91307beda64744566c7a72fd63d586b50c1",
+      "sample": {
+        "seconds": 27.229,
+        "frame": "RedProbe/0093.webp",
+        "sample": 27.165
+      }
+    },
+    "native": {
+      "image": "scripted-objectives/presentation/ons-native-death-camera/red-cut.webp",
+      "sha256": "219accb3d6a233d7ac8b368de768b4845290a6aa7188631a112d5d912d73c9a1",
+      "sample": {
+        "seconds": 33.397,
+        "frame": "RedProbe/0114.webp",
+        "sample": 33.278
+      }
+    }
+  },
+  "countdown": {
+    "original": {
+      "image": "scripted-countdown/original/observer-2.webp",
+      "sha256": "2e8271b07d81a9da7dd647122d79c650fe4333cc76ac419b3dfc2089c17bbc17",
+      "sample": {
+        "seconds": 15.471,
+        "frame": "RedProbe/0027.webp",
+        "sample": 15.407
+      }
+    },
+    "native": {
+      "image": "scripted-countdown/native/observer-2.webp",
+      "sha256": "5dcd37b7a1e249e73746e487a87d13f39fdfebf8b259a53e68b5094c19c04a54",
+      "sample": {
+        "seconds": 40.332,
+        "frame": "RedProbe/0034.webp",
+        "sample": 40.299
+      }
+    }
+  }
+}

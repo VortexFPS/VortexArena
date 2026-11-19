@@ -101,6 +101,7 @@ public sealed class DpSignon
     private bool _loadFinished;   // cl.loadfinished
     private bool _beginDownloadsPending;
     private bool _waitingForPackages;
+    private DpDownloadResult? _completedProgram;
     // The in-band requests for a missing map: what is still to be tried, and what was asked for last.
     private List<string>? _fallbacks;
     private string? _requested;
@@ -127,10 +128,10 @@ public sealed class DpSignon
     public int ServerExtensionDownload { get; private set; }
 
     /// <summary>The downloaded client program, once a download of <see cref="CsqcProgName"/> completed.</summary>
-    public byte[]? CsprogsData { get; private set; }
+    public byte[]? CsprogsData => _completedProgram?.Data;
     /// <summary>True when <see cref="CsprogsData"/> has exactly the size and CRC the server announced
     /// in csqc_progsize / csqc_progcrc. A program that fails this must not be run.</summary>
-    public bool CsprogsVerified { get; private set; }
+    public bool CsprogsVerified => HasMatchingDownloadedProgram();
     /// <summary>The last download to finish, whatever its outcome.</summary>
     public DpDownloadResult? LastDownload { get; private set; }
 
@@ -163,8 +164,7 @@ public sealed class DpSignon
         CsqcProgSize = -1;
         CsqcProgCrc = -1;
         ServerExtensionDownload = 0;
-        CsprogsData = null;
-        CsprogsVerified = false;
+        _completedProgram = null;
         LastDownload = null;
         _downloadCsqc = _loadBegun = _loadFinished = _beginDownloadsPending = false;
         _waitingForPackages = false;
@@ -302,7 +302,8 @@ public sealed class DpSignon
                 DpDownloadResult result = Download.Finish(DpStuffText.Atoi(args[1]), DpStuffText.Atoi(args[2]));
                 if (wasActive)
                     FinishedDownload(result);
-                BeginDownloads();
+                if (_loadBegun)
+                    BeginDownloads();
                 return true;
             }
 
@@ -352,8 +353,7 @@ public sealed class DpSignon
         }
         if (result.Status != DpDownloadStatus.Completed)
             return;
-        CsprogsData = result.Data;
-        CsprogsVerified = result.Crc == CsqcProgCrc && (CsqcProgSize == -1 || result.Data.Length == CsqcProgSize);
+        _completedProgram = result;
     }
 
     /// <summary>
@@ -393,6 +393,7 @@ public sealed class DpSignon
         {
             _downloadCsqc = false;
             if (CsqcProgName.Length != 0 && CsqcProgCrc >= 0 && ServerExtensionDownload != 0
+                && !HasMatchingDownloadedProgram()
                 && !(_config.HaveFile?.Invoke(CsqcProgName, CsqcProgSize, CsqcProgCrc) ?? false))
             {
                 Note?.Invoke($"Downloading new CSQC code to dlcache/{Printable(CsqcProgName)}.{CsqcProgSize}.{CsqcProgCrc}");
@@ -440,6 +441,13 @@ public sealed class DpSignon
             Commands.Add("prespawn");
         }
     }
+
+    // Recordings can carry the download before signon reaches the normal request point.
+    private bool HasMatchingDownloadedProgram() =>
+        _completedProgram is { } download
+        && download.Name == CsqcProgName
+        && download.Crc == CsqcProgCrc
+        && (CsqcProgSize < 0 || download.Data.Length == CsqcProgSize);
 
     /// <summary>
     /// Curl_CheckCommandWhenDone running "cl_begindownloads": the package downloads this level waited for

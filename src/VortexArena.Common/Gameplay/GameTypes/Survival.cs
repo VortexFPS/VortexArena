@@ -153,8 +153,8 @@ public sealed class Survival : GameType
     {
         if (_deathHandler is not null)
             return;
-        RoundOver = false;
-        WinningSide = SurvStatus.None;
+        _roster = System.Array.Empty<Player>();
+        ResetMatch();
 
         // QC round_handler_Spawn(survival_CheckTeams, survival_CheckWinner, survival_RoundStart).
         Handler = new RoundHandler(() => Api.Services is not null ? Api.Clock.Time : 0f)
@@ -177,12 +177,65 @@ public sealed class Survival : GameType
         GameScores.DeclareColumn("SURV_SURVIVALS", ScoreFlags.None, "survivals"); // QC field(SP_SURV_SURVIVALS, "survivals", 0)
         GameScores.DeclareColumn("SURV_HUNTS", ScoreFlags.None, "hunts");         // QC field(SP_SURV_HUNTS, "hunts", SECONDARY)
         GameScores.SetSortKeys(GameScores.Score, GameScores.Field("SURV_HUNTS"));
+        GameScores.ResetFragsRemaining();
 
         // QC the survival AddPlayerScore hook: anonymize kills/deaths so the scoreboard can't out the hunters.
         GameScores.AddPlayerScoreHook = AnonymizeScore;
 
         _deathHandler = OnDeath;
         Combat.Death.Add(_deathHandler);
+    }
+
+    /// <summary>Clear role and banked-kill state at a level start or a full match restart.</summary>
+    public void ResetMatch()
+    {
+        _states.Clear();
+        RoundOver = false;
+        WinningSide = SurvStatus.None;
+        _endDelayTime = -1f;
+    }
+
+    /// <summary>QC WinningConditionHelper ranks active player rows by score and then by hunts.</summary>
+    public (Player? Winner, bool Tied, int TopScore, int SecondScore) GetMatchStanding(IReadOnlyList<Player> roster)
+    {
+        Player? leader = null;
+        Player? runnerUp = null;
+        foreach (Player player in roster)
+        {
+            if (player.IsObserver) continue;
+            if (leader is null || GameScores.ComparePlayers(player, leader) > 0)
+            {
+                runnerUp = leader;
+                leader = player;
+            }
+            else if (runnerUp is null || GameScores.ComparePlayers(player, runnerUp) > 0)
+            {
+                runnerUp = player;
+            }
+        }
+
+        int topScore = leader is null ? 0 : GameScores.PrimaryScore(leader);
+        int secondScore = runnerUp is null ? 0 : GameScores.PrimaryScore(runnerUp);
+        // The non-strict comparison uses just the primary and secondary keys.
+        bool tied = leader is not null && runnerUp is not null && topScore == secondScore
+            && (GameScores.Secondary is not { } hunts || GameScores.Get(leader, hunts) == GameScores.Get(runnerUp, hunts));
+        return (tied ? null : leader, tied, topScore, secondScore);
+    }
+
+    /// <summary>QC WinningCondition_Scores, including Survival's opted-in remaining-frags cue.</summary>
+    public (Player? Winner, bool LimitReached, bool Tied) CheckMatchScores(IReadOnlyList<Player> roster,
+        float limit, float leadLimit, bool requireBothLimits)
+    {
+        var (winner, tied, topScore, secondScore) = GetMatchStanding(roster);
+        // QC CheckRules_World exits at sudden-death expiry before calling WinningCondition_Scores.
+        GameScores.CountFragsRemaining(limit, leadLimit, topScore, secondScore, suddenDeathEnding: false);
+
+        bool scoreReached = limit != 0f && topScore >= limit;
+        bool leadReached = leadLimit != 0f && topScore - secondScore >= leadLimit;
+        bool limitReached = requireBothLimits && limit != 0f && leadLimit != 0f
+            ? scoreReached && leadReached
+            : scoreReached || leadReached;
+        return (winner, topScore != 0 && limitReached, tied);
     }
 
     /// <summary>

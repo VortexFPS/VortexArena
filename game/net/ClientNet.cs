@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Godot;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
+using VortexArena.Common.Menu;
 using VortexArena.Common.Physics;
 using VortexArena.Common.Services;
 using VortexArena.Net;
@@ -60,6 +61,8 @@ public sealed class ClientNet : IDisposable
 
     // remote entities, keyed by their server net id.
     private readonly Dictionary<int, RemoteEntity> _remotes = new();
+    private readonly Dictionary<int, NetEntityState> _brushColliders = new();
+    internal IReadOnlyDictionary<int, NetEntityState> BrushColliders => _brushColliders;
 
     private sealed class RemoteEntity
     {
@@ -159,8 +162,8 @@ public sealed class ClientNet : IDisposable
     /// </summary>
     public int SpectateeStatus { get; private set; }
 
-    /// <summary>QC <c>spectatee_status_changed_time</c>: the client clock time at which <see cref="SpectateeStatus"/>
-    /// last changed. Drives the 1-second shownames grace window in which the freshly-followed player's own name tag
+    /// <summary>QC <c>spectatee_status_changed_time</c>: the server time of the snapshot in which
+    /// <see cref="SpectateeStatus"/> last changed. Drives the 1-second shownames grace window in which the freshly-followed player's own name tag
     /// stays visible even with <c>hud_shownames_self</c> off (<c>Draw_ShowNames</c>).</summary>
     public float SpectateeStatusChangedTime { get; private set; }
 
@@ -283,9 +286,20 @@ public sealed class ClientNet : IDisposable
 
     /// <summary>Raised for each received effect/temp-entity (the client renderer spawns the particle/sound).</summary>
     public event Action<EffectEvent>? EffectReceived;
+    public event Action<FireballBlastEffect>? FireballBlastReceived;
+    public event Action<AttachedDamageWire>? AttachedDamageReceived;
+    private readonly WarpzoneCameraWire.Receiver _warpzoneCameras = new();
+    public IReadOnlyDictionary<int, WarpzoneCamera.Pose?> WarpzoneCameraPoses => _warpzoneCameras.Poses;
+
+    public OnslaughtDestruction? OnslaughtCamera { get; private set; }
+    public event Action<OnslaughtDestruction?>? OnslaughtDestructionChanged;
+    public event Action? OnslaughtRadarRequested;
+    public string QuickMenuFile { get; private set; } = "";
+    public IReadOnlySet<int> ScoreboardIgnores { get; private set; } = new HashSet<int>();
 
     /// <summary>Raised for each received positional sound (the client renderer plays it spatially). DP SV_StartSound.</summary>
     public event Action<SoundEvent>? SoundReceived;
+    public event Action<string>? SoundPrecacheReceived;
 
     /// <summary>Raised for each received notification (the client HUD shows the kill-feed / centerprint / announce).</summary>
     public event Action<NotificationEvent>? NotificationReceived;
@@ -300,10 +314,22 @@ public sealed class ClientNet : IDisposable
         public readonly int Count;
         public readonly NVec3 ColorMin;
         public readonly NVec3 ColorMax;
+        public readonly bool FirstPersonCasing;
         public EffectEvent(Effect? effect, NVec3 origin, NVec3 velocity, int count, NVec3 colorMin, NVec3 colorMax)
             : this(effect, effect?.Name ?? "", origin, velocity, count, colorMin, colorMax) { }
-        public EffectEvent(Effect? effect, string effectName, NVec3 origin, NVec3 velocity, int count, NVec3 colorMin, NVec3 colorMax)
-        { Effect = effect; EffectName = effectName; Origin = origin; Velocity = velocity; Count = count; ColorMin = colorMin; ColorMax = colorMax; }
+
+        public EffectEvent(Effect? effect, string effectName, NVec3 origin, NVec3 velocity, int count,
+            NVec3 colorMin, NVec3 colorMax, bool firstPersonCasing = false)
+        {
+            Effect = effect;
+            EffectName = effectName;
+            Origin = origin;
+            Velocity = velocity;
+            Count = count;
+            ColorMin = colorMin;
+            ColorMax = colorMax;
+            FirstPersonCasing = firstPersonCasing;
+        }
     }
 
     /// <summary>A decoded positional sound (the client-side counterpart of the engine's <c>SoundEvent</c>). Kept
@@ -341,10 +367,13 @@ public sealed class ClientNet : IDisposable
         { Notification = n; Type = type; Text = text; StringArgs = s; FloatArgs = f; }
     }
 
-    public ClientNet(NetTransport.Client transport, IMovementStep movement, Func<InputCommand> sampleInput)
+    public ClientNet(NetTransport.Client transport, IMovementStep movement, Func<InputCommand> sampleInput,
+        PlayerIdentity? identity = null)
     {
+        Identity = identity ?? PlayerIdentity.Generate();
         _transport = transport;
         _sampleInput = sampleInput;
+        _entityMovement = movement as EntityMovementStep;
         _reconciler = new Reconciler(_inputBuffer, movement)
         {
             // smoothing on by default so corrections/steps are visually gradual (cl_movement_errorcompensation).
@@ -360,7 +389,17 @@ public sealed class ClientNet : IDisposable
     {
         NetTransport.Client? t = NetTransport.Client.Connect(host, port);
         if (t is null) return null;
-        var cn = new ClientNet(t, movement, sampleInput) { _host = host, _port = port };
+        PlayerIdentity? identity = null;
+        try
+        {
+            identity = PlayerIdentityFile.LoadOrCreate(UserPaths.Resolve(PlayerIdentityFile.FileName));
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException
+                                  or System.Security.Cryptography.CryptographicException)
+        {
+            GD.PushWarning($"[ClientNet] Could not load the profile identity. This connection uses a temporary identity: {ex.Message}");
+        }
+        var cn = new ClientNet(t, movement, sampleInput, identity) { _host = host, _port = port };
         return cn;
     }
 
@@ -439,19 +478,36 @@ public sealed class ClientNet : IDisposable
         _handshakeSent = false;
         _wasConnected = false;
         Accepted = false;
+        LocalNetId = 0;
+        PendingWelcomeDetails = null;
+        ServerMapVisualSuggestions = default;
+        _mapVisualSubscription = false;
+        QuickMenuFile = "";
+        ScoreboardIgnores = new HashSet<int>();
+        HasMatchState = false;
+        MapStats = default;
+        MapWeaponBits = 0;
         RejectReason = null; // fresh session: clear any prior reject so a reconnect isn't born "failed"
         _remotes.Clear();
+        _brushColliders.Clear();
         LocalState = null; // drop the captured local entcs slice across reconnect/map change
         // session-scoped replication state: a fresh session re-sends all cvars and starts override-free.
         MovementParameters.PredictionOverride = null;
         _replicatedLastSent.Clear();
         _replicateSendAll = false;
-        _radarPingTimes.Clear(); // drop stale per-waypoint radar ping stamps across reconnect/map change
-        _radarLinks.Clear();     // drop stale Onslaught radar links across reconnect/map change
+        _radarPings.Clear();
+        _nextRadarPings.Clear();
+        _waypointSequence = null;
+        _waypoints.Clear();
+        _warpzoneCameras.Clear();
+        _radarLinks.Clear();
+        _radarLinkSequence = null;
         // Reset the echoed snapshot clock so the first post-reconnect input frame doesn't carry a stale large
         // server-time the server would read as a near-zero/negative RTT (it self-heals via the rtt<0 clamp, but
         // this avoids the brief under-report). 0 = "no snapshot yet", which the server treats as "measure nothing".
         LatestServerTime = 0f;
+        OnslaughtCamera = null;
+        OnslaughtDestructionChanged?.Invoke(null);
         return true;
     }
 
@@ -543,8 +599,8 @@ public sealed class ClientNet : IDisposable
     private bool _handshakeSent;
 
     /// <summary>This client's cryptographic identity (its public-key fingerprint is the stable player id). Defaults
-    /// to a fresh ephemeral key; the host may assign a persisted <see cref="PlayerIdentity"/> before connecting.</summary>
-    public PlayerIdentity Identity { get; set; } = PlayerIdentity.Generate();
+    /// to a temporary key when the native profile is unavailable.</summary>
+    public PlayerIdentity Identity { get; }
 
     private void SendHandshake()
     {
@@ -707,6 +763,14 @@ public sealed class ClientNet : IDisposable
             case NetControl.SoundBundle:
                 using (VortexArena.Common.Diagnostics.Prof.Sample("cn.sounds")) HandleSoundBundle(ref r);
                 break;
+            case NetControl.SoundPrecache:
+                if (Accepted)
+                {
+                    string sample = r.ReadString();
+                    if (!r.BadRead && r.Remaining == 0 && VortexArena.Legacy.Csqc.LegacyQcHost.IsSafePath(sample))
+                        SoundPrecacheReceived?.Invoke(sample);
+                }
+                break;
             case NetControl.ReliableBundle: HandleReliableBundle(ref r); break;
             case NetControl.ServerPrint: HandleServerPrint(ref r); break;
             case NetControl.MinigameState: HandleMinigameState(ref r); break;
@@ -718,8 +782,70 @@ public sealed class ClientNet : IDisposable
             case NetControl.MapVote: HandleMapVote(ref r); break;
             case NetControl.EditorOp: HandleEditorOp(ref r); break;
             case NetControl.ModFrame: HandleModFrame(data); break;
+            case NetControl.JoinNotice:
+                if (Accepted && JoinNotice.Read(ref r) is { } notice)
+                    JoinNoticeReceived?.Invoke(notice);
+                break;
+            case NetControl.WarpzoneCameraPoses:
+                if (Accepted)
+                    _warpzoneCameras.Receive(ref r);
+                break;
+            case NetControl.OnslaughtDestruction:
+                if (Accepted && OnslaughtDestructionWire.TryRead(ref r, out var destruction, out bool showCamera))
+                {
+                    OnslaughtCamera = showCamera ? destruction : null;
+                    OnslaughtDestructionChanged?.Invoke(destruction);
+                }
+                break;
+            case NetControl.OnslaughtRadar:
+                if (Accepted && ServerGametype == "ons" && r.Remaining == 0)
+                    OnslaughtRadarRequested?.Invoke();
+                break;
+            case NetControl.ScoreboardIgnores:
+                if (Accepted)
+                {
+                    int count = r.ReadByte();
+                    if (!r.BadRead && r.Remaining == count * sizeof(ushort))
+                    {
+                        var ignored = new HashSet<int>();
+                        for (int i = 0; i < count; i++) ignored.Add(r.ReadUShort());
+                        ScoreboardIgnores = ignored;
+                    }
+                }
+                break;
+            case NetControl.QuickMenuFile:
+                if (Accepted)
+                {
+                    string file = r.ReadString();
+                    if (!r.BadRead && r.Remaining == 0 && VortexArena.Legacy.Csqc.LegacyQcHost.IsSafePath(file))
+                        QuickMenuFile = file;
+                }
+                break;
+            case NetControl.FireballBlast:
+                if (Accepted && FireballBlastWire.Read(ref r) is { } blast)
+                    FireballBlastReceived?.Invoke(blast);
+                break;
+            case NetControl.FixAngle:
+                if (LocalNetId != 0 && r.Remaining == 2 * sizeof(float))
+                    _pendingFixAngle = new NVec3(r.ReadFloat(), r.ReadFloat(), 0f);
+                break;
             default: break;
         }
+    }
+
+    public event Action<JoinNotice>? JoinNoticeReceived;
+
+    private readonly EntityMovementStep? _entityMovement;
+    public ViewLocationState? ActiveViewLocation { get; private set; }
+
+    private NVec3? _pendingFixAngle;
+
+    /// <summary>Consume the most recent authoritative view snap before sampling new input.</summary>
+    public NVec3? ConsumeFixAngle()
+    {
+        NVec3? angles = _pendingFixAngle;
+        _pendingFixAngle = null;
+        return angles;
     }
 
     /// <summary>Raised with a decoded minigame-session envelope (the S2C <see cref="NetControl.MinigameState"/>
@@ -776,6 +902,10 @@ public sealed class ClientNet : IDisposable
     /// so on a listen server the client's draws never corrupt the server world's stream. RESERVED — no consumer yet.</summary>
     public VortexArena.Common.Math.PrandomContext RandomRng { get; } = new();
 
+    public (int MonstersTotal, int MonstersKilled, int SecretsTotal, int SecretsFound) MapStats { get; private set; }
+
+    public ulong MapWeaponBits { get; private set; }
+
     private void HandleMatchState(ref BitReader r)
     {
         float gameStart = r.ReadFloat();
@@ -790,6 +920,13 @@ public sealed class ClientNet : IDisposable
         int randomSeed = r.ReadUShort();
         if (r.BadRead)
             return;
+        // Older native builds end MatchState after the seed. The four map stats are an optional suffix.
+        MapStats = r.Remaining >= 4 * sizeof(int)
+            ? (r.ReadLong(), r.ReadLong(), r.ReadLong(), r.ReadLong())
+            : default;
+        MapWeaponBits = r.Remaining >= 2 * sizeof(uint)
+            ? r.ReadULong() | ((ulong)r.ReadULong() << 32)
+            : 0;
         MatchStartTime = gameStart;
         MatchTimeLimit = timeLimit;
         MatchWarmup = warmup;
@@ -809,7 +946,7 @@ public sealed class ClientNet : IDisposable
 
     // ---- client init constants (S2C NetControl.ClientInit; QC ENT_CLIENT_INIT / ClientInit_misc) ----
 
-    /// <summary>[W14a-QW4] True once the one-shot <see cref="NetControl.ClientInit"/> constant bundle has arrived.</summary>
+    /// <summary>[W14a-QW4] True once the first <see cref="NetControl.ClientInit"/> constant bundle has arrived.</summary>
     public bool HasClientInit { get; private set; }
 
     /// <summary>QC <c>hook_shotorigin</c> — the grappling-hook muzzle offset (the port models a single offset, not the
@@ -829,17 +966,36 @@ public sealed class ClientNet : IDisposable
     public float ArmorBlockPercent { get; private set; }
 
     /// <summary>QC networked <c>serverflags</c> — the SERVERFLAG_* bitmap (fullbright / forbid-pickuptimer / teamplay).
-    /// The client gates fullbright player rendering + the HUD pickup timer off these bits.</summary>
+    /// The native night-vision overlay reads this bitmap.</summary>
     public int ServerFlags { get; private set; }
 
-    /// <summary>QC <c>world.fog</c> (when <c>sv_foginterval</c>) — the server's fog string, or "" when none.</summary>
+    /// <summary>Effective server map fog, with explicit "none" distinguished from an absent value.</summary>
     public string ServerFog { get; private set; } = "";
 
     /// <summary>QC <c>g_nexball_meter_period</c> — the nexball powershot meter cycle period.</summary>
     public float NexballMeterPeriod { get; private set; }
 
+    public MapClientVisualSettings ServerMapVisualSuggestions { get; private set; }
+    private bool _mapVisualSubscription;
+
+    public void UpdateMapVisualSubscription(bool accept)
+    {
+        if (!Accepted || accept == _mapVisualSubscription)
+            return;
+
+        _mapVisualSubscription = accept;
+        if (!accept)
+            ServerMapVisualSuggestions = default;
+        _writer.Reset();
+        _writer.WriteByte((byte)NetControl.MapVisualSubscription);
+        _writer.WriteByte(accept ? 1 : 0);
+        _transport.SendToServer(_writer.WrittenSpan, reliable: true);
+    }
+
     private void HandleClientInit(ref BitReader r)
     {
+        if (!Accepted)
+            return;
         // Same field order as ServerNet.SendClientInit.
         NVec3 hookOrigin = r.ReadVector(NetPrecision.Float);
         float trueAimMin = r.ReadFloat();
@@ -857,6 +1013,7 @@ public sealed class ClientNet : IDisposable
         ServerFlags = serverFlags;
         ServerFog = fog ?? "";
         NexballMeterPeriod = nexballMeter;
+        ServerMapVisualSuggestions = _mapVisualSubscription ? MapVisualSuggestionsWire.Read(ref r) : default;
         HasClientInit = true;
     }
 
@@ -879,7 +1036,8 @@ public sealed class ClientNet : IDisposable
         bool finished = r.ReadBool();
         bool isGametypeVote = r.ReadBool();
         bool detail = r.ReadBool();
-        float remaining = r.ReadFloat();
+        float serverTime = r.ReadFloat();
+        float deadline = r.ReadFloat();
         int winner1Based = r.ReadShort();
         int own = r.ReadShort();
         bool abstain = r.ReadBool();
@@ -907,7 +1065,8 @@ public sealed class ClientNet : IDisposable
             Finished = finished,
             IsGametypeVote = isGametypeVote,
             Detail = detail,
-            Remaining = remaining,
+            ServerTime = serverTime,
+            Deadline = deadline,
             Winner1Based = winner1Based,
             Own = own,
             AbstainPresent = abstain,
@@ -925,14 +1084,32 @@ public sealed class ClientNet : IDisposable
     /// wholesale each <see cref="NetControl.Waypoints"/> message; empty in waypoint-less modes (plain DM).</summary>
     public IReadOnlyList<VortexArena.Common.Gameplay.Waypoints.WaypointNet> Waypoints => _waypoints;
 
-    /// <summary>Per-waypoint-id radar ping timestamps (server time of the last ping) — the C# analogue of QC's
-    /// per-icon <c>teamradar_times</c> array. The radar draws an expanding gfx/teamradar_ping ring for ~1s after
-    /// each stamp. Stamped on decode when bit 7 of the radar-icon byte is set; read by <see cref="Game.Hud.RadarPanel"/>.</summary>
-    private readonly Dictionary<int, float> _radarPingTimes = new();
+    private sealed class RadarPingHistory
+    {
+        private readonly float[] _times = new float[32];
+        private int _next;
+        private int _count;
+        private uint _lastSequence;
 
-    /// <summary>The server time of the most recent radar ping for <paramref name="waypointId"/>, or 0 if none.</summary>
-    public float RadarPingTime(int waypointId)
-        => _radarPingTimes.TryGetValue(waypointId, out float t) ? t : 0f;
+        public ReadOnlySpan<float> Times => _times.AsSpan(0, _count);
+
+        public void Record(uint sequence, float time)
+        {
+            if (_count > 0 && sequence == _lastSequence)
+                return;
+            _lastSequence = sequence;
+            _times[_next] = time;
+            _next = (_next + 1) % _times.Length;
+            _count = Math.Min(_count + 1, _times.Length);
+        }
+    }
+
+    private uint? _waypointSequence;
+    private Dictionary<int, RadarPingHistory> _radarPings = new();
+    private Dictionary<int, RadarPingHistory> _nextRadarPings = new();
+
+    public ReadOnlySpan<float> RadarPingTimes(int waypointId)
+        => _radarPings.TryGetValue(waypointId, out var history) ? history.Times : default;
 
     // ---- onslaught radar links (S2C NetControl.RadarLinks; QC the networked ENT_CLIENT_RADARLINK entities) ----
 
@@ -941,6 +1118,7 @@ public sealed class ClientNet : IDisposable
     public readonly record struct RadarLink(NVec3 A, int TeamA, NVec3 B, int TeamB);
 
     private readonly List<RadarLink> _radarLinks = new();
+    private uint? _radarLinkSequence;
 
     /// <summary>The live Onslaught control-point/generator connection lines (QC g_radarlinks). Drives the radar's
     /// draw_teamradar_link pass. Replaced wholesale each <see cref="NetControl.RadarLinks"/> message; empty in any
@@ -949,6 +1127,10 @@ public sealed class ClientNet : IDisposable
 
     private void HandleRadarLinks(ref BitReader r)
     {
+        // Reliable clears and best-effort updates can arrive in either order.
+        uint sequence = unchecked((uint)r.ReadLong());
+        if (_radarLinkSequence is uint previous && unchecked((int)(sequence - previous)) <= 0)
+            return;
         int count = r.ReadByte();
         // Decode into a temp so a truncated packet never leaves a half-updated list on screen.
         var tmp = new List<RadarLink>(count);
@@ -964,30 +1146,31 @@ public sealed class ClientNet : IDisposable
             return;
         _radarLinks.Clear();
         _radarLinks.AddRange(tmp);
+        _radarLinkSequence = sequence;
     }
 
     private void HandleWaypoints(ref BitReader r)
     {
+        // Reliable clears and unordered updates share a sequence. Simulation time can stop during a pause.
+        uint snapshotSequence = unchecked((uint)r.ReadLong());
+        if (_waypointSequence is uint previous && unchecked((int)(snapshotSequence - previous)) <= 0)
+            return;
+        float packetTime = r.ReadFloat();
+        if (!float.IsFinite(packetTime))
+            return;
         int count = r.ReadByte();
         // Decode into a temp so a truncated packet never leaves a half-updated list on screen.
         var tmp = new List<VortexArena.Common.Gameplay.Waypoints.WaypointNet>(count);
+        Span<uint?> pingSequences = stackalloc uint?[count];
         for (int i = 0; i < count; i++)
         {
             int id = r.ReadLong();
             float x = r.ReadFloat(), y = r.ReadFloat(), z = r.ReadFloat();
             int team = r.ReadByte();
             string sprite = r.ReadString();
-            // QC: the radar-icon byte packs m_radaricon in the low 7 bits and a ping pulse in bit 7
-            // (waypointsprites.qc:187-192). Stamp a per-id ping time on a fresh ping so the radar can draw an
-            // expanding gfx/teamradar_ping ring; de-dupe within the 0.3s ping window (one ring per ping event).
             int radarByte = r.ReadByte();
             int radarIcon = radarByte & 0x7F;
-            if ((radarByte & 0x80) != 0)
-            {
-                float servTime = LatestServerTime;
-                if (!_radarPingTimes.TryGetValue(id, out float prev) || servTime - prev >= 0.3f)
-                    _radarPingTimes[id] = servTime;
-            }
+            pingSequences[i] = (radarByte & 0x80) != 0 ? unchecked((uint)r.ReadLong()) : null;
             float cr = r.ReadByte() / 255f, cg = r.ReadByte() / 255f, cb = r.ReadByte() / 255f;
             float health = r.ReadFloat();
             float fade = r.ReadFloat();
@@ -1000,6 +1183,23 @@ public sealed class ClientNet : IDisposable
         }
         if (r.BadRead)
             return;
+        // Apply pulse events only after decoding the whole packet. A removed waypoint loses its history.
+        for (int i = 0; i < tmp.Count; i++)
+        {
+            int id = tmp[i].Id;
+            _radarPings.TryGetValue(id, out var history);
+            if (pingSequences[i] is uint sequence)
+            {
+                history ??= new RadarPingHistory();
+                history.Record(sequence, packetTime);
+            }
+
+            if (history is not null)
+                _nextRadarPings[id] = history;
+        }
+        (_radarPings, _nextRadarPings) = (_nextRadarPings, _radarPings);
+        _nextRadarPings.Clear();
+        _waypointSequence = snapshotSequence;
         _waypoints.Clear();
         _waypoints.AddRange(tmp);
     }
@@ -1118,6 +1318,8 @@ public sealed class ClientNet : IDisposable
 
     private void HandleAccept(ref BitReader r)
     {
+        if (Accepted)
+            return; // A duplicate accept must not re-arm Welcome or restart the mod session.
         LocalNetId = r.ReadUShort();
         ServerTickRate = r.ReadFloat();
         if (ServerTickRate <= 0f) ServerTickRate = 72f;
@@ -1126,6 +1328,10 @@ public sealed class ClientNet : IDisposable
         // and its prediction collision. Read in the same order ServerNet.HandleAuth writes them.
         ServerMapName = r.ReadString();
         ServerGametype = r.ReadString();
+        string welcome = WelcomeBriefing.Read(ref r);
+        if (r.BadRead)
+            return;
+        PendingWelcomeDetails = welcome;
         _reconciler.TickRate = ServerTickRate;
         Accepted = true;
         // ReplicateVars_Start (lib/replicate.qh:50-57): push ALL replicated cvars once at session init, then the
@@ -1162,12 +1368,17 @@ public sealed class ClientNet : IDisposable
     {
         "cl_autoswitch",
         "cl_autoscreenshot",
+        "cl_casings",
+        "r_drawviewmodel",
         "cl_clippedspectating",
         "cl_autoswitch_cts",
         "cl_handicap",
         "cl_handicap_damage_given",
         "cl_handicap_damage_taken",
         "cl_noantilag",
+        "cl_allow_uidtracking",
+        "cl_allow_uid2name",
+        "cl_spawn_near_teammate",
         "g_xonoticversion",
         // --- port-specific (not in Base REPLICATE) ---
         "cl_weaponpriority",
@@ -1255,6 +1466,7 @@ public sealed class ClientNet : IDisposable
 
     /// <summary>The server's display name, learned at handshake (for the client UI / server browser).</summary>
     public string ServerName { get; private set; } = "";
+    internal string? PendingWelcomeDetails { get; set; }
 
     /// <summary>The map the server is currently running, learned at handshake. A pure <c>--connect</c> client
     /// loads this BSP to render the world + build its prediction collision (NetGame.LoadClientMapFromServer);
@@ -1287,6 +1499,8 @@ public sealed class ClientNet : IDisposable
         uint ackedSeq = r.ReadULong();
 
         int ownerNetId = r.ReadUShort();
+        if (!Accepted || ownerNetId == 0 || ownerNetId != LocalNetId || r.BadRead)
+            return;
         // owner authoritative state (full precision) — the reconcile seed.
         NVec3 origin = r.ReadVector(NetPrecision.Float);
         NVec3 velocity = r.ReadVector(NetPrecision.Float);
@@ -1300,11 +1514,7 @@ public sealed class ClientNet : IDisposable
         ActiveWeaponId = r.ReadShort(); // owner block — same order as ServerNet.WriteOwnerState (viewmodel selector)
         RespawnTimeStat = r.ReadFloat(); // QC STAT(RESPAWN_TIME): dead respawn countdown / "press fire" prompt
         int newSpectatee = r.ReadShort(); // QC spectatee_status: 0 playing, own id observing, other id spectating
-        if (newSpectatee != SpectateeStatus)
-            // QC client/main.qc: spectatee_status_changed_time is stamped whenever spectatee_status changes (the
-            // 1s shownames grace window after switching who you follow).
-            SpectateeStatusChangedTime = Api.Services is not null ? Api.Clock.Time : SpectateeStatusChangedTime;
-        SpectateeStatus = newSpectatee;
+        ViewLocationState? viewLocation = ViewLocationWire.Read(ref r);
         // QC STAT(PRESSED_KEYS) (server GetPressedKeys / SpectateCopy): the view-player's held-key bitset — the
         // OWN keys while playing, the SPECTATEE's keys while following (the server copies them). Written by
         // ServerNet.WriteOwnerState right after spectatee; MUST be read here to keep the owner block aligned for
@@ -1441,6 +1651,16 @@ public sealed class ClientNet : IDisposable
         if (r.BadRead)
             return;
 
+        if (newSpectatee != SpectateeStatus)
+            SpectateeStatusChangedTime = serverTime;
+        if (viewLocation != ActiveViewLocation || newSpectatee != SpectateeStatus)
+        {
+            ActiveViewLocation = viewLocation;
+            SpectateeStatus = newSpectatee;
+            _entityMovement?.SetViewLocation(newSpectatee == 0 ? viewLocation : null);
+            _reconciler.InvalidatePrediction();
+        }
+
         LatestServerTime = serverTime;
 
         // Fix B — POST-HITCH STALL HOLD (defense-in-depth for the spawn-rubberband; Fix A removes the pre-match-freeze
@@ -1506,9 +1726,17 @@ public sealed class ClientNet : IDisposable
         if (entities is null)
             return; // bad read or missing baseline — wait for a full snapshot
 
+        // Collider poses belong to the accepted snapshot, independently of render interpolation.
+        _brushColliders.Clear();
         foreach (KeyValuePair<int, NetEntityState> kv in entities)
         {
             int netId = kv.Key;
+            if (kv.Value.Kind == NetEntityKind.BrushCollider)
+            {
+                _brushColliders.Add(netId, kv.Value);
+                _remotes.Remove(netId);
+                continue;
+            }
             if (netId == LocalNetId)
             {
                 // Never interpolate our own entity (we predict it) — but keep its decoded slice so the own name tag
@@ -1565,7 +1793,8 @@ public sealed class ClientNet : IDisposable
 
     /// <summary>
     /// The interpolated render pose of remote entity <paramref name="netId"/> at client time
-    /// <paramref name="now"/> (origin + seam-safe blended angles). Returns false if the entity is unknown.
+    /// <paramref name="now"/> (origin + seam-safe blended angles). Returns false when interpolation is disabled
+    /// or there is no sample.
     /// Interpolate slightly behind the latest server time for smoothness; here <paramref name="now"/> is
     /// typically <see cref="LatestServerTime"/> (a one-snapshot delay falls out of the two-snapshot lerp).
     /// </summary>
@@ -1587,6 +1816,26 @@ public sealed class ClientNet : IDisposable
         }
         origin = default;
         angles = default;
+        return false;
+    }
+
+    /// <summary>Resolve the followed player's view pose, using the latest snapshot if interpolation is unavailable.</summary>
+    internal bool TryGetFollowedPose(out NVec3 origin, out NVec3 angles)
+    {
+        int followId = SpectatingNetId;
+        if (followId != 0)
+        {
+            if (SampleRemote(followId, LatestServerTime, out origin, out angles))
+                return true;
+            if (TryGetViewedState(followId, out var state))
+            {
+                origin = state.Origin;
+                angles = state.Angles;
+                return true;
+            }
+        }
+
+        origin = angles = default;
         return false;
     }
 
@@ -1629,7 +1878,12 @@ public sealed class ClientNet : IDisposable
             ReadOnlySpan<byte> body = r.ReadBytes(bodyLen);
             if (r.BadRead)
                 return;
-            if (effectId == EffectNetProtocol.ByNameSentinelId)
+            if (effectId == AttachedDamageWire.EffectRecordId)
+            {
+                if (Accepted && AttachedDamageWire.Read(body) is { } hit && hit.WeaponId < Weapons.Count)
+                    AttachedDamageReceived?.Invoke(hit);
+            }
+            else if (effectId == EffectNetProtocol.ByNameSentinelId)
                 DecodeEffectByName(body);
             else
                 DecodeEffect(effectId, body);
@@ -1698,7 +1952,9 @@ public sealed class ClientNet : IDisposable
         if (br.BadRead)
             return;
 
-        EffectReceived?.Invoke(new EffectEvent(effect, origin, velocity, count, colorMin, colorMax));
+        bool firstPersonCasing = (flags & EffectNetProtocol.NetFirstPersonCasing) != 0;
+        EffectReceived?.Invoke(new EffectEvent(effect, effect?.Name ?? "", origin, velocity, count,
+            colorMin, colorMax, firstPersonCasing));
     }
 
     // EFF_NET color components are quantized as rint(bound(0,16*c,255)); decode back to the [0,16) float range.
@@ -1797,6 +2053,7 @@ public sealed class ClientNet : IDisposable
         OwnedModLayer()?.EndServerSession();
         _modSession = false;
         _transport.Dispose();
+        Identity.Dispose();
     }
 }
 
@@ -1804,7 +2061,7 @@ public sealed class ClientNet : IDisposable
 /// The end-of-match map/gametype-vote ballot as decoded on a remote client (<see cref="ClientNet.HandleMapVote"/>)
 /// — the client-side stand-in for the listen host's in-process <c>MapVoting</c>. NetGame.UpdateMapVotePanel renders
 /// the vote panel from this when there is no server world (a pure --connect client). All indices are the same
-/// abstain-stripped cell indices the server computed, so the panel highlights line up 1:1 with the candidate cells.
+/// candidate indices the server computed; the own choice can also be the appended abstain row.
 /// </summary>
 public sealed class NetMapVote
 {
@@ -1818,11 +2075,13 @@ public sealed class NetMapVote
     public bool Detail;
     /// <summary>QC mv_abstain: the appended "Don't care" abstain slot is present on the ballot.</summary>
     public bool AbstainPresent;
-    /// <summary>Seconds remaining on the vote countdown (the panel's timeout clock).</summary>
-    public float Remaining;
+    /// <summary>Server simulation time when the ballot was sent, on the movement snapshot clock.</summary>
+    public float ServerTime;
+    /// <summary>Absolute server simulation deadline, or -1 for an untimed ballot.</summary>
+    public float Deadline;
     /// <summary>1-based winning cell (abstain-stripped), 0 = none decided yet.</summary>
     public int Winner1Based;
-    /// <summary>This client's own vote as an abstain-stripped cell index, or -1 for none / abstain.</summary>
+    /// <summary>This client's 0-based choice, including the appended abstain row, or -1 for none.</summary>
     public int Own;
     /// <summary>The ballot cells (abstain excluded — see <see cref="AbstainPresent"/>).</summary>
     public readonly List<Cand> Candidates = new();

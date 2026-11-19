@@ -491,7 +491,7 @@ public static class LogicGates
     //  trigger_magicear (magicear.qc) — chat pattern match -> SUB_UseTargets / text replace
     //  LIVE: the server Chat.Say pipeline (VortexArena.Server/Chat.cs) calls MagicEarProcessAllEars on every
     //  non-empty player say (chat.qc:75-76), so registered ears now see messages on the live path. The TUBA
-    //  melody branch is out of scope (W_Tuba_HasPlayed). The magicears list is linked via Enemy and walked
+    //  note-off path checks each slot’s note history. The magicears list is linked via Enemy and walked
     //  exactly like QC's trigger_magicear_processmessage_forallears.
     // ===================================================================
 
@@ -503,8 +503,8 @@ public static class LogicGates
     public const int MagicEarReplaceOutside = 1 << 5;        // MAGICEAR_REPLACE_OUTSIDE
     public const int MagicEarContinue = 1 << 6;              // MAGICEAR_CONTINUE
     public const int MagicEarNoDecolorize = 1 << 7;          // MAGICEAR_NODECOLORIZE
-    public const int MagicEarTuba = 1 << 8;                  // MAGICEAR_TUBA (out of scope)
-    public const int MagicEarTubaExactPitch = 1 << 9;        // MAGICEAR_TUBA_EXACTPITCH (out of scope)
+    public const int MagicEarTuba = 1 << 8;                  // MAGICEAR_TUBA
+    public const int MagicEarTubaExactPitch = 1 << 9;        // MAGICEAR_TUBA_EXACTPITCH
 
     /// <summary>QC <c>magicears</c> — the head of the magicear linked list (each links the next via .enemy).</summary>
     public static Entity? MagicEars;
@@ -520,7 +520,7 @@ public static class LogicGates
         this_.ClassName = "trigger_magicear";
         MapMover.IndexRegister(this_);
 
-        // QC: --this.movedir_x — map to tuba instrument numbers (kept for fidelity even though TUBA is skipped).
+        // QC: --this.movedir_x — map to tuba instrument numbers.
         System.Numerics.Vector3 md = this_.MoveDir;
         md.X -= 1f;
         this_.MoveDir = md;
@@ -530,7 +530,7 @@ public static class LogicGates
     /// Port of <c>trigger_magicear_processmessage</c> (magicear.qc): match <paramref name="msgin"/> against the
     /// ear's <c>.message</c> pattern (the *pattern* / *pattern / pattern* / exact branches), and on a match fire
     /// the ear's targets (when in-range) and return the replacement text. Sets <see cref="MagicEarMatched"/>.
-    /// The TUBA note-sequence branch is out of scope (returns msgin unchanged for a TUBA ear).
+    /// An empty message checks the Tuba note sequence in each weapon slot.
     /// </summary>
     public static string MagicEarProcessMessage(Entity ear, Entity source, int teamsay, Entity? privatesay, string msgin)
     {

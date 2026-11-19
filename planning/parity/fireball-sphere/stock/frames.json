@@ -1,0 +1,50 @@
+{
+  "observer-before.webp": {
+    "seconds": 8.491,
+    "frame": "impact-RedProbe/0052.webp",
+    "sample": 8.427,
+    "sha256": "7421f964cf41bcb43fd0d7d598282c9ec745a7e6c0044afd8aafbb2ec52e4261"
+  },
+  "observer-early.webp": {
+    "seconds": 8.628,
+    "frame": "impact-RedProbe/0054.webp",
+    "sample": 8.562,
+    "sha256": "31ad5dcc18723eff948c7569d93ab41c447d3c0e98bb31ae904e0df4080c3406"
+  },
+  "observer-grow.webp": {
+    "seconds": 8.864,
+    "frame": "impact-RedProbe/0058.webp",
+    "sample": 8.829,
+    "sha256": "dd98d30ed6e7b73ac9e62be58eb42ac22a4e09ffc893d873530ff8f9126e2103"
+  },
+  "observer-fade.webp": {
+    "seconds": 9.267,
+    "frame": "impact-RedProbe/0064.webp",
+    "sample": 9.202,
+    "sha256": "243a6fbb0b3c0f4338633789801a30a0de1b994d6872e533ff4fc7d5b06af4fe"
+  },
+  "observer-cleared.webp": {
+    "seconds": 9.632,
+    "frame": "impact-RedProbe/0070.webp",
+    "sample": 9.565,
+    "sha256": "274fc504dea57d0de4732a5091859b93c99b3ab18e9a31882552c030860b4ca5"
+  },
+  "shooter-impact.webp": {
+    "seconds": 9.27,
+    "frame": "impact-BlueProbe/0064.webp",
+    "sample": 9.198,
+    "sha256": "a50d6d83c4df49674fe2fbb3f361e0b7fba9bf56f25059f14c240342f3404c05"
+  },
+  "observer-timeout.webp": {
+    "seconds": 19.05,
+    "frame": "timeout-RedProbe/0068.webp",
+    "sample": 18.931,
+    "sha256": "a99b4ff73f6c23ebfe16c0201588fa4f4f87f83b4cc3000950ed9bef61e19d5f"
+  },
+  "observer-self-damage.webp": {
+    "seconds": 29.196,
+    "frame": "self-damage-RedProbe/0065.webp",
+    "sample": 29.131,
+    "sha256": "eb7aa96680d67bf3f673ae2c95a9d0c78efbf7b73afa7ab199c3a03b3610b5b0"
+  }
+}

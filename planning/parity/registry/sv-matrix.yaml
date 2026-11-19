@@ -1,0 +1,45 @@
+unit: sv-matrix
+category: server
+base_ref_rev: "v0.8.6-1779-g863cd3e84"
+last_audited: "2026-11-19"
+summary:
+  feature_count: 1
+  worst_gaps: []
+features:
+  - id: sv-matrix.chat.bridge
+    name: "Optional native dedicated Matrix chat bridge"
+    layer: [authority]
+    base_refs:
+      - "lib/matrix/command.qc"
+      - "lib/matrix/command.qh"
+      - "lib/matrix/matrix.qc"
+      - "lib/matrix/matrix.qh"
+      - "server/chat.qc:Say"
+      - "server/matrix.qc:MX_Handle"
+      - "server/matrix.qh"
+    port_refs:
+      - "src/VortexArena.Server/MatrixChatBridge.cs"
+      - "src/VortexArena.Server/Commands.Matrix.cs"
+      - "src/VortexArena.Server/Chat.cs:Say"
+      - "src/VortexArena.Server/GameWorld.cs:OnStartFrame"
+      - "game/net/NetGame.cs"
+      - "game/net/ServerNet.cs:WireRcon"
+    constants:
+      - { name: "matrix_server", base: "http://matrix.org", port: "http://matrix.org", match: true }
+      - { name: "default token", base: "empty", port: "empty", match: true }
+      - { name: "poll and typing timeouts", base: "30000 ms", port: "30000 ms", match: true }
+      - { name: "events limit", base: "50", port: "50", match: true }
+    status:
+      logic: faithful
+      values: faithful
+      timing: faithful
+      presentation: na
+      audio: na
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: "Native dedicated only. Uses bearer headers, JSON serialization and TLS outside loopback. Refuses redirects, bypasses proxies for loopback homeservers, scopes credentials to the configured server and world, runs one receive loop, and retries failed polls after one second with the current cursor."
+    gaps: []
+    verification:
+      - { kind: ingame, ref: "tools/tests/verify-dedicated-matrix.py", result: pass }
+    confidence: high
+    notes: "Verified using the native host and native client with a loopback Matrix fixture and local proxy trap. Membership transitions reconcile the confirmed room before sending or polling in the current selection, including delayed joins and rapid room changes. See planning/parity/matrix/VERIFICATION.md for the console commands, teardown behavior and repeatable test."

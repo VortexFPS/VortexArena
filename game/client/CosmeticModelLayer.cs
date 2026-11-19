@@ -1,9 +1,9 @@
 // Client cosmetic-model manager: spawns/updates/removes the freezetag ICE BLOCK and the BUFF carrier GLOW
 // from an entity's decoded status effects. Port companions:
-//   - ice block      = QC freezetag.qc Freeze() -> the "models/ice/ice.md3" attachment with one of 20 random
-//                       looks (the per-freeze cached frame), tinted by the carrier's team color, offset '0 0 16'.
+//   - ice block      = QC freezetag_Freeze -> "models/ice/ice.md3" with one of 21 frames, the player's
+//                       team color and a world-axis offset of '0 0 -16'.
 //                       (freezetag.presentation.ice_model)
-//   - buff carrier    = QC sv_buffs.qc buff_Effect / the relic glow worn by a buff carrier: "models/relics/relic.md3"
+//   - buff carrier    = QC sv_buffs.qc buffs_BuffModel_Spawn: "models/relics/relic.md3"
 //                       at scale 0.7, wearing the buff's per-type skin (StatusEffectDef.Skin) and tinted by the
 //                       buff's per-type color (StatusEffectDef.Color). (buffs.carrier_model)
 //
@@ -29,18 +29,18 @@ namespace VortexArena.Game.Client;
 public sealed class CosmeticModelLayer
 {
     // ---- ICE (freezetag.presentation.ice_model) ----
-    /// <summary>QC freezetag ice model ("models/ice/ice.md3"). 20 looks (frames 0..20).</summary>
+    /// <summary>QC freezetag ice model ("models/ice/ice.md3"). Frames 0..20.</summary>
     private const string IceModel = "models/ice/ice.md3";
-    /// <summary>QC ice attach offset '0 0 16' (Quake coords; AttachedCosmeticModel converts to Godot).</summary>
-    private static readonly Vector3 IceOffsetQuake = new(0f, 0f, 16f);
-    /// <summary>The number of ice looks (frames) — QC picks one of 20 (floor(random()*21) -> 0..20).</summary>
-    private const int IceLooks = 20;
-    /// <summary>Salt for the deterministic per-entity ice-frame RNG (keeps the look stable per freeze, varied per id).</summary>
-    private const int IceFrameSalt = 0x1CE_F2AE;
+    private static readonly Vector3 IceOffset = Coords.ToGodot(new System.Numerics.Vector3(0f, 0f, -16f));
+    private const int IceFrameCount = 21;
 
     // ---- BUFF GLOW (buffs.carrier_model) ----
     /// <summary>QC buff carrier glow model ("models/relics/relic.md3").</summary>
     private const string BuffModel = "models/relics/relic.md3";
+
+    internal static bool IsBuffRelic(string? model) =>
+        string.Equals(model, BuffModel, StringComparison.OrdinalIgnoreCase);
+    private static readonly Vector3 BuffOffsetQuake = new(0f, 0f, 40f);
     /// <summary>QC buff carrier glow scale (0.7).</summary>
     private const float BuffScale = 0.7f;
 
@@ -50,6 +50,7 @@ public sealed class CosmeticModelLayer
     /// <summary>The cached random ice frame per entity — ONE pick per freeze, held until the entity thaws.</summary>
     private readonly Dictionary<int, int> _iceFrame = new();
 
+    private readonly Dictionary<int, (AttachedCosmeticModel Model, VortexArena.Net.CountdownIndicatorState State)> _digits = new();
     private readonly Func<AssetSystem?> _assets;
     private readonly Func<string, VortexArena.Formats.Md3.Md3Data?>? _md3Loader;
     private readonly Func<string, int, Node3D?>? _modelLoader;
@@ -82,8 +83,48 @@ public sealed class CosmeticModelLayer
         if (e is null || attachRoot is null) return;
         int idx = e.Index;
 
+        DriveCountdown(e, attachRoot);
         DriveIce(e, idx, attachRoot);
         DriveBuffGlow(e, idx, attachRoot);
+    }
+
+    private void DriveCountdown(Entity entity, Node3D root)
+    {
+        var state = entity.CountdownIndicator;
+        if (_digits.TryGetValue(entity.Index, out var previous))
+        {
+            if (GodotObject.IsInstanceValid(previous.Model))
+            {
+                if (previous.State == state && !previous.Model.IsQueuedForDeletion() && previous.Model.IsInsideTree())
+                {
+                    PlaceCountdown(previous.Model, root);
+                    return;
+                }
+                previous.Model.QueueFree();
+            }
+            _digits.Remove(entity.Index);
+        }
+        if (state.Digit is < 1 or > 10) return;
+        var rgb = Teams.ColorRgb(state.TargetTeam);
+        var tint = state.TargetTeam == -2 ? new Color(0.5f, 0.5f, 0.5f) : new Color(rgb.X, rgb.Y, rgb.Z);
+        var digit = AttachedCosmeticModel.Create(_assets(), $"models/sprites/{state.Digit}.spr32",
+            colormod: tint,
+            name: "KillIndicator", modelLoader: _modelLoader);
+        if (digit is null) return;
+        root.AddChild(digit);
+        digit.TopLevel = true;
+        PlaceCountdown(digit, root);
+        _digits[entity.Index] = (digit, state);
+    }
+
+    private static void PlaceCountdown(AttachedCosmeticModel digit, Node3D root)
+    {
+        // The stock digits face the view plane. Orient the entire sprite so its
+        // off-center frame origin is applied in the same view plane as the quad.
+        Camera3D? camera = root.GetViewport().GetCamera3D();
+        Basis axes = camera is null ? Basis.Identity : camera.GlobalBasis.Orthonormalized();
+        digit.GlobalTransform = new Transform3D(axes.Scaled(Vector3.One * 0.5f),
+            root.GlobalPosition + Vector3.Up * 52f);
     }
 
     // ---- (A) FROZEN ice block ----
@@ -98,17 +139,17 @@ public sealed class CosmeticModelLayer
             Color teamColor = TeamColor(e);
             if (!exists || ice is null || !ice.IsValid)
             {
-                // First time frozen this id: pick + cache ONE of the 20 ice looks (stable for this freeze,
-                // deterministic per id so two players don't share a look). QC floor(random()*21) -> 0..20.
-                int frame = PickIceFrame(idx);
-                var model = AttachedCosmeticModel.Create(
+                if (!_iceFrame.TryGetValue(idx, out int frame))
+                    _iceFrame[idx] = frame = Random.Shared.Next(IceFrameCount);
+                ice = AttachedCosmeticModel.Create(
                     _assets(), IceModel, skin: 0, rawFrame: frame,
-                    localOffsetQuake: IceOffsetQuake, scale: 1f, colormod: teamColor,
+                    colormod: teamColor,
                     md3Loader: _md3Loader, modelLoader: _modelLoader);
-                if (model != null)
+                if (ice != null)
                 {
-                    attachRoot.AddChild(model);
-                    _ice[idx] = model;
+                    attachRoot.AddChild(ice);
+                    ice.TopLevel = true;
+                    _ice[idx] = ice;
                 }
             }
             else
@@ -118,9 +159,12 @@ public sealed class CosmeticModelLayer
                 if (!ColorsEqual(_iceColor.TryGetValue(idx, out var prev) ? prev : default, teamColor))
                     ice.SetColormod(teamColor);
             }
+            if (ice != null)
+                ice.GlobalTransform = new Transform3D(
+                    Basis.Identity.Scaled(attachRoot.GlobalBasis.Scale), attachRoot.GlobalPosition + IceOffset);
             _iceColor[idx] = teamColor;
         }
-        else if (exists)
+        else
         {
             // Thaw: drop the ice block and the cached frame so the NEXT freeze re-rolls a fresh look.
             ice?.QueueFree();
@@ -133,19 +177,6 @@ public sealed class CosmeticModelLayer
     // Last-applied ice tint per id, so the team-change refresh is gated (no field churn in the spec, kept
     // local to the ice path — purely a redundant-write guard).
     private readonly Dictionary<int, Color> _iceColor = new();
-
-    /// <summary>Pick (and cache) the per-entity ice look. Deterministic per id so the look is stable for the
-    /// whole freeze yet varied between players. QC: <c>(int)floor(random()*21)</c> clamped 0..20.</summary>
-    private int PickIceFrame(int idx)
-    {
-        if (_iceFrame.TryGetValue(idx, out int cached)) return cached;
-        var rng = new Random(idx ^ IceFrameSalt);
-        int frame = (int)Math.Floor(rng.NextDouble() * (IceLooks + 1));
-        if (frame < 0) frame = 0;
-        if (frame > IceLooks) frame = IceLooks;
-        _iceFrame[idx] = frame;
-        return frame;
-    }
 
     // ---- (B) BUFF carrier glow ----
     private void DriveBuffGlow(Entity e, int idx, Node3D attachRoot)
@@ -181,11 +212,12 @@ public sealed class CosmeticModelLayer
                 Color colormod = BuffColor(buffDef);
                 var model = AttachedCosmeticModel.Create(
                     _assets(), BuffModel, skin: buffDef.Skin, rawFrame: -1,
-                    localOffsetQuake: default, scale: BuffScale, colormod: colormod,
+                    localOffsetQuake: BuffOffsetQuake, scale: BuffScale, colormod: colormod,
                     md3Loader: _md3Loader, modelLoader: _modelLoader);
                 if (model != null)
                 {
                     attachRoot.AddChild(model);
+                    ModelTint.SetRelicLighting(model, fullbright: true);
                     _buffGlow[idx] = (model, buffDefId);
                 }
             }
@@ -204,6 +236,8 @@ public sealed class CosmeticModelLayer
     /// </summary>
     public void Remove(int entityIndex)
     {
+        if (_digits.Remove(entityIndex, out var digit) && GodotObject.IsInstanceValid(digit.Model))
+            digit.Model.QueueFree();
         if (_ice.TryGetValue(entityIndex, out var ice))
         {
             ice?.QueueFree();
@@ -221,6 +255,9 @@ public sealed class CosmeticModelLayer
     /// <summary>Free every cosmetic attachment and reset all per-entity state (map reset / disconnect).</summary>
     public void Clear()
     {
+        foreach (var entry in _digits.Values)
+            if (GodotObject.IsInstanceValid(entry.Model)) entry.Model.QueueFree();
+        _digits.Clear();
         foreach (var ice in _ice.Values) ice?.QueueFree();
         foreach (var entry in _buffGlow.Values) entry.model?.QueueFree();
         _ice.Clear();

@@ -1,0 +1,14 @@
+Native Darkzone listen host, loopback client
++0.000 server: load warm.bot
++0.619 precache 'botprobe/explicit.wav' mounted=True mixer=True
++2.620 server: BOTPRECACHE_RELEASE
+
+Native Darkzone dedicated host, remote loopback observer
+-0.794 precache 'botprobe/default.wav' mounted=True mixer=True (late join)
++0.000 server: load warm.bot
++0.695 precache 'botprobe/explicit.wav' mounted=True mixer=True
++2.050 server: BOTPRECACHE_RELEASE
+Dedicated process audio warm events: 0
+
+Pinned Xonotic data
+863cd3e8456e18f577f7fe5fef857ff55ae62cc0

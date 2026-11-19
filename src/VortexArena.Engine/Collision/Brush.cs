@@ -404,6 +404,7 @@ public sealed class CollisionWorld
     private int _markNumber;
 
     public IReadOnlyList<Brush> Brushes => _brushes;
+    internal bool DarkPlacesArithmetic { get; init; }
 
     public CollisionWorld() { }
 
@@ -421,6 +422,7 @@ public sealed class CollisionWorld
         _gridBuilt = true;
         _bih = source._bih;
         _useBih = source._useBih;
+        DarkPlacesArithmetic = source.DarkPlacesArithmetic;
         _mark = new int[_brushes.Count];
         Hulls = source.Hulls;   // a Quake 1 format world: its hulls are only read by a query
     }

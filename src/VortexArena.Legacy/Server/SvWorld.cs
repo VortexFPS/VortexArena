@@ -216,7 +216,7 @@ public sealed class SvWorld : TraceService.IEntityProvider
             }
             BspData bsp = BspReader.Read(file);
             // Brushes, the curved surfaces as DarkPlaces' own collision triangles, and its hierarchy over both.
-            BspCollisionBuilder.Result built = BspCollisionBuilder.Build(bsp, null, BspCollisionOptions.DarkPlaces(file));
+            BspCollisionBuilder.Result built = BspCollisionBuilder.Build(bsp, null, BspCollisionOptions.DarkPlaces);
             Bsp = bsp;
             foreach (BspCollisionBuilder.Submodel submodel in built.Submodels) _submodels[submodel.Name] = submodel;
             _pvs = new BspPvs(bsp);

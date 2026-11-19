@@ -1,0 +1,5 @@
+title Fog parity fixture
+gametype dm
+fog .31 .27 .41 .63 .79 32 4096
+clientsettemp_for_type all r_sky 0
+clientsettemp_for_type ffa r_bloom 1

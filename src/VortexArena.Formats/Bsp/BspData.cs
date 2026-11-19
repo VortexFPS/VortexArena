@@ -27,6 +27,9 @@ public sealed class BspData
     public IReadOnlyList<IReadOnlyDictionary<string, string>> Entities { get; init; } =
         Array.Empty<IReadOnlyDictionary<string, string>>();
 
+    /// <summary>The embedded entity list when a mounted replacement is active.</summary>
+    public IReadOnlyList<IReadOnlyDictionary<string, string>>? EmbeddedEntities { get; init; }
+
     /// <summary>Lump 1 — shader/texture references used by faces and brushes.</summary>
     public BspTexture[] Textures { get; init; } = Array.Empty<BspTexture>();
 
@@ -281,4 +284,8 @@ public readonly record struct BspFace(
     int IndexCount,
     int LightmapIndex,
     int PatchWidth,
-    int PatchHeight);
+    int PatchHeight)
+{
+    /// <summary>The compiled patch's LOD group bounds. Authored faces may omit them.</summary>
+    public (Vector3 Mins, Vector3 Maxs)? PatchLodBounds { get; init; }
+}

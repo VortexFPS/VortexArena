@@ -83,6 +83,8 @@ public sealed class TeamMayhem : GameType
 
     public override void OnInit()
     {
+        if (UseMatchLimits)
+            return;
         // QC INIT(tmayhem): identity (TeamGame) is set in the ctor; team count is read on demand (TeamCount).
         // GameRules_teams(true) / GameRules_spawning_teams + tmayhem_team map-entity colors are engine-side.
         //
@@ -91,6 +93,9 @@ public sealed class TeamMayhem : GameType
         // the timelimit is a generic engine cvar, so we seed the gametype default here exactly as Tdm/Mayhem do.
         SeedTimeLimit(DefaultTimeLimitMinutes);
     }
+
+    public bool UseMatchLimits { get; set; }
+    public override string MenuSummary => "Compete along with your team for the most damage dealt and frags in this chaotic mayhem";
 
     /// <summary>
     /// Apply tmayhem's gametype-default timelimit (gametype_init "timelimit=20") if the host has not overridden it.
@@ -136,6 +141,7 @@ public sealed class TeamMayhem : GameType
     {
         get
         {
+            if (UseMatchLimits && Api.Services is not null) return Api.Cvars.GetFloat("fraglimit");
             if (TryCvar(CvarPointLimit, out float pl) && pl >= 0f) return pl;
             return DefaultPointLimit;
         }
@@ -146,6 +152,7 @@ public sealed class TeamMayhem : GameType
     {
         get
         {
+            if (UseMatchLimits && Api.Services is not null) return Api.Cvars.GetFloat("leadlimit");
             if (TryCvar(CvarLeadLimit, out float ll) && ll >= 0f) return ll;
             return DefaultLeadLimit;
         }

@@ -135,7 +135,7 @@ public sealed partial class SvServer
         connection.Download?.Abort();
 
         // allow the client some time to send his keepalives, even if map loading took ages
-        connection.Timeout = RealTime + Cvar("net_connecttimeout", 15);
+        connection.Channel.ArmTimeout(RealTime, Cvar("net_connecttimeout", 15));
     }
 
     private static void Stuff(DpMessageWriter msg, string text)

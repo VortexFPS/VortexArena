@@ -1,7 +1,7 @@
 unit: mutator-buffs
 category: mutator
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
-last_audited: "2026-06-28"
+last_audited: "2026-11-18"
 # Re-audited 2026-06-28 (OPUS waypoint/presentation wave re-verify; branch claude/parity-port-waves). TWO ROWS DRIFTED
 # (both IMPROVEMENTS, 0 regressions): (1) buffs.waypoint went missing->IMPLEMENTED+LIVE — BuffsMutator.SpawnBuffWaypoint
 # (BuffsMutator.cs:584) spawns the registered "Buff" radar/HUD sprite (Waypoints.cs:164 Add("Buff",...,Orange)) tinted
@@ -66,9 +66,7 @@ last_audited: "2026-06-28"
 summary:
   feature_count: 38
   worst_gaps:
-    - "Spawned buff items now render in the per-buff SKIN (relic.md3 skin per type) AND carry a WP_Buff radar/HUD waypoint; residual presentation gaps are the world-item color/glowmod tint (Color is networked only to the waypoint, not the item), the carrier buff_model glow, and the buff_Effect particle trail."
-    - "Disability buff fire-rate slow is LIVE (WeaponRateFactor x1.5), but projectile-speed (WeaponSpeedFactor x0.7) and monster run/walk (MonsterMove x0.7) slows are still absent."
-    - "No observer/disconnect cleanup (buffs.observer_cleanup) — moot only because the carrier buff_model glow it cleans up is itself unimplemented."
+    - "Buff pickups lack Base's dynamic light and bot pickup weight. The carrier relic lacks Base's dynamic light and per-viewer customization."
 features:
   - id: buffs.core.enable
     name: "Buffs mutator enable (g_buffs)"
@@ -96,7 +94,7 @@ features:
 
   - id: buffs.item.spawnfunc
     name: "Map buff pickup item (item_buff_<type> spawnfunc + compat classnames)"
-    layer: [authority]
+    layer: [authority, presentation]
     base_refs:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_Init"
       - "common/mutators/mutator/buffs/buffs.qh:BUFF_SPAWNFUNCS / BUFF_SPAWNFUNC_Q3COMPAT"
@@ -105,12 +103,14 @@ features:
       - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:SpawnMapBuff"
       - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:ConfigureBuffEntity"
       - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:RegisterBuffSpawnFuncs"
+      - "game/client/ClientWorld.cs:ApplyRestingItemTint"
     constants:
       - { name: "model MDL_BUFF", base: "models/relics/relic.md3 (buff)", port: "models/relics/relic.md3 (MdlBuff fallback; asset present)", match: true }
       - { name: "box ITEM_D_MINS..ITEM_L_MAXS", base: "'-30 -30 0'..'30 30 70'", port: "ItemBoxes.DefaultMins..LargeMaxs", match: true }
       - { name: "per-buff skin (m_skin)", base: "set per buff (relic.md3 skin)", port: "e.Skin = buff.Skin (ConfigureBuffEntity:318)", match: true }
-      - { name: "per-buff color/glowmod (m_color)", base: "set per buff (item tint)", port: "not networked to the item (Color used only for the waypoint tint)", match: false }
+      - { name: "per-buff color/glowmod (m_color)", base: "set per buff (item tint)", port: "reconstructed from the relic model and skin for the base and emission colors", match: true }
       - { name: "bot_pickupbasevalue", base: "1000", port: "none", match: false }
+      - { name: "spawnflags 1 and 64", base: "keep position and force relocation", port: "NoAlign and BuffAlwaysRelocate", match: true }
     status:
       logic: faithful
       values: faithful
@@ -121,12 +121,13 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "FIXED this wave: the per-buff SKIN is now applied — ConfigureBuffEntity:318 sets e.Skin = buff.Skin (relic.md3 ships one skin per buff type, so the pickup renders in its own colour). Residual presentation gap is the per-buff COLOR/glowmod world-item tint (StatusEffectDef.Color is read only to tint the waypoint via BuffColor, never networked onto the item itself)."
-      - "Minor lifecycle omissions vs buff_Init: PFLAGS_FULLDYNAMIC dynamic light + buff_Customize light pulse and bot_pickupbasevalue 1000 (bots don't weight buff items) are not ported. The buff_Waypoint_Spawn waypoint is now ported + live (see buffs.waypoint)."
+      - "The pickup lacks the PFLAGS_FULLDYNAMIC light and buff_Customize light pulse. Whole-mesh alpha uses GeometryInstance3D.Transparency and is unavailable in Compatibility. Bots lack the pickup weight of 1000."
+      - "Targetname-gated visibility and resetting map buffs on match reset require the Base buff_Reset path."
     verification:
       - { kind: code, ref: "ItemSpawnFuncs.RegisterBuffSpawnFuncs registers item_buff_random + item_buff_<13 types> + _team1.._team4 + 11 Q3/WOP compat classnames -> BuffsMutator.SpawnMapBuff -> ConfigureBuffEntity (model/box/movetype/effects/activate-cooldown/touch/think). LIVE: GameInit->MapObjectsRegistry.RegisterAll->ItemSpawnFuncs.Register; SpawnFuncs.TrySpawn at GameWorld.cs:3582 dispatches the BSP lump classnames", result: pass }
+      - { kind: code, ref: "ServerNet sends the relic model and skin. ClientEntityView rebuilds when the skin changes. NetGame routes the relic to the skin-aware MD3 builder for the autosprite and blended ring, and ClientWorld applies the tint and fullbright flag.", result: pass }
     confidence: high
-    notes: "Map buff pickups fully implemented AND live — item_buff_* + per-team + Q3/QL/WOP compat classnames all spawn real buff items via SpawnMapBuff/ConfigureBuffEntity (buff_Init), routed through the live SpawnFuncs map-spawn dispatch. Compat classname set matches Base BUFF_SPAWNFUNC_Q3COMPAT. UPDATED 2026-06-28: the per-buff SKIN sub-gap is now closed (e.Skin = buff.Skin at :318) and the item carries a WP_Buff waypoint (buffs.waypoint). Residual presentation: per-buff color/glowmod item tint (not networked to the item) + dynamic light + bot pickup value — presentation stays partial."
+    notes: "The map, team and compatibility spawn functions all use the same buff model and skin setup."
 
   - id: buffs.item.auto_spawn
     name: "Auto-spawn buffs when none exist (g_buffs_spawn_count)"
@@ -135,25 +136,26 @@ features:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buffs_Initialize / buffs_DelayedInit"
     port_refs:
       - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:SpawnInitialBuffs"
+      - "src/VortexArena.Server/GameWorld.cs:Boot"
     constants:
       - { name: "g_buffs_spawn_count", base: "0", port: "0", match: true }
       - { name: "spawn velocity", base: "randomvec() * 250", port: "Prandom.Vec() * 250", match: true }
     status:
-      logic: partial
+      logic: faithful
       values: faithful
-      timing: partial
+      timing: faithful
       presentation: partial
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Default count is 0 so this never runs unless explicitly configured (matches Base default) — this stays liveness:partial. (The map item_buff_* spawnfuncs are now the primary obtain path; see buffs.item.spawnfunc.)"
-      - "QC defers via InitializeEntity(buffs_DelayedInit, INITPRIO_FINDTARGET) and sets spawnflags|=64 (always randomize/relocate) on each seed; port sets BuffAlwaysRelocate=true on each auto-seed (SpawnInitialBuffs), then routes through ConfigureBuffEntity (which now sets the relic model + box + cooldown + think + touch, same as the map spawn). Still spawns immediately at Hook() (not via the INITPRIO_FINDTARGET defer). Residual presentation gap: per-buff skin/color/glowmod still not applied, and no waypoint."
+      - "Auto-seeded pickups share the presentation gaps in buffs.item.spawnfunc."
     verification:
-      - { kind: code, ref: "SpawnInitialBuffs gated on g_buffs>0 && g_buffs_spawn_count>0 (default 0); each seed sets BuffAlwaysRelocate + Velocity then ConfigureBuffEntity(model/box/cooldown/touch/think) (BuffsMutator.cs:252-270)", result: pass }
+      - { kind: test, ref: "FilterItemHookTests.BuffAutoSeed_UsesTheCompletedMapItemSet", result: pass }
+      - { kind: code, ref: "GameWorld.Boot invokes SpawnInitialBuffs after the BSP map spawn and post-spawn passes. The seeder checks the completed item_buff set.", result: pass }
     confidence: high
-    notes: "UPDATED 2026-06-25: presentation missing->partial — auto-seeds now route through ConfigureBuffEntity so the relic model + STRENGTH_RESPAWN/ITEM_RESPAWN are present (per-buff color still missing). liveness stays partial (its own g_buffs_spawn_count>0 default-0 gate). No longer the only obtain path — the live map spawnfuncs are."
+    notes: "Auto-seeds go through ConfigureBuffEntity and ActivateBuff, which apply the relic model and skin and spawn the waypoint."
 
   - id: buffs.item.touch_pickup
     name: "Buff pickup + autoreplace on touch"
@@ -164,22 +166,23 @@ features:
       - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:BuffTouch"
     constants:
       - { name: "cl_buffs_autoreplace", base: "1 (REPLICATE'd; replace only if set)", port: "1 (CvarBool default-true; honored)", match: true }
+      - { name: "map-authored duration", base: "buffs_finished, then legacy count, then per-buff default", port: "same order", match: true }
     status:
       logic: faithful
       values: faithful
       timing: faithful
-      presentation: partial
+      presentation: faithful
       audio: faithful
       liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "EFFECT_ITEM_PICKUP particle is still not spawned (no effect-spawn service); only the pickup sound + notifications play."
-      - "cl_buffs_autoreplace is read as the server-side value (no per-client REPLICATE store), so it can't differ per client; functionally equivalent on a server-wide setting."
+      - "The autoreplace preference is read from the server cvar rather than replicated per player."
     verification:
       - { kind: code, ref: "BuffTouch:284-336: team_forced/vehicle/buff_shield/dead guards; held buff replaced only when autoreplace && held!=thebuff (CvarBool cl_buffs_autoreplace, BuffsMutator.cs:309); INFO_ITEM_BUFF_LOST on replace; ITEM_BUFF_GOT center + INFO_ITEM_BUFF + shield_respawn on pickup", result: pass }
+      - { kind: test, ref: "FilterItemHookTests.RandomTeamBuff_UsesSpawnFlagsAndAuthoredPickupDuration", result: pass }
     confidence: high
-    notes: "Logic/values/timing/audio faithful (cl_buffs_autoreplace honored, team_forced + vehicle + lifetime-zero-on-pickup, replace/pickup notifications). UPDATED 2026-06-25: liveness partial->live — buff items now spawn on maps via the item_buff_* spawnfuncs (buffs.item.spawnfunc), so pickup-on-touch is reachable on the real map path, not just the auto-seed. Residual gap is the missing EFFECT_ITEM_PICKUP particle (presentation)."
+    notes: "BuffTouch emits ITEM_PICKUP with the pickup sound and notifications."
 
   - id: buffs.item.needkill_respawn
     name: "Buff item lava/needkill respawn on touch (ITEM_TOUCH_NEEDKILL)"
@@ -511,29 +514,31 @@ features:
       - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnDamageCalculate"
       - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnPlayerPhysics"
       - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnWeaponRateFactor"
+      - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnWeaponSpeedFactor"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:WeaponSpeedFactor"
+      - "src/VortexArena.Common/Gameplay/Monsters/MonsterAI.cs:Move"
+      - "src/VortexArena.Server/Bot/BotBrain.cs:CurrentShotSpeed"
     constants:
       - { name: "g_buffs_disability_slowtime", base: "3", port: "3", match: true }
       - { name: "g_buffs_disability_speed", base: "0.7", port: "0.7", match: true }
       - { name: "g_buffs_disability_attack_time_multiplier", base: "1.5", port: "1.5", match: true }
-      - { name: "g_buffs_disability_weaponspeed", base: "0.7", port: "none", match: false }
+      - { name: "g_buffs_disability_weaponspeed", base: "0.7", port: "0.7", match: true }
       - { name: "g_buffs_disability", base: "0 (off)", port: "0", match: true }
     status:
-      logic: partial
-      values: partial
+      logic: faithful
+      values: faithful
       timing: faithful
       presentation: na
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Movement-speed slow (Stunned x0.7 via SpeedMultiplier, OnPlayerPhysics:678-680) is LIVE."
-      - "Weapon fire-time slow (WeaponRateFactor x1.5) is LIVE: OnWeaponRateFactor (691-697) multiplies args.Factor by 1.5 for a stunned player; WeaponRateFactor.Call has a live site (WeaponFireGate)."
-      - "STILL MISSING: weapon projectile-speed slow (WeaponSpeedFactor x0.7) and monster run/walk slow (MonsterMove x0.7) — BuffsMutator subscribes neither hook (no WeaponSpeedFactor mutator-hook chain exists; MonsterMove is unsubscribed)."
+    gaps: []
     verification:
-      - { kind: code, ref: "Stunned apply in OnDamageCalculate:557-562; OnPlayerPhysics:678-680 SpeedMultiplier *=0.7; OnWeaponRateFactor:691-697 *=1.5 (live); no WeaponSpeedFactor/MonsterMove handlers", result: pass }
+      - { kind: code, ref: "BuffsMutator applies Stunned and handles PlayerPhysics and WeaponRateFactor. MonsterAI.Move scales the selected run or walk speed while Stunned using g_buffs_disability_speed.", result: pass }
+      - { kind: test, ref: "FilterItemHookTests.Disability_ScalesTheEntireProjectileLaunchVector", result: pass }
     confidence: high
-    notes: "Unchanged. The weapon fire-rate slow (WeaponRateFactor x1.5) is wired and live. Projectile-speed + monster-move slows remain absent."
+    notes: "The weapon launch path and bot aim lead consume the same actor-specific speed factor. MonsterAI applies its movement multiplier inline."
 
   - id: buffs.vengeance
     name: "Vengeance buff — reflect damage to attacker"
@@ -624,9 +629,10 @@ features:
       - "common/mutators/mutator/buffs/buff/magnet.qc:MagnetBuff.m_tick"
     port_refs:
       - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:MagnetTick"
+      - "data/core.pk3dir/mutators.cfg:g_buffs_magnet_range_item / g_buffs_magnet_range_buff"
     constants:
-      - { name: "g_buffs_magnet_range_item", base: "250", port: "250", match: true }
-      - { name: "g_buffs_magnet_range_buff", base: "100", port: "100", match: true }
+      - { name: "g_buffs_magnet_range_item", base: "250", port: "250 (shipped cfg and runtime default)", match: true }
+      - { name: "g_buffs_magnet_range_buff", base: "100", port: "100 (shipped cfg and runtime default)", match: true }
     status:
       logic: faithful
       values: faithful
@@ -709,11 +715,13 @@ features:
 
   - id: buffs.swapper
     name: "Swapper buff — swap places with nearest enemy"
-    layer: [authority]
+    layer: [authority, presentation]
     base_refs:
       - "common/mutators/mutator/buffs/buff/swapper.qc:MUTATOR_HOOKFUNCTION(buffs, ForbidThrowCurrentWeapon)"
+      - "lib/warpzone/common.qc:592-660 (WarpZone_FindRadius_Recurse, needlineofsight=false)"
     port_refs:
       - "src/VortexArena.Common/Gameplay/Mutators/BuffsMutator.cs:OnForbidThrowCurrentWeapon"
+      - "src/VortexArena.Common/Gameplay/Warpzone/WarpzoneRadiusQuery.cs:FindRadiusWarpzone"
     constants:
       - { name: "g_buffs_swapper_range", base: "1500", port: "1500", match: true }
       - { name: "g_buffs_swapper", base: "0 (off)", port: "0", match: true }
@@ -721,18 +729,19 @@ features:
       logic: partial
       values: faithful
       timing: faithful
-      presentation: partial
+      presentation: faithful
       audio: faithful
       liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Core swap is implemented and LIVE: nearest enemy within range (DIFF_TEAM/dead/frozen/vehicle filtered), origin/velocity/angles + oldorigin exchanged, SND_KA_RESPAWN at both ends, buff_RemoveAll consumes the buff. The ForbidThrowCurrentWeapon hook has live Call sites (WeaponThrowing.cs:149/185)."
-      - "Divergences from QC: uses center-distance + Api.Entities.FindInRadius instead of WarpZone_FindRadius (no warpzone traversal); omits Drop_Special_Items(closest) (flag/key carriers keep their objective on swap); omits MUTATOR_CALLHOOK(PortalTeleport, player); omits the EFFECT_ELECTRO_COMBO x2 visual at both endpoints."
+      - "The native traversal retains a path-local pair guard and a 16-hop cap. QC temporarily reserves sibling portal partners during collection, so highly interconnected portal layouts can differ in which chains are explored."
     verification:
-      - { kind: code, ref: "OnForbidThrowCurrentWeapon:706-746: Active(swapper) -> FindInRadius(1500) nearest DIFF_TEAM enemy, swap org/vel/ang, KA_RESPAWN x2, RemoveAllBuffs, return true. ForbidThrowCurrentWeapon.Call live at WeaponThrowing.cs:149/185", result: pass }
+      - { kind: code, ref: "WeaponThrowing calls ForbidThrowCurrentWeapon on the live drop path. BuffsMutator exchanges the position, velocity and angles; sets view snaps, old velocity, and push credit; and emits KA_RESPAWN and ELECTRO_COMBO at both endpoints.", result: pass }
+      - { kind: test, ref: "FilterItemHookTests.Swapper_ExchangesMotionAndViewAndCreditsTheCarrier and Swapper_PicksClosestEnemyThroughPortal cover motion, credit and nearest enemy selection via a linked pair.", result: pass }
+      - { kind: test, ref: "FilterItemHookTests.Swapper_AdmitsAnElongatedPortalFromBehindItsPlane and Swapper_ClipsExitSearchButRanksByNominalOrigin cover trigger bounds, bidirectional admission, exit-side trace, radius loss and nearest-target ranking.", result: pass }
     confidence: high
-    notes: "Unchanged. Swapper is implemented and LIVE. Remaining gaps are the warpzone-aware radius, Drop_Special_Items, PortalTeleport hook, and the electro-combo effect."
+    notes: "Swapper searches from the clipped exit-side origin with a reduced radius and ranks target bounds from the nominal transformed origin. It consumes the buff after a successful exchange."
 
   - id: buffs.carrier_model
     name: "Carrier buff_model glow"
@@ -742,50 +751,50 @@ features:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buffs_BuffModel_Think"
       - "common/mutators/mutator/buffs/sv_buffs.qc:buffs_BuffModel_Customize"
       - "common/mutators/mutator/buffs/sv_buffs.qc:buffs_BuffModel_Update (PlayerPreThink)"
-    port_refs: []
+    port_refs:
+      - "game/client/CosmeticModelLayer.cs:DriveBuffGlow"
+      - "game/client/ClientWorld.cs:DriveCsqcModelHooks"
     constants:
-      - { name: "buff_model scale", base: "0.7", port: "none", match: false }
+      - { name: "buff_model scale", base: "0.7", port: "0.7", match: true }
+      - { name: "attachment height", base: "40 Quake units", port: "40 Quake units", match: true }
       - { name: "light_lev", base: "200", port: "none", match: false }
     status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
+      logic: partial
+      values: partial
+      timing: faithful
+      presentation: partial
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "A player holding a buff still has no colored MDL_BUFF glow model attached: no buffs_BuffModel_Spawn/Update/Think/Customize, no removal on observer/disconnect. EF_NOSHADOW IS set on the player while held (ApplyBuff:461), but the glow model itself is absent."
+      - "The attached relic lacks the 200-level dynamic light, per-viewer alpha customization, and invisibility-based enemy filtering. The exterior attachment uses the fullbright model-lighting mode."
     verification:
-      - { kind: code, ref: "no buff_model spawn/think/customize in port; OnPlayerPreThink has no buffs_BuffModel_Update", result: fail }
+      - { kind: code, ref: "ClientWorld drives CosmeticModelLayer on skeletal and generic entity nodes. DriveBuffGlow reads decoded buffs and creates the relic through the skin-aware MD3 builder with the matching tint, scale and offset.", result: pass }
     confidence: high
-    notes: "Unchanged. Pure presentation; the QC TODO already flags moving this to CSQC."
+    notes: "The client reconciles the attachment each frame from the networked status effects."
 
   - id: buffs.buff_effect
-    name: "Carrier buff particle trail (buff_Effect / g_buffs_effects)"
+    name: "Unused buff_Effect helper"
     layer: [presentation]
     base_refs:
       - "common/mutators/mutator/buffs/sv_buffs.qc:buff_Effect"
     port_refs: []
-    constants:
-      - { name: "g_buffs_effects", base: "1 (on)", port: "none", match: false }
-      - { name: "buff_effect_delay throttle", base: "0.05s", port: "field exists, unused", match: false }
+    constants: []
     status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
+      logic: na
+      values: na
+      timing: na
+      presentation: na
       audio: na
       liveness: na
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "No per-carrier Send_Effect particle emission throttled by buff_effect_delay; g_buffs_effects (default ON) is never read. EntityMutatorState declares a buff_effect_delay field but nothing emits the effect."
+    gaps: []
     verification:
-      - { kind: code, ref: "grep g_buffs_effects/buff_Effect in src: only the unused buff_effect_delay field", result: fail }
+      - { kind: code, ref: "Whole-tree search for buff_Effect in pinned qcsrc finds only its definition. The helper takes an effect name from its caller, and no caller supplies one.", result: pass }
     confidence: high
-    notes: "Unchanged. Distinct from carrier_model: this is the per-buff colored particle trail; default-on in Base."
+    notes: "The shipped g_buffs_effects default is 1 in both trees. With no caller, the setting has no observable effect in the pinned Base."
 
   - id: buffs.waypoint
     name: "Buff item waypoint sprite (WP_Buff radar/HUD)"
@@ -869,11 +878,11 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Replacement buff item inherits the spawnfunc presentation gap (buffs.item.spawnfunc): per-buff skin/color/glowmod is not applied, so the replaced powerup renders as the uncolored relic. No carrier glow/waypoint either."
+      - "Replacement buff items inherit the missing pickup dynamic light and light pulse in buffs.item.spawnfunc."
     verification:
       - { kind: code, ref: "OnFilterItem (BuffsMutator.cs:912-931): returns false when g_buffs<0; gated on g_buffs_replace_powerups; item.Pickup.IsPowerup check; buff_SpawnReplacement (setorigin/angles/noalign + ConfigureBuffEntity(null random)); returns true to delete the powerup. Subscribes MutatorHooks.FilterItem (Hook():107). LIVE: StartItem.cs:119 calls MutatorHooks.FireFilterItem(item) on the item-spawn path", result: pass }
     confidence: high
-    notes: "FIXED since the prior 2026-06-25 baseline (was missing, empty port_refs — a recorded worst-gap): the FilterItem powerup-replace obtain path is now fully implemented and LIVE. In the g_buffs>0 'replace' mode, map powerups are swapped for random buffs (buff_SpawnReplacement), matching Base; the g_buffs<0 'no auto-replace' mode is honored. logic/values missing->faithful, liveness na->live. Residual presentation gap is shared with buffs.item.spawnfunc (uncolored relic)."
+    notes: "Replacement items use the same relic setup and activation waypoint as map-placed buffs."
 
   - id: buffs.mutator_string
     name: "Report as active mutator (BuildMutatorsString / PrettyString)"
@@ -930,27 +939,29 @@ features:
 
   - id: buffs.observer_cleanup
     name: "Strip buff visuals on observer / disconnect"
-    layer: [authority]
+    layer: [authority, presentation]
     base_refs:
       - "common/mutators/mutator/buffs/sv_buffs.qc:MUTATOR_HOOKFUNCTION(buffs, MakePlayerObserver)"
       - "common/mutators/mutator/buffs/sv_buffs.qc:MUTATOR_HOOKFUNCTION(buffs, ClientDisconnect)"
-    port_refs: []
+    port_refs:
+      - "game/net/ServerNet.cs:BuildEntitySet"
+      - "game/client/ClientWorld.cs:OnEntityRemove"
+      - "game/client/CosmeticModelLayer.cs:Remove"
     constants: []
     status:
-      logic: missing
+      logic: faithful
       values: na
       timing: na
-      presentation: missing
+      presentation: faithful
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Still no MakePlayerObserver / ClientDisconnect handler to run buffs_RemovePlayer (delete the carrier buff_model). Moot only because the buff_model glow itself is unimplemented (buffs.carrier_model)."
+    gaps: []
     verification:
-      - { kind: code, ref: "BuffsMutator subscribes neither MakePlayerObserver nor ClientDisconnect", result: fail }
+      - { kind: code, ref: "BuildEntitySet excludes observers and disconnected players. ClientWorld.OnEntityRemove calls CosmeticModelLayer.Remove for the removed player index, which frees the relic and drops its cached attachment.", result: pass }
     confidence: high
-    notes: "Unchanged. Cleanup tied to the missing carrier glow."
+    notes: "The client owns the relic and removes it with the carrier's entity."
 
   - id: buffs.port_extra_speed_invisible
     name: "Port-only speed/invisible buff branches (not in QC buff set)"
@@ -985,24 +996,25 @@ features:
     port_refs:
       - "src/VortexArena.Common/Gameplay/StatusEffects.cs:Write"
       - "src/VortexArena.Common/Gameplay/StatusEffects.cs:Read"
+      - "game/net/ServerNet.cs:BuildEntitySet"
+      - "game/net/ClientEntityView.cs:ApplyStatusEffects"
     constants:
       - { name: "StatusEffects_groups_minor", base: "8", port: "8", match: true }
       - { name: "StatusEffects_groups_major", base: "4", port: "4", match: true }
     status:
       logic: faithful
       values: faithful
-      timing: unknown
+      timing: faithful
       presentation: na
       audio: na
-      liveness: unknown
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Write/Read round-trip mirrors the QC major/minor bitmap + float time + byte flags, but whether the host net loop actually Flush()es buff state to clients each tick was not traced here (status_effects unit owns that)."
+    gaps: []
     verification:
-      - { kind: code, ref: "StatusEffects.Write/Read layout matches QC; major/minor group constants unchanged; live Flush wiring not traced in this unit", result: pass }
-    confidence: low
-    notes: "Unchanged. Defer the live-send confirmation to the status_effects parity unit."
+      - { kind: code, ref: "ServerNet.BuildEntitySet calls Flush and includes the cached effect blob in snapshots. ClientEntityView.ApplyStatusEffects reads the blob into remote entities and NetGame uses the same decoder for the local mirror.", result: pass }
+    confidence: high
+    notes: "The snapshot cache carries current effects to new viewers and sends clears when effects are removed."
 
   - id: buffs.defs.registration
     name: "Per-buff class definitions (REGISTER_BUFF: netname + m_skin + m_color for all 13 buffs)"
@@ -1041,7 +1053,7 @@ features:
     verification:
       - { kind: code, ref: "each .qh REGISTER_BUFF + m_skin/m_color read from Base and compared field-by-field against StatusEffects.cs:240-252 — all 13 skins + all 13 color triples exact; RegisterAll called at boot (GameInit.cs:26)", result: pass }
     confidence: high
-    notes: "added 2026-07-02 (coverage fold). The data contract of the 13 buff/*.qh headers: registry membership + per-buff skin/color. All values bit-exact in the port catalog; consumption of skin (item), color (waypoint tint vs missing item tint) is tracked in buffs.item.spawnfunc / buffs.waypoint. m_name/m_icon consumption is buffs.defs.hud_identity; the .qh SVQC autocvars are recorded on each perk row (+ buffs.defs.qh_autocvar_fallbacks for the code-fallback outliers)."
+    notes: "The catalog matches all 13 buff headers. The pickup, waypoint, carrier model and HUD rows track use of these values."
 
   - id: buffs.defs.compat_mapping
     name: "Q3/QL/WOP compat classname -> buff type mapping (BUFF_SPAWNFUNC_Q3COMPAT per .qh)"
@@ -1084,29 +1096,28 @@ features:
     base_refs:
       - "common/mutators/mutator/buffs/cl_buffs.qh (client include pulling the buff registry into CSQC)"
       - "common/mutators/mutator/buffs/buff/bash.qh:ATTRIB m_name _(\"Bash\") / m_icon \"buff_bash\" (pattern identical across all 13 .qh)"
+      - "common/mutators/mutator/status_effects/cl_status_effects.qc:StatusEffect.m_tick"
     port_refs:
       - "game/hud/PowerupsPanel.cs:BuffLabel (277-281)"
       - "game/hud/PowerupsPanel.cs:227-239 (buff branch: label/icon/color)"
     constants:
       - { name: "m_icon", base: "\"buff_<netname>\" x13", port: "icon = def.Name (\"buff_<netname>\") — identical string", match: true }
       - { name: "m_name", base: "_(\"Ammo\")..._(\"Vengeance\") — netname capitalized for all 13", port: "BuffLabel strips buff_ + capitalizes — identical for all 13", match: true }
-      - { name: "entry tint", base: "per-buff m_color", port: "generic (0.4, 1, 0.6) for every buff", match: false }
+      - { name: "entry tint", base: "per-buff m_color", port: "StatusEffectDef.Color", match: true }
     status:
       logic: faithful
-      values: partial
+      values: faithful
       timing: na
-      presentation: partial
+      presentation: faithful
       audio: na
-      liveness: unknown
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "The held-buff HUD entry is tinted a single generic green (0.4,1,0.6) instead of the per-buff m_color; the code comment 'no per-buff color in the C# def' is STALE — StatusEffectDef.Color IS populated for all 13 buffs (StatusEffects.cs:240-252), the panel just doesn't read it."
-      - "Liveness not claimed: the panel (registered live, HudManager.cs:141) iterates the local player's Entity.StatusEffects, but whether the client-side entity's buff effects are populated over the net was not traced here (buffs.networking has the same unknown; powerups display via the same list was fixed to work per the file's port note)."
+    gaps: []
     verification:
-      - { kind: code, ref: "PowerupsPanel buff branch: label=BuffLabel(def.Name) (capitalized netname, matches all 13 QC m_name strings), icon=def.Name (matches QC m_icon buff_<netname>), color=generic — vs each .qh's ATTRIBs; panel live via HudManager.cs:141", result: pass }
-    confidence: medium
-    notes: "added 2026-07-02 (coverage fold). Covers the m_name/m_icon halves of the .qh contract (skins/colors on the item are buffs.defs.registration + buffs.item.spawnfunc). cl_buffs.qh itself is a 3-line include-only header — its observable effect is exactly this client-side availability of the buff registry (icons/labels/waypoint colors)."
+      - { kind: code, ref: "HudManager registers PowerupsPanel. Its held-effect row uses BuffLabel(def.Name), def.Name for the icon and def.Color for the tint. NetGame fills the local mirror's effects using ClientEntityView.ApplyStatusEffects.", result: pass }
+    confidence: high
+    notes: "The HUD uses the buff catalog's per-type tint for the progress bar."
 
   - id: buffs.defs.qh_autocvar_fallbacks
     name: "Code-level autocvar fallback defaults (luck.qh =0.15/=3, magnet.qh range_buff =100)"

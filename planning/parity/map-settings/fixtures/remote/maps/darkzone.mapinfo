@@ -1,0 +1,5 @@
+title Mounted native client fixture
+gametype dm
+clientsettemp_for_type all r_sky 1
+clientsettemp_for_type dm r_bloom 0
+clientsettemp_for_type dm r_drawfog 1

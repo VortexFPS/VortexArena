@@ -223,6 +223,39 @@ public static class WeaponOrder
         "devastator", "porto", "vaporizer", "hook", "hlac", "tuba", "rifle", "fireball", "seeker", "arc",
     };
 
+    // QuakeC keeps these WEP_* registrations in the numeric registry even when they
+    // do not get a weapon-by-id impulse or are unavailable as native player weapons.
+    private static readonly string[] XonoticRegistryTail =
+    {
+        "turret_ewheel", "turret_flac", "turret_hellion", "turret_hk", "magespike", "ballstealer",
+        "okhmg", "okmachinegun", "oknex", "okrpc", "okshotgun", "turret_phaser", "turret_plasma",
+        "turret_plasma_dual", "racercannon", "raptorcannon", "raptorbomb", "raptorflare", "spider",
+        "turret_tesla", "turret_machinegun", "turret_mlrs", "turret_walker", "wyvern",
+    };
+
+    /// <summary>Resolve a pinned Xonotic registry number, where 0 is the Null weapon.</summary>
+    public static Weapon? FromXonoticRegistryId(int id)
+    {
+        if (id <= 0)
+            return null;
+        int index = id - 1;
+        if (index < CoreDefinitionOrder.Length)
+            return Registry<Weapon>.ByName(CoreDefinitionOrder[index]);
+        index -= CoreDefinitionOrder.Length;
+        return index < XonoticRegistryTail.Length ? Registry<Weapon>.ByName(XonoticRegistryTail[index]) : null;
+    }
+
+    /// <summary>Return the pinned Xonotic weapon registry ID, or 0 for an absent or unknown weapon.</summary>
+    public static int ToXonoticRegistryId(string? name)
+    {
+        int index = System.Array.IndexOf(CoreDefinitionOrder, name);
+        if (index >= 0)
+            return index + 1;
+
+        index = System.Array.IndexOf(XonoticRegistryTail, name);
+        return index >= 0 ? CoreDefinitionOrder.Length + index + 1 : 0;
+    }
+
     /// <summary>
     /// Port of the QC <c>m_unique_impulse</c> allocation ORDER (all.qh:359-382): the registry walked in
     /// <c>FOREACH(Weapons)</c> (registry-index) order, skipping <c>WEP_Null</c>, any

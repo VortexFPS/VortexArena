@@ -1,0 +1,5 @@
+ParityOwner is now playing
+ParityGuest is now playing
+]cmd teleporttotarget parity_buff_start
+]cmd teleporttotarget parity_buff_touch
+You got the Vampire buff!

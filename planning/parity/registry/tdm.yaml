@@ -5,8 +5,7 @@ last_audited: "2026-06-28"
 summary:
   feature_count: 13
   worst_gaps:
-    - "Map-support gating: m_isAlwaysSupported (>=8 spawns & diameter>3250) unimplemented; the m_isForcedSupported (g_tdm_on_dm_maps) half is now CODED (MapInfoBackend.ApplyForcedGametypes) but DEAD (no live caller / cvar wiring) — map-pool/menu concern, no in-match impact"
-    - "Custom per-map team config (spawnfunc tdm_team names/colors; mapinfo teams= -> g_tdm_teams) not ported — maps render with the stock team set"
+    - "BSP map support and authored team setup are covered by mapinfo.generate.always_supported and tdm.rules.map_team_config."
 features:
   - id: tdm.identity.registration
     name: "TDM gametype identity + default match limits (timelimit=15 pointlimit=50 teams=2 leadlimit=0)"
@@ -98,9 +97,9 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code_read, ref: "Tdm.TeamCount mirrors override>=2?override:teams clamp 2..4; GameWorld.TeamCountFor (GameWorld:4653) feeds new Teamplay(...)", result: pass }
+      - { kind: code_read, ref: "Tdm.ConfiguredTeamCount uses override>=2 and clamps 2..4; GameWorld.FinishTdmTeamSetup uses it when the map has no valid team entities.", result: pass }
     confidence: high
-    notes: "TeamCount read live by TeamCountFor at boot to size the Teamplay manager, bot population, and team-score seeding. Unchanged by Wave-2."
+    notes: "The fallback count is resolved at map boot. Authored team colors take precedence, as covered by map_team_config."
 
   - id: tdm.rules.team_spawns
     name: "Team spawnpoint gating (g_tdm_team_spawns, default 0)"
@@ -332,32 +331,35 @@ features:
 
   - id: tdm.rules.map_support
     name: "Map-support gating (m_isAlwaysSupported >=8 spawns & diameter>3250; m_isForcedSupported g_tdm_on_dm_maps)"
-    layer: [authority]
+    layer: [shared]
     base_refs:
       - "common/gametypes/gametype/tdm/tdm.qh:METHOD(TeamDeathmatch, m_isAlwaysSupported)"
       - "common/gametypes/gametype/tdm/tdm.qh:METHOD(TeamDeathmatch, m_isForcedSupported)"
     port_refs:
+      - "src/VortexArena.Formats/Bsp/MapInfoCatalog.cs:Generate"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:MapInfo.SupportsInCatalog"
       - "src/VortexArena.Common/Menu/MapInfoBackend.cs:ApplyForcedGametypes"
+      - "game/menu/CreateGameScreen.cs:MapInfoCache.Supports"
+      - "game/net/NetGame.cs:Rotation.MapSupportsGametype"
     constants:
-      - { name: "always_supported", base: "spawnpoints>=8 && diameter>3250", port: "none", match: false }
-      - { name: "g_tdm_on_dm_maps", base: "0 (DM maps also offer TDM when set)", port: "ApplyForcedGametypes promotes DM->TDM when ForceTdmOnDmMaps, BUT that flag is never wired from the cvar and MapInfoBackend has no live constructor (dead)", match: false }
+      - { name: "always_supported", base: "spawnpoints>=8 && diameter>3250", port: "spawnpoints>=8 && diameter>3250", match: true }
+      - { name: "g_tdm_on_dm_maps", base: "0 (DM maps also offer TDM when set)", port: "0, read from the consuming menu or hosted server's cvar store", match: true }
     status:
-      logic: partial
-      values: missing
+      logic: faithful
+      values: faithful
       timing: na
       presentation: na
       audio: na
-      liveness: dead
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "m_isAlwaysSupported (auto-offer TDM on maps with >=8 spawnpoints AND diameter>3250) is still entirely unimplemented (no BSP world-bounds/spawn-count probe in the menu's file-only mapinfo layer)."
-      - "m_isForcedSupported (g_tdm_on_dm_maps -> DM maps also support TDM) now has CODE — MapInfoBackend.ApplyForcedGametypes adds 'tdm' to a DM map's supported set when forceTdmOnDmMaps — but it is DEAD: (a) no caller constructs MapInfoBackend anywhere in src, and (b) the ForceTdmOnDmMaps flag defaults false and is never set from the g_tdm_on_dm_maps cvar. The Duel.cs:39 comment claiming a live 'MapInfoCache.Get' caller is stale (no MapInfoCache.cs exists). So at runtime g_tdm_on_dm_maps still changes nothing."
+    gaps: []
     verification:
-      - { kind: code_read, ref: "MapInfoBackend.ApplyForcedGametypes (MapInfoBackend.cs:134-149) adds 'tdm' to SupportedGametypes when forceTdmOnDmMaps && dm-supported && !tdm-supported; MapInfoBackend.Get (110) calls it with ForceTdmOnDmMaps (default false, never reassigned).", result: pass }
-      - { kind: code_read, ref: "grep 'new MapInfoBackend'/'ForceTdmOnDmMaps'/'ApplyForcedGametypes'/'g_tdm_on_dm_maps' across src -> only MapInfoBackend.cs self-references; no constructor, no cvar wiring, MapInfoCache.cs does not exist. m_isAlwaysSupported/diameter -> only doc comments. So the forced-support half is coded but unreachable, the always-supported half absent.", result: fail }
+      - { kind: test, ref: "MapInfoGenerationTests.NativeMapThresholdsReachCatalogAndDetails checks generated eligibility through both APIs on nine maps with varied spawn counts and diameters.", result: pass }
+      - { kind: code, ref: "MapInfoCache.Supports reads the current cvar. NetGame uses world.Services.Cvars for Rotation.MapSupportsGametype, AllowedMaps and lsmaps.", result: pass }
+      - { kind: test, ref: "MenuDataSourceTests.MapInfo_CatalogEvaluatesCurrentFlagsAgainstDeclaredModes", result: pass }
     confidence: high
-    notes: "Drift since baseline: the m_isForcedSupported (g_tdm_on_dm_maps) HALF gained a port impl (MapInfoBackend.ApplyForcedGametypes, shared with Duel's forced-support), so the baseline 'no implementation at all' is stale -> bumped logic missing->partial. But the code is DEAD (no MapInfoBackend constructor, ForceTdmOnDmMaps never wired to the cvar), so liveness na->dead and the feature stays OPEN. m_isAlwaysSupported half remains fully missing. Low gameplay impact (map-pool/menu, not in-match). NOT closed by Wave 16/17."
+    notes: "Forced TDM eligibility responds to cvar changes without a content rescan."
 
   - id: tdm.rules.map_team_config
     name: "Map team config (spawnfunc tdm_team custom names/colors; mapinfo teams= -> g_tdm_teams via m_parse_mapinfo/m_setTeams)"
@@ -366,22 +368,27 @@ features:
       - "common/gametypes/gametype/tdm/sv_tdm.qc:spawnfunc(tdm_team)"
       - "common/gametypes/gametype/tdm/sv_tdm.qc:tdm_DelayedInit (Team_MapEnts_FindOrSpawn)"
       - "common/gametypes/gametype/tdm/tdm.qh:METHOD(TeamDeathmatch, m_parse_mapinfo / m_setTeams)"
-    port_refs: []
+    port_refs:
+      - "src/VortexArena.Server/GameWorld.cs:ApplyMapMatchDefaults and FinishTdmTeamSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:GametypeObjectiveSpawns.TdmTeam"
+      - "src/VortexArena.Server/Teamplay.cs:ActiveTeams"
+      - "game/net/ServerNet.cs:BuildScoreboard"
     constants:
-      - { name: "tdm_team_entity", base: "netname + cnt -> team = cnt+1", port: "none (default red/blue/yellow/pink set)", match: false }
-      - { name: "mapinfo_teams", base: "teams= -> cvar_set g_tdm_teams", port: "none (reads g_tdm_teams/override cvars only)", match: false }
+      - { name: "tdm_team_entity", base: "nonzero cnt sets SVQC team=cnt+1; only four known colors enter the mask", port: "cnt is the native color ID, with the same four recognized colors", match: true }
+      - { name: "fallback team count", base: "valid map entities win; otherwise clamp g_tdm_teams_override if >=2, or g_tdm_teams, to 2..4", port: "same", match: true }
+      - { name: "mapinfo_teams", base: "teams= or third legacy positional value sets g_tdm_teams", port: "same at native match boot", match: true }
     status:
-      logic: missing
-      values: missing
+      logic: faithful
+      values: faithful
       timing: na
-      presentation: na
+      presentation: faithful
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Custom per-map team declarations are not ported: spawnfunc_tdm_team (map-defined team netname + scoreboard color cnt, team=cnt+1) is ignored, and the mapinfo `teams=` override path (m_parse_mapinfo / m_setTeams writing g_tdm_teams) is not implemented. The port reads team COUNT only from g_tdm_teams / g_tdm_teams_override cvars and always uses the default team set. Maps that rely on tdm_team for non-default team names/colors render with the stock teams. NOT addressed by Wave-2."
+    gaps: []
     verification:
-      - { kind: code_read, ref: "grep tdm_team/m_setTeams/parse_mapinfo/teams= in src -> doc-comment mentions only; Tdm.TeamCount reads g_tdm_teams* cvars only", result: fail }
+      - { kind: test, ref: "MapInfoGenerationTests.TdmUsesSparseAuthoredTeamColorsForRosterAndScoreSlots and TdmAppliesAuthoredCountAndOverrideWithMapLocalLifetime.", result: pass }
+      - { kind: trace, ref: "At 863cd3e84 server/bot/default/bot.qc accepts a valid color index in the roster. server/client.qc:592 calls SetPlayerTeam for a pinned bot and server/teamplay.qc:461 bypasses best-team balancing. The ordinary sparse-team balancing rule does not override this bot setting.", result: pass }
     confidence: high
-    notes: "Cosmetic / map-authoring concern; team count itself is faithful via the cvar path (tdm.rules.team_count). Still open after Wave-2."
+    notes: "Authored names remain on tdm_team entities. The pinned scoreboard groups by color and uses static color names for team selection. The synthetic BSP fixture covers sparse colors, a filtered entity, zero cnt, and an out-of-mask color. The installed map packs had no tdm_team fixture."

@@ -1,0 +1,107 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver.
+     at: set_use_vsync (platform/linuxbsd/x11/gl_manager_x11.cpp:364)
+OpenGL API 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 20.1.2, 256 bits)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Disabled maxfps=0 refresh=NaNHz cpu=6c gpu=llvmpipe (LLVM 20.1.2, 256 bits)
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag]
+=== VortexArena boot ===
+Weapons:   27
+Items:     21
+Mutators:  46
+GameTypes: 21
+Sounds:    223
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).
+[lb]MenuState] user gamedir mounted: /tmp/va-paired-20261119/published-crylink-native/crylink-native/client-user/data (drop .pk3 packs in its maps/ subfolder).
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"
+"maxplayers" set to "32"
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).
+[lb]MenuState] cvar help: 1386 engine descriptions.
+[lb]shell] --cvar cl_autopause = "0"
+[lb]shell] --cvar cl_maxfps = "40"
+[lb]shell] --cvar _cl_name = "ParityProbe"
+[lb]shell] --cvar gl_texturecompression = "0"
+[lb]video] vid_vsync 0 → requested Disabled, actual Disabled (off — uncapped, may tear)
+[lb]video] cl_maxfps 40 -> Engine.MaxFps 40 (your setting; refresh NaNHz)
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)
+[lb]video] process priority boost unavailable: Permission denied
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] connecting to 127.0.0.1:28086.
+[NetTransport.Client] connecting to 127.0.0.1:28086 …
+[EffectInfo] parsed 'vortex/original/effectinfo.txt': 301 effects (process-lifetime, shared by every match).
+[EffectSystem] effectinfo: 301 effects, particlefont atlas: loaded, style overlay: 0 effects
+[Particles] backend=original (cl_particles_modern=0)
+[AssetLoader] model 'models/items/buff.md3' read failed: Asset not found in any mount: "models/items/buff.md3".
+[lb]LightGrid] this map ships no light grid (BSP lump 15) — models use the PBR + sun fallback.
+[lb]WorldLights] realtime world lighting OFF — back to baked lightmaps.
+[NetGame] precached 24 weapon models, skipped 0 (lazy), 24 muzzle tags.
+[AssetLoader] skeletal parse MISS 'models/player/erebus.iqm' (loader#392c5c0 cache n=1: [models/player/erebus.iqm])
+[NetGame] precached 36 combat sounds, 1 player models (rendered for pipeline warm).
+[NetGame] roster warm set: [models/player/erebus.iqm] → loader#392c5c0 cache n=1: [models/player/erebus.iqm]
+[NetGame] connecting to 127.0.0.1:28086.
+[LoadTimeline] connect 127.0.0.1 — load begin → ready, 36875 ms total
+    textures.compress: off (gl_texturecompression 0)
+  client.boot                      120.2 ms    0.3 %
+    fx.warmup                      421.8 ms    1.1 %
+    fx.trails                     1613.2 ms    4.4 %
+    gpu.warm-items(build)         2483.6 ms    6.7 %
+    world.attach                     0.3 ms    0.0 %
+    editor.nodes                    54.6 ms    0.1 %
+    light                           33.0 ms    0.1 %
+  render.setup                    4864.6 ms   13.2 %
+  camera.hud                       526.8 ms    1.4 %
+  music                             11.2 ms    0.0 %
+  precache.weapons               20271.1 ms   55.0 %
+    precache.weapons.pso-warm     5905.9 ms   16.0 %
+  precache.sounds+models          3161.5 ms    8.6 %
+  (unaccounted: yields, present, unmeasured)     7919.6 ms
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 3, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 3.
+[MapLoader] occluder: 52008 verts / 43612 tris (r_occlusion_cull A/B)
+[MapLoader] 'stormkeep' materials: lightmapped=34 vertexLit=3 plain=8 glow=5 normalMapped=34 (deluxe=True, internalPages=0, atlas=1p, cellSize=1024, cells=31, surfaces=380)
+[MapLoader] 'stormkeep' portal surfaces: 2 (from 2 faces), pocket decor: 5 (from 5 faces)
+[DecalSplats] geometry: 106027 render triangles, 502 grid cells
+[Skybox] loaded 'env/extragalactic/asteroids'.
+[lb]LightGrid] GPU lightgrid 54x61x39 (501 KB) bound — per-pixel model lighting active.
+[NetGame] client loaded map 'stormkeep' (dm) for render + prediction collision.
+[lb]md3morph] 'models/players/model/model.md3' frames=30 gpu=True mats: morphable
+[LoadTimeline] (late) precache.models.pso-warm: 5342.7 ms — finished after the table printed; not included in the total above.
+[AssetLoader] skeletal parse MISS 'models/player/gakmasked.iqm' (loader#392c5c0 cache n=2: [models/player/erebus.iqm, models/player/gakmasked.iqm])
+]cmd join
+[AssetLoader] skeletal parse MISS 'models/player/megaerebus.iqm' (loader#392c5c0 cache n=3: [models/player/erebus.iqm, models/player/gakmasked.iqm, models/player/megaerebus.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/nyx.iqm' (loader#392c5c0 cache n=4: [models/player/erebus.iqm, models/player/gakmasked.iqm, models/player/megaerebus.iqm, models/player/nyx.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/pyria.iqm' (loader#392c5c0 cache n=5: [models/player/erebus.iqm, models/player/gakmasked.iqm, models/player/megaerebus.iqm, models/player/nyx.iqm, models/player/pyria.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/seraphina.iqm' (loader#392c5c0 cache n=6: [models/player/erebus.iqm, models/player/gakmasked.iqm, models/player/megaerebus.iqm, models/player/nyx.iqm, models/player/pyria.iqm, models/player/seraphina.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/umbra.iqm' (loader#392c5c0 cache n=7: [models/player/erebus.iqm, models/player/gakmasked.iqm, models/player/megaerebus.iqm, models/player/nyx.iqm, models/player/pyria.iqm, models/player/seraphina.iqm, models/player/umbra.iqm])
+]cmd teleporttotarget misc_teleporter_dest1
+joined the game
+]quit
+[lb]perf] entity PVS tests: 347 run, 1778 skipped by memo (83.7% of 2125 avoided BSP descents)
+=== frame profiler session summary (88s, 66 frames) ===
+  fps: avg 1.6  1%low 1  0.1%low 1  (median 849.7ms, worst 849.7ms)
+  hitches: 0 total — 0 primaries: no hitches
+  gc: g0+55 g1+35 g2+19, total pause 576ms
+  alloc: 681.2MB total, 16MB/s recent, peak 167.5MB in one frame @ t=46.7s, heap 128.2MB
+  note: DEBUG build — frame times and the hitch census are NOT release-representative (run the release export via tools/perf-run.ps1 for real numbers)
+  [lb]vram census] 394 resident textures, est 1672 MB (textures only; Godot's vram monitor adds mesh/render-target buffers)
+    compression: mode 0, s3tc yes, ok 0, bc7-fallback 0, failed 0
+    Color               594.7 MB in 152 textures
+    Normal              311.3 MB in 66 textures
+    Gloss               299.6 MB in 72 textures
+    Glow                276.9 MB in 51 textures
+    ReflectMask         177.7 MB in 29 textures
+    TwoD                  9.2 MB in 23 textures
+    Q3BspLightmaps        3.0 MB in 1 textures
+    top 10:
+         21.3 MB  rgba8        vortex/original/particles/particlefont.png
+         21.3 MB  rgba8        textures/fireball_pants.png
+         21.3 MB  rgba8        textures/fireball_norm.png
+         21.3 MB  rgba8        textures/fireball_glow.png
+         21.3 MB  rgba8        textures/erebusfullbright_norm.png
+         21.3 MB  rgba8        textures/erebusfullbright_shirt.png
+         21.3 MB  rgba8        textures/erebusfullbright.png
+         21.3 MB  rgba8        textures/hagar_norm.png
+         21.3 MB  rgba8        textures/nexgun_gloss.png
+         21.3 MB  rgba8        textures/nexgun_norm.png

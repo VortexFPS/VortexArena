@@ -26,6 +26,8 @@ public sealed class EntityMovementStep : IMovementStep
 
     public EntityMovementStep(Entity carrier) => _carrier = carrier;
 
+    public void SetViewLocation(ViewLocationState? region) => _carrier.PredictedViewLocation = region;
+
     /// <summary>PRE-MATCH FREEZE mirror (set by the host each frame, like the carrier's DeadState). While true the
     /// predictor runs NO movement step — gravity, wishmove, jump, jumppad/teleport are all skipped — so the predicted
     /// body stays pinned EXACTLY where the server holds it (canMove=false, GameWorld.preMatchFreeze) during the
@@ -85,15 +87,9 @@ public sealed class EntityMovementStep : IMovementStep
             return;
         }
 
-        // run one authoritative movement tick (gravity + friction/accel + slide/step collision).
-        Movement.Move(_carrier, input);
-
-        // Mirror the server (GameWorld: `p.Angles = input.ViewAngles`): the carrier's .Angles MUST carry the
-        // live view angles. The warpzone/teleport predictors below rotate the EXIT facing via
-        // TransformAngles(carrier.Angles); without this the carrier kept a stale/zero angle, so a warpzone snapped
-        // the view to a FIXED wrong facing (the reported "comes out at the wrong angle") instead of the player's
-        // actual view rotated into the exit plane. (Movement.Move already set .ViewAngles, not .Angles.)
+        // Seed the angles before movement so view-location yaw and trigger rotations apply in order.
         _carrier.Angles = input.ViewAngles;
+        Movement.Move(_carrier, input);
 
         // Client-side jump-pad prediction (CSQC trigger_push): after the move, apply the launch of any jump-pad
         // the carrier now overlaps — exactly as the server does in its post-move TouchAreaGrid pass

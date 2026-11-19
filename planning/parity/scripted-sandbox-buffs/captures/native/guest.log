@@ -1,0 +1,147 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver.
+     at: set_use_vsync (platform/linuxbsd/x11/gl_manager_x11.cpp:364)
+OpenGL API 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 20.1.2, 256 bits)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Disabled maxfps=0 refresh=NaNHz cpu=6c gpu=llvmpipe (LLVM 20.1.2, 256 bits)[0m
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag][0m
+=== VortexArena boot ===[0m
+Weapons:   27[0m
+Items:     21[0m
+Mutators:  46[0m
+GameTypes: 21[0m
+Sounds:    223[0m
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).[0m
+[lb]MenuState] user gamedir mounted: /tmp/va-sandbox-native-light1/session-native/guest-user/data (drop .pk3 packs in its maps/ subfolder).[0m
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"[0m
+"maxplayers" set to "32"[0m
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).[0m
+[lb]MenuState] cvar help: 1386 engine descriptions.[0m
+[lb]shell] --cvar cl_autopause = "0"[0m
+[lb]shell] --cvar cl_maxfps = "40"[0m
+[lb]shell] --cvar _cl_name = "ParityGuest"[0m
+[lb]shell] --cvar gl_texturecompression = "0"[0m
+[lb]shell] --cvar sensitivity = "4"[0m
+[lb]shell] --cvar showposition = "1"[0m
+[lb]shell] --cvar cl_frameprofiler = "0"[0m
+[lb]shell] --cvar sv_warpzone_trace = "1"[0m
+[lb]shell] --cvar cl_portal_render = "0"[0m
+[lb]shell] --cvar cl_warm_at_boot = "0"[0m
+[lb]shell] --cvar cl_precache_all_weapons = "0"[0m
+[lb]shell] --cvar cl_idle_warmup = "0"[0m
+[lb]shell] --cvar gl_picmip = "2"[0m
+[lb]video] vid_vsync 0 → requested Disabled, actual Disabled (off — uncapped, may tear)[0m
+[lb]video] cl_maxfps 40 -> Engine.MaxFps 40 (your setting; refresh NaNHz)[0m
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)[0m
+[lb]video] process priority boost unavailable: Permission denied[0m
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] connecting to 127.0.0.1:26717.[0m
+[NetTransport.Client] connecting to 127.0.0.1:26717 …
+[EffectInfo] parsed 'vortex/original/effectinfo.txt': 301 effects (process-lifetime, shared by every match).
+[EffectSystem] effectinfo: 301 effects, particlefont atlas: loaded, style overlay: 0 effects
+[Particles] backend=original (cl_particles_modern=0)
+[AssetLoader] model 'models/items/buff.md3' read failed: Asset not found in any mount: "models/items/buff.md3".
+[lb]LightGrid] this map ships no light grid (BSP lump 15) — models use the PBR + sun fallback.[0m
+[lb]WorldLights] realtime world lighting OFF — back to baked lightmaps.[0m
+[NetGame] precached 24 weapon models, skipped 0 (lazy), 24 muzzle tags.
+[AssetLoader] skeletal parse MISS 'models/player/erebus.iqm' (loader#135a23a cache n=1: [models/player/erebus.iqm])
+[NetGame] precached 36 combat sounds, 1 player models (rendered for pipeline warm).
+[NetGame] roster warm set: [models/player/erebus.iqm] → loader#135a23a cache n=1: [models/player/erebus.iqm]
+[NetGame] connecting to 127.0.0.1:26717.
+[LoadTimeline] connect 127.0.0.1 — load begin → ready, 6647 ms total
+    textures.compress: off (gl_texturecompression 0)
+  client.boot                       42.9 ms    0.6 %
+    fx.warmup                       75.3 ms    1.1 %
+    fx.trails                      636.1 ms    9.6 %
+    gpu.warm-items(build)          505.6 ms    7.6 %
+    world.attach                     0.3 ms    0.0 %
+    editor.nodes                    18.4 ms    0.3 %
+    light                            8.7 ms    0.1 %
+  render.setup                    1339.5 ms   20.2 %
+  camera.hud                       141.4 ms    2.1 %
+  music                              2.2 ms    0.0 %
+  precache.weapons                3402.9 ms   51.2 %
+    precache.weapons.pso-warm      829.5 ms   12.5 %
+  precache.sounds+models           690.9 ms   10.4 %
+  (unaccounted: yields, present, unmeasured)     1026.9 ms
+[ClientNet] handshake accepted by 'Vortex 1.0.0 Server': netId 2, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0 Server': netId 2.
+[MapLoader] occluder: 52008 verts / 43612 tris (r_occlusion_cull A/B)
+[MapLoader] 'stormkeep' materials: lightmapped=34 vertexLit=3 plain=8 glow=5 normalMapped=34 (deluxe=True, internalPages=0, atlas=1p, cellSize=1024, cells=31, surfaces=380)
+[MapLoader] 'stormkeep' portal surfaces: 2 (from 2 faces), pocket decor: 5 (from 5 faces)
+[DecalSplats] geometry: 106027 render triangles, 502 grid cells
+[Skybox] loaded 'env/extragalactic/asteroids'.
+[lb]LightGrid] GPU lightgrid 54x61x39 (501 KB) bound — per-pixel model lighting active.[0m
+[NetGame] client loaded map 'stormkeep' (dm) for render + prediction collision.
+[wzview] authoritative snap -> <0, 0, 0>
+[lb]md3morph] 'models/players/model/model.md3' frames=30 gpu=True mats: morphable[0m
+[lb]md3morph] 'models/player/relic.md3elic.md3' frames=101 gpu=True mats: std std std std std std std std[0m
+[LoadTimeline] (late) precache.models.pso-warm: 886.6 ms — finished after the table printed; not included in the total above.
+joined the game[0m
+[wzview] authoritative snap -> <0, 45, 0>
+[wzview] authoritative snap -> <12, 90, 0>
+[lb]md3morph] 'models/player/relic.md3elic.md3' frames=101 gpu=True mats: std std std std std std std std[0m
+[lb]hitch MIXED] 292.1ms (med 157.9, ×1.8) — 285.8ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 6.3 rcpu 0.0 gpu 0.0 rest 285.8 late 285.8 | alloc 72KB | remote.ents 35 | watchdog: 254/259 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 318, pipeline compiles +0, vram 327MB[0m
+[lb]hitch]   prev: 206.7 245.6 255.0 217.9 210.5 210.8 193.3 193.1[0m
+[38;2;0;255;0mSANDBOX - INFO: [39mObject is owned by "ParityOwner", created "[38;2;255;255;0m19-11-2026 04:56:50[39m", last edited "[38;2;255;255;0m19-11-2026 04:56:50[39m"[0m
+[38;2;255;0;0mSANDBOX - WARNING: [39mObject could not be edited. Make sure you are facing an object that you have edit rights over[0m
+[lb]hitch MIXED ×8…] ongoing 292.1–449.0ms over 3.1s — 285.8ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch MIXED ×9] 292.1–449.0ms over 4.0s (med 188.3) — 285.8ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch MIXED] 402.6ms (med 204.1, ×2.0) — 394.0ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 8.5 rcpu 0.0 gpu 0.0 rest 394.0 late 394.0 | alloc 48KB | remote.ents 0 | watchdog: 342/348 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 292, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 191.0 289.2 313.3 235.6 187.5 231.2 250.6 285.6[0m
+[lb]hitch MIXED] 405.3ms (med 217.9, ×1.9) — 388.2ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 17.1 rcpu 0.0 gpu 0.0 rest 388.2 late 386.0 | alloc 32KB | remote.ents 2 | watchdog: 342/362 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 292, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 238.4 319.1 312.8 288.2 213.7 331.2 351.2 363.7[0m
+[wzview] authoritative snap -> <12, 90, 0>
+[lb]hitch MIXED ×4] 405.3–828.9ms over 2.4s (med 232.0) — 388.2ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch MIXED] 808.6ms (med 232.0, ×3.5) — 642.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 166.0 rcpu 0.0 gpu 0.0 rest 642.6 late 1000.7 | alloc 78KB | remote.ents 2 | watchdog: 608/1024 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 293, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 213.7 331.2 351.2 363.7 405.3 488.6 828.9 785.9[0m
+[lb]hitch MIXED ×6…] ongoing 613.9–820.3ms over 3.8s — 642.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch MIXED ×8] 613.9–820.3ms over 5.7s (med 238.4) — 642.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch MIXED] 819.2ms (med 238.4, ×3.4) — 739.7ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 79.5 rcpu 0.0 gpu 0.0 rest 739.7 late 1023.8 | alloc 56KB | remote.ents 2 | watchdog: 702/988 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 808.6 763.4 670.5 613.9 643.3 820.3 794.7 738.4[0m
+[lb]hitch MIXED] 856.8ms (med 245.6, ×3.5) — 616.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 240.6 rcpu 0.0 gpu 0.0 rest 616.3 late 805.6 | alloc 48KB | remote.ents 2 | watchdog: 563/926 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 763.4 670.5 613.9 643.3 820.3 794.7 738.4 819.2[0m
+[lb]hitch MIXED ×2] 709.8–856.8ms over 1.0s (med 247.9) — 616.3ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch MIXED] 796.3ms (med 247.9, ×3.2) — 678.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 117.7 rcpu 0.0 gpu 0.0 rest 678.6 late 795.9 | alloc 138KB | remote.ents 2 | watchdog: 576/799 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 613.9 643.3 820.3 794.7 738.4 819.2 856.8 709.8[0m
+[lb]hitch MIXED] 808.0ms (med 247.9, ×3.3) — mixed — proc:other 264.6ms | proc 382.2 rcpu 0.0 gpu 0.0 rest 425.8 late 1701.9 | alloc 32KB | remote.ents 2 | watchdog: 1069/1844 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 643.3 820.3 794.7 738.4 819.2 856.8 709.8 796.3[0m
+[lb]hitch MIXED] 840.2ms (med 248.0, ×3.4) — 537.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 302.6 rcpu 0.0 gpu 0.0 rest 537.6 late 811.9 | alloc 139KB | remote.ents 2 | watchdog: 510/945 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 820.3 794.7 738.4 819.2 856.8 709.8 796.3 808.0[0m
+[lb]hitch MIXED ×2] 662.9–840.2ms over 0.7s (med 250.5) — 537.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch GC-PAUSE] 768.2ms (med 250.5, ×3.1) — gen2/GC-pause tail (prior frame paused 37.3ms; this frame rest-dominated) | proc 69.7 rcpu 0.0 gpu 0.0 rest 698.5 late 667.5 | alloc 131KB | remote.ents 2 | watchdog: 395/655 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 738.4 819.2 856.8 709.8 796.3 808.0 840.2 662.9[0m
+[lb]hitch GC-PAUSE] 758.6ms (med 250.5, ×3.0) — gen2/GC-pause tail (prior frame paused 37.3ms; this frame rest-dominated) | proc 196.0 rcpu 0.0 gpu 0.0 rest 562.6 late 869.0 | alloc 40KB | remote.ents 2 | watchdog: 585/944 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 819.2 856.8 709.8 796.3 808.0 840.2 662.9 768.2[0m
+[lb]hitch GC-PAUSE] 764.6ms (med 250.6, ×3.1) — gen2/GC-pause tail (prior frame paused 37.3ms; this frame rest-dominated) | proc 142.4 rcpu 0.0 gpu 0.0 rest 622.3 late 1017.7 | alloc 161KB | remote.ents 2 | watchdog: 596/1015 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 856.8 709.8 796.3 808.0 840.2 662.9 768.2 758.6[0m
+[lb]hitch MIXED] 874.5ms (med 250.6, ×3.5) — 686.7ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 187.8 rcpu 0.0 gpu 0.0 rest 686.7 late 1133.0 | alloc 120KB | remote.ents 2 | watchdog: 750/1164 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 709.8 796.3 808.0 840.2 662.9 768.2 758.6 764.6[0m
+[lb]hitch MIXED] 745.0ms (med 251.1, ×3.0) — 449.2ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 295.8 rcpu 0.0 gpu 0.0 rest 449.2 late 1581.1 | alloc 131KB | remote.ents 2 | watchdog: 1052/1663 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 796.3 808.0 840.2 662.9 768.2 758.6 764.6 874.5[0m
+[lb]hitch MIXED] 837.9ms (med 251.1, ×3.3) — 591.1ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 246.8 rcpu 0.0 gpu 0.0 rest 591.1 late 1728.3 | alloc 139KB | remote.ents 2 | watchdog: 1009/1723 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 808.0 840.2 662.9 768.2 758.6 764.6 874.5 745.0[0m
+[lb]hitch MIXED] 797.1ms (med 255.0, ×3.1) — 536.2ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 260.9 rcpu 0.0 gpu 0.0 rest 536.2 late 2013.9 | alloc 129KB | remote.ents 2 | watchdog: 1223/1984 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 840.2 662.9 768.2 758.6 764.6 874.5 745.0 837.9[0m
+[wzview] authoritative snap -> <12, 270, 0>
+[lb]hitch MIXED] 770.5ms (med 255.0, ×3.0) — 488.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 282.1 rcpu 0.0 gpu 0.0 rest 488.4 late 1094.7 | alloc 136KB | remote.ents 2 | watchdog: 751/1206 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   gpu: draws 294, pipeline compiles +0, vram 326MB[0m
+[lb]hitch]   prev: 662.9 768.2 758.6 764.6 874.5 745.0 837.9 797.1[0m

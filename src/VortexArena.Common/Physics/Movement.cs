@@ -32,6 +32,7 @@ public interface IMovementInput
     /// (ServerNet.ToMovementInput) and bots set it from the move command / brain.
     /// </summary>
     bool ButtonHook => false;
+    bool ButtonDrag => false;
 
     /// <summary>
     /// PHYS_INPUT_BUTTON_JETPACK — the dedicated jetpack key (separate from <see cref="ButtonJump"/>).
@@ -89,6 +90,7 @@ public struct MovementInput : IMovementInput
     public bool ButtonAttack1 { get; set; }
     public bool ButtonAttack2 { get; set; }
     public bool ButtonHook { get; set; }
+    public bool ButtonDrag { get; set; }
     public bool ButtonJetpack { get; set; }
     public bool ButtonZoom { get; set; }
     public bool Typing { get; set; }

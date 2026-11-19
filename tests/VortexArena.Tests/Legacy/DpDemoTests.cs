@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using VortexArena.Legacy.Protocol;
 using Xunit;
@@ -10,8 +11,8 @@ using Xunit.Abstractions;
 namespace VortexArena.Tests.Legacy;
 
 /// <summary>
-/// Runs the DP7 parser over real recordings: the two demos shipped in the reference Xonotic checkout
-/// (Base/data/xonotic-data.pk3dir/demos). They are the byte stream a DarkPlaces client received from a
+/// Runs the DP7 parser over the two original recordings bundled with Vortex Arena.
+/// They are the byte stream a DarkPlaces client received from a
 /// Xonotic server, so every message in them is one the parser must cope with.
 ///
 /// Two payloads in that stream are defined by the game's QuakeC and have no length (svc_csqcentities,
@@ -24,8 +25,6 @@ public class DpDemoTests
     private readonly ITestOutputHelper _output;
 
     public DpDemoTests(ITestOutputHelper output) => _output = output;
-
-    private static string DemoPath(string name) => Path.Combine(TestPaths.BaseCorePk3Dir, "demos", name);
 
     /// <summary>Counts what the parser saw, and stops at anything only QuakeC can measure.</summary>
     private sealed class StatsHandler : IDpClientHandler
@@ -176,13 +175,14 @@ public class DpDemoTests
     }
 
     [Theory]
-    [InlineData("little-bot-orchestra.dem")]
-    [InlineData("the-big-keybench.dem")]
-    public void Real_Demo_Decodes_Without_Parse_Errors(string name)
+    [InlineData("little-bot-orchestra.dem", 10201, "CEAD8DC807EF0DD83510C2E6B7A91C305EC5777DBC405AA20B0E3800E5504B9F")]
+    [InlineData("the-big-keybench.dem", 35605, "BFF2583A8E44BDD395983DC397C63D4585EED31D4ED68B94E709450238BF87FF")]
+    public void Real_Demo_Decodes_Without_Parse_Errors(string name, int expectedMessages, string expectedSha256)
     {
-        string path = DemoPath(name);
-        if (!File.Exists(path))
-            return; // reference checkout not present on this machine
+        string path = Path.Combine(TestPaths.RepoRoot, "data", "core.pk3dir", "demos", name);
+        // Pin the shipped bytes independently of the optional upstream checkout.
+        using (var recording = File.OpenRead(path))
+            Assert.Equal(expectedSha256, Convert.ToHexString(SHA256.HashData(recording)));
 
         DemoStats s = Run(path);
         string report = Describe(s);
@@ -199,7 +199,7 @@ public class DpDemoTests
         catch (IOException) { }
 
         Assert.Null(s.ReaderError);
-        Assert.True(s.Messages > 100, "a real demo has many messages");
+        Assert.Equal(expectedMessages, s.Messages);
 
         // The level description.
         Assert.NotNull(s.Handler.ServerInfo);

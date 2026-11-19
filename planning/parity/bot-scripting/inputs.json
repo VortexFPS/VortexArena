@@ -1,0 +1,14 @@
+{
+  "original_data_git": "863cd3e8456e18f577f7fe5fef857ff55ae62cc0",
+  "files_sha256": {
+    "darkzone.pk3": "68395e6a1a3019dd22a59dd19a7cbd5f117b92c8cda856d83c6ef138d351e2fe",
+    "cues.bot": "78de39bff2185dd2fef50dc410a02d15982374cb6f20a8c600f08edfe436a426",
+    "darkplaces": "35b40b973d7e83d75bab026b2707bf80660840421b1e12fcfe0e9c85cb9633ea",
+    "Godot_v4.6.3-stable_mono_linux.x86_64": "cabf9ac16c55f8ca662da62e1f5908d3c35f765e312be62f104097bd8f78b987",
+    "progs.dat": "c4a5a9e85598333568183779c06446b2d03f056d2da71636b6f86150ed1202f7",
+    "csprogs.dat": "cbc9fd9a4e2c7fc8f02f4aab6e5883e549790eb24e71be2bc0b8a0b0fea89999",
+    "loopback.so": "d0606863ad58b724dfe63de17d4051233f4abfa04e7c0f0ba08dadbc2372de9b",
+    "VortexArena.dll": "e00d0d7bf10161c9d89644b544cc7e268ce461c0a068dd2835a37a88c4ca545a",
+    "VortexArena.Server.dll": "6adb7ed1d78a689c62739383ba7ddf3bc4ed5a7e01e57b97646625a1b92ce487"
+  }
+}

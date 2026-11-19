@@ -3,11 +3,11 @@ category: client
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
 last_audited: "2026-06-28"  # Re-verify x2 (opus parity-diff, claude/parity-port-waves): re-read FirstPersonView/ChaseCamera/ViewEffects/ReticleOverlay + NetGame wiring + ClientNet/ServerNet against current source AGAIN this wave. NO DRIFT — all feature scores hold. Live wiring re-confirmed at current line numbers: own-player UpdateView NetGame:5578, spectate UpdateView 5458; CameraMode from chase_active 3044 (own) / 5447 (spectate); Spectating=true 5446 then reset 5461; TriggerSpawnZoom 3022; NotifyZoomScroll on wheel 4904; ZoomScriptCaught->reticle 3084-3086; UpdateEffects 3116 + UpdateFrozenOverlay 3125. Punch seam intact: owner block order PressedKeys(ClientNet:1023)->PunchAngle(1024)->PunchVector(1025); ServerNet writes PunchVector:2783; ViewState PunchOriginQuake=_client.PunchVector NetGame:5563 (own, first-person-only). ViewEffects damage flash uses gfx/blood splatter (MakeBloodSplat:114, TextureCache.Get("gfx/blood")) + gentle path (cl_gentle/cl_gentle_damage:256). ChaseCamera.cs (extracted classic+event chase primitives) live via FirstPersonView. port_ref line numbers in feature rows below shifted again (warpzone/wepent waves) but left as-is except where edited.
 summary:
-  feature_count: 27
+  feature_count: 28
   worst_gaps:
     - "Spectator-camera SERVER mode toggle (STAT(CAMERA_SPECTATOR) 1/2 + IMP_weapon_drop cycling, View_SpectatorCamera's chase_active<=0 auto-switch path) is not ported — the user chase_active-driven third-person spectate IS now live (NetGame UpdateCamera sets _view.Spectating + Chase, anchored to the spectatee pose) and chase_front is now reachable, but pressing weapon-drop to cycle the server-side spectator camera mode is absent."
-    - "GLSL blur/sharpen post-process (damage/content blur, powerup edge-sharpen, View_BlurTest) and night-vision are not implemented (engine shader cvars, no Godot analogue)."
-    - "viewloc (2.5D side-scroller View Location camera, GetViewLocationFOV), demo free camera (CSQC_Demo_Camera), orthoview, and the server FPS report are not ported (niche dev/demo tools, off the normal-match camera path). NOTE: lockview (cl_lockview / View_Lock) IS now ported+live (FirstPersonView.ApplyViewLock) — no longer a gap."
+    - "GLSL blur/sharpen post-process (damage/content blur, powerup edge-sharpen, View_BlurTest) is still unported."
+    - "Demo free camera (CSQC_Demo_Camera), orthoview, and the server FPS report are not ported (niche dev/demo tools, off the normal-match camera path). NOTE: lockview (cl_lockview / View_Lock) IS now ported+live (FirstPersonView.ApplyViewLock) — no longer a gap."
 features:
   - id: cl-view.zoom.fov_state_machine
     name: "Zoom / FOV state machine (current_viewzoom integration, 0.75 frustum, sensitivity)"
@@ -525,12 +525,11 @@ features:
     confidence: high
     notes: "Full-screen ColorRect composited above the damage + liquid tints. Faithful icy-blue tint that warms toward white and fades out as the thaw ring (STAT(REVIVE_PROGRESS)) fills. Driven by the live FreezeTag gametype, same source as the crosshair thaw ring. liveness: live only in Freeze Tag (the gametype gates STAT(FROZEN)); a pure remote (non-host) client has no LocalServerPlayer so reads false — the cross-client wepent/stat follow-up is the same limitation noted on the crosshair revive ring."
 
-  - id: cl-view.screen.postprocess_nightvision
-    name: "GLSL blur/sharpen post-process + night-vision + blur-test"
+  - id: cl-view.screen.postprocess
+    name: "GLSL blur/sharpen post-process and blur test"
     layer: [presentation]
     base_refs:
       - "client/view.qc:View_PostProcessing (1326)"
-      - "client/view.qc:View_NightVision (1113)"
       - "client/view.qc:View_BlurTest (1453)"
     port_refs: []
     constants:
@@ -545,13 +544,48 @@ features:
       audio: na
       liveness: na
     intended_divergence: true
-    divergence_rationale: "The damage/content blur, powerup edge-sharpen and blur-test drive engine GLSL shader cvars (r_glsl_postprocess + r_glsl_postprocess_uservec1/2) with no Godot analogue; ViewEffects deliberately ships only the coloured screen reaction (documented in ViewEffects.cs class header). Night-vision is a fullbright/fakelight debug aid, not a normal-match feature."
+    divergence_rationale: "The damage/content blur, powerup edge-sharpen and blur-test drive engine GLSL shader cvars (r_glsl_postprocess + r_glsl_postprocess_uservec1/2) with no Godot analogue; ViewEffects deliberately ships only the coloured screen reaction (documented in ViewEffects.cs class header)."
     gaps:
-      - "No screen blur when damaged / underwater, no powerup edge-sharpen, no night-vision tint, no blur-test debug effect."
+      - "No screen blur when damaged / underwater, no powerup edge-sharpen or blur-test debug effect."
     verification:
-      - { kind: grep, ref: "no postprocess/nightvision/blurtest implementation; 'postprocess' appears only in ViewEffects.cs (class doc stating intentional omission)", result: fail }
+      - { kind: grep, ref: "no GLSL postprocess/blurtest implementation; 'postprocess' appears only in ViewEffects.cs (class doc stating intentional omission)", result: fail }
     confidence: high
     notes: "Documented intended omission in ViewEffects.cs. hud_powerup defaults 0 so the sharpen is off in stock anyway; the damage/content blur is the only default-on effect lost (a subtle blur under heavy damage / underwater)."
+
+  - id: cl-view.screen.nightvision
+    name: "Night-vision tint and noise"
+    layer: [presentation]
+    base_refs:
+      - "client/view.qc:View_NightVision (1113)"
+      - "client/view.qc:CSQC_UpdateView (1848)"
+      - "lib/noise.qh:Noise_Pink"
+      - "lib/noise.qh:Noise_White"
+    port_refs:
+      - "game/client/NightVisionOverlay.cs:UpdateOverlay"
+      - "game/client/ViewEffects.cs:UpdateNightVision"
+      - "game/client/WorldTint.cs:PollCvars"
+      - "game/net/NetGame.cs:_Process"
+      - "game/net/ServerNet.cs:SendClientInit"
+    constants:
+      - { name: "trigger", base: "(r_fakelight >= 2 || r_fullbright) && !(serverflags & SERVERFLAG_ALLOW_FULLBRIGHT)", port: "same, from the client rendering cvars and the server's ClientInit flags", match: true }
+      - { name: "tint", base: "0.5 1 0.3, multiply", port: "0.5 1 0.3, canvas blend_mul", match: true }
+      - { name: "background", base: "gfx/nightvision-bg, additive white, pink noise at dt * 1.5, alpha = 0.15 + 0.05 * noise", port: "same image, blend and pink-noise formula, with the same three sinusoidal UV corners", match: true }
+      - { name: "foreground", base: "gfx/nightvision-fg, additive, pink noise at dt * 0.1, alpha = 0.12 + 0.05 * noise; independent white samples for RGB and the UV transform", port: "same image, blend, noise and UV transform", match: true }
+    status:
+      logic: faithful
+      values: faithful
+      timing: faithful
+      presentation: faithful
+      audio: na
+      liveness: live
+    intended_divergence: false
+    divergence_rationale: null
+    gaps: []
+    verification:
+      - { kind: code, ref: "NightVisionOverlay reproduces the QC gate and per-frame UVs, and draws before the liquid/damage overlays and HUD. Both mounted PNGs are pixel-identical to the pinned TGAs.", result: pass }
+      - { kind: ingame, ref: "planning/parity/nightvision/stormkeep.jpg: Godot 4.6.3 Mono, GL Compatibility (llvmpipe), native Stormkeep listen match, fixed observer at 819 878 210 (yaw 46, pitch -5), 768x432. Stock and restricted-server settings with standard lighting show no tint. Console toggles apply the effect to r_fullbright 1 and r_fakelight 2 only while sv_allow_fullbright is 0. Two enabled captures show the animated noise, and r_fakelight 1 leaves the effect off on this lit map.", result: pass }
+    confidence: high
+    notes: "The server flag bypasses the tint and both noise layers while the client-selected 3D lighting stays active. The random stream is local to the overlay, with the same distributions and independent pink-noise accumulators as the original. Native scene fullbright bypasses baked lighting on lit BSP and skin materials. Fakelight uses the classic DarkPlaces view-facing diffuse with its 15% floor. The optional directed-fullbright shading variant is outside this overlay port."
 
   - id: cl-view.reticle.zoom_reticle
     name: "Zoom reticle (generic +zoom + weapon scope)"
@@ -643,7 +677,7 @@ features:
       - "client/view.qc:fpscounter_update (398)"
     port_refs:
       - "game/client/FirstPersonView.cs:ApplyViewLock (825) — View_Lock port (cl_lockview only)"
-      - "game/client/FirstPersonView.cs:UpdateCamera (ApplyViewLock call, 413)"
+      - "game/client/FirstPersonView.cs:UpdateCamera (view lock and 110-degree rail FOV)"
     constants:
       - { name: "cl_lockview", base: "0 (0=off; 1=freeze origin+angles; 2=freeze origin only)", port: "0 (read live; lock_type 1/2 both ported)", match: true }
       - { name: "cl_orthoview", base: "0", port: "none", match: false }
@@ -659,13 +693,12 @@ features:
     gaps:
       - "Demo free/chase camera (CSQC_Demo_Camera) not ported (tracked separately on the demo-cinematics branch)."
       - "Orthographic radar-render view (cl_orthoview / View_Ortho) not ported (dev/radar tool)."
-      - "viewloc 2.5D side-scroller camera (GetViewLocationFOV) not ported (niche 2.5D-map feature)."
       - "FPS report to the server (fpscounter_update STAT(SHOWFPS)) not ported."
       - "cl_lockview: only the bare cvar lock_type is honored; the UI-forced lock_type=1 conditions (hud_configure / clickable radar / minigame menu / quickmenu) are not on the net play path so they are not modelled (documented in ApplyViewLock)."
     verification:
-      - { kind: code, ref: "cl_lockview is now ported: FirstPersonView.ApplyViewLock (FirstPersonView:825) freezes the final Quake render origin/angles (lock_type>=1 pins origin to freeze_org; ==1 also pins angles to freeze_ang; ==2 origin-only with continuous capture while off), called every frame from UpdateCamera:413 (live on the net path via UpdateView). The other 4 features (demo cam / orthoview / viewloc / FPS report) remain unimplemented in src/ or game/.", result: pass }
+      - { kind: code, ref: "cl_lockview is now ported: FirstPersonView.ApplyViewLock (FirstPersonView:825) freezes the final Quake render origin/angles (lock_type>=1 pins origin to freeze_org; ==1 also pins angles to freeze_ang; ==2 origin-only with continuous capture while off), called every frame from UpdateCamera:413 (live on the net path via UpdateView). The rail uses a fixed 110-degree FOV.", result: pass }
     confidence: high
-    notes: "PARTIAL FIX since the 2026-06-27 baseline: cl_lockview (View_Lock) is now ported and live — it freezes the rendered view at the captured origin/angles (lock_type 1=both, 2=origin-only), read live each frame from the cvar (default 0=off so a stock match is unaffected). The remaining four features (demo free camera, orthoview radar render, viewloc 2.5D camera, server FPS report) are still unported — none are on the normal-match camera path. Status is partial (was missing) because this row bundles five features and only lockview landed."
+    notes: "Live view lock freezes the captured view at lock type 1 or just its origin at lock type 2. The view-location rail has a fixed render FOV and the player and follower paths are covered by the paired fixture in planning/parity/view-location/FREEAIM.md. Demo free camera, orthoview and server FPS reporting are still tracked in this row."
 
   - id: cl-view.zoom.header_defaults
     name: "view.qh bare autocvar defaults gating live zoom paths (spawnzoom / velocityzoom_type / zoomscroll)"
@@ -697,7 +730,7 @@ features:
     verification:
       - { kind: code, ref: "port fallbacks/seeds re-read at the cited lines; behavior itself audited in cl-view.zoom.spawn_zoom / velocity_zoom / zoom_scroll (all live)", result: pass }
     confidence: high
-    notes: "Declaration-surface row for client/view.qh: the header's bare autocvar defaults are exactly the values the live port paths seed or fall back to. Behavioral audits live in the owning rows (zoom.spawn_zoom / zoom.velocity_zoom / zoom.zoom_scroll). The header's other declaration families are owned elsewhere: camera_* -> cl-view.demo.camera_cvars; hud_contents_blur*/hud_damage_blur*/hud_postprocessing_* -> cl-view.screen.postprocess_nightvision (intended omission); cl_eventchase_vehicle* -> the vehicle-chase gap in cl-view.chase.event_death_cam; cl_hitsound_* -> the hitsound/sound units. added 2026-07-02 (coverage fold)"
+    notes: "Declaration-surface row for client/view.qh: the header's bare autocvar defaults are exactly the values the live port paths seed or fall back to. Behavioral audits live in the owning rows (zoom.spawn_zoom / zoom.velocity_zoom / zoom.zoom_scroll). The header's other declaration families are owned elsewhere: camera_* -> cl-view.demo.camera_cvars; hud_contents_blur*/hud_damage_blur*/hud_postprocessing_* -> cl-view.screen.postprocess (intended omission); cl_eventchase_vehicle* -> the vehicle-chase gap in cl-view.chase.event_death_cam; cl_hitsound_* -> the hitsound/sound units. added 2026-07-02 (coverage fold)"
 
   - id: cl-view.zoom.unpress_defaults
     name: "Zoom/attack unpress-on-event defaults (cl_unpress_zoom_on_spawn/death/weapon_switch, cl_unpress_attack_on_weapon_switch)"
@@ -833,24 +866,26 @@ features:
       - "client/main.qc:Welcome_Message_Show_Try (1455-1476; gated on intermission/isdemo/cl_welcome)"
       - "client/view.qc:1808 (per-frame show-try call)"
     port_refs:
-      - "game/menu/dialogs/DialogWelcome.cs (faithful UI port of dialog_welcome.qc — documented INERT: placeholder body, no connect backend)"
-      - "game/Shell.cs:184 (menu route \"welcome\")"
-      - "src/VortexArena.Server/GameWorld.cs:1397-1554 (welcome CONTENT — campaign line / mutators / MOTD — rerouted to per-player console prints)"
+      - "game/net/NetGame.cs:OnMatchWelcome"
+      - "game/net/ClientNet.cs:HandleAccept"
+      - "game/net/ServerNet.cs:HandleAuth"
+      - "game/Shell.cs"
+      - "game/menu/dialogs/DialogWelcome.cs"
     constants:
-      - { name: "cl_welcome", base: "1 (show Welcome dialog when connecting)", port: "none (cvar unregistered, no reader)", match: false }
+      - { name: "cl_welcome", base: "1", port: "1 (default on)", match: true }
     status:
-      logic: stub
-      values: missing
+      logic: partial
+      values: faithful
       timing: na
       presentation: partial
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "The cl_welcome-gated auto-show on connect is not wired: nothing opens DialogWelcome when joining a server; it is reachable only via the menu route."
-      - "DialogWelcome's body is a placeholder — the server-supplied hostname/MOTD/welcome blob (net_handle_ServerWelcome) has no networked channel; the welcome content is instead surfaced as console prints (GameWorld SendCampaignWelcome/SendMutatorsWelcome — see campaign-flow rows)."
+      - "Campaign-specific automatic opening, campaign typography and the additional stock gameplay-tip and player-count lines still need comparison."
     verification:
-      - { kind: code, ref: "DialogWelcome.cs header documents INERT status (no connect backend); grep cl_welcome over port .cs -> zero matches; Shell.cs:184 is the only instantiation site", result: fail }
-    confidence: medium
-    notes: "main.qh's cl_welcome + the main.qc show-try loop are the client half of the server SendWelcomeMessage seam already audited in GameWorld.cs (welcome content rerouted to console prints as a documented substitution). The dialog UI itself is a faithful widget port awaiting the networked welcome channel. Remaining main.qh content is infrastructure (spectatee_status/zoom globals owned by the rows above; hud_showbinds -> HUD keybind display; cl_autodemo_* -> demo-cinematics track; menu_gamemenu -> menu unit). added 2026-07-02 (coverage fold)"
+      - { kind: runtime, ref: "planning/parity/deferred-audit/welcome-live-evidence.md", result: pass }
+      - { kind: test, ref: "WelcomeBriefingTests exercises the sign-on briefing codec and its bounds.", result: pass }
+    confidence: high
+    notes: "A remote sign-on supplies the hostname and briefing. A player joining during intermission can open the cached text manually. See menu-core.nav.welcome for the dialog and its remaining presentation differences."

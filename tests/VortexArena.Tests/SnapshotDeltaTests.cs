@@ -21,6 +21,76 @@ public class SnapshotDeltaTests
     };
 
     [Fact]
+    public void Snapshot_PreservesCloneWhenDeltaReusesItsBaselineSlot()
+    {
+        const int bodyId = 16725;
+        var body = Player(bodyId, new Vector3(-157, -230, 24), 100);
+        body.Kind = NetEntityKind.Body;
+        body.Model = "models/player/erebus.iqm";
+        var states = new Dictionary<int, NetEntityState> { [bodyId] = body };
+        var server = new ServerSnapshotHistory();
+        var client = new ClientSnapshotHistory();
+        var writer = new BitWriter();
+        server.EncodeSnapshot(writer, states, snapshotSeq: 1);
+        var baseline = new BitReader(writer.WrittenSpan);
+        Assert.NotNull(client.DecodeSnapshot(ref baseline));
+        server.Ack(client.LastDecodedSeq);
+
+        body.CountdownIndicator = new(4, 0);
+        states[bodyId] = body;
+        writer.Reset();
+        server.EncodeSnapshot(writer, states, snapshotSeq: 1 + ServerSnapshotHistory.Capacity);
+
+        var truncated = new BitReader(writer.WrittenSpan[..^1]);
+        Assert.Null(client.DecodeSnapshot(ref truncated));
+        Assert.Equal(1, client.LastDecodedSeq);
+        var delta = new BitReader(writer.WrittenSpan);
+        NetEntityState decoded = client.DecodeSnapshot(ref delta)![bodyId];
+        Assert.Equal(body.Kind, decoded.Kind);
+        Assert.Equal(body.Model, decoded.Model);
+        Assert.Equal(body.Origin, decoded.Origin);
+        Assert.Equal(body.CountdownIndicator, decoded.CountdownIndicator);
+    }
+
+    [Fact]
+    public void SnapshotTracksInlineBrushPoseUntilAuthoritativeRemoval()
+    {
+        const int id = 16402;
+        var brush = NetEntityState.Empty(id);
+        brush.Kind = NetEntityKind.BrushCollider;
+        brush.Model = "*17";
+        brush.Origin = new Vector3(32, -64, 16);
+        var states = new Dictionary<int, NetEntityState> { [id] = brush };
+        var server = new ServerSnapshotHistory();
+        var client = new ClientSnapshotHistory();
+        var writer = new BitWriter();
+
+        server.EncodeSnapshot(writer, states, snapshotSeq: 1);
+        var spawn = new BitReader(writer.WrittenSpan);
+        Assert.Equal(brush.Model, client.DecodeSnapshot(ref spawn)![id].Model);
+        server.Ack(client.LastDecodedSeq);
+
+        brush.Origin = new Vector3(64, -64, 16);
+        brush.Angles = new Vector3(0, 90, 0);
+        states[id] = brush;
+        writer.Reset();
+        server.EncodeSnapshot(writer, states, snapshotSeq: 2);
+        var update = new BitReader(writer.WrittenSpan);
+        var decoded = client.DecodeSnapshot(ref update)![id];
+        Assert.Equal(NetEntityKind.BrushCollider, decoded.Kind);
+        Assert.Equal(brush.Model, decoded.Model);
+        Assert.Equal(brush.Origin, decoded.Origin);
+        Assert.Equal(brush.Angles, decoded.Angles);
+        server.Ack(client.LastDecodedSeq);
+
+        states.Clear();
+        writer.Reset();
+        server.EncodeSnapshot(writer, states, snapshotSeq: 3);
+        var remove = new BitReader(writer.WrittenSpan);
+        Assert.Empty(client.DecodeSnapshot(ref remove)!);
+    }
+
+    [Fact]
     public void EntityCodec_RoundTrips_AnimAction_And_Wepent()
     {
         // [W14a] the new upper-body action overlay + exterior-weapon block round-trip through the delta codec.
@@ -255,6 +325,45 @@ public class SnapshotDeltaTests
         NetEntityState got = EntityStateCodec.ReadDelta(ref r, baseline);
         Assert.False(r.BadRead);
         Assert.Equal((byte)255, got.WepAlpha);
+    }
+
+    [Theory]
+    [InlineData(0, 128)]
+    [InlineData(128, 255)]
+    [InlineData(128, 0)]
+    public void EntityCodec_ProjectileAlpha_RoundTrips(int previousAlpha, int alpha)
+    {
+        var baseline = NetEntityState.Empty(20);
+        baseline.Kind = NetEntityKind.Projectile;
+        baseline.Alpha = previousAlpha;
+
+        var current = baseline;
+        current.Alpha = alpha;
+        var writer = new BitWriter();
+        Assert.Equal(EntityField.Alpha, EntityStateCodec.WriteDelta(writer, baseline, current));
+
+        var reader = new BitReader(writer.WrittenSpan);
+        NetEntityState decoded = EntityStateCodec.ReadDelta(ref reader, baseline);
+        Assert.False(reader.BadRead);
+        Assert.Equal(NetEntityKind.Projectile, decoded.Kind);
+        Assert.Equal(alpha, decoded.Alpha);
+    }
+
+    [Theory]
+    [InlineData(0, 10, -2)]
+    [InlineData(10, 9, 13)]
+    [InlineData(1, 0, 0)]
+    public void EntityCodec_CountdownDigitChangesAndClears(int before, int digit, int team)
+    {
+        var baseline = NetEntityState.Empty(4);
+        baseline.CountdownIndicator = new((byte)before, 0);
+        var next = baseline;
+        next.CountdownIndicator = new((byte)digit, team);
+        var writer = new BitWriter();
+        Assert.Equal(EntityField.CountdownIndicator, EntityStateCodec.WriteDelta(writer, baseline, next));
+        var reader = new BitReader(writer.WrittenSpan);
+        Assert.Equal(next.CountdownIndicator, EntityStateCodec.ReadDelta(ref reader, baseline).CountdownIndicator);
+        Assert.False(reader.BadRead);
     }
 
     [Fact]

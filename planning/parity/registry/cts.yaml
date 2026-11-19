@@ -5,8 +5,7 @@ last_audited: "2026-06-28"  # re-audited on claude/parity-port-waves: verified l
 summary:
   feature_count: 21
   worst_gaps:
-    - "Intermediate/defrag checkpoints unimplemented (target_checkpoint/trigger_race_checkpoint are no-ops for CTS): no ordered progress, no 'went backwards' penalty, no per-cp splits. The Race port has per-checkpoint split records; CTS remains a single start->stop course."
-    - "No CTS bot role (havocbot_role_cts): bots are not routed to race-checkpoint waypoints, so they do not run the CTS course."
+    - "CTS checks ordered gates and records splits in memory. Learned defrag order is not written back, touch detection uses bounding boxes, and the client split display is not wired."
     - "Per-player race bookkeeping is only partly ported: PlayerSpawn (run-clock reset + checkpoint=-1), MakePlayerObserver (FRAGS_PLAYER_OUT_OF_GAME + checkpoint=-1), and AbortSpeedrun (drop the run clock on a speedrun-cheat teleport-back, live via Commands.cs:2155 impulse-141 dispatch) are now live, but there are still no ClientConnect/PutClientInServer hooks (race_SendAll, race_RetractPlayer respawn branch, g_allow_checkpoints practice mode)."
     - "FIXED since last audit (2026-06-27): cts.mode.register_latch values partial->faithful — the timelimit=20 gametype default (now asserted at GameWorld:3157-3158 when unset) and the MUTATOR_ONADD GameRules_limit_score(0)/limit_lead(0) clears (now fraglimit=0/leadlimit=0 at Cts.cs:218-219) are both modeled and match Base; only the non-gameplay 'cloaked'/m_generate_mapinfo menu+mapinfo-listing surface remains."
     - "FIXED earlier (2026-06-25): the .race_movetime per-frame run-clock accumulator is ported+live in OnPlayerPhysics and read at FinishStage (deterministic run clock; was wall-clock). independent_players=1 is an authoritative latch read live by the damage independent-block + score rules. MakePlayerObserver (FRAGS_PLAYER_OUT_OF_GAME) is ported+live."
@@ -137,25 +136,33 @@ features:
       - "server/race.qc:target_checkpoint_setup"
       - "server/race.qc:checkpoint_passed"
       - "server/race.qc:trigger_race_checkpoint_verify"
-    port_refs: []
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:RegisterCourseEntity"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:LoadCheckpointOrder"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:PassCheckpoint"
+      - "src/VortexArena.Server/GameWorld.cs:WireObjectiveSpawns"
+      - "src/VortexArena.Server/GameWorld.cs:SpawnMapEntities"
     constants:
-      - { name: "MAX_CHECKPOINTS", base: "255", port: "n/a", match: false }
+      - { name: "MAX_CHECKPOINTS", base: "255", port: "numbered gates accept 0–254, reserving 255 for unresolved defrag finish", match: true }
+      - { name: "spawnflag 4 wrong-order damage", base: "10000", port: "10000", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
+      logic: partial
+      values: partial
+      timing: faithful
       presentation: missing
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "target_checkpoint and trigger_race_checkpoint are consumed as no-ops for CTS (GameWorld:3207-3208 documents them as Race-only); defrag-style maps lose ordered checkpoint enforcement."
-      - "No 'went backwards' detection, no spawnflag-4 backward-damage, no per-checkpoint split times/records, no .defragcp order file. Wave-5 added per-checkpoint split records to the Race port (Race.cs RecordCheckpointSplit / _checkpointRecords), but Cts.cs got no equivalent — CTS remains a single start->stop course with no intermediate checkpoints."
+      - "The server reads .defragcp from the map VFS and learns unlisted gate indices in memory. It does not write learned order back."
+      - "Exact-brush intersection, checkpoint penalty seconds, practice-mode and portal handling, per-checkpoint waypoint sprites, and split networking/presentation remain open."
+      - "Session split records currently cover intermediate gates only."
     verification:
-      - { kind: code, ref: "Cts.cs has no checkpoint path; GameWorld:3207 routes target_checkpoint/trigger_race_checkpoint to no-op for CTS. Wave-5 RecordCheckpointSplit lives on Race only.", result: fail }
+      - { kind: code, ref: "GameWorld CTS objective dispatch retains authored gate entities; Cts.PassCheckpoint validates order, advances the expected index and records intermediate split time and speed.", result: pass }
+      - { kind: test, ref: "CtsSpawnTests.DefragCheckpoints_LoadOrder_AndRequireEachSplitBeforeFinish / NumberedCheckpoints_UseCnt_AndFinishAtTimedGate", result: pass }
     confidence: high
-    notes: "Cts.cs is a single start->stop course by design; a documented simplification but a real gap for community defrag CTS maps. Unchanged from baseline."
+    notes: "Both numbered touch volumes and targetable Defrag checkpoints participate in CTS runs."
 
   - id: cts.records.persistence
     name: "Per-map top-99 CTS record ranking + UID gating"
@@ -166,9 +173,11 @@ features:
       - "server/race.qc:race_readPos"
       - "server/race.qc:race_setTime"
     port_refs:
+      - "tools/race-record-migration/Migration.cs:Apply"
       - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:SetTime"
       - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:WriteTime"
       - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:ReadPos"
+      - "src/VortexArena.Server/RaceRecordFile.cs:Open"
     constants:
       - { name: "RANKINGS_CNT", base: "99", port: "99", match: true }
       - { name: "CTS_RECORD key seg", base: "CTS_RECORD", port: "/cts100record/", match: true }
@@ -182,13 +191,12 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "uid2name consent gates (cl_allow_uidtracking / cl_allow_uid2name) and the '^1Unregistered Player' guard are not modeled; ranking is gated only on a non-empty PersistentId."
-      - "Persistence is in-memory + Export/Import; the host must wire the file save (QC ServerProgsDB is auto-persisted)."
+    gaps: []
     verification:
+      - { kind: test, ref: "RecordMigrationTests (pinned database and native profile integration)", result: pass }
       - { kind: test, ref: "CtsSpawnTests.EndToEnd_*_FilesRecord (ServerRecord reflects best run); Cts.FinishStage:354 calls RaceRecords.SetTime live", result: pass }
     confidence: high
-    notes: "Classification into RaceRecordKind matches race_setTime branches. Unchanged from baseline (faithful)."
+    notes: "CTS rank admission uses both replicated UID opt-ins and a named identity. The native profile loads on world creation and saves on clean shutdown. The offline importer decodes original hundredths of a second and merges times for verified, consenting owners."
 
   - id: cts.records.notifications
     name: "Finish + record-set/improved/broken notifications (INFO_RACE_*) + medal status"
@@ -431,6 +439,7 @@ features:
       - "server/race.qc:race_send_speedaward / race_send_speedaward_alltimebest"
       - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, GetPressedKeys)"
     port_refs:
+      - "tools/race-record-migration/Migration.cs:Apply"
       - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:SpeedAwardFrame"
       - "src/VortexArena.Common/Gameplay/GameTypes/RaceRecords.cs:ReadSpeedAwardBest/WriteSpeedAwardBest/ReadSpeedAwardBestHolder/SetName"
       - "src/VortexArena.Server/GameWorld.cs:3526 (case Cts cts: cts.Tick(Time); cts.SpeedAwardFrame(Clients.Players))"
@@ -453,9 +462,10 @@ features:
     gaps:
       - "Persistence rides the in-memory RaceRecords DB + Export/Import (the host must wire the file save), where QC auto-persists via ServerProgsDB db_save/db_load. uid2name consent gates (cl_allow_uidtracking/cl_allow_uid2name) are modeled only as a non-empty PersistentId."
     verification:
+      - { kind: test, ref: "RecordMigrationTests (pinned database and native profile integration)", result: pass }
       - { kind: code, ref: "Cts.SpeedAwardFrame (Cts.cs:544-577) mirrors race_SpeedAwardFrame: per non-observer/non-dead player tracks round-best planar speed, persists a new all-time best when it also beats the all-time best AND has a UID, and calls RaceRecords.SetName (= race_checkAndWriteName). LIVE: driven per server frame at GameWorld.cs:3526. Networked: ServerNet.cs:2285-2289 feeds _scoreSpeedAward (rounded floor(s+0.5)). Drawn: ScoreboardPanel.DrawSpeedAward (gated rc|cts).", result: pass }
     confidence: high
-    notes: "Speed award fully ported and live end-to-end (round-best + persisted all-time best planar speed; networked + drawn on the rc|cts scoreboard). Unchanged from baseline (line numbers re-anchored)."
+    notes: "Speed award fully ported and live end-to-end (round-best + persisted all-time best planar speed; networked + drawn on the rc|cts scoreboard). Unchanged from baseline (line numbers re-anchored). Historical CTS speed awards retain game units per second and enter the ladder only when verified and faster."
 
   - id: cts.hud.race_timer
     name: "Race timer HUD: running clock, checkpoint splits, anticipation, medal, PB/server-best"
@@ -483,11 +493,11 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "CTS has no intermediate checkpoints, so the panel's per-checkpoint split / anticipation delta / next-best lines are intentionally inert for CTS (RaceCheckpoint=254, no split feed) — this matches a single start->stop course but means the panel shows only the running clock + medal flash, not the full Race split UI."
+      - "CTS tracks intermediate splits on the server. The panel still receives only the running clock and medal flash."
     verification:
       - { kind: code, ref: "NetGame.UpdateRacePanels (called from the live HUD update) CTS branch (3782-3805) feeds rt.RaceLapTime=RunStartTime, raises the medal flash from cts.LastRecord/LastRecordTime, sets RaceCheckpoint=254. RaceTimerPanel lapRunning gate displays the clock.", result: pass }
     confidence: high
-    notes: "CTS race-timer panel is fed (running clock + medal flash) and un-hidden on the live HUD path. The full per-checkpoint split UI stays inert because CTS has no intermediate checkpoints (presentation:partial). Unchanged from baseline (line numbers re-anchored)."
+    notes: "CTS race-timer panel shows the running clock and medal flash. Per-checkpoint HUD fields are still unwired."
 
   - id: cts.hud.cl_panel_gating
     name: "CTS client panel gating (physics/strafe/race-timer shown, score/accuracy/item-stats hidden)"
@@ -550,7 +560,7 @@ features:
     divergence_rationale: null
     gaps:
       - "ResetMapGlobal resets every runner's in-progress run (AbandonRun: RunStartTime + .race_movetime accumulator zeroed), zeroes the round-best speed award, and cancels pending finish-retracts on map reset — live (GameWorld:4647). The persistent top-99 CTS records are intentionally kept (QC keeps them too)."
-      - "Still not modeled: the cts_EventLog place echo per client (Score_NicePrint + the ftos(race_place) gamelog line) and the qualifying==2 -> race collapse (moot: CTS pins g_race_qualifying=1). The PlayerScore_Sort/race_place bookkeeping is also absent (CTS has no intermediate-checkpoint race_place tracking)."
+      - "The cts_EventLog place echo and PlayerScore_Sort/race_place bookkeeping are absent. CTS pins g_race_qualifying=1, so the qualifying==2 collapse is irrelevant."
     verification:
       - { kind: code, ref: "Cts.ResetMapGlobal (Cts.cs:462-473) clears _retractAt, AbandonRun per player (RunStartTime + race_movetime accumulator zeroed), and resets the round-best speed award; wired live at GameWorld.cs:4647 in the reset-map dispatch. The event-log/place-scoring half of the QC hook is still absent.", result: pass }
     confidence: high
@@ -600,39 +610,12 @@ features:
     base_refs:
       - "common/gametypes/gametype/cts/sv_cts.qc:havocbot_role_cts"
       - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, HavocBot_ChooseRole)"
-    port_refs: []
-    constants:
-      - { name: "routerating", base: "navigation_routerating 1000000, 5000", port: "not modeled", match: false }
-    status:
-      logic: missing
-      values: missing
-      timing: na
-      presentation: na
-      audio: na
-      liveness: na
-    intended_divergence: false
-    divergence_rationale: null
-    gaps:
-      - "No CTS bot role: bots are not routed to their next-expected race-checkpoint waypoint (with the raw-touch redirect for unreachable checkpoints), so bots do not actually run the CTS course. (CTS does, however, force _independent_players=1, which makes bots hold fire via the BotBrain fire-gate — see cts.mode.register_latch.)"
-    verification:
-      - { kind: code, ref: "grep havocbot_role_cts / HavocBot_ChooseRole for CTS — absent in the port", result: fail }
-    confidence: medium
-    notes: "Tied to the missing race-checkpoint waypoints; bots in CTS have no mode-specific navigation. Unchanged from baseline."
-
-  - id: cts.records.getrecords
-    name: "Map-record listing reply (GetRecords): per-map rank-1 CTS time + holder"
-    layer: [authority]
-    base_refs:
-      - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, GetRecords)"
-      - "server/race.qc:race_readTime"
-      - "server/race.qc:race_readName"
     port_refs:
-      - "src/VortexArena.Server/CommandReplies.cs:GetRankings (reads RaceRecords CTS table for the current map)"
-      - "src/VortexArena.Server/Commands.cs:896-897 (records/rankings console commands) -> CmdRecords/CmdRankings -> Replies.RankingsReply"
+      - "src/VortexArena.Server/Bot/BotRoles.cs:ChooseRole"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleCts"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Cts.cs:IsNextCheckpoint"
     constants:
-      - { name: "records page size", base: "200 maps/page (multi-map)", port: "single-map rankings only (no paging)", match: false }
-      - { name: "per-rank line fmt", base: "strpad(8,pos) ' ' strpad(-8,TIME_ENCODED_TOSTRING) ' ' name", port: "pos.PadLeft(8) ' ' time.PadRight(8) ' ' name (CommandReplies.cs:173)", match: true }
-      - { name: "record_type seg", base: "CTS_RECORD under g_cts", port: "RaceRecords.CtsRecord for NetName cts (CommandReplies.cs:155)", match: true }
+      - { name: "routerating", base: "navigation_routerating 1000000, 5000", port: "1000000, 5000", match: true }
     status:
       logic: partial
       values: faithful
@@ -643,8 +626,39 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "The port models the single-map ranking listing (QC getrankings: ranks 1..RANKINGS_CNT of the current map) and wires it live to the rankings/records console commands. The QC GetRecords hook's multi-map paged form (200 maps/page across MapInfo, the cross-map 'records [<page>]' listing) is NOT modeled — only the current map's records are listed."
+      - "The CTS role rates touchable gates with the next index. Use-only gates do not expose their upstream activators to bot routing, and the raw-touch fallback for unreachable waypoints is not modeled."
     verification:
-      - { kind: code, ref: "CommandReplies.GetRankings (CommandReplies.cs:146-180) reads RaceRecords.ReadTime/ReadName off CtsRecord for the current map and returns 'Records for <map>:' with the ranked lines; reachable live via Commands.cs:896-897 'records'/'rankings' -> CmdRecords/CmdRankings (Commands.cs:3265/3284) -> Replies.RankingsReply.", result: pass }
+      - { kind: code, ref: "BotRoles CTS dispatch selects BotObjectiveRoles.RoleCts; RoleCts rates touchable gates matching Cts.IsNextCheckpoint.", result: pass }
+    confidence: medium
+    notes: "CTS already dispatched to a mode-specific role. The role now considers intermediate gates."
+
+  - id: cts.records.getrecords
+    name: "Paged map-record report of rank-one CTS times and holders"
+    layer: [authority]
+    base_refs:
+      - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, GetRecords)"
+      - "server/race.qc:race_readTime"
+      - "server/race.qc:race_readName"
+    port_refs:
+      - "src/VortexArena.Server/CommandReplies.cs:GetRecords"
+      - "src/VortexArena.Server/Commands.cs:CmdRecords"
+      - "game/net/NetGame.cs:RecordMapCatalog"
+    constants:
+      - { name: "records page size", base: "200 catalog positions", port: "200 catalog positions", match: true }
+      - { name: "record columns", base: "map width 32, clock time width 8, then holder", port: "same", match: true }
+      - { name: "record type", base: "CTS_RECORD, rank 1", port: "RaceRecords.CtsRecord, rank 1", match: true }
+    status:
+      logic: faithful
+      values: faithful
+      timing: na
+      presentation: faithful
+      audio: na
+      liveness: live
+    intended_divergence: false
+    divergence_rationale: null
+    gaps: []
+    verification:
+      - { kind: test, ref: "ServerClientCommandsTests.Records_RaceModesReturnScopedRankOneInClockFormat", result: pass }
+      - { kind: code, ref: "planning/parity/record-reports/README.md (native dedicated CTS output on Leave Em Behind and Courtfun)", result: pass }
     confidence: high
-    notes: "Per-map records/rankings console reply reads the RaceRecords CTS table live. Residual: the multi-map paged GetRecords form is still not modeled (logic:partial). Unchanged from baseline (line numbers re-anchored)."
+    notes: "The records command pages across mounted CTS maps. The rankings command still shows the current map's individual ranks."

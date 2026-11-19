@@ -29,12 +29,8 @@ namespace VortexArena.Common.Gameplay;
 /// editable by anyone"; <c>g_sandbox_editor_free &gt;= 2</c> overriding ownership; and RoundPerfectVector on
 /// the scaled bbox (#2742).</para>
 ///
-/// <para>Cross-file seams this file deliberately calls THROUGH rather than reinventing (see the TODOs in the
-/// returned work order): the player-view crosshair trace used by <c>object_spawn</c>/<c>sandbox_ObjectEdit_Get</c>
-/// is taken via the injectable <see cref="ITraceProvider"/> (a host wires it to the real
-/// <c>crosshair_trace_plusvisibletriggers</c>); object→client CSQC networking, the <c>+button8</c> drag system,
-/// and the actual <c>sandbox/</c> file IO are host responsibilities surfaced through small delegates
-/// (<see cref="ObjectStore"/>) so this mutator stays in <c>VortexArena.Common</c> and unit-testable.</para>
+/// <para>The host supplies view tracing and sandbox storage. The server drives <see cref="DriveDrag"/>
+/// from the native <c>+button8</c> input.</para>
 /// </summary>
 [Mutator]
 public sealed class SandboxMutator : MutatorBase
@@ -73,6 +69,8 @@ public sealed class SandboxMutator : MutatorBase
 
     /// <summary>QC global <c>float autosave_time;</c>.</summary>
     private float _autosaveTime;
+    private readonly Dictionary<Entity, DragState> _drags = new();
+    private readonly List<Entity> _staleDrags = new();
 
     private HookHandler<MutatorHooks.SvStartFrameArgs>? _onStartFrame;
 
@@ -105,6 +103,9 @@ public sealed class SandboxMutator : MutatorBase
     /// <summary>QC <c>print_to(player, ..)</c> — host-overridable so command feedback can reach the client console.</summary>
     public Action<Entity, string>? PrintTo { get; set; }
 
+    /// <summary>Host sink for server-side Sandbox activity enabled by g_sandbox_info.</summary>
+    public Action<string>? LogInfo { get; set; }
+
     public override void Hook()
     {
         // QC MUTATOR_ONADD: fresh object list, seed autosave_time (don't save the first frame), autoload.
@@ -122,6 +123,10 @@ public sealed class SandboxMutator : MutatorBase
     {
         if (_onStartFrame is not null)
             MutatorHooks.SvStartFrame.Remove(_onStartFrame);
+        _staleDrags.AddRange(_drags.Keys);
+        foreach (Entity player in _staleDrags)
+            ReleaseDrag(player);
+        _staleDrags.Clear();
     }
 
     private float Now => Api.Services is null ? 0f : Api.Clock.Time;
@@ -166,7 +171,11 @@ public sealed class SandboxMutator : MutatorBase
         // think / touch / grab
         public int Grab;                      // 0 none / 1 owner / 3 anyone
         public float TouchTimer;
+        internal Entity? Carrier;
     }
+
+    private sealed record DragState(SandboxObject Object, MoveType MoveType, float Gravity,
+        float Distance, Vector3 LocalPoint, float YawOffset);
 
     /// <summary>Live read-only view of all spawned objects (for the host's CSQC networker / drag system / tests).</summary>
     public IReadOnlyList<SandboxObject> Objects => _objects;
@@ -242,6 +251,8 @@ public sealed class SandboxMutator : MutatorBase
     /// <summary>QC <c>sandbox_ObjectRemove</c>: detach children, clear any player's attach-selection, delete.</summary>
     public void ObjectRemove(SandboxObject e)
     {
+        if (e.Carrier is { } carrier)
+            ReleaseDrag(carrier);
         ObjectAttachRemove(e); // detach child objects
 
         // unset any player's pending attach-selection pointing at e (QC FOREACH_CLIENT ... object_attach == e)
@@ -262,20 +273,33 @@ public sealed class SandboxMutator : MutatorBase
     {
         e.Scale = f;
         if (e.Scale != 0f)
-        {
             e.Scale = System.Math.Clamp(e.Scale, ScaleMin, ScaleMax);
-            if (e.Edict is not null && Api.Services is not null)
-                Api.Entities.SetModel(e.Edict, e.Model); // reset mins/maxs based on mesh
-            e.Mins = RoundPerfectVector(e.Mins * e.Scale);
-            e.Maxs = RoundPerfectVector(e.Maxs * e.Scale);
-            if (e.Edict is not null && Api.Services is not null)
-                Api.Entities.SetSize(e.Edict, e.Mins, e.Maxs);
+        ApplyModelBounds(e);
+    }
+
+    private void ApplyModelBounds(SandboxObject obj)
+    {
+        var bounds = ModelBoundsProvider?.Invoke(obj.Model);
+        if (bounds is null)
+            return;
+
+        float scale = obj.Scale == 0f ? 1f : obj.Scale;
+        obj.Mins = bounds.Value.Mins;
+        obj.Maxs = bounds.Value.Maxs;
+        if (obj.Scale != 0f)
+        {
+            obj.Mins = RoundPerfectVector(obj.Mins * scale);
+            obj.Maxs = RoundPerfectVector(obj.Maxs * scale);
         }
+        if (obj.Edict is { } body && Api.Services is not null)
+            Api.Entities.SetSize(body, obj.Mins, obj.Maxs);
     }
 
     /// <summary>QC <c>sandbox_ObjectAttach_Set</c>: attach e to parent on tag s, persisting old solid/movetype.</summary>
     public void ObjectAttachSet(SandboxObject e, SandboxObject parent, string s)
     {
+        if (e.Carrier is { } carrier)
+            ReleaseDrag(carrier);
         ObjectAttachRemove(e); // can't attach an attachment
 
         e.OldSolid = e.Solid;       // persist solidity
@@ -376,6 +400,101 @@ public sealed class SandboxMutator : MutatorBase
         // TODO[cross-file]: CSQCMODEL_AUTOUPDATE(e) — object networking seam.
     }
 
+    /// <summary>Apply the authoritative drag button for this player's server tick.</summary>
+    public void DriveDrag(Entity player, bool held, float frameTime)
+    {
+        if (!held || !IsEnabled)
+        {
+            ReleaseDrag(player);
+            return;
+        }
+
+        if (!_drags.TryGetValue(player, out DragState? drag))
+        {
+            if (!ReadOnly)
+                StartDrag(player);
+            return;
+        }
+
+        // QC checks edit permissions at acquisition. An existing carry ends on release or removal.
+        if (drag.Object.Edict is not { IsFreed: false } body)
+        {
+            ReleaseDrag(player);
+            return;
+        }
+
+        if (frameTime <= 0f)
+            return;
+
+        body.Flags &= ~EntFlags.OnGround;
+        QMath.AngleVectors(body.Angles, out Vector3 forward, out Vector3 right, out Vector3 up);
+        Vector3 offset = drag.LocalPoint;
+        Vector3 current = body.Origin + forward * offset.X + right * offset.Y + up * offset.Z;
+        Vector3 target = player.Origin + player.ViewOfs + QMath.Forward(player.ViewAngles) * drag.Distance;
+        float fraction = MathF.Min(frameTime * 10f, 1f);
+        body.Velocity = Vector3.Lerp(body.Velocity, (target - current) / frameTime, fraction);
+        if (body.Model is null || !body.Model.StartsWith('*'))
+        {
+            float yawDelta = MathF.IEEERemainder(player.ViewAngles.Y + drag.YawOffset - body.Angles.Y, 360f);
+            body.Angles.Y += yawDelta * fraction;
+        }
+        SyncDraggedEdict(drag.Object, body);
+    }
+
+    private void StartDrag(Entity player)
+    {
+        if (Trace is null)
+            return;
+        const string rangeCvar = "g_grab_range";
+        float range = string.IsNullOrEmpty(Api.Cvars.GetString(rangeCvar)) ? 200f : Api.Cvars.GetFloat(rangeCvar);
+        if (range <= 0f)
+            return;
+
+        Trace.TraceForward(player, range, out Vector3 touchPoint, out SandboxObject? hit);
+        if (hit?.Edict is not { IsFreed: false } body || !CanDrag(player, hit)
+            || Vector3.DistanceSquared(player.Origin, body.Origin) > range * range)
+            return;
+
+        if (hit.Carrier is { } previousCarrier)
+            ReleaseDrag(previousCarrier);
+
+        QMath.AngleVectors(body.Angles, out Vector3 forward, out Vector3 right, out Vector3 up);
+        Vector3 offset = touchPoint - body.Origin;
+        Vector3 localPoint = new(Vector3.Dot(offset, forward), Vector3.Dot(offset, right), Vector3.Dot(offset, up));
+        hit.Carrier = player;
+        _drags[player] = new DragState(hit, body.MoveType, body.Gravity,
+            Vector3.Distance(touchPoint, player.Origin + player.ViewOfs), localPoint,
+            body.Angles.Y - player.ViewAngles.Y);
+        body.MoveType = MoveType.Walk;
+        body.Gravity = 0.00001f;
+        body.Flags &= ~EntFlags.OnGround;
+    }
+
+    private static bool CanDrag(Entity player, SandboxObject obj)
+        => obj.Parent is null && (obj.Grab == 3 || (obj.Grab == 1 && ReferenceEquals(obj.RealOwner, player)));
+
+    private void ReleaseDrag(Entity player)
+    {
+        if (!_drags.Remove(player, out DragState? drag))
+            return;
+        drag.Object.Carrier = null;
+        if (drag.Object.Edict is not { IsFreed: false } body)
+            return;
+        body.MoveType = drag.MoveType;
+        body.Gravity = drag.Gravity;
+        if (drag.MoveType is not (MoveType.Toss or MoveType.Walk or MoveType.Step or MoveType.FlyMissile
+            or MoveType.Bounce or MoveType.BounceMissile or MoveType.Physics))
+            body.Velocity = Vector3.Zero;
+        SyncDraggedEdict(drag.Object, body);
+    }
+
+    private static void SyncDraggedEdict(SandboxObject obj, Entity body)
+    {
+        obj.Origin = body.Origin;
+        obj.Angles = body.Angles;
+        obj.Velocity = body.Velocity;
+    }
+
     /// <summary>QC <c>sandbox_ObjectFunction_Touch</c>: rate-limited velocity-scaled material impact fx/sound.
     /// The toucher may be any entity (player, world, another object) — only its velocity is read.</summary>
     public void ObjectTouch(SandboxObject e, Vector3 toucherVelocity)
@@ -433,8 +552,8 @@ public sealed class SandboxMutator : MutatorBase
             if (it == e) // main object first
             {
                 slot = 0;
-                solidity = it.Solid;
-                physics = it.MoveType;
+                solidity = it.Edict?.Solid ?? it.Solid;
+                physics = it.Edict?.MoveType ?? it.MoveType;
             }
             else if (it.Parent == e) // child, in order
             {
@@ -454,8 +573,8 @@ public sealed class SandboxMutator : MutatorBase
             }
             else if (database)
             {
-                sb += $"\"{V9(it.Origin)}\" ";
-                sb += $"\"{V9(it.Angles)}\" ";
+                sb += $"\"{V9(it.Edict?.Origin ?? it.Origin)}\" ";
+                sb += $"\"{V9(it.Edict?.Angles ?? it.Angles)}\" ";
             }
             // properties stored for all objects
             sb += $"\"{it.Model}\" ";
@@ -602,6 +721,12 @@ public sealed class SandboxMutator : MutatorBase
             var clients = RealClients();
             foreach (var it in _objects)
                 ObjectThink(it, clients);
+            foreach (Entity player in _drags.Keys)
+                if (player.IsFreed)
+                    _staleDrags.Add(player);
+            foreach (Entity player in _staleDrags)
+                ReleaseDrag(player);
+            _staleDrags.Clear();
         }
 
         if (StorageAutosave == 0f) return false;
@@ -675,6 +800,7 @@ public sealed class SandboxMutator : MutatorBase
                 e.Model = A(2);
                 if (e.Edict is not null && Api.Services is not null)
                     Api.Entities.SetModel(e.Edict, A(2));
+                ApplyModelBounds(e);
                 if (Info > 0)
                     Log($"^3SANDBOX - SERVER: ^7{NetNameOf(player)} spawned an object at origin ^3{Vtos(e.Origin)}");
                 return true;
@@ -816,6 +942,8 @@ public sealed class SandboxMutator : MutatorBase
                             // FAITHFUL Base quirk: solidity case has NO break; ⇒ falls through into physics.
                             goto case "physics";
                         case "physics":
+                            if (e.Carrier is { } carrier)
+                                ReleaseDrag(carrier);
                             switch (A(3))
                             {
                                 case "0": e.MoveType = MoveType.None; if (e.Edict is not null) e.Edict.MoveType = MoveType.None; break;  // static
@@ -963,13 +1091,15 @@ public sealed class SandboxMutator : MutatorBase
         if (player is not null && PrintTo is not null) PrintTo(player, msg);
     }
 
-    private static void Log(string msg) { /* QC LOG_INFO — host may surface; intentionally quiet headless */ _ = msg; }
+    private void Log(string msg) => LogInfo?.Invoke(msg);
 
     private void ApplyEdictTransform(SandboxObject e)
     {
         if (e.Edict is null || Api.Services is null) return;
-        Api.Entities.SetOrigin(e.Edict, e.Origin);
         e.Edict.Angles = e.Angles;
+        e.Edict.Solid = e.Solid;
+        e.Edict.MoveType = e.MoveType;
+        Api.Entities.SetOrigin(e.Edict, e.Origin);
     }
 
     private bool ModelExists(string path)
@@ -1005,6 +1135,9 @@ public sealed class SandboxMutator : MutatorBase
     /// any <c>Api.*</c> seam; a host wires this to the asset VFS). Null ⇒ permissive (headless / tests), so the
     /// build still works in-session; when wired, object_spawn rejects a non-existent model path like Base.</summary>
     public Func<string, bool>? ModelExistsProvider { get; set; }
+
+    /// <summary>Unscaled local model bounds for the server-side object hull.</summary>
+    public Func<string, (Vector3 Mins, Vector3 Maxs)?>? ModelBoundsProvider { get; set; }
 
     /// <summary>QC <c>FOR_EACH_TAG(e)</c> — a host-wired enumeration of an object's model tag (bone) names for
     /// <c>object_info mesh</c>. Null ⇒ no tag list (the mesh subcommand prints the header only, current behavior).

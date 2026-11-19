@@ -23,7 +23,7 @@ namespace VortexArena.Common.Gameplay;
 ///
 /// Faithfully ported (Godot-free essence):
 ///  - smallest-team assignment on join (<see cref="TeamBalance"/>);
-///  - the freeze model: a fragged player becomes <see cref="FrozenState.Frozen"/> rather than respawning,
+///  - the freeze model: a fragged player becomes <see cref="FrozenState.IsFrozen"/> rather than respawning,
 ///    and counts as not-alive for the round check (<see cref="CheckWinner"/>);
 ///  - manual revive by a nearby teammate (<see cref="TryRevive"/>) clears the freeze;
 ///  - the freeze/revive SCORE matrix and round-limit win condition.
@@ -40,7 +40,6 @@ namespace VortexArena.Common.Gameplay;
 ///  - FT's start-loadout (<see cref="OnSetStartItems"/> via the live SetStartItems hook, QC g_ft_start_health/
 ///    armor 100/100 + ammo).
 ///
-/// Deferred (NOTE — cross-boundary): the ice entity model + waypoint visuals (CSQC), and bot freeing roles.
 /// </summary>
 [GameType]
 public sealed class FreezeTag : GameType
@@ -343,6 +342,22 @@ public sealed class FreezeTag : GameType
         if (MatchEnded)
             return false;
 
+        if (DeathTypes.ItemDamageNeedKill(ev.DeathType) && Api.Services is not null
+            && SpawnSystem.SelectSpawnPoint(victim, _roster, targetCheck: true) is { } spot)
+        {
+            if (!IsFrozen(victim) && ev.Attacker is not Player)
+                victim.ScoreFrags -= 1;
+            victim.SetResource(ResourceType.Health, 1f);
+            victim.SetResource(ResourceType.Armor, victim.FrozenArmor);
+            Relocate(victim, spot, isTeleport: false);
+        }
+
+        if (IsFrozen(victim))
+        {
+            ev.StatusEffectToKeep = StatusEffectsCatalog.Frozen;
+            return false;
+        }
+
         // QC freezetag PlayerDies (sv_freezetag.qc:484): freezetag_LastPlayerForTeam_Notify(frag_target) — if this
         // freeze leaves exactly one still-living (unfrozen) teammate, that lone survivor gets CENTER_ALONE ("You
         // are now alone!"). Evaluated BEFORE the freeze takes effect, with the victim passed as `leaving` (and
@@ -350,6 +365,7 @@ public sealed class FreezeTag : GameType
         NotifyLastPlayerForTeam(victim, _roster);
 
         Freeze(victim, ev.Attacker as Player);
+        ev.StatusEffectToKeep = StatusEffectsCatalog.Frozen;
         return false;
     }
 
@@ -391,6 +407,7 @@ public sealed class FreezeTag : GameType
         var st = GetState(targ);
         st.IsFrozen = true;
         st.ReviveProgress = 0f;
+        targ.ReviveProgress = 0f;
         st.FrozenTime = now;
         targ.RevivalTime = 0f; // QC freezetag_Freeze (sv_freezetag.qc:227): clear the last-revive timestamp.
         // QC freezetag_Freeze: arm the auto-thaw timer only when revive_auto is on AND maxtime > 0.
@@ -400,7 +417,7 @@ public sealed class FreezeTag : GameType
         targ.SetResource(ResourceType.Health, 1f);
         // QC STAT(FROZEN): apply the shared Frozen status effect so the rest of the sim sees the freeze.
         if (StatusEffectsCatalog.Frozen is { } frozenDef)
-            StatusEffectsCatalog.Apply(targ, frozenDef, maxtime > 0f ? maxtime : 0f, 1f, attacker);
+            StatusEffectsCatalog.Apply(targ, frozenDef, duration: 0f, source: attacker);
 
         // ----- score matrix (QC freezetag_Add_Score, sv_freezetag.qc:162-181) -----
         if (ReferenceEquals(attacker, targ))
@@ -450,6 +467,7 @@ public sealed class FreezeTag : GameType
             st.FrozenTimeout = 0f;
             st.FrozenTime = 0f;
         }
+        targ.ReviveProgress = 0f;
         targ.DeadState = DeadFlag.No;
         // QC freezetag_Unfreeze (sv_freezetag.qc:262): stamp the revive time so the ice nade's 1.5s re-freeze
         // grace (ice.qc:59) and other revive-window checks can see a just-thawed player.
@@ -481,8 +499,7 @@ public sealed class FreezeTag : GameType
     ///    scaled by g_frozen_force (0.6) — the HP=1 frozen body can't be chip-killed;
     ///  - <b>fall-damage revive</b> (g_frozen_revive_falldamage, default 0/off): a hard enough DEATH_FALL hit
     ///    thaws the player to g_frozen_revive_falldamage_health (40) instead.
-    /// The void/lava soft-kill relocate (g_frozen_damage_trigger 0, default 1 = die) needs a spawn-point
-    /// selector that lives in the server layer and is intentionally NOT done here.
+    /// With g_frozen_damage_trigger disabled, hazards instead teleport an already-frozen victim without a death.
     /// </summary>
     private bool OnDamageCalculate(ref MutatorHooks.DamageCalculateArgs args)
     {
@@ -545,7 +562,7 @@ public sealed class FreezeTag : GameType
             targ.SetResource(ResourceType.Health, nadeHealth);
             args.Damage = 0f;
             args.Force = Vector3.Zero;
-            // QC Send_Effect(EFFECT_ICEORGLASS) is host-side VFX.
+            EffectEmitter.Emit("ICEORGLASS", targ.Origin, count: 3);
             NotificationSystem.Send(NotifBroadcast.All, null, MsgType.Info, "FREEZETAG_REVIVED_NADE", targ.NetName);
             NotificationSystem.Send(NotifBroadcast.One, targ, MsgType.Center, "FREEZETAG_REVIVE_SELF");
             return false;
@@ -553,7 +570,18 @@ public sealed class FreezeTag : GameType
 
         // ----- frozen damage immunity + fall-damage revive (QC sv_freezetag.qc:656-670) -----
         string dt = args.DeathType;
-        if (!IsNeedKill(dt) && !DeathTypes.IsTeamChange(dt))
+        bool needKill = DeathTypes.ItemDamageNeedKill(dt);
+        if (needKill && TryCvar("g_frozen_damage_trigger", out float damageTrigger) && damageTrigger == 0f
+            && SpawnSystem.SelectSpawnPoint(targ, _roster) is { } spot)
+        {
+            EffectEmitter.Emit("TELEPORT", targ.Origin);
+            Relocate(targ, spot, isTeleport: true);
+            EffectEmitter.Emit("TELEPORT", targ.Origin);
+            args.Damage = 0f;
+            return false;
+        }
+
+        if (!needKill && !DeathTypes.IsTeamChange(dt))
         {
             // QC fall-damage revive (default off): a hard enough fall thaws the player to falldamage_health.
             float fallRevive = TryCvar("g_frozen_revive_falldamage", out float fr) ? fr : 0f;
@@ -562,7 +590,7 @@ public sealed class FreezeTag : GameType
                 float fallHealth = TryCvar("g_frozen_revive_falldamage_health", out float fh) ? fh : 40f;
                 Unfreeze(targ);
                 targ.SetResource(ResourceType.Health, fallHealth);
-                // QC Send_Effect(EFFECT_ICEORGLASS) is host-side VFX.
+                EffectEmitter.Emit("ICEORGLASS", targ.Origin, count: 3);
                 NotificationSystem.Send(NotifBroadcast.All, null, MsgType.Info, "FREEZETAG_REVIVED_FALL", targ.NetName);
                 NotificationSystem.Send(NotifBroadcast.One, targ, MsgType.Center, "FREEZETAG_REVIVE_SELF");
             }
@@ -576,15 +604,24 @@ public sealed class FreezeTag : GameType
         return false;
     }
 
-    /// <summary>
-    /// QC <c>ITEM_DAMAGE_NEEDKILL(dt)</c> (server/items/items.qh:123): the void(HURTTRIGGER)/slime/lava/swamp
-    /// "must-kill" deathtypes — the only damage that still kills a frozen player (so they don't float forever in
-    /// a kill volume). All map to the port's environment deathtype tags.
-    /// </summary>
-    private static bool IsNeedKill(string? deathType)
+    private static void Relocate(Player player, SpawnPoint spot, bool isTeleport)
     {
-        string b = DeathTypes.BaseOf(deathType);
-        return b == DeathTypes.Void || b == DeathTypes.Slime || b == DeathTypes.Lava || b == DeathTypes.Swamp;
+        player.Angles = spot.Angles;
+        player.FixAngle = true;
+        player.FixAngleAngles = player.Angles;
+        player.Velocity = player.OldVelocity = player.AVelocity = Vector3.Zero;
+        player.PunchAngle = player.PunchVector = Vector3.Zero;
+        player.AntilagNeedsClear = true;
+        Vector3 origin = spot.Origin;
+        if (isTeleport)
+        {
+            origin += Vector3.UnitZ * (1f - player.Mins.Z - 24f);
+            player.DeadState = DeadFlag.No;
+            player.Effects = EffectFlags.Teleport;
+            player.GtSpawnOrigin = spot.Origin;
+        }
+        Api.Entities.SetOrigin(player, origin);
+        player.OldOrigin = origin;
     }
 
     /// <summary>

@@ -61,7 +61,42 @@ features:
     verification:
       - { kind: code, ref: "game/net/ServerNet.cs:1054 ClientConnect admit; ClientManager.cs:149-222", result: pass }
     confidence: high
-    notes: "Connect is LIVE and registers the client everywhere (entity table, sim, scores, roster); fires ban/event-log/stats/anticheat/timeout/CHAT_CONNECT and ends in the QC observer-on-connect invariant (IsObserver, FRAGS_SPECTATOR, MOVETYPE_NONE/SOLID_NOT). Bots auto-Join at connect."
+    notes: "Connect registers the client in entity, sim, score and roster state, runs connect hooks with the verified identity available, and starts humans as observers. Bots auto-Join at connect. The native ENet caller rejects if a connect hook drops the connection during admission."
+
+  - id: sv-client-lifecycle.connect.join_notice
+    name: "Configured timed join notice"
+    layer: [authority, presentation]
+    base_refs:
+      - "common/net_notice.qc:sv_notice_join"
+      - "common/net_notice.qc:sv_notice_join_think"
+      - "common/net_notice.qc:cl_notice_run"
+      - "server/client.qc:ClientConnect"
+    port_refs:
+      - "game/net/ServerNet.cs:BroadcastSnapshots"
+      - "src/VortexArena.Net/JoinNotice.cs:Read"
+      - "game/hud/JoinNoticeOverlay.cs:ShowNotice"
+    constants:
+      - { name: "delay after connection", base: "1 second", port: "1 simulation second", match: true }
+      - { name: "sv_join_notices_time", base: "15 seconds by default", port: "15 seconds by default", match: true }
+    status:
+      logic: faithful
+      values: faithful
+      timing: partial
+      presentation: partial
+      audio: na
+      liveness: live
+    intended_divergence: false
+    divergence_rationale: null
+    gaps:
+      - "The first accepted snapshot anchors a receipt that has no prior snapshot clock. Timing with snapshot loss, a long receive stall, or nonzero time scaling remains unmeasured."
+    verification:
+      - { kind: test, ref: "OrderedAuditGameplayTests.JoinNoticeWireRetainsLinesColorsAndStockWholeSecondDuration", result: pass }
+      - { kind: test, ref: "OrderedAuditGameplayTests.JoinNoticeUtf8LimitNeverCutsAScalarAndRejectsOversizedWireText", result: pass }
+      - { kind: live, ref: "ordered-gameplay-council/02-second-join and 03-paused frames verify separate notices and a frozen timer", result: pass }
+      - { kind: live, ref: "Ordered S1 graphical fixture shows both color-coded notice lines in planning/parity/unmapped-audit/ordered-gameplay-smoke.webp", result: pass }
+      - { kind: live, ref: "unmapped-audit/client-state-notices/evidence.txt, two native remotes with an instrumented loading hold verify display with time remaining and discard at exact expiry", result: pass }
+    confidence: medium
+    notes: "A nonempty setting at connection arms a one-shot reliable notice for that peer. Delivery reads the current text and duration. The receipt clock runs under loading and the overlay displays only the remaining interval."
 
   - id: sv-client-lifecycle.connect.fix_client_cvars_welcome
     name: "FixClientCvars / SendWelcomeMessage / ClientInit_misc: server->client welcome + cvar push"
@@ -72,25 +107,28 @@ features:
       - "server/client.qc:ClientInit_misc"
       - "common/mutators/mutator/buffs/cl_buffs.qc / cl_hook.qc:BuildGameplayTipsString"
     port_refs:
-      - "src/VortexArena.Server/GameWorld.cs:InfraClientConnect (~1192)"
-      - "src/VortexArena.Server/GameWorld.cs:SendCampaignWelcome (~1288, campaign branch of SendWelcomeMessage)"
+      - "src/VortexArena.Server/GameWorld.cs:InfraClientConnect, BuildJoinWelcomeDetails"
+      - "game/net/ServerNet.cs:HandleAuth (per-peer HandshakeAccept); game/net/NetGame.cs:OnMatchWelcome"
+      - "game/net/ServerNet.cs:SendClientInit, SendMatchState"
+      - "game/net/ClientNet.cs:HandleClientInit, NextMap"
+      - "game/net/NetGame.cs:scoreboard next-map binding"
     constants: []
     status:
       logic: partial
-      values: missing
-      timing: missing
+      values: partial
+      timing: partial
       presentation: partial
       audio: na
       liveness: partial
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "More of the welcome channel exists now: the campaign welcome level-num (SendCampaignWelcome), the non-campaign 'Active modifications:' line (SendMutatorsWelcome → BuildMutatorsPrettyString), the g_mutatormsg server mutator message, the sv_motd MOTD (\\n-escapes expanded), and the grappling-hook + offhand-blaster gameplay tips are all surfaced to the connecting client. Still unmodeled: FixClientCvars (cl_jumpspeedcap_min/max, cl_shootfromfixedorigin, prediction/gentle), clientstuff, set _teams_available, Send_NextMap_To_Player, and the ClientInit_misc per-client init entity (armor-blockpercent, damagepush speedfactor, fog, serverflags, g_trueaim_minrange, hook/arc shot origins)."
-      - "The port pushes a few physics-relevant cvars via per-client replicated-cvar tables; there is no FixClientCvars cvar-push stuffcmd and no per-client ClientInit_misc init-entity carrying the server's damage/fog/trueaim constants. (The `cmd clientversion` request IS now handled — Commands.cs:3248 — and its mismatch nag fires via frame.name_and_version.)"
+      - "The accept handshake delivers the per-player Welcome briefing. Gameplay tips are live through the existing per-client channel. The reliable client-init bundle carries true aim, damage push, armor, fog, server flags, Nexball meter timing and a single hook muzzle offset. The per-alignment hook and Arc muzzle arrays and full use of the decoded constants remain open."
+      - "The server's match-state packet feeds the scoreboard next-map line. The full FixClientCvars push, clientstuff and explicit _teams_available setup are still open."
     verification:
-      - { kind: code, ref: "GameWorld.cs:1277-1321 (SendCampaignWelcome/SendMutatorsWelcome/g_mutatormsg/sv_motd + hook+offhand tips on InfraClientConnect); SendMutatorsWelcome:1387-1418; grep: no FixClientCvars/_teams_available/Send_NextMap/ClientInit_misc in src", result: pass }
+      - { kind: code_read, ref: "ServerNet sends ClientInit after HandshakeAccept; ClientNet.HandleClientInit decodes fields. SendMatchState sends NextMapBroadcast and NetGame binds ClientNet.NextMap to the scoreboard.", result: pass }
     confidence: high
-    notes: "DRIFT 2026-06-27: the welcome channel expanded again — beyond the campaign line + hook tip, the non-campaign branch now delivers the BuildMutatorsPrettyString 'Active modifications:' line, the g_mutatormsg message, the sv_motd MOTD, and the offhand-blaster tip, all per-client via the chat sink (skipped for bots). Dimension statuses stay partial (no flip — the row was already logic/presentation/liveness:partial; values/timing stay missing as no numeric constants are involved). The remaining absent pieces are FixClientCvars cvar-push, clientstuff, _teams_available, ClientInit_misc init-entity, Send_NextMap; the replicated-cvar table remains the stand-in for the physics cvars."
+    notes: "2026-11-19 audit corrected the missing init bundle and next-map leads."
 
   - id: sv-client-lifecycle.join.join_player
     name: "Join: observer -> live player"
@@ -517,6 +555,7 @@ features:
     base_refs:
       - "server/client.qc:PlayerFrame (sv_maxidle block ~2982)"
       - "server/client.qc:PlayerFrame (alivetime parm_idlesince ~2858)"
+      - "server/client.qc:DecodeLevelParms"
       - "ecs/systems/sv_physics.qc:sys_phys_monitor (parm_idlesince activity update)"
     port_refs:
       - "src/VortexArena.Server/GameWorld.cs:PlayerFrameIdleAll (~1701)"
@@ -525,6 +564,7 @@ features:
       - "src/VortexArena.Server/ServerPlayerState.cs:IdleSince/IdleKickLastTimeLeft (~36)"
     constants:
       - { name: "sv_maxidle", base: "0 (off)", port: "0 (Cvars.cs:354)", match: true }
+      - { name: "fresh connection idle grace", base: "max(time, time - sv_maxidle + 60)", port: "same in InfraClientConnect", match: true }
       - { name: "sv_maxidle_playertospectator", base: "60 (server/client.qh:39; cfg also 60)", port: "60 (Cvars.cs:357; W16 fixed 0->60)", match: true }
       - { name: "sv_maxidle_minplayers", base: "2 (server/client.qh:38)", port: "2 (Cvars.cs:358; W16 fixed 0->2)", match: true }
       - { name: "sv_maxidle_alsokickspectators", base: "0 source default (xonotic-server.cfg sets 1)", port: "0 (Cvars.cs:361)", match: true }
@@ -544,6 +584,7 @@ features:
       - "The dedicated-server sv_maxidle_slots free-slot threshold (maxclients - totalClients > sv_maxidle_slots disables the kick) is NOT enforced — the headless core has no engine-level maxclients to read, so the slots gate is a no-op (the cvars are read but skipped). Off by default; only affects a dedicated operator who sets sv_maxidle_slots."
     verification:
       - { kind: code, ref: "GameWorld.cs:1864-2050 PlayerFrameIdleAll (alivetime AFK-gate :1905-1910, spectator-kick :1912-1941, name/godmode :1945-1946, idle-kick/move-to-spec :1948-2050, countdown_time :1990); cvar reads :1867-1871 = 60/2/10 live; Cvars.cs:357/358/365 (W16 defaults); server project builds clean", result: pass }
+      - { kind: test, ref: "JoinNoticeAndClientStateTests.ConnectAllowsLoadingGraceAndRealInputStartsTheNormalIdleClock", result: pass }
     confidence: high
     notes: "RE-VERIFY 2026-06-27 (W16): the two idle cvar DEFAULTS the prior pass flagged (0/0) are FIXED in Wave 16 — sv_maxidle_playertospectator='60' (Cvars.cs:357) and sv_maxidle_minplayers='2' (:358) now match Base (server/client.qh:38-39), confirmed against the W16 diff. values partial->faithful. The whole subsystem stays LIVE on the per-server-frame path (PlayerFrameIdleAll runs once per frame for all clients, bots skipped by IS_REAL_CLIENT). alivetime AFK-gate advances alivetime_start by frametime once parm_idlesince>=30s; the idle-kick honors sv_maxidle, move-to-spec honors sv_maxidle_playertospectator (with the join-queue WantsJoin distinction), the minplayers reset matches QC, countdown bang (SND TALK2) is a 2D play2 heard only by the idle client. NOTE: function moved +163 lines from the previously-cited :1701 — line refs refreshed. Only sv_maxidle_slots remains a known divergence (no engine maxclients)."
 
@@ -636,10 +677,12 @@ features:
     layer: [authority]
     base_refs:
       - "server/client.qc:ClientDisconnect"
+      - "common/state.qc:ClientState_detach"
     port_refs:
       - "src/VortexArena.Server/ClientManager.cs:ClientDisconnect"
       - "src/VortexArena.Server/GameWorld.cs:InfraClientDisconnect"
-      - "game/net/ServerNet.cs:DriveDisconnect (~638)"
+      - "game/net/ServerNet.cs:OnPeerDisconnectedCore"
+      - "src/VortexArena.Server/Commands.cs:ForgetPlayer"
     constants: []
     status:
       logic: partial
@@ -651,8 +694,9 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Still not modeled: ignore-list cleanup, Portal_ClearAll/RemoveGrapplingHooks, chatbubble/killindicator/personal/g_counters delete, minigame part, WaypointSprite_PlayerGone, ReadyCount/VoteCount-on-leave, sv_hook_lastleave, and TeamBalance_RemoveExcessPlayers / QueuedPlayersTagIn. (Vehicle exit, player_powerups_remove_all + poweroff sound, the status-effect clear, the gametype objective-drop, and the generic MUTATOR_CALLHOOK(ClientDisconnect) ARE now modeled.)"
+      - "Scoped teardown now covers hitplots, replicated client cvars, observer/player flags and server state. Broader cleanup equivalence for ignore entries, map-local counters, minigame membership and last-leave hooks remains outside this verification."
     verification:
       - { kind: code, ref: "ClientManager.cs:728-781 ClientDisconnect (vehicle exit :747, player_powerups_remove_all :753, ClientDisconnect mutator hook :778); ServerNet.cs DriveDisconnect; GameWorld InfraClientDisconnect", result: pass }
+      - { kind: test, ref: "JoinNoticeAndClientStateTests.ConnectHooksSeeIdentityAndDetachClearsOnlyThatConnectionsPreferences and HitPlotTests", result: pass }
     confidence: high
-    notes: "WAVE-6c added the VHEF_RELEASE vehicle exit, player_powerups_remove_all (poweroff sound on the live-player path), the status-effect NORMAL-removal clear, and the generic MUTATOR_CALLHOOK(ClientDisconnect) (e.g. dynamic_handicap mean recompute). Still removes from roster/scores/sim/entity table, clears FL_CLIENT + FL_PICKUPITEMS, fires CHAT_DISCONNECT + EFFECT_SPAWN puff + stats finalize + :part: event log + the gametype objective drop. logic stays partial — the ignore-list/chatbubble/waypoint/ready-vote-recount cleanups are still absent — but materially closer to QC ClientDisconnect."
+    notes: "The world detaches connection-local preferences and options on every normal ClientManager disconnect. Current teardown also closes hitplots, clears status, leaves the vehicle and game objectives, removes grapples, portals, the typing bubble and owned waypoints, and recounts the vote after roster removal."

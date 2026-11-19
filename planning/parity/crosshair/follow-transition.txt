@@ -1,0 +1,11 @@
+FOLLOW_PROBE follow local=2 follow=1 nolerp=False sample=True raw=True camera=True visible=True anchor=(400, 296.54562) fade=1 alpha=0.250
+FOLLOW_PROBE missing local=2 follow=1 nolerp=False sample=False raw=False camera=False visible=True anchor=centre fade=0 alpha=1.000
+FOLLOW_PROBE recovered local=2 follow=1 nolerp=False sample=True raw=True camera=True visible=True anchor=(400, 296.54562) fade=1 alpha=0.250
+FOLLOW_PROBE raw local=2 follow=1 nolerp=True sample=False raw=True camera=True visible=True anchor=(400, 296.54562) fade=1 alpha=0.250
+FOLLOW_PROBE raw_missing local=2 follow=1 nolerp=True sample=False raw=False camera=False visible=True anchor=centre fade=0 alpha=1.000
+FOLLOW_PROBE raw_recovered local=2 follow=1 nolerp=True sample=False raw=True camera=True visible=True anchor=(400, 296.54562) fade=1 alpha=0.250
+FOLLOW_PROBE interpolation_restored local=2 follow=1 nolerp=False sample=True raw=True camera=True visible=True anchor=(400, 296.54562) fade=1 alpha=0.250
+FOLLOW_PROBE disabled local=2 follow=1 nolerp=False sample=True raw=True camera=True visible=True anchor=centre fade=0 alpha=1.000
+FOLLOW_PROBE enabled local=2 follow=1 nolerp=False sample=True raw=True camera=True visible=True anchor=(400, 296.54562) fade=1 alpha=0.250
+FOLLOW_PROBE released local=2 follow=0 nolerp=False sample=False raw=False camera=False visible=False anchor=centre fade=0 alpha=1.000
+FOLLOW_PROBE ten transitions passed

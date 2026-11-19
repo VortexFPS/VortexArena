@@ -197,7 +197,7 @@ public sealed class Porto : Weapon
         Api.Entities.SetOrigin(gren, origin);
 
         // W_SetupProjVelocity_Basic(gren, speed, 0).
-        gren.Velocity = dir * speed;
+        gren.Velocity = WeaponFiring.CalculateProjectileVelocity(actor, dir * speed);
         gren.Angles = QMath.VecToAngles(gren.Velocity);
 
         // QC: fixedmakevectors(fixedvectoangles(gren.velocity)); gren.right_vector = v_right;

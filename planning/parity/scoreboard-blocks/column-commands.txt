@@ -1,0 +1,21 @@
+[shell] --cvar scoreboard_columns = "name | score"
+joined the game
+]cl_cmd hud scoreboard_columns_set ALL
+]scoreboard_columns
+scoreboard_columns is "name | score" ["default"]
+]scoreboard_columns_set
+]cl_cmd hud scoreboard_columns_help
+scoreboard_columns_set [default|expand_default|all|ALL|<fields>]
+Without arguments, reload scoreboard_columns. Map start also reloads it.
+expand_default writes the built-in layout to scoreboard_columns. Other layouts are temporary.
+Example: scoreboard_columns_set name ping pl | +ctf/caps -dm/score
+Fields: +/-, deaths, diff, frags, k-d, kd, kdr, kdratio, kills, name, nick, ping, pl, score, suicides, sum
+]scoreboard_columns_help
+scoreboard_columns_set [default|expand_default|all|ALL|<fields>]
+Without arguments, reload scoreboard_columns. Map start also reloads it.
+expand_default writes the built-in layout to scoreboard_columns. Other layouts are temporary.
+Example: scoreboard_columns_set name ping pl | +ctf/caps -dm/score
+Fields: +/-, deaths, diff, frags, k-d, kd, kdr, kdratio, kills, name, nick, ping, pl, score, suicides, sum
+]cl_cmd hud scoreboard_columns_set expand_default
+]scoreboard_columns
+scoreboard_columns is "ping pl fps skill name | -teams,rc,cts,surv,inv,lms/kills +ft,tdm,tmayhem/kills ?+rc,inv/kills -teams,surv,lms/deaths +ft,tdm,tmayhem/deaths +tdm/sum -teams,lms,rc,cts,surv,inv,ka/suicides +ft,tdm,tmayhem/suicides ?+rc,inv/suicides -cts,dm,tdm,surv,ka,ft,mayhem,tmayhem/frags +tdm,ft,dom,ons,as,tmayhem/teamkills -rc,cts,surv,nb/dmg -rc,cts,surv,nb/dmgtaken +surv/survivals +surv/hunts +ctf/pickups +ctf/fckills +ctf/returns +ctf/caps +ons/takes +ons/caps +lms/lives +lms/rank +kh/kckills +kh/losses +kh/caps ?+rc/laps ?+rc/time +rc,cts/fastest +as/objectives +nb/faults +nb/goals +ka,tka/pickups +ka,tka/bckills +ka,tka/bctime +ft/revivals +dom/ticks +dom/takes -lms,rc,cts,inv,nb/score" ["default"]

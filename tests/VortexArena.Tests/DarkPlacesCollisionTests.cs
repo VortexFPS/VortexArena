@@ -41,41 +41,36 @@ public class DarkPlacesCollisionTests
     private static readonly BspCollisionOptions Triangles = new() { PatchCollision = PatchCollisionMode.DarkPlacesTriangles };
 
     [Fact]
-    public void The_default_build_has_no_triangles_no_hierarchy_and_no_flags()
+    public void The_former_native_profile_builds_slabs_and_uses_the_grid()
     {
-        // (the defaults proper: BspCollisionOptions.Default can be redirected for a trial run, see its TrialVariable)
-        BspCollisionBuilder.Result plain = BspCollisionBuilder.Build(FlatPatchBsp(), null, new BspCollisionOptions());
-        BspCollisionBuilder.Result withDefaults = BspCollisionBuilder.Build(FlatPatchBsp());
-        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(BspCollisionOptions.TrialVariable)))
-            Assert.Equal(PatchCollisionMode.Slabs, BspCollisionOptions.Default.PatchCollision);
-        else return;   // a trial run: the rest of this test is about the untouched default
-        Assert.Equal(PatchCollisionMode.Slabs, plain.PatchCollision);
-        Assert.Equal(0, plain.PatchTriangles);
-        Assert.Equal(plain.World.Brushes.Count, withDefaults.World.Brushes.Count);
-        Assert.NotEmpty(plain.World.Brushes);
-        Assert.All(plain.World.Brushes, b => { Assert.False(b.IsTriangle); Assert.False(b.HasAabbPlanes); });
-        Assert.False(plain.World.UseBih);
-        Assert.Null(plain.World.Bih);
-        for (int i = 0; i < plain.World.Brushes.Count; i++)
-        {
-            Assert.Equal(plain.World.Brushes[i].Mins, withDefaults.World.Brushes[i].Mins);
-            Assert.Equal(plain.World.Brushes[i].Maxs, withDefaults.World.Brushes[i].Maxs);
-            Assert.Equal(plain.World.Brushes[i].Sides.Length, withDefaults.World.Brushes[i].Sides.Length);
-        }
+        BspCollisionBuilder.Result built = BspCollisionBuilder.Build(FlatPatchBsp(), null, new BspCollisionOptions());
+        Assert.Equal(PatchCollisionMode.Slabs, built.PatchCollision);
+        Assert.Equal(0, built.PatchTriangles);
+        Assert.NotEmpty(built.World.Brushes);
+        Assert.All(built.World.Brushes, b => { Assert.False(b.IsTriangle); Assert.False(b.HasAabbPlanes); });
+        Assert.False(built.World.UseBih);
+        Assert.Null(built.World.Bih);
+        Assert.False(new TraceService(built.World).DarkPlacesArithmetic);
     }
 
     [Fact]
-    public void The_trial_variables_are_read_when_set_and_only_then()
+    public void Native_profile_defaults_to_DarkPlaces_with_explicit_trial_overrides()
     {
         string? patches = Environment.GetEnvironmentVariable(BspCollisionOptions.TrialVariable)?.Trim().ToLowerInvariant();
-        Assert.Equal(patches is "triangles" or "triangles+bih" ? PatchCollisionMode.DarkPlacesTriangles : PatchCollisionMode.Slabs, BspCollisionOptions.Default.PatchCollision);
-        Assert.Equal(patches == "triangles+bih" ? CollisionBroadphase.Bih : CollisionBroadphase.Grid, BspCollisionOptions.Default.Broadphase);
-        Assert.False(BspCollisionOptions.Default.CompiledBrushesHaveAabbPlanes);
-        Assert.False(BspCollisionOptions.Default.DarkPlacesBrushPoints);
+        bool darkPlaces = patches is not ("slabs" or "triangles" or "triangles+bih");
+        BspCollisionBuilder.Result built = BspCollisionBuilder.Build(FlatPatchBsp());
+        Assert.Equal(patches == "slabs" ? PatchCollisionMode.Slabs : PatchCollisionMode.DarkPlacesTriangles, built.PatchCollision);
+        Assert.Equal(darkPlaces || patches == "triangles+bih", built.World.UseBih);
+        Assert.Equal(darkPlaces, BspCollisionOptions.Default.CompiledBrushesHaveAabbPlanes);
+        Assert.Equal(darkPlaces, BspCollisionOptions.Default.DarkPlacesBrushPoints);
+
+        // Prediction creates a service on an empty world and swaps to a BSP when the map arrives.
         bool monstersOnly = string.Equals(Environment.GetEnvironmentVariable(TraceService.MissileTrialVariable)?.Trim(), "monsters", StringComparison.OrdinalIgnoreCase);
         var service = new TraceService(EmptyWorld());
         Assert.Equal(monstersOnly, service.MissileGrowsOnlyAgainstMonsters);
         Assert.False(service.DarkPlacesArithmetic);
+        service.SetCollisionWorld(built.World.ShareForThread());
+        Assert.Equal(darkPlaces, service.DarkPlacesArithmetic);
     }
 
     [Fact]

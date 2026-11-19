@@ -1,0 +1,46 @@
+Stormkeep and pinned SVQC input SHA-256
+8d08dc53313b34c32ce669f38e630d264a0cc0698ef703235f759d6b9d6f7dd2  /home/tasual/.tasual/worktrees/vortexarena/chore-xonotic-parity-review/data/maps/stormkeep.pk3
+c4a5a9e85598333568183779c06446b2d03f056d2da71636b6f86150ed1202f7  /tmp/va-reviewed-stock/compiled/progs.dat
+
+Stock start
+time=1.10010004 start=5 warmup=0 tracking=0 head=0 action=kh_WaitForPlayers()
+time=7.02822495 start=5 warmup=0 tracking=0 head=0 action=kh_StartRound() count=2 nextthink=8.00010014
+time=10.1219749 start=5 warmup=0 tracking=0 head=4284 action=kh_EnableTrackingDevice() count=2 nextthink=11.0001001
+time=13.2157249 start=5 warmup=0 tracking=1 head=4284 action=kh_EnableTrackingDevice() count=-1 nextthink=14.0001001
+At 10.3407249: count=1 owner=2 linked_key=4181. Bot edicts 1 and 2: team=5/14, attached waypoints=4283/4289.
+Between the 10.1219749 and 10.3407249 samples (tracking=0 in both): breakpoint from havocbot_goalrating_kh at sv_keyhunt.qc:1037 (carried-key branch).
+
+Stock warmup
+time=1.10010004 start=0 warmup=1 tracking=0 head=0 action=kh_WaitForPlayers()
+time=3.20009995 start=0 warmup=1 tracking=0 head=0 action=kh_StartRound() count=2 nextthink=4.00010014
+time=6.09072495 start=0 warmup=1 tracking=0 head=4284 action=kh_EnableTrackingDevice() count=2 nextthink=7.00010014
+time=9.20009995 start=0 warmup=1 tracking=1 head=4284 action=kh_EnableTrackingDevice() count=-1 nextthink=10.0001001
+At 6.30947495: count=1 owner=1 linked_key=4179. Bot edicts 1 and 2: team=14/5, attached waypoints=4289/4282.
+Between the 6.09072495 and 6.30947495 samples (tracking=0 in both): breakpoint from havocbot_goalrating_kh at sv_keyhunt.qc:1037 (carried-key branch).
+
+Pinned bot gate disassembly, selected statements
+s539111: ./common/gametypes/gametype/keyhunt/sv_keyhunt.qc:1021: FIELD_ENT  GLOBAL48926, .waypointsprite_attachedforcarrier (=.waypointsprite_attachedforcarrier), GLOBAL48927
+s539112: ./common/gametypes/gametype/keyhunt/sv_keyhunt.qc:1022: IFNOT      GLOBAL48927, statement 539114
+s539113: ./common/gametypes/gametype/keyhunt/sv_keyhunt.qc:1028: RETURN     GLOBAL669
+s539114: ./common/gametypes/gametype/keyhunt/sv_keyhunt.qc:1023: FIELD_FNC  GLOBAL48927, .waypointsprite_visible_for_player (=.waypointsprite_visible_for_player), GLOBAL48928
+s539127: ./common/gametypes/gametype/keyhunt/sv_keyhunt.qc:1025: CALL2      checkpvs (=checkpvs())
+
+Native start
+KH_PROBE time=0.0000 start=4.0000 warmup=False phase=WaitingForPlayers tracking=False keys= goals=
+KH_PROBE time=2.5000 start=4.0000 warmup=False phase=WaitingForPlayers tracking=False keys= goals=-
+KH_PROBE time=2.5156 start=4.0000 warmup=False phase=WaitingForPlayers tracking=False keys= goals=-,-
+KH_PROBE time=6.0000 start=4.0000 warmup=False phase=Countdown tracking=False keys= goals=-,-
+KH_PROBE time=9.0000 start=4.0000 warmup=False phase=InProgress tracking=False keys=13:13,4:4 goals=-,-
+KH_PROBE time=11.0312 start=4.0000 warmup=False phase=InProgress tracking=False keys=13:13,4:4 goals=player:4,-
+KH_PROBE time=11.3906 start=4.0000 warmup=False phase=InProgress tracking=False keys=13:13,4:4 goals=player:4,player:13
+KH_PROBE time=12.0000 start=4.0000 warmup=False phase=InProgress tracking=True keys=13:13,4:4 goals=player:4,player:13
+
+Native warmup
+KH_PROBE time=0.0000 start=0.0000 warmup=True phase=WaitingForPlayers tracking=False keys= goals=
+KH_PROBE time=2.5000 start=0.0000 warmup=True phase=WaitingForPlayers tracking=False keys= goals=-
+KH_PROBE time=2.5156 start=0.0000 warmup=True phase=WaitingForPlayers tracking=False keys= goals=-,-
+KH_PROBE time=4.0000 start=0.0000 warmup=True phase=Countdown tracking=False keys= goals=-,-
+KH_PROBE time=7.0000 start=0.0000 warmup=True phase=InProgress tracking=False keys=13:13,4:4 goals=-,-
+KH_PROBE time=9.1562 start=0.0000 warmup=True phase=InProgress tracking=False keys=13:13,4:4 goals=player:4,-
+KH_PROBE time=9.5469 start=0.0000 warmup=True phase=InProgress tracking=False keys=13:13,4:4 goals=player:4,player:13
+KH_PROBE time=10.0000 start=0.0000 warmup=True phase=InProgress tracking=True keys=13:13,4:4 goals=player:4,player:13

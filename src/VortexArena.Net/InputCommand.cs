@@ -22,7 +22,8 @@ public enum InputButtons
     Chat = 1 << 7,     // PHYS_INPUT_BUTTON_CHAT — the player is typing (chat prompt / console open). Carried
                        // so the server knows to exempt the typist from camp-check / type-frag etc. The client
                        // sets it even while ordinary input is suppressed (movement keys are zeroed while typing,
-                       // but the typing FLAG itself must still reach the server). Fits the existing 1-byte field.
+                       // but the typing FLAG itself must still reach the server).
+    Drag = 1 << 8,     // PHYS_INPUT_BUTTON_DRAG (+button8).
 }
 
 /// <summary>
@@ -87,7 +88,7 @@ public struct InputCommand
         w.WriteSByte(EncodeMove(Forward));
         w.WriteSByte(EncodeMove(Side));
         w.WriteSByte(EncodeMove(Up));
-        w.WriteByte(Buttons & 0xFF);
+        w.WriteUShort(Buttons & 0xFFFF);
         // The impulse rides as a byte (QC usercmd.impulse is one byte; valid weapon impulses are 0..253). Clamp
         // defensively so an out-of-range value never corrupts the byte stream. ANY change to this layout requires
         // bumping NetProtocol.ProtocolVersion (it folds into the build-parity handshake).
@@ -104,7 +105,7 @@ public struct InputCommand
         c.Forward = DecodeMove(r.ReadSByte());
         c.Side = DecodeMove(r.ReadSByte());
         c.Up = DecodeMove(r.ReadSByte());
-        c.Buttons = r.ReadByte();
+        c.Buttons = r.ReadUShort();
         c.Impulse = r.ReadByte();
         c.DeltaTime = r.ReadFloat();
         return c;

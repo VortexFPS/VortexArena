@@ -1,0 +1,13 @@
+Isolated native listen trace before the scoreboard alpha fix
+Tab reached the bind table and NetGame requested the scoreboard. One slow frame finished the panel fade, but that frame drew with stale LiveFgAlpha=0.
+SBTRACE _Input press=True echo=False key=Tab bind=+showscores console=False chat=False paused=False q=False map=False ui=0
+SBTRACE frame held=True ui=False show=True radar=False map=False
+SBTRACE process vis=True tree=True active=True fade=0 rawfg=1 livefg=0
+SBTRACE draw fade=0 ui=0 pos=(159.99998, 36) size=(480.00003, 552) rows=1
+SBTRACE frame held=True ui=False show=True radar=False map=False
+SBTRACE process vis=True tree=True active=True fade=1 rawfg=1 livefg=1
+SBTRACE frame held=True ui=False show=True radar=False map=False
+SBTRACE process vis=True tree=True active=True fade=1 rawfg=1 livefg=1
+SBTRACE frame held=True ui=False show=True radar=False map=False
+SBTRACE process vis=True tree=True active=True fade=1 rawfg=1 livefg=1
+SBTRACE frame held=True ui=False show=True radar=False map=False

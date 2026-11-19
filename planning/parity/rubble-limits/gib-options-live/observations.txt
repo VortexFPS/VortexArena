@@ -1,0 +1,37 @@
+Stock pinned CSQC
+default   type-1 calls ['269']; type-2 calls ['302', '302']; surviving model edicts arm.md3×2, bloodyskull.md3×1, chest.md3×1, chunk.mdl×7, eye.md3×1, leg1.md3×1, leg2.md3×1, smallchest.md3×1
+gentle1   type-1 calls ['309']; type-2 calls ['312', '312']; surviving model edicts none
+gentle2   type-1 calls ['309']; type-2 calls ['312', '312']; surviving model edicts none
+gentle3   type-1 calls ['309']; type-2 calls ['312', '312']; surviving model edicts none
+particles type-1 calls ['309']; type-2 calls ['312', '312']; surviving model edicts none
+ekg       type-1 calls ['269']; type-2 calls ['302', '302']; surviving model edicts arm.md3×10, bloodyskull.md3×1, chest.md3×5, chunk.mdl×23, eye.md3×1, leg1.md3×5, leg2.md3×5, smallchest.md3×5
+nogibs    type-1 calls none; type-2 calls none; surviving model edicts none
+
+Stock TossGib entry breakpoints
+default   type-1 model calls 12; type-3 calls 3; call sites {268: 1, 271: 1, 278: 1, 280: 1, 282: 1, 284: 1, 286: 1, 288: 1, 292: 1, 294: 1, 296: 1, 298: 1, 306: 3}
+ekg       type-1 model calls 52; type-3 calls 3; call sites {268: 1, 271: 1, 278: 5, 280: 5, 282: 5, 284: 5, 286: 5, 288: 5, 292: 5, 294: 5, 296: 5, 298: 5, 306: 3}
+
+Native ENet observing client
+default   type-1 12 model calls arm.md3×2, bloodyskull.md3×1, chest.md3×1, chunk.mdl×4, eye.md3×1, leg1.md3×1, leg2.md3×1, smallchest.md3×1; model splash ['amount=1 species=Human']; type-1 particles bloodshower count=0.02 blocks=3×50; type-2 particles blood count=200 blocks=2×2; type-3 models chunk.mdl×3; frame active=3 uploaded=3
+Default decoded wire order and coordinates
+  Hit model_gib_hit_0 count=200 origin=<1216, 289.96875, 19.028294> velocity=<-6.48276E-07, 14.999993, 0.014161805>
+  Chunk model_gib_chunk_0 count=1 origin=<1216, 289.96875, 19.028294> velocity=<6.48276E-08, -1.4999994, -0.0014161805>
+  Hit model_gib_hit_0 count=200 origin=<1216, 289.96875, 19.028294> velocity=<-6.48276E-07, 14.999993, 0.014161805>
+  Chunk model_gib_chunk_0 count=1 origin=<1216, 289.96875, 19.028294> velocity=<6.48276E-08, -1.4999994, -0.0014161805>
+  Chunk model_gib_chunk_0 count=1 origin=<1216, 289.96875, 19.028294> velocity=<1.296552E-07, -2.9999988, -0.002832361>
+  Splash MODEL_GIB_SPLASH count=1 origin=<1216, 306, -4> velocity=<-1.296552E-06, 29.999987, 0.02832361>
+gentle1   type-1 0 model calls none; model splash none; type-1 particles morphed_damage_dissolve count=1 blocks=4×1; type-2 particles morphed_damage_hit count=200 blocks=2×2; type-3 models none; frame active=1 uploaded=1
+gentle2   type-1 0 model calls none; model splash none; type-1 particles damage_dissolve count=1 blocks=3×1; type-2 particles damage_hit count=200 blocks=3×2; type-3 models none; frame active=646 uploaded=646
+gentle3   type-1 0 model calls none; model splash none; type-1 particles happy_damage_dissolve count=1 blocks=3×1; type-2 particles happy_damage_hit count=200 blocks=3×2; type-3 models none; frame active=166 uploaded=166
+particles type-1 0 model calls none; model splash none; type-1 particles particlegibs_damage_dissolve count=1 blocks=5×1; type-2 particles particlegibs_damage_hit count=200 blocks=3×2; type-3 models none; frame active=2 uploaded=2
+ekg       type-1 52 model calls arm.md3×10, bloodyskull.md3×1, chest.md3×5, chunk.mdl×20, eye.md3×1, leg1.md3×5, leg2.md3×5, smallchest.md3×5; model splash ['amount=5 species=Human']; type-1 particles bloodshower count=0.1 blocks=3×50; type-2 particles blood count=1000 blocks=2×2; type-3 models chunk.mdl×3; frame active=3 uploaded=3
+nogibs    type-1 0 model calls none; model splash none; type-1 particles none; type-2 particles none; type-3 models none; frame active=1 uploaded=1
+
+Native Modern backend submissions (controlled floor, collisionless)
+default   blood count=200×2, bloodshower count=0.02×50
+gentle1   morphed_damage_dissolve count=1×1, morphed_damage_hit count=200×2
+gentle2   damage_dissolve count=1×1, damage_hit count=200×2
+gentle3   happy_damage_dissolve count=1×1, happy_damage_hit count=200×2
+particles particlegibs_damage_dissolve count=1×1, particlegibs_damage_hit count=200×2
+ekg       blood count=1000×2, bloodshower count=0.1×50
+nogibs    none

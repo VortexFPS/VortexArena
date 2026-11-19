@@ -1,0 +1,8 @@
+[S1Probe client] spectatee=2 region=-1 serverTime=22.05
+[S1Probe client] spectatee=0 region=-1 serverTime=23.03
+[S1Probe command] spectate Alpha
+[S1Probe client] spectatee=1 region=282 serverTime=26.95
+[S1Probe client] spectatee=1 region=-1 serverTime=27.36
+[S1Probe command] spectate 0
+[S1Probe client] spectatee=2 region=-1 serverTime=27.78
+[S1Probe command] join

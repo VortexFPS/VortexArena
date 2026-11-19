@@ -1,19 +1,47 @@
 unit: keyhunt
 category: gametype
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
-last_audited: "2026-06-27"  # drift re-audit 06-27: Base sv_keyhunt.qc byte-identical to pin; port KeyHunt.cs now 1575 lines. NEW FIX: bot.role upgraded partial->faithful (full 4-role behavior tree now implemented in BotObjectiveRoles.RoleKeyHunt). All other rows match prior truth.
+last_audited: "2026-11-19"
 summary:
-  feature_count: 21
+  feature_count: 22
   worst_gaps:
-    - "NEW DRIFT (06-27): keyhunt.bot.role is now FULLY FAITHFUL (logic/values partial->faithful). BotObjectiveRoles.RoleKeyHunt (BotObjectiveRoles.cs:463-567) implements the COMPLETE Base 4-role behavior tree: HavocBot_ChooseRole random()*3 initial pick (offense/defense/freelancer), per-role timeouts (defense/offense random()*10+20, freelancer random()*10+10), stochastic transitions (freelancer->offense|defense on timeout, any->carrier on pickup, carrier->freelancer on loss), and the AllOwnedByWhichTeam-driven ratingscale switching with each role's neutral triple (carrier 10/0.1/0.05|4/4/0.5; defense 4/1/0.05; offense 0.1/1/2; freelancer 1/10/2). State persists in BotBrain.KhRole/KhRoleTimeout (BotBrain.cs:144,152) via the KhBotRole enum; carried-key detection via bot.GtCarried; key/carrier rating via FindByClass('item_kh_key')+key.GtCarrier. Live (BotRoles.cs:96 dispatch). The baseline's last STILL-PARTIAL gap is CLOSED."
+    - "Ordered row 30 verified the one-second KeyHunt controller and newest-first world key list. Bots use the live list and can rate keys with attached waypoints before the player tracker activates. See planning/parity/keyhunt-controller/README.md."
     - "Full waypoint system (re-verified LIVE 06-27): WP_KeyDropped on each loose key + the 3-state SPRITERULE_TEAMPLAY carrier markers (SpriteName=team-colored enemy/model1, SpriteNameOwn=KeyCarrierFriend flipped to KeyCarrierFinish 'Run here' on all-owned/model2, SpriteNameSpec=team-colored spectator/model3), tracking-device gate + per-viewer visibility predicates (DroppedKeyWaypointVisibleFor/CarrierWaypointVisibleFor mirror kh_Key_/kh_KeyCarrier_waypointsprite_visible_for_player). All 7 defs in WaypointRegistry (Waypoints.cs:128-134). Consumed LIVE at game/net/ServerNet.cs:1060. The 3-state SpriteFor resolution is Waypoints.cs:204-211."
     - "Carried from the prior baseline (all still TRUE/verified 06-27): carried-key orbit (OrbitCarriedKey, KH_KEY_XYDIST 24/XYSPEED 45/ZSHIFT 22 match), 9-way carrier/noncarrier damage+force matrix (OnDamageCalculate, live via MutatorHooks.DamageCalculate dispatched DamageSystem.cs:264), lava/slime return_when_unreachable (KeyDamage via GtEventDamage, DamageSystem.cs:358-360), observe/disconnect drop (OnPlayerRemoved->DropAllKeys), per-carrier SP_SCORE + nades_GiveBonus on capture, full DistributeEvenly destroy split, per-team spawn angle. All faithful + live."
     - "REMAINING gaps (all minor): DropSpecialItems drop edge unwired (covered by PlayerDies+observer+disconnect); damageforcescale unread (no-op at stock 1, values partial on keyhunt.unreachable); push/carrier-frag/capture credited via ScoreFrags rather than the team-aware SCORE float2int pipeline (mechanism divergence, magnitude faithful); capture customflash approximated by TE_EXPLOSION; the dead AssignKey method (harmless, routes to correct geometry); OBJECTIVE_STATUS on-wire team encoding is the port index+1 convention (intended divergence, observationally identical icons)."
 features:
+  - id: keyhunt.mapinfo.autodetection
+    name: "KeyHunt eligibility for native maps without a sidecar"
+    layer: [shared]
+    base_refs:
+      - "common/gametypes/gametype/keyhunt/keyhunt.qh:m_isAlwaysSupported"
+      - "common/mapinfo.qc:_MapInfo_Generate"
+    port_refs:
+      - "src/VortexArena.Formats/Bsp/MapInfoCatalog.cs:Generate"
+    constants:
+      - { name: "minimum qualifying spawnpoints", base: "12", port: "12", match: true }
+      - { name: "entity-origin diameter", base: "strictly greater than 5120", port: "strictly greater than 5120", match: true }
+    status:
+      logic: faithful
+      values: faithful
+      timing: na
+      presentation: na
+      audio: na
+      liveness: live
+    intended_divergence: false
+    divergence_rationale: null
+    gaps: []
+    verification:
+      - { kind: test, ref: "MapInfoGenerationTests.NativeMapThresholdsReachCatalogAndDetails and RotationUsesGeneratedAndExplicitEligibilityForBothListSources.", result: pass }
+      - { kind: ingame, ref: "planning/parity/keyhunt-map/README.md. Stock and native dedicated map catalogs admitted the 12-start fixture at 5121 units. Both excluded 11 starts at 5121 and 12 starts at 5120.", result: pass }
+    confidence: high
+    notes: "Authored sidecars govern declared eligibility. See mapinfo.generate.always_supported for two-base and Defrag suppression."
+
   - id: keyhunt.controller.round_loop
     name: "Controller round loop: wait-for-players -> countdown -> start round"
     layer: [authority]
     base_refs:
+      - "common/gametypes/gametype/keyhunt/sv_keyhunt.qh:kh_Controller_SetThink"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Controller_Think"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_WaitForPlayers"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_StartRound"
@@ -21,6 +49,9 @@ features:
       - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:Tick"
       - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:StartRound"
       - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:AnyTeamMissing"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:ResetMap"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:OnMatchEnd"
+      - "src/VortexArena.Server/GameWorld.cs:DriveGametypeFrame"
     constants:
       - { name: "g_balance_keyhunt_delay_round", base: "5", port: "5 (DefaultDelayRound)", match: true }
       - { name: "g_balance_keyhunt_delay_tracking", base: "10", port: "10 (DefaultDelayTracking)", match: true }
@@ -33,26 +64,26 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Base kh_WaitForPlayers/kh_StartRound also gate on time >= game_starttime; the port's Tick does not gate the round on game_starttime (minor: warmup-edge timing only). Note KH also calls the generic EnableRounds() with no callbacks, so a parallel generic RoundHandler sits in InProgress forever — it serves the round-counter + the impulse gate only, and KH's own Phase machine is the authority."
+    gaps: []
     verification:
-      - { kind: code, ref: "GameWorld.cs per-frame objective switch 'case KeyHunt kh: kh.Tick(); break;'", result: pass }
-      - { kind: code, ref: "ActivateGameType: kh.Activate() + kh.SetRoster(Clients.Players) (live backing list); deactivates every gametype before Activate (clean re-arm)", result: pass }
-      - { kind: code, ref: "KeyHunt.cs:585-596 StartRound: TrackingEnabled=false + CenterAll('KEYHUNT_SCAN', delayTracking) + _trackingEnableTime=now+delayTracking; KeyHunt.cs:871-875 TickKeys flips TrackingEnabled when now>=_trackingEnableTime", result: pass }
-      - { kind: code, ref: "DRIFT 06-26: the TrackingEnabled flag now gates a REAL sprite target — DroppedKeyWaypointVisibleFor (KeyHunt.cs:1386) / CarrierWaypointVisibleFor (KeyHunt.cs:1402) return TrackingEnabled, so the delay_tracking reveal is player-visible (waypoint sprites now implemented). presentation upgraded partial->faithful.", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/KeyHuntControllerTests.cs (live server countdown, delay edges, chat eligibility, warmup reset at both restart boundaries, and endmatch cleanup)", result: pass }
+      - { kind: manual, ref: "planning/parity/keyhunt-controller/README.md (pinned and native Stormkeep with two bots, match delay and warmup variants)", result: pass }
     confidence: high
-    notes: "FIXED presentation partial->faithful (Jun-26 drift): delay_tracking (default 10) was already read + scheduled; the 06-25 baseline held presentation at partial ONLY because the tracking flag gated not-yet-implemented sprites. Those sprites now exist (keyhunt.waypoints.sprites faithful/live), so the tracking-device reveal is now a real player-visible behavior. Controller live; ROUNDSTART + SCAN center-prints wired."
+    notes: "KeyHunt self-manages its round. Stock's controller decrements on one-second thinks, then calls the scheduled action on the next think after reaching zero. Roster checks exclude observers, dead players and players holding chat. Warmup can run KeyHunt rounds. The match countdown and reset boundary follow the live server clock."
 
   - id: keyhunt.round.spawn_keys
     name: "Spawn one key per team onto a random live teammate at round start"
     layer: [authority]
     base_refs:
+      - "common/gametypes/gametype/keyhunt/sv_keyhunt.qh:kh_worldkeylist"
+      - "common/gametypes/gametype/keyhunt/sv_keyhunt.qh:FOR_EACH_KH_KEY"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Spawn"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_StartRound"
     port_refs:
       - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:SpawnKey"
       - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:AssignKeyNoScore"
       - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:PickRandomLivePlayer"
+      - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:WorldKeys"
     constants:
       - { name: "KH_KEY_MIN", base: "'-25 -25 -46'", port: "(-25,-25,-46) (KeyMins)", match: true }
       - { name: "KH_KEY_MAX", base: "'25 25 4'", port: "(25,25,4) (KeyMaxs)", match: true }
@@ -71,6 +102,7 @@ features:
       - { kind: code, ref: "KeyHunt.cs:631-655 SpawnKey -> GametypeEntities.SpawnObjective('item_kh_key', origin, team, KeyMins, KeyMaxs, touch, think); KeyMins/Maxs match Base const -25..25/4", result: pass }
       - { kind: code, ref: "KeyHunt.cs:570-580 StartRound: key.SpawnAngle = 360f*keyIndex/teamCount (matches Base key.cnt = 360*i/AVAILABLE_TEAMS) + KEYHUNT_START_<team> center-print to the initial owner", result: pass }
       - { kind: code, ref: "KeyHunt.cs:605-620 PickRandomLivePlayer reservoir Prandom()*seen<=1 matches QC random()*players<=1", result: pass }
+      - { kind: manual, ref: "planning/parity/keyhunt-controller/README.md (live world key head and link, newest first)", result: pass }
     confidence: high
     notes: "FIXED: spawn_angle constant now matches Base (360*i/teams stored in key.SpawnAngle and consumed by the carried-key orbit), upgrading the prior cosmetic-random-yaw mismatch. Spawned classname item_kh_key (matches the bot role search)."
 
@@ -450,7 +482,7 @@ features:
       - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:KeyDamage"
       - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:SpawnKey"
     constants:
-      - { name: "g_balance_keyhunt_return_when_unreachable", base: "1", port: "1 (read; gates installing the KeyDamage handler)", match: true }
+      - { name: "g_balance_keyhunt_return_when_unreachable", base: "1", port: "1 (spawn-time switch for DamagedByTriggers and DamagedByContents)", match: true }
       - { name: "g_balance_keyhunt_delay_damage_return", base: "5", port: "5 (DefaultDelayDamageReturn)", match: true }
       - { name: "g_balance_keyhunt_damageforcescale", base: "1", port: "unread (force re-team uses the raw force vector, not damageforcescale)", match: false }
     status:
@@ -465,10 +497,10 @@ features:
     gaps:
       - "Minor: g_balance_keyhunt_damageforcescale (default 1) is not read — the port's KeyDamage gates the re-team branch on force != 0 (raw force) rather than scaling the key's knockback by damageforcescale. At stock 1 this is a no-op; a tuned damageforcescale wouldn't affect the key's physical kick. The destroy/return behavior (NEEDKILL -> delay_damage_return) and the force-reteam logic are faithful."
     verification:
-      - { kind: code, ref: "KeyHunt.cs:775-805 KeyDamage: loose key only; NEEDKILL deathtype (Void/Slime/Lava/Swamp) -> bound the return to now+DelayDamageReturn (can only SHORTEN); else if force!=0 && now>ProtectTime && attacker is Player -> re-stamp DropperTeam to attacker's team. Matches Base kh_Key_Damage.", result: pass }
-      - { kind: code, ref: "LIVE: SpawnKey (KeyHunt.cs:648-649) installs e.GtEventDamage = KeyDamage when return_when_unreachable != 0; DamageSystem.cs:331-333 routes a non-player edict with GtEventDamage to it. DelayDamageReturn default 5 (KeyHunt.cs:110) matches Base.", result: pass }
+      - { kind: code, ref: "SpawnKey installs KeyDamage independently of the return-when-unreachable cvar. KeyDamage bounds ReturnDeadline for the stock ITEM_DAMAGE_NEEDKILL cases, and KeyThinkEntity checks this separate deadline.", result: pass }
+      - { kind: test, ref: "TargetUtilitiesTests.ObjectiveSpawn_OptsIntoTriggerDamageOnlyWhenConfigured drops a key at t=1, checks the shortened deadline and intact pickup lockout, and drives the scheduled return.", result: pass }
     confidence: high
-    notes: "FIXED missing->faithful/live (Wave-6a): a dropped key in lava/slime/trigger_hurt now fast-returns in delay_damage_return (5s) via the KeyDamage event_damage handler (installed in SpawnKey, dispatched through GtEventDamage). port_refs were empty in the baseline. Only residual: damageforcescale not read (values partial)."
+    notes: "Spawn eligibility controls damage from hurt triggers and hazardous contents. The key keeps separate times for returning and for the dropper's pickup lockout."
 
   - id: keyhunt.alarm.siren
     name: "Periodic alarm while one team holds all keys"
@@ -596,6 +628,8 @@ features:
     name: "Bot KeyHunt role (carrier/defense/offense/freelancer goal rating)"
     layer: [authority]
     base_refs:
+      - "common/gametypes/gametype/keyhunt/sv_keyhunt.qh:kh_next"
+      - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_waypointsprite_visible_for_bot"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:havocbot_goalrating_kh"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:havocbot_role_kh_freelancer"
       - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:havocbot_role_kh_carrier"
@@ -625,8 +659,8 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "BotObjectiveRoles.cs:463-567 RoleKeyHunt: full 4-role tree — HavocBot_ChooseRole random()*3 initial pick (None->offense/defense/freelancer, :477-482), any-non-carrier->carrier on pickup (:485-489), carrier->freelancer on loss (:491-495), per-role timeouts (defense/offense random()*10+20 :503-510, freelancer random()*10+10 :514-520, freelancer->offense|defense on timeout), AllOwnedByWhichTeam-driven ratingscale switch (:530-559) with each role's neutral triple. State in BotBrain.KhRole/KhRoleTimeout. Matches Base havocbot_role_kh_* exactly.", result: pass }
-      - { kind: code, ref: "RateKeyHuntTargets (BotObjectiveRoles.cs:570-593) FindByClass('item_kh_key') matches the spawn classname (KeyHunt.cs SpawnObjective('item_kh_key')); reads key.GtCarrier (carrier back-link set in AttachToCarrier EntityGametypeState.cs:282 obj.GtCarrier=carrier, carrier.GtCarried=obj); own-key skip + same-team(rsTeam)/enemy(rsEnemy)/dropped(rsDropped) selection mirror havocbot_goalrating_kh.", result: pass }
-      - { kind: code, ref: "Dispatched live: BotRoles.cs:96 'keyhunt' or 'kh' => RoleKeyHunt. bot.GtCarried (set/cleared by Attach/Detach) drives the carrier-role transition.", result: pass }
+      - { kind: code, ref: "BotRoles.ChooseRole dispatches kh to BotObjectiveRoles.RoleKeyHunt. The roster checks use actual ownership, and ordered goal rating skips the bot's own keys.", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/KeyHuntControllerTests.cs (enemy carriers and loose keys are eligible before tracking, and equal ratings select the newest real key)", result: pass }
+      - { kind: manual, ref: "planning/parity/keyhunt-controller/README.md (pinned bot helper disassembly and live traces, native goals before the tracking reveal)", result: pass }
     confidence: high
-    notes: "FIXED logic/values partial->faithful (06-27 drift): the four QC roles (carrier/defense/offense/freelancer) with role timeouts, HavocBot_ChooseRole random pick, and AllOwnedByWhichTeam-driven ratingscale switching are now FULLY implemented in RoleKeyHunt (was a single collapsed freelancer rating in the baseline). All role timeouts + ratingscale triples match Base. The classname item_kh_key + carrier read via GtCarrier remain intact. Last partial KH row is now faithful."
+    notes: "With an attached waypoint, stock's nested ifs return before player visibility and PVS checks. Native uses the live newest-first list, skips the bot's own carriers, and still requires the regular navigation route. The tracking device affects player markers."

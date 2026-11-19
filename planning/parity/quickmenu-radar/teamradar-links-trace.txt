@@ -1,0 +1,18 @@
+Stock HUD
+LINK_HUD 6
+LINK_HUD 0
+
+Native dedicated server
+[ServerNet] peer 964297863 accepted as 'RadarViewer'.
+LINK_REPLAY 1566
+
+Loopback relay
+LINK_DROP_CLEAR 17e315000000
+LINK_DELIVER_RETRY 17e315000000
+
+Native remote client
+RADAR_PLAYING
+LINK_HUD 6
+LINK_CLEAR 5603
+LINK_HUD 0
+LINK_STALE 1566 5603 0

@@ -439,7 +439,7 @@ public sealed partial class EditorController : Node3D
     public float OrthoUnitsPerPixel { get; set; } = 1f;
 
     /// <summary>The ray a pick should run along: the pointer in ortho, the crosshair otherwise.</summary>
-    private (NVec3 Origin, NVec3 Direction) ActiveRay()
+    internal (NVec3 Origin, NVec3 Direction) ActiveRay()
         => OrthoActive ? (OrthoRayOrigin, OrthoForward) : CameraRay();
 
     /// <summary>What the crosshair is currently over (drives the hover highlight).</summary>

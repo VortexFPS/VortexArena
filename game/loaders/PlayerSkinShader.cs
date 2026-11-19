@@ -236,6 +236,7 @@ global uniform float model_light_gamma;
 global uniform float dp_framebuffer;
 // The lightmap intensity of the level (LightmapShader's global); read by the legacy arithmetic only.
 global uniform float world_lightmap_scale;
+" + VortexArena.Formats.Materials.DpColour.DebugLightingShader + @"
 
 // The exact sRGB curve and its inverse (the pair the output transform uses), valid above 1 as well.
 vec3 skin_to_linear(vec3 c) {
@@ -288,7 +289,21 @@ void fragment() {
     // (A legacy session - model_light_gamma above 1.5 - lights every surface of this shader as DarkPlaces
     // does, asked or not: from the level's grid, or at full light on a level that has none.)
     bool grid_on = model_light_gamma > 1.5 || grid_lit > 1.5 || (grid_lit > 0.5 && lightgrid_params.w > 0.5);
-    if (grid_on) {
+    if (native_debug_lighting.x > 0.5) {
+        vec3 glow = has_glow ? texture(glow_tex, UV).rgb * glowmod : vec3(0.0);
+        float lighting = grid_lit > 2.5 ? 1.0 : native_debug_light(NORMAL);
+        if (dp_framebuffer > 0.5) {
+            vec3 texel = skin_to_display(base.rgb) + shirt * skin_to_display(shirt_color) + pants * skin_to_display(pants_color);
+            vec3 display_glow = has_glow ? texture(glow_tex, UV).rgb * skin_to_display(glowmod) : vec3(0.0);
+            EMISSION = clamp(texel * skin_to_display(colormod) * entity_tint * lighting + display_glow, vec3(0.0), vec3(1.0));
+        } else {
+            EMISSION = tinted * lighting + glow;
+        }
+        ALBEDO = vec3(0.0);
+        ROUGHNESS = 1.0;
+        METALLIC = 0.0;
+        SPECULAR = 0.0;
+    } else if (grid_on) {
         // ---- DP lightgrid model lighting (playtest r14 B/C/A) ----
         // Normal-mapping applied manually: NORMAL_MAP feeds Godot's scene-light path, which this branch
         // bypasses (missing/zero tangents degrade toward the vertex normal — same binding contract as

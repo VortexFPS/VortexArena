@@ -147,8 +147,12 @@ public sealed class KeyHunt : GameType
     /// <summary>The current round phase (QC kh_controller think state).</summary>
     public RoundPhase Phase { get; private set; } = RoundPhase.WaitingForPlayers;
 
-    /// <summary>Absolute sim time the countdown ends and the round begins (QC kh_controller countdown).</summary>
-    public float RoundStartTime { get; private set; }
+    /// <summary>Nominal sim time of the next round start, before server-frame rounding.</summary>
+    public float RoundStartTime => Phase == RoundPhase.Countdown && _controllerCount >= 0f
+        ? _controllerNextThink + _controllerCount : 0f;
+
+    private float _controllerNextThink;
+    private float _controllerCount;
 
     /// <summary>The roster the controller drives (set by the host before <see cref="Tick"/>).</summary>
     private IReadOnlyList<Player> _roster = System.Array.Empty<Player>();
@@ -165,8 +169,14 @@ public sealed class KeyHunt : GameType
     // team store — the source of truth (common/scores.qh). KH's team primary is ST_SCORE with ST_KH_CAPS
     // secondary. Read/written via GetTeamScore / AddTeamScore (slot 0) + CreditCapture (slot 1 caps).
 
-    /// <summary>The key belonging to each team (QC FOR_EACH_KH_KEY), keyed by the key's home-team color code.</summary>
+    /// <summary>Team lookup for the key state, including slots between rounds.</summary>
     public readonly Dictionary<int, KeyState> Keys = new();
+
+    private readonly List<KeyState> _worldKeys = new();
+    private IEntityService? _keyEntities;
+
+    /// <summary>Spawned keys in QC kh_worldkeylist order, newest first.</summary>
+    public IReadOnlyList<KeyState> WorldKeys => _worldKeys;
 
     public bool MatchEnded { get; private set; }
     public int LeaderTeam { get; private set; }
@@ -175,11 +185,8 @@ public sealed class KeyHunt : GameType
     private float _sirenTime;
 
     /// <summary>QC kh_tracking_enabled: whether the radar/waypoint tracking device has powered up this round (after
-    /// delay_tracking). Gates the dropped-key + carrier waypoint sprite visibility (sprites themselves deferred).</summary>
+    /// delay_tracking). Gates dropped-key and carrier waypoint visibility for players.</summary>
     public bool TrackingEnabled { get; private set; }
-
-    /// <summary>Absolute sim time the tracking device powers up (QC kh_EnableTrackingDevice schedule); 0 = none.</summary>
-    private float _trackingEnableTime;
 
     /// <summary>QC kh_interferemsg_time/team: a deferred (time+0.2) INTERFERE/MEET/HELP center-print volley.</summary>
     private float _interfereMsgTime;
@@ -190,6 +197,7 @@ public sealed class KeyHunt : GameType
     private HookHandler<DeathEvent>? _deathHandler;
     private HookHandler<MutatorHooks.PlayerUseKeyArgs>? _useKeyHandler;
     private HookHandler<MutatorHooks.DamageCalculateArgs>? _damageCalcHandler;
+    private HookHandler<MutatorHooks.MatchEndArgs>? _matchEndHandler;
 
     /// <summary>QC KH_KEY_WP_ZSHIFT: the height offset for key waypoint sprites above the origin.</summary>
     private const float KeyWpZShift = 20f;
@@ -201,13 +209,18 @@ public sealed class KeyHunt : GameType
         TeamGame = true;
     }
 
+    public override string MenuSummary => "Gather all the keys to win the round";
+
     public override void OnInit()
     {
         // QC kh_Initialize: the controller starts in wait-for-players; the first round spawns one key per
         // team once every team has a live player (kh_WaitForPlayers → kh_StartRound). GameRules_teams(true)
         // and kh_ScoreRules are the engine's job; here we put the controller in its initial phase.
         Phase = RoundPhase.WaitingForPlayers;
-        RoundStartTime = 0f;
+        _controllerNextThink = 0f;
+        _controllerCount = 0f;
+        TrackingEnabled = false;
+        Round.Number = 0;
     }
 
     /// <summary>
@@ -227,12 +240,15 @@ public sealed class KeyHunt : GameType
         }
     }
 
-    /// <summary>Point limit in force (g_keyhunt_point_limit, else fraglimit, else 1000). 0 == unlimited.</summary>
+    /// <summary>The hosted world resolves its match limits before activating the mode.</summary>
+    public bool UseMatchLimits { get; set; }
+
+    /// <summary>Active scoreboard point limit. Zero means unlimited.</summary>
     public float PointLimit
     {
         get
         {
-            if (TryCvar(CvarPointLimitKh, out float pl)) return pl;
+            if (!UseMatchLimits && TryCvar(CvarPointLimitKh, out float pl) && pl >= 0f) return pl;
             if (TryCvar(CvarPointLimit, out float fl)) return fl;
             return DefaultPointLimit;
         }
@@ -242,7 +258,7 @@ public sealed class KeyHunt : GameType
     {
         get
         {
-            if (TryCvar(CvarLeadLimitKh, out float ll)) return ll;
+            if (!UseMatchLimits && TryCvar(CvarLeadLimitKh, out float ll) && ll >= 0f) return ll;
             if (TryCvar(CvarLeadLimit, out float l)) return l;
             return 0f;
         }
@@ -270,6 +286,8 @@ public sealed class KeyHunt : GameType
         // QC MUTATOR_HOOKFUNCTION(kh, Damage_Calculate): scale player-vs-player damage/force by the carrier matrix.
         _damageCalcHandler ??= OnDamageCalculate;
         MutatorHooks.DamageCalculate.Add(_damageCalcHandler);
+        _matchEndHandler = OnMatchEnd;
+        MutatorHooks.MatchEnd.Add(_matchEndHandler);
     }
 
     /// <summary>
@@ -314,6 +332,9 @@ public sealed class KeyHunt : GameType
 
     public override void Deactivate()
     {
+        RemoveAllKeys();
+        _keyEntities = null;
+        _roster = System.Array.Empty<Player>();
         if (_deathHandler is null)
             return;
         Combat.Death.Remove(_deathHandler);
@@ -328,6 +349,19 @@ public sealed class KeyHunt : GameType
             MutatorHooks.DamageCalculate.Remove(_damageCalcHandler);
             _damageCalcHandler = null;
         }
+        if (_matchEndHandler is not null)
+        {
+            MutatorHooks.MatchEnd.Remove(_matchEndHandler);
+            _matchEndHandler = null;
+        }
+    }
+
+    private bool OnMatchEnd(ref MutatorHooks.MatchEndArgs args)
+    {
+        // QC kh_finalize cleans up the keys and removes the controller.
+        FinishRound();
+        _controllerCount = -1f;
+        return false;
     }
 
     /// <summary>
@@ -354,9 +388,9 @@ public sealed class KeyHunt : GameType
     }
 
     /// <summary>QC <c>player.kh_next != NULL</c>: the player is carrying at least one key.</summary>
-    private bool IsCarrier(Player p)
+    public bool IsCarrier(Player p)
     {
-        foreach (var k in Keys.Values)
+        foreach (var k in _worldKeys)
             if (ReferenceEquals(k.Carrier, p)) return true;
         return false;
     }
@@ -425,6 +459,7 @@ public sealed class KeyHunt : GameType
 
         key.Carrier = player;
         key.DropTime = 0f;
+        key.ReturnDeadline = null;
         AddTeamScore(player.Team, (int)ScoreCollect);
         AddCol(player, "KH_PICKUPS", 1); // QC kh_Key_Collect: GameRules_scoring_add(player, KH_PICKUPS, 1)
         // Attach the world entity to the new carrier (QC kh_Key_Attach) when the entity layer is live.
@@ -497,47 +532,87 @@ public sealed class KeyHunt : GameType
     //  Controller + round loop (QC kh_Controller_Think / kh_WaitForPlayers / kh_StartRound)
     // ============================================================================================
 
-    /// <summary>
-    /// Advance the KeyHunt controller one step (QC kh_Controller_Think): wait until every team has a live
-    /// player, then count a round down and spawn the keys; while a round runs, evaluate the capture geometry
-    /// and auto-return any dropped key whose timer elapsed. Call each tick after <see cref="SetRoster"/>.
-    /// </summary>
-    public void Tick()
+    /// <summary>Run the one-second QC controller think and the live key checks.</summary>
+    public void Tick(float gameStartTime = 0f, bool gameStopped = false)
     {
-        if (MatchEnded)
+        if (MatchEnded || gameStopped)
             return;
-        float now = Api.Services is not null ? Api.Clock.Time : 0f;
 
-        // QC kh_WaitForPlayers / kh_StartRound: if(time < game_starttime) → defer until the match clock has
-        // started (prematch warmup gate). Same guard as Domination.cs and DamageSystem.cs.
-        float gameStart = StartItem.GameStartTimeProvider?.Invoke() ?? 0f;
-
-        switch (Phase)
+        float now = GametypeEntities.Now;
+        if (now >= _controllerNextThink)
         {
-            case RoundPhase.WaitingForPlayers:
-                if (now < gameStart)
-                    break; // QC: kh_Controller_SetThink(game_starttime - time + 0.1, kh_WaitForPlayers); return;
-                if (!AnyTeamMissing())
+            if (_controllerCount > 0f)
+            {
+                _controllerCount--;
+            }
+            else if (_controllerCount == 0f)
+            {
+                _controllerCount = -1f;
+                switch (Phase)
                 {
-                    Phase = RoundPhase.Countdown;
-                    RoundStartTime = now + DelayRound;
-                    // QC kh_WaitForPlayers / kh_FinishRound: announce the round-start countdown to everyone.
-                    CenterAll("KEYHUNT_ROUNDSTART", DelayRound);
+                    case RoundPhase.WaitingForPlayers:
+                        WaitForPlayers(gameStartTime);
+                        break;
+                    case RoundPhase.Countdown:
+                        StartRound(gameStartTime);
+                        break;
+                    case RoundPhase.InProgress:
+                        ClearRoundNotices();
+                        TrackingEnabled = true;
+                        break;
                 }
-                break;
-
-            case RoundPhase.Countdown:
-                if (now < gameStart) { Phase = RoundPhase.WaitingForPlayers; break; } // QC: same early-return
-                if (AnyTeamMissing()) { Phase = RoundPhase.WaitingForPlayers; break; }
-                if (now >= RoundStartTime)
-                    StartRound();
-                break;
-
-            case RoundPhase.InProgress:
-                TickKeys(now);
-                break;
+            }
+            // QC re-arms after the callback, even if the callback scheduled a delay of zero.
+            _controllerNextThink = now + 1f;
         }
+
+        if (Phase == RoundPhase.InProgress)
+            TickKeys(now);
     }
+
+    private void SetControllerThink(float delay)
+    {
+        _controllerCount = MathF.Ceiling(delay);
+        if (delay == 0f)
+            _controllerNextThink = GametypeEntities.Now;
+    }
+
+    private void WaitForPlayers(float gameStartTime)
+    {
+        float now = GametypeEntities.Now;
+        Phase = RoundPhase.WaitingForPlayers;
+        if (now < gameStartTime)
+            SetControllerThink(gameStartTime - now + 0.1f);
+        else if (AnyTeamMissing())
+            SetControllerThink(1f);
+        else
+            ScheduleRound();
+    }
+
+    private void ScheduleRound()
+    {
+        Phase = RoundPhase.Countdown;
+        float delay = DelayRound;
+        CenterAll("KEYHUNT_ROUNDSTART", delay);
+        SetControllerThink(delay);
+    }
+
+    private static void ClearRoundNotices()
+    {
+        NotificationSystem.SendCenterKill(NotifBroadcast.All, null, "CPID_KEYHUNT");
+        NotificationSystem.SendCenterKill(NotifBroadcast.All, null, "CPID_KEYHUNT_OTHER");
+    }
+
+    /// <summary>QC reset_map_global runs the wait callback, then the map reset removes every key.</summary>
+    public void ResetMap(float gameStartTime)
+    {
+        MatchEnded = false;
+        WaitForPlayers(gameStartTime);
+        RemoveAllKeys();
+    }
+
+    private static bool CanStartWith(Player player, int team)
+        => (int)player.Team == team && !player.IsObserver && !player.IsDead && !player.ButtonChat;
 
     /// <summary>QC kh_GetMissingTeams: true if any active team has no live, non-chatting player.</summary>
     public bool AnyTeamMissing()
@@ -548,7 +623,7 @@ public sealed class KeyHunt : GameType
             for (int i = 0; i < _roster.Count; i++)
             {
                 Player p = _roster[i];
-                if ((int)p.Team == team && !p.IsDead) { has = true; break; }
+                if (CanStartWith(p, team)) { has = true; break; }
             }
             if (!has)
                 return true;
@@ -560,21 +635,24 @@ public sealed class KeyHunt : GameType
     /// QC kh_StartRound: spawn one key per active team, each initially assigned to a random live player on
     /// that team (and positioned on them). Transitions the controller to <see cref="RoundPhase.InProgress"/>.
     /// </summary>
-    public void StartRound()
+    public void StartRound(float gameStartTime = 0f)
     {
+        float now = GametypeEntities.Now;
+        if (now < gameStartTime)
+        {
+            Phase = RoundPhase.WaitingForPlayers;
+            SetControllerThink(gameStartTime - now + 0.1f);
+            return;
+        }
         if (AnyTeamMissing())
         {
             Phase = RoundPhase.WaitingForPlayers;
+            SetControllerThink(1f);
             return;
         }
-        // Clear any leftover keys from a prior round.
-        foreach (var k in Keys.Values)
-        {
-            if (k.Entity is not null && Api.Services is not null)
-                Api.Entities.Remove(k.Entity);
-            k.Entity = null;
-            k.Carrier = null;
-        }
+
+        ClearRoundNotices();
+        RemoveAllKeys();
 
         int teamCount = TeamCount;
         int keyIndex = 0;
@@ -596,13 +674,12 @@ public sealed class KeyHunt : GameType
         // if delay_tracking >= 0 is the "Scanning frequency range…" countdown shown and the reveal scheduled (a
         // negative delay_tracking means the trackers never show — QC gametypes-server.cfg note on the cvar).
         TrackingEnabled = false;
-        _trackingEnableTime = 0f;
-        float now0 = Api.Services is not null ? Api.Clock.Time : 0f;
+        _controllerCount = -1f;
         float delayTracking = DelayTracking;
         if (delayTracking >= 0f)
         {
             CenterAll("KEYHUNT_SCAN", delayTracking); // QC CENTER_KEYHUNT_SCAN delay_tracking
-            _trackingEnableTime = now0 + delayTracking; // QC kh_Controller_SetThink(delay_tracking, kh_EnableTrackingDevice)
+            SetControllerThink(delayTracking);
         }
         // Fresh round: clear the alarm + interfere-message state.
         _sirenTime = 0f;
@@ -623,7 +700,7 @@ public sealed class KeyHunt : GameType
         for (int i = 0; i < _roster.Count; i++)
         {
             Player p = _roster[i];
-            if ((int)p.Team != team || p.IsDead)
+            if (!CanStartWith(p, team))
                 continue;
             seen++;
             if (VortexArena.Common.Math.Prandom.Float() * seen <= 1f)
@@ -648,23 +725,30 @@ public sealed class KeyHunt : GameType
             key = new KeyState(team);
             Keys[team] = key;
         }
+        else
+        {
+            RemoveKeyEntity(key);
+            _worldKeys.Remove(key);
+        }
+        _worldKeys.Insert(0, key);
         Vector3 origin = initialOwner?.Origin ?? Vector3.Zero;
         Entity? e = GametypeEntities.SpawnObjective("item_kh_key", origin, team, KeyMins, KeyMaxs,
             touch: KeyTouchEntity, think: KeyThinkEntity);
         if (e is not null)
         {
+            _keyEntities = Api.Entities;
             e.TakeDamage = DamageMode.Yes; // a loose key can be returned by damage (QC takedamage = DAMAGE_YES)
             e.DamageForceScale = DamageForcescale; // QC kh_Key_Detach: key.damageforcescale = g_balance_keyhunt_damageforcescale (loose key knockback)
             e.NextThink = GametypeEntities.Now + 0.05f; // QC kh_Key_Think rate
-            // QC kh_Key_Spawn: event_damage = kh_Key_Damage; damagedbytriggers/contents = return_when_unreachable.
-            // The port routes a non-player edict's damage through GtEventDamage, and a dropped key carries FL_ITEM
-            // (IsPushable) so a trigger_hurt touch reaches it. Install the damage handler when return_when_unreachable.
-            if (GametypeEntities.Cvar(CvarReturnWhenUnreachable, 1f) != 0f)
-                e.GtEventDamage = (self, infl, atk, dt, dmg, loc, frc) => KeyDamage(self, atk, dt, frc);
+            bool returnWhenUnreachable = GametypeEntities.Cvar(CvarReturnWhenUnreachable, 1f) != 0f;
+            e.DamagedByTriggers = returnWhenUnreachable;
+            e.DamagedByContents = returnWhenUnreachable;
+            e.GtEventDamage = (self, infl, atk, dt, dmg, loc, frc) => KeyDamage(self, atk, dt, frc);
             SetKeyVisual(e, team, carried: false);       // QC kh_Key_Spawn: model + team color + glow + spin
         }
         key.Entity = e;
         key.Carrier = null;
+        key.ReturnDeadline = null;
         return key;
     }
 
@@ -726,7 +810,7 @@ public sealed class KeyHunt : GameType
     /// <summary>The <see cref="KeyState"/> bound to a world key <see cref="Entity"/>, or null.</summary>
     public KeyState? KeyForEntity(Entity e)
     {
-        foreach (var k in Keys.Values)
+        foreach (var k in _worldKeys)
             if (ReferenceEquals(k.Entity, e)) return k;
         return null;
     }
@@ -739,6 +823,7 @@ public sealed class KeyHunt : GameType
     {
         key.Carrier = player;
         key.DropTime = 0f;
+        key.ReturnDeadline = null;
         if (key.Entity is not null)
             GametypeEntities.AttachToCarrier(key.Entity, player, new Vector3(0f, 0f, KeyZShift));
     }
@@ -763,6 +848,7 @@ public sealed class KeyHunt : GameType
         key.DropperTeam = Teams.None;
         key.Dropper = null;
         key.DropTime = 0f;
+        key.ReturnDeadline = null;
         key.Carrier = player;
         if (key.Entity is not null)
             GametypeEntities.AttachToCarrier(key.Entity, player, new Vector3(0f, 0f, KeyZShift));
@@ -792,20 +878,12 @@ public sealed class KeyHunt : GameType
         if (key is null || key.Carrier is not null) // QC: if(this.owner) return;
             return;
 
-        // QC ITEM_DAMAGE_NEEDKILL(deathtype): lava/slime/swamp/hurttrigger → return in delay_damage_return.
-        string b = Damage.DeathTypes.BaseOf(deathType);
-        bool needKill = b == Damage.DeathTypes.Void || b == Damage.DeathTypes.Slime
-            || b == Damage.DeathTypes.Lava || b == Damage.DeathTypes.Swamp;
-        if (needKill)
+        if (DeathTypes.ItemDamageNeedKill(deathType))
         {
-            // QC: pain_finished = bound(time, time + delay_damage_return, pain_finished). In port terms the return
-            // fires at DropTime + DelayReturn; shorten DropTime so the new return time = min(old, Now+damage_return).
+            // QC bounds pain_finished separately from kh_droptime, which still gates pickup.
             float now = GametypeEntities.Now;
-            if (key.DropTime <= 0f) key.DropTime = now; // a never-dropped key (defensive) starts its clock now
-            float oldReturn = key.DropTime + DelayReturn;
-            float newReturn = System.Math.Min(oldReturn, now + DelayDamageReturn);
-            newReturn = System.Math.Max(newReturn, now); // bound below by time
-            key.DropTime = newReturn - DelayReturn;
+            float deadline = key.ReturnDeadline ?? now + DelayReturn;
+            key.ReturnDeadline = MathF.Max(now, MathF.Min(now + DelayDamageReturn, deadline));
             return;
         }
 
@@ -849,7 +927,7 @@ public sealed class KeyHunt : GameType
         if (key.Carrier is null)
         {
             // dropped: auto-return after delay_return (QC pain_finished timeout → kh_LoserTeam → respawn)
-            if (key.DropTime > 0f && GametypeEntities.Now > key.DropTime + DelayReturn)
+            if (key.ReturnDeadline is float deadline && GametypeEntities.Now > deadline)
             {
                 AutoReturnKey(key);
                 return;
@@ -884,17 +962,14 @@ public sealed class KeyHunt : GameType
 
     private void TickKeys(float now)
     {
-        // QC kh_EnableTrackingDevice (scheduled at kh_StartRound for delay_tracking seconds): once the device
-        // powers up, the dropped-key + carrier waypoint sprites become visible (the sprites themselves are deferred).
-        if (!TrackingEnabled && _trackingEnableTime > 0f && now >= _trackingEnableTime)
+        // A loose key timing out ends the round and removes the entire world list.
+        foreach (var key in _worldKeys)
         {
-            TrackingEnabled = true;
-            _trackingEnableTime = 0f;
+            if (key.Carrier is not null || key.ReturnDeadline is not float deadline || now <= deadline)
+                continue;
+            AutoReturnKey(key);
+            return;
         }
-        // Headless think: auto-return loose keys, then evaluate the in-range capture.
-        foreach (var key in Keys.Values)
-            if (key.Carrier is null && key.DropTime > 0f && now > key.DropTime + DelayReturn)
-                AutoReturnKey(key);
         UpdateInterfereMessages(now);
         CheckCaptureGeometry();
     }
@@ -918,6 +993,7 @@ public sealed class KeyHunt : GameType
             // QC: only a suicide marks kh_dropperteam (a kill leaves it 0 so any teammate can re-collect freely).
             key.DropperTeam = suicide ? (int)player.Team : Teams.None;
             key.DropTime = now;
+            key.ReturnDeadline = now + DelayReturn;
             key.Pusher = mypusher;               // QC key.pusher = mypusher (credited if the key times out in-window)
             key.ProtectTime = now + ProtectTime; // QC pushltime: pusher-credit window
             AddCol(player, "KH_LOSSES", 1); // QC kh_Key_DropAll: GameRules_scoring_add(player, KH_LOSSES, 1)
@@ -936,7 +1012,7 @@ public sealed class KeyHunt : GameType
                 float pitch = -(45f + 45f * VortexArena.Common.Math.Prandom.Float());
                 float yaw = 360f * VortexArena.Common.Math.Prandom.Float();
                 VortexArena.Common.Math.QMath.AngleVectors(new Vector3(pitch, yaw, 0f), out Vector3 fwd, out _, out _);
-                e.Velocity = player.Velocity + fwd * DropVelocity; // QC W_CalculateProjectileVelocity adds the thrower's velocity
+                e.Velocity = WeaponFiring.CalculateProjectileVelocity(player, fwd * DropVelocity);
                 SetKeyVisual(e, key.HomeTeam, carried: false); // dropped: restore the spin + dropped model
             }
         }
@@ -964,6 +1040,7 @@ public sealed class KeyHunt : GameType
         key.Carrier = null;
         key.Dropper = player;
         key.DropTime = now;            // QC key.kh_droptime = time (re-collect gate baseline)
+        key.ReturnDeadline = now + DelayReturn;
         key.DropperTeam = (int)player.Team; // QC key.kh_dropperteam = key.team (own-team can't free-collect)
         key.ProtectTime = now + ProtectTime;
         key.Pusher = null;
@@ -981,7 +1058,7 @@ public sealed class KeyHunt : GameType
             GametypeEntities.SetOrigin(e, player.Origin);
             // QC: makevectors(player.v_angle); throwvelocity * v_forward (+ thrower velocity).
             VortexArena.Common.Math.QMath.AngleVectors(player.Angles, out Vector3 fwd, out _, out _);
-            e.Velocity = player.Velocity + fwd * ThrowVelocity;
+            e.Velocity = WeaponFiring.CalculateProjectileVelocity(player, fwd * ThrowVelocity);
             SetKeyVisual(e, key.HomeTeam, carried: false);
         }
         SoundOn(player, "KH_DROP"); // QC sound(player, CH_TRIGGER, SND_KH_DROP, …)
@@ -1045,7 +1122,7 @@ public sealed class KeyHunt : GameType
 
             // QC: keys = FOR_EACH_KH_KEY(key.owner && key.team != loser_team) → non-loser key holders right now.
             int keys = 0;
-            foreach (var k in Keys.Values)
+            foreach (var k in _worldKeys)
                 if (k.Carrier is { } kc && (int)kc.Team != loserTeam)
                     keys++;
 
@@ -1054,7 +1131,7 @@ public sealed class KeyHunt : GameType
 
             // QC: each non-loser key holder gets DistributeEvenly_Get(of) as a "destroyed_holdingkey" chunk
             // (credited to their INDIVIDUAL SP_SCORE via the float2int team:1 side — and so the team too).
-            foreach (var k in Keys.Values)
+            foreach (var k in _worldKeys)
                 if (k.Carrier is { } kc && (int)kc.Team != loserTeam)
                 {
                     int f = dist.Get(of);
@@ -1100,28 +1177,42 @@ public sealed class KeyHunt : GameType
         if (Api.Services is not null)
             EffectEmitter.TeTarExplosion(boomOrigin); // QC te_tarexplosion(lostkey.origin)
 
-        // remove the key + end the round (QC kh_FinishRound). The waypoint sprites are transient (rebuilt each
-        // tick by CollectWaypoints from live key state), so clearing the entity/carrier state drops them.
-        key_RemoveAll();
         UpdateLeaderAndCheckLimit();
-        Phase = RoundPhase.WaitingForPlayers;
+        FinishRound();
     }
 
-    /// <summary>Remove every key entity from the field and clear carrier/drop state (QC kh_FinishRound loop).</summary>
-    private void key_RemoveAll()
+    private void FinishRound()
+    {
+        RemoveAllKeys();
+        ScheduleRound();
+    }
+
+    /// <summary>Remove the live world list and clear the reusable per-team slots.</summary>
+    private void RemoveAllKeys()
     {
         _interfereMsgTime = 0f;
         _allOwnedTeam = Teams.None;
-        foreach (var key in Keys.Values)
+        foreach (var key in _worldKeys)
         {
-            key.Carrier = null;
+            RemoveKeyEntity(key);
             key.Dropper = null;
             key.DropperTeam = Teams.None;
             key.DropTime = 0f;
-            if (key.Entity is not null && Api.Services is not null)
-                Api.Entities.Remove(key.Entity);
-            key.Entity = null;
+            key.ReturnDeadline = null;
+            key.Pusher = null;
         }
+        _worldKeys.Clear();
+    }
+
+    private void RemoveKeyEntity(KeyState key)
+    {
+        if (key.Entity is { } entity)
+        {
+            GametypeEntities.DetachFromCarrier(entity);
+            _keyEntities?.Remove(entity);
+        }
+        key.Entity = null;
+        key.Carrier = null;
     }
 
     /// <summary>
@@ -1131,14 +1222,15 @@ public sealed class KeyHunt : GameType
     /// </summary>
     public int CheckCaptureGeometry()
     {
-        if (MatchEnded || Keys.Count == 0)
+        if (MatchEnded || _worldKeys.Count != TeamCount)
             return Teams.None;
 
         int owner = Teams.None;
         Player? anchor = null;
-        foreach (var key in Keys.Values)
+        // Preserve the spawn-order anchor while considering only live keys.
+        for (int i = _worldKeys.Count - 1; i >= 0; i--)
         {
-            Player? c = key.Carrier;
+            Player? c = _worldKeys[i].Carrier;
             if (c is null || c.IsDead)
                 return Teams.None; // a key is loose → no capture
             int t = (int)c.Team;
@@ -1160,7 +1252,7 @@ public sealed class KeyHunt : GameType
         float maxDist = MaxDist;
         if (maxDist > 0f)
         {
-            foreach (var key in Keys.Values)
+            foreach (var key in _worldKeys)
             {
                 Player c = key.Carrier!;
                 if (Vector3.Distance(c.Origin, anchor.Origin) > maxDist)
@@ -1178,10 +1270,10 @@ public sealed class KeyHunt : GameType
     /// </summary>
     public int AllOwnedByWhichTeam()
     {
-        if (Keys.Count == 0)
+        if (_worldKeys.Count != TeamCount)
             return Teams.None;
         int team = Teams.None;
-        foreach (var key in Keys.Values)
+        foreach (var key in _worldKeys)
         {
             Player? c = key.Carrier;
             if (c is null || c.IsDead)
@@ -1210,7 +1302,7 @@ public sealed class KeyHunt : GameType
         if (total <= 0) total = (int)ScoreCapture; // 2-team fallback (kept from the prior port behavior)
         var dist = new EvenDistributor(total, System.Math.Max(1, teams));
         float nadeBonusHigh = GametypeEntities.Cvar("g_nades_bonus_score_high", 15f);
-        foreach (var key in Keys.Values)
+        foreach (var key in _worldKeys)
         {
             if (key.Carrier is not { } c || (int)c.Team != owner)
                 continue;
@@ -1235,18 +1327,7 @@ public sealed class KeyHunt : GameType
 
         UpdateLeaderAndCheckLimit();
 
-        // reset keys + arm the next round (QC kh_FinishRound)
-        _interfereMsgTime = 0f;
-        _allOwnedTeam = Teams.None;
-        foreach (var key in Keys.Values)
-        {
-            key.Carrier = null;
-            key.DropTime = 0f;
-            if (key.Entity is not null && Api.Services is not null)
-                Api.Entities.Remove(key.Entity);
-            key.Entity = null;
-        }
-        Phase = RoundPhase.WaitingForPlayers;
+        FinishRound();
     }
 
     /// <summary>QC kh_WinnerTeam VFX: a NEXUIZPLASMA trail chaining the key carriers + a customflash midpoint.</summary>
@@ -1257,7 +1338,7 @@ public sealed class KeyHunt : GameType
         Vector3 firstOrigin = Vector3.Zero, lastOrigin = Vector3.Zero, midpoint = Vector3.Zero;
         bool first = true;
         int n = 0;
-        foreach (var key in Keys.Values)
+        foreach (var key in _worldKeys)
         {
             if (key.Carrier is not { } c)
                 continue;
@@ -1313,7 +1394,7 @@ public sealed class KeyHunt : GameType
                 {
                     // QC: a carrier on the owning team gets MEET (rendezvous), everyone else on it gets HELP.
                     bool carrying = false;
-                    foreach (var key in Keys.Values)
+                    foreach (var key in _worldKeys)
                         if (ReferenceEquals(key.Carrier, p)) { carrying = true; break; }
                     NotificationSystem.Send(NotifBroadcast.One, p, MsgType.Center,
                         carrying ? "KEYHUNT_MEET" : "KEYHUNT_HELP");
@@ -1559,8 +1640,11 @@ public sealed class KeyState
     /// <summary>The team that owns the drop (QC kh_dropperteam): a same-team collect earns no score.</summary>
     public int DropperTeam = Teams.None;
 
-    /// <summary>Sim time the key was dropped (QC kh_droptime / pain_finished baseline) for the return timer.</summary>
+    /// <summary>Sim time the key was dropped (QC kh_droptime), used for re-collect protection.</summary>
     public float DropTime;
+
+    /// <summary>QC pain_finished, the loose key's return deadline. Null before the return timer is armed.</summary>
+    public float? ReturnDeadline;
 
     /// <summary>Sim time the pusher-credit window closes (QC pushltime): a push after this is no longer credited.</summary>
     public float ProtectTime;

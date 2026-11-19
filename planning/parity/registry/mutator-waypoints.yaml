@@ -83,7 +83,7 @@ features:
     name: "Per-tick objective waypoint emit (per gametype)"
     layer: [authority]
     base_refs:
-      - "common/gamemodes/gamemode/ctf/sv_ctf.qc:ctf_FlagSetup"
+      - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_FlagSetup"
       - "common/mutators/mutator/waypoints/waypointsprites.qc:WaypointSprite_SpawnFixed"
     port_refs:
       - "src/VortexArena.Common/Gameplay/GameplayBases.cs:419"
@@ -119,7 +119,7 @@ features:
     name: "CTF flag waypoint sprites (base/dropped/carrier state machine)"
     layer: [authority, presentation]
     base_refs:
-      - "common/gamemodes/gamemode/ctf/sv_ctf.qc:ctf_FlagSetup"
+      - "common/gametypes/gametype/ctf/sv_ctf.qc:ctf_FlagSetup"
       - "common/mutators/mutator/waypoints/all.inc:REGISTER_WAYPOINT(FlagBaseRed)"
     port_refs:
       - "src/VortexArena.Common/Gameplay/GameTypes/Ctf.cs:CollectWaypoints"
@@ -425,8 +425,8 @@ features:
     name: "Item-respawn countdown waypoints (WP_Item/WP_Weapon + build bar + ping + sound)"
     layer: [authority, presentation]
     base_refs:
-      - "common/t_items.qc:Item_RespawnCountdown"
-      - "common/mutators/mutator/itemstime/sv_itemstime.qc"
+      - "server/items/items.qc:Item_RespawnCountdown"
+      - "common/mutators/mutator/itemstime/itemstime.qc"
     port_refs:
       - "src/VortexArena.Common/Gameplay/Items/ItemPickupRules.cs:RespawnCountdown"
     constants:
@@ -455,9 +455,9 @@ features:
     name: "Key Hunt key/carrier waypoint sprites (dropped + carrier state machine)"
     layer: [authority, presentation]
     base_refs:
-      - "common/gamemodes/gamemode/keyhunt/sv_keyhunt.qc:kh_Key_Spawn"
-      - "common/gamemodes/gamemode/keyhunt/sv_keyhunt.qc:kh_Key_AssignTo"
-      - "common/gamemodes/gamemode/keyhunt/sv_keyhunt.qc:kh_Key_waypointsprite_visible_for_player"
+      - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_Spawn"
+      - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_AssignTo"
+      - "common/gametypes/gametype/keyhunt/sv_keyhunt.qc:kh_Key_waypointsprite_visible_for_player"
     port_refs:
       - "src/VortexArena.Common/Gameplay/GameTypes/KeyHunt.cs:CollectWaypoints"
     constants:
@@ -484,7 +484,7 @@ features:
     name: "Misc live producers: LMS leader, Seeker tag, powerup-drop countdown"
     layer: [authority]
     base_refs:
-      - "common/gamemodes/gamemode/lms/sv_lms.qc:lms_waypointsprite_visible_for_player"
+      - "common/gametypes/gametype/lms/sv_lms.qc:lms_waypointsprite_visible_for_player"
       - "common/weapons/weapon/seeker.qc:W_Seeker_Tag_Touch"
       - "common/mutators/mutator/powerups/sv_powerups.qc:powerups_DropItem"
     port_refs:

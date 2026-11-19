@@ -135,6 +135,7 @@ public static class Cvars
         new("leadlimit_and_fraglimit", "0", "both leadlimit AND fraglimit must be reached"),
         new("g_maxplayers", "0", "0 = unlimited player slots"),
         new("minplayers", "0", "fill FFA up to this many with bots"),
+        new("g_mapinfo_settemp_acl", "+*", "ACL for temporary map gameplay settings"),
         new("minplayers_per_team", "0", "fill each team up to this many with bots"),
 
         // ---- warmup / ready-restart (xonotic-server.cfg) ----
@@ -497,6 +498,7 @@ public static class Cvars
         new("sv_status_privacy", "1", Save, "hide IP/crypto_id from who/status replies shown to clients"), // commands.cfg:157
 
         // ---- cheats (server/cheats.qc) ----
+        new("sessionid", "", CvarFlags.None, "Native record profile partition selected at map start"),
         new("sv_cheats", "0", Notify, "0=off, 1=cheats, 2=cheats for non-players + wider teleport"),
         new("g_grab_range", "200", "non-cheat object drag range"),
         new("g_max_info_autoscreenshot", "3"), // xonotic-server.cfg:643
@@ -516,6 +518,9 @@ public static class Cvars
         new("g_playban_minigames", "0", "disallow playbanned players (forced to spectate) from minigames"),
 
         // ---- event log + player stats (server/gamelog.qc + common/playerstats.qc) ----
+        new("sv_weaponstats_file", "", "append per-weapon match stats to the first usable local destination (relative user-data path or - for stdout)"),
+        new("g_hitplots", "0", "record local hitplots for every client"),
+        new("g_hitplots_individuals", "", "space-separated client addresses to record in local hitplots"),
         new("sv_eventlog", "0", "enable the event log"),
         new("sv_eventlog_console", "0", "echo the event log to the console"),
         new("sv_eventlog_files", "0", "write the event log to files"),
@@ -610,10 +615,8 @@ public static class Cvars
         new("sv_autodemo_perclient_discardable", "0", "per-client demos may be auto-deleted"),
 
         // ---- world-item pickups (T35: common/items/* + server/items/items.qc; values from balance-xonotic.cfg
-        //      + _all.cfg). NOTE: the SHIPPED g_pickup_items / g_powerups default is -1 ("use gametype default"),
-        //      which needs a per-gametype computation the headless port doesn't do — so we seed 1 (force-spawn)
-        //      here so stock maps spawn their items + powerups out of the box. A host can set 0 / -1 over the top.
-        new("g_pickup_items", "1", "force item spawning (-1 = gametype default; seeded 1 so items spawn)"),
+        //      + _all.cfg). Gametype item filters and the weapon-arena gate handle the default -1.
+        new("g_pickup_items", "-1", "force item spawning (-1 = gametype default)"),
         new("g_weapon_stay", "0", "1 = ghost weapons (no ammo), 2 = ghost weapons refill ammo"),
         new("g_items_dropped_lifetime", "20", "seconds a dropped loot item survives before despawning"),
         new("g_pickup_weapons_anyway", "0", "always pick up a weapon even if already owned"),
@@ -662,6 +665,8 @@ public static class Cvars
         new("g_pickup_respawntime_powerup", "120"),
         new("g_pickup_respawntime_weapon", "10"),
         new("g_pickup_respawntime_superweapon", "120"),
+        new("g_pickup_respawntimejitter_weapon", "0"),
+        new("g_pickup_respawntimejitter_superweapon", "10"),
 
         // (§12.8) DP-faithful networking entity culling (DP sv_send.c SV_MarkWriteEntityStateToClient): the
         // server stops SENDING a client the entities whose bounds fall outside that client's PVS — the bandwidth

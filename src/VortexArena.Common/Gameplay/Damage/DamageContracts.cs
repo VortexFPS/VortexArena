@@ -26,6 +26,15 @@ public struct DeathEvent
     public Entity? Attacker;
     public Entity? Inflictor;
     public string DeathType;
+    /// <summary>Status effect installed by a gametype that keeps the victim alive.</summary>
+    public StatusEffectDef? StatusEffectToKeep;
+}
+
+/// <summary>Server observer for the weaponstats calls in the live player damage path.</summary>
+public interface IWeaponStatsSink
+{
+    bool CanRecord(Player victim);
+    void Record(Player attacker, Player victim, string attackWeapon, float damage, bool killed);
 }
 
 /// <summary>The damage pipeline (armor/health split, force/knockback, Killed handling). Installed onto <see cref="Combat"/>.</summary>

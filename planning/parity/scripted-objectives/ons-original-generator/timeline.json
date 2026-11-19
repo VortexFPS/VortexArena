@@ -1,0 +1,132 @@
+[
+  {
+    "seconds": 0.0,
+    "event": "both graphical clients connected",
+    "port": 26814
+  },
+  {
+    "seconds": 2.0,
+    "client": "RedProbe",
+    "command": "cmd selectteam red"
+  },
+  {
+    "seconds": 3.0,
+    "client": "RedProbe",
+    "command": "cmd join"
+  },
+  {
+    "seconds": 4.001,
+    "client": "BlueProbe",
+    "command": "cmd selectteam blue"
+  },
+  {
+    "seconds": 5.023,
+    "client": "BlueProbe",
+    "command": "cmd join"
+  },
+  {
+    "seconds": 6.036,
+    "server": "status; g_weaponarena; g_balance_vortex_charge; g_balance_vortex_primary_damage; g_balance_vortex_primary_refire; g_balance_vortex_primary_force; g_onslaught_warmup; g_onslaught_round_timelimit; g_onslaught_cp_buildtime; g_onslaught_cp_health; g_onslaught_cp_buildhealth; g_onslaught_cp_regen; g_onslaught_gen_health"
+  },
+  {
+    "seconds": 8.036,
+    "client": "BlueProbe",
+    "command": "cmd teleporttotarget probe_blueview"
+  },
+  {
+    "seconds": 9.11,
+    "server": "echo BlueProbe at probe_blueview; prvm_edictget server 2 origin; prvm_edictget server 2 v_angle"
+  },
+  {
+    "seconds": 9.11,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_bluegen"
+  },
+  {
+    "seconds": 10.165,
+    "server": "echo RedProbe at probe_bluegen; prvm_edictget server 1 origin; prvm_edictget server 1 v_angle"
+  },
+  {
+    "seconds": 11.167,
+    "phase": "shielded generator shot"
+  },
+  {
+    "seconds": 11.167,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 11.414,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 12.215,
+    "phase": "initial build touch"
+  },
+  {
+    "seconds": 12.215,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_point"
+  },
+  {
+    "seconds": 13.277,
+    "server": "echo RedProbe at probe_point; prvm_edictget server 1 origin; prvm_edictget server 1 v_angle"
+  },
+  {
+    "seconds": 13.278,
+    "client": "RedProbe",
+    "event": "walk straight into pad"
+  },
+  {
+    "seconds": 14.352,
+    "client": "RedProbe",
+    "command": "cmd teleporttotarget probe_bluegen"
+  },
+  {
+    "seconds": 15.438,
+    "server": "echo RedProbe at probe_bluegen; prvm_edictget server 1 origin; prvm_edictget server 1 v_angle"
+  },
+  {
+    "seconds": 21.439,
+    "phase": "exposed generator damage"
+  },
+  {
+    "seconds": 21.439,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 21.675,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 23.125,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 23.373,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 24.823,
+    "phase": "destroy generator"
+  },
+  {
+    "seconds": 24.824,
+    "client": "RedProbe",
+    "event": "attack down"
+  },
+  {
+    "seconds": 25.053,
+    "client": "RedProbe",
+    "event": "attack up"
+  },
+  {
+    "seconds": 31.055,
+    "server": "status"
+  }
+]

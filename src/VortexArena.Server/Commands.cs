@@ -19,6 +19,7 @@ namespace VortexArena.Server;
 public sealed class CommandContext
 {
     private readonly string[] _argv;
+    private readonly string? _rawLine;
     private readonly StringBuilder _out = new();
 
     /// <summary>True when the command came from rcon / the server console (QC <c>CMD_REQUEST_COMMAND</c> rcon).</summary>
@@ -30,9 +31,10 @@ public sealed class CommandContext
     /// <summary>QC <c>argc</c>: the token count, including the command name at index 0.</summary>
     public int ArgCount => _argv.Length;
 
-    public CommandContext(string[] argv, bool isServerConsole, Player? caller)
+    public CommandContext(string[] argv, bool isServerConsole, Player? caller, string? rawLine = null)
     {
         _argv = argv;
+        _rawLine = rawLine;
         IsServerConsole = isServerConsole;
         Caller = caller;
     }
@@ -55,8 +57,30 @@ public sealed class CommandContext
         return string.Join(' ', _argv, first, _argv.Length - first);
     }
 
+    /// <summary>The original tail, retaining quotes for a nested command.</summary>
+    internal string RawTail(int first)
+    {
+        if (_rawLine is null)
+            return ArgTail(first);
+        int index = 0;
+        for (int token = 0; token < first; token++)
+        {
+            while (index < _rawLine.Length && char.IsWhiteSpace(_rawLine[index]))
+                index++;
+            bool quoted = false;
+            while (index < _rawLine.Length && (quoted || !char.IsWhiteSpace(_rawLine[index])))
+            {
+                if (_rawLine[index++] == '"')
+                    quoted = !quoted;
+            }
+        }
+        return _rawLine[index..].Trim();
+    }
+
     /// <summary>Write a line of command output (QC <c>print()</c> / <c>sprint(caller, ...)</c>).</summary>
     public void Print(string line) => _out.AppendLine(line);
+
+    internal void Write(string text) => _out.Append(text);
 
     /// <summary>The accumulated output so far (the host relays it to the console/client).</summary>
     public string Output => _out.ToString();
@@ -92,7 +116,7 @@ public sealed class ConsoleCommand
 /// feeds it console/rcon/client input via <see cref="Execute"/>. Output is collected on the
 /// <see cref="CommandContext"/> for the host to relay.
 /// </summary>
-public sealed class Commands
+public sealed partial class Commands
 {
     private readonly Dictionary<string, ConsoleCommand> _commands = new(StringComparer.OrdinalIgnoreCase);
     private readonly GameWorld _world;
@@ -211,11 +235,7 @@ public sealed class Commands
     /// </summary>
     public DeferredCommands Deferred { get; } = new();
 
-    /// <summary>
-    /// The precomputed common-command reply strings (QC getreplies.qc): printmaplist/lsmaps/records/rankings/
-    /// ladder/the monster list + cvar_changes/cvar_purechanges. Rebuilt by <c>GameWorld</c> after boot/map-load
-    /// via <see cref="CommandReplies.Recompute"/>; the reply commands read the cached fields.
-    /// </summary>
+    /// <summary>Builds common command replies from the current world state.</summary>
     public CommandReplies Replies { get; }
 
     /// <summary>QC <c>CS_CVAR(caller).cvar_cl_autoswitch</c>: the per-client auto-weapon-switch flag, kept off the
@@ -248,7 +268,11 @@ public sealed class Commands
         "cl_weaponpriority4", "cl_weaponpriority5", "cl_weaponpriority6", "cl_weaponpriority7",
         "cl_weaponpriority8", "cl_weaponpriority9",
         "cl_autoswitch", "cl_autoswitch_cts",
+        "cl_casings", "r_drawviewmodel",
         "cl_noantilag",
+        "cl_allow_uidtracking",
+        "cl_allow_uid2name",
+        "cl_spawn_near_teammate",
         "cl_physics",
         "cl_movement_track_canjump",
         "cl_jetpack_jump",
@@ -364,6 +388,11 @@ public sealed class Commands
         => _clientCvars.TryGetValue(p, out var t) && t.TryGetValue(name, out string? v) ? InterpretBoolean(v) : fallback;
 
     /// <summary>Float read of a per-client replicated cvar (QC <c>stof</c> — unparsable → 0).</summary>
+    /// <summary>Both client opt-ins are required to file named ranking records.</summary>
+    public bool RankingIdentityAllowed(Player player) =>
+        GetClientCvarFloat(player, "cl_allow_uidtracking", 1f) == 1f
+        && GetClientCvarFloat(player, "cl_allow_uid2name", -1f) == 1f;
+
     public float GetClientCvarFloat(Player p, string name, float fallback = 0f)
         => _clientCvars.TryGetValue(p, out var t) && t.TryGetValue(name, out string? v)
             ? (float.TryParse(v, System.Globalization.NumberStyles.Float,
@@ -506,7 +535,7 @@ public sealed class Commands
 
     /// <summary>
     /// Drop every per-client table entry for a departed player (the QC clientstate entity being freed on
-    /// disconnect). The net layer calls this from its disconnect/bot-removal paths so the dictionaries don't
+    /// disconnect). The world's disconnect hook clears this state so the dictionaries don't
     /// retain dead Player references across a long-running server.
     /// </summary>
     public void ForgetPlayer(Player p)
@@ -528,6 +557,7 @@ public sealed class Commands
         Chat = new Chat(world); // [T46] the chat engine (registers its g_chat_* cvar defaults on construction)
         RegisterClientCommandCvars();
         RegisterBuiltins();
+        RegisterLocalDiagnostics();
 
         // Per-client weapon priority (T54): point the selection code's per-player priority source at this
         // world's replicated-cvar table (QC w_getbestweapon reading CS_CVAR(this).cvar_cl_weaponpriority).
@@ -594,6 +624,10 @@ public sealed class Commands
         DodgingMutator.ClientDodgingProvider = e =>
             e is Player p && GetClientCvarFloat(p, "cl_dodging", 0f) != 0f;
 
+        // The replicated bool starts false until the client sends its archived preference (default 1).
+        SpawnNearTeammateMutator.ClientPreferenceProvider = e =>
+            e is Player p && GetClientCvarBool(p, "cl_spawn_near_teammate");
+
         // Per-client double-tap window (QC dodging/sv_dodging.qc:50 PHYS_DODGING_TIMEOUT(s) =
         // CS_CVAR(s).cvar_cl_dodging_timeout, a REPLICATE'd float). Base reads the timeout off the dodging
         // player's own replicated cl_dodging_timeout each frame, so each client sets their own window. Point the
@@ -650,7 +684,26 @@ public sealed class Commands
     public CommandContext Execute(string commandLine, bool isServerConsole = true, Player? caller = null)
     {
         string[] argv = Tokenize(commandLine);
-        var ctx = new CommandContext(argv, isServerConsole, caller);
+        if (isServerConsole && argv.Length > 0)
+        {
+            int verb = argv.Length > 1 && argv[0].Equals("sv_cmd", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+            bool operatorVote = verb == 1 && argv[1].Equals("vote", StringComparison.OrdinalIgnoreCase);
+            bool operatorBotScript = verb == 1 && argv[1].Equals("bot_cmd", StringComparison.OrdinalIgnoreCase);
+            if (operatorVote || operatorBotScript
+                || (verb == 1 && argv[1].Equals("mx", StringComparison.OrdinalIgnoreCase) && Has("mx")))
+            {
+                commandLine = new CommandContext(argv, true, caller, commandLine).RawTail(1);
+                argv = argv[1..];
+                if (operatorVote)
+                    caller = null;
+            }
+            else if (IsLocalDiagnostic(argv[verb])
+                || argv[verb].Equals("maplist", StringComparison.OrdinalIgnoreCase)
+                || (verb == 1 && (argv[verb].Equals("lsmaps", StringComparison.OrdinalIgnoreCase)
+                    || argv[verb].Equals("printmaplist", StringComparison.OrdinalIgnoreCase))))
+                argv = VortexArena.Common.Config.ConfigInterpreter.Tokenize(commandLine).Skip(verb).ToArray();
+        }
+        var ctx = new CommandContext(argv, isServerConsole, caller, commandLine);
         if (argv.Length == 0)
             return ctx;
 
@@ -777,6 +830,7 @@ public sealed class Commands
         Register("vote", "vote <call|yes|no|abstain|stop|status|master|help> [args] — match/map voting", CmdVote);
 
         // ---- bots (QC bot_cmd add / bot_remove / setbots) ----
+        Register("bot_cmd", "bot_cmd <bot|*> <command> [args] — queue a scripted bot command", CmdBotScript);
         Register("bot_add", "bot_add [name] [skill] — add an AI player", CmdBotAdd);
         Register("bot_remove", "bot_remove [name] — remove a bot", CmdBotRemove);
         Register("bot_neural_status", "bot_neural_status — what the learned locomotion policy is doing (or why it is not)", CmdBotNeuralStatus);
@@ -929,6 +983,7 @@ public sealed class Commands
         Register("superspec_itemfilter", "superspec_itemfilter [help|clear|show|<classnames>] — item-message classname filter", CmdSuperspec);
         Register("followpowerup", "followpowerup — spectate the first player holding Strength or Shield", CmdSuperspec);
         Register("followstrength", "followstrength — spectate the first player holding Strength", CmdSuperspec);
+        Register("followfc", "followfc [red|blue|yellow|pink] — spectate a flag carrier", CmdFollowFlagCarrier);
         Register("followshield", "followshield — spectate the first player holding Shield", CmdSuperspec);
 
         // ---- campaign (QC sv_cmd warp) ----
@@ -1599,7 +1654,7 @@ public sealed class Commands
         int teamIndex = 0;
         foreach (Player p in shuffled)
         {
-            int target = Teams.All[teamIndex % teamCount];
+            int target = _world.Teamplay.ActiveTeams[teamIndex % teamCount];
             if ((int)p.Team != target)
             {
                 // QC sv_cmd.qc:1374: shuffleteams moves each player via MoveToTeam(it, target, 6) — the lock is
@@ -1661,7 +1716,9 @@ public sealed class Commands
     private bool CmdReady(CommandContext ctx)
     {
         if (ctx.Caller is null) { ctx.Print("ready is a client command"); return true; }
-        if (!_world.Warmup.WarmupStage) { ctx.Print("Not in warmup."); return true; }
+        bool qualifying = _world.GameType is Race { QualifyingThenRace: true };
+        if (!_world.Warmup.WarmupStage && !qualifying) { ctx.Print("Not in warmup."); return true; }
+        if (qualifying && ctx.Caller.IsObserver) return true;
         bool ready = _world.ToggleReady(ctx.Caller);
         ChatBroadcast?.Invoke($"^2* {ctx.Caller.NetName} is {(ready ? "ready" : "NOT ready")}");
         return true;
@@ -1678,6 +1735,8 @@ public sealed class Commands
         // and the editor's "EDIT is where you live" gate — while the auto-join path honored all of them.
         // An already-live (dead) player is a respawn, not a join, and QC lets that through unchecked.
         if (p.IsObserver && !_world.Clients.JoinAllowed(p, _world.Time))
+            return true;
+        if (!p.IsObserver && _world.Clients.ClanArenaRoundInProgress)
             return true;
         // QC Join_Try (client.qc:2274): a non-INGAME client in g_playban_list cannot (re)join — the play-ban's
         // load-bearing enforcement. A player who isn't currently in play is one sitting as observer/spectator;
@@ -1797,6 +1856,20 @@ public sealed class Commands
         if (ctx.Caller is null) { ctx.Print("spectate is a client command"); return true; }
         if (!Cvars.Bool("sv_spectate")) { ctx.Print("Spectating is not allowed."); return true; }
         Player p = ctx.Caller;
+        if (_world.GameType is ClanArena && ctx.ArgCount >= 2)
+        {
+            if (!p.IsObserver)
+                return true;
+            if (ctx.Arg(1) == "0")
+                _world.Clients.StopSpectating(p);
+            else if (Cvars.FloatOr("sv_spectate", 1f) != 2f || _world.Warmup.WarmupStage)
+            {
+                Player? target = FindPlayerByName(ctx.Arg(1));
+                if (target is not null)
+                    _world.Clients.Spectate(p, target);
+            }
+            return true;
+        }
         // QC MUTATOR_HOOKFUNCTION(lms, ClientCommand_Spectate) ⇒ MUT_SPECCMD_RETURN (sv_lms.qc:704): a ranked
         // (out-of-game) LMS player can no longer become a real spectator — they stay a ranked observer of the
         // match. Keyed on frags == FRAGS_PLAYER_OUT_OF_GAME (the eliminated state), which here is the LmsState's
@@ -1821,11 +1894,15 @@ public sealed class Commands
             ctx.Print("now spectating");
             return true;
         }
-        // QC MUTATOR_HOOKFUNCTION(ca, ClientCommand_Spectate) (sv_clanarena.qc): before the generic kill-
-        // countdown spectate, let CA intercept the command. For a live CA player this sends INFO_CA_LEAVE
-        // (MUT_SPECCMD_FORCE) and records _prevTeam. The actual PutObserverInServer still runs below via the
-        // countdown; GametypeSpectateCommand only sets up the CA state. Non-CA modes return false (no-op).
-        _world.Clients.GametypeSpectateCommand(p);
+        // QC MUT_SPECCMD_FORCE lets a participating CA observer withdraw immediately.
+        // A live participant still takes the generic spectate countdown below.
+        bool forceSpectate = _world.Clients.GametypeSpectateCommand(p);
+        if (_world.GameType is ClanArena && p.IsObserver)
+        {
+            if (forceSpectate)
+                _world.Clients.PutObserverInServer(p);
+            return true;
+        }
         // QC ClientCommand_spectate (cmd.qc:886): a plain `spectate` defers the observer transition through
         // ClientKill_TeamChange(caller, -2) — the g_balance_kill_delay countdown (grey CENTER_TEAMCHANGE_SPECTATE
         // print + the cancel window), not an instant PutObserverInServer. Begin resolves -2 → PutObserverInServer
@@ -1886,6 +1963,11 @@ public sealed class Commands
 
         int team = TeamFromName(sel);
         if (team == Teams.None) { ctx.Print($"invalid team \"{sel}\""); return true; }
+        if (_world.GameType is Tdm && !_world.Teamplay.ActiveTeams.Contains(team))
+        {
+            ctx.Print("That team is not available.");
+            return true;
+        }
         // QC cmd.qc:730 (INFO/CENTER_TEAMCHANGE_SAME): an explicit re-select of your current team is a no-op.
         if (oldTeam == team) { ctx.Print("already on that team"); return true; }
         // QC cmd.qc:746 (g_balance_teams_prevent_imbalance): an explicit (non-auto) switch to a stronger/larger
@@ -1936,7 +2018,7 @@ public sealed class Commands
     {
         if (ctx.Caller is null) { ctx.Print("kill is a client command"); return true; }
         Player p = ctx.Caller;
-        if (p.FragsStatus == Player.FragsSpectator) return true;
+        if (p.FragsStatus == Player.FragsSpectator || VortexArena.Common.Physics.PlayerPhysics.RoundMoveForbidden?.Invoke(p) == true) return true;
         if (p.IsDead) { ctx.Print("already dead"); return true; }
         // QC server/clientkill.qc ClientKill → ClientKill_TeamChange(this, 0): defer the suicide through the
         // g_balance_kill_delay countdown (spoken kill announcer + CENTER_TEAMCHANGE_SUICIDE print). Begin() falls
@@ -2356,16 +2438,14 @@ public sealed class Commands
         if (caller.Vehicle is not null && !VehicleCommon.IsDead(caller.Vehicle) && VehicleBoarding.Impulse(caller, imp))
             return true;
         // QC CheatImpulse (impulse.qc:398, cheats.qc:184): impulse 99 (CHIMPULSE_GIVE_ALL) — route it to
-        // Cheats.GiveAll, which runs the sv_cheats gate (and counts the cheat) itself. The clone/speedrun/teleport/
-        // drag impulses need engine services and remain unported; R00T (148) is handled just below.
+        // Cheats.GiveAll, which runs the sv_cheats gate and counts the cheat.
         if (imp == 99)
         {
             _world.Cheats.GiveAll(caller); // silently no-ops (returns false) when sv_cheats disallows it, like QC
             return true;
         }
         // QC CheatImpulse CHIMPULSE_R00T (148, cheats.qc:264): nuke a random living enemy. Like GIVE_ALL it runs
-        // the sv_cheats gate + counts the cheat itself, and silently no-ops when disallowed. Clone (140/142) and
-        // speedrun (141) impulses need engine services (CopyBody / personal-waypoint) and remain unported.
+        // the sv_cheats gate and counts the cheat.
         if (imp == 148)
         {
             _world.Cheats.R00t(caller, _world.Clients.Players);
@@ -2378,11 +2458,15 @@ public sealed class Commands
             _world.Cheats.Teleport(caller);
             return true;
         }
+        if (imp is 140 or 142)
+        {
+            _world.Cheats.Clone(caller, moving: imp == 140, now: _world.Time);
+            return true;
+        }
         // QC CheatImpulse CHIMPULSE_SPEEDRUN (141, cheats.qc:188): teleport back to the personal speedrun checkpoint
         // and restore the snapshotted resources/weapons/items/status-effects (the checkpoint is taken by SPEEDRUN_INIT
         // = impulse 30, handled in the waypoint switch below). Gated as a cheat only when g_allow_checkpoints is off
-        // (Cheats.Speedrun runs that gate + the cheat count itself); a free reset otherwise. CLONE_MOVING(140)/
-        // CLONE_STANDING(142) remain unported (need a CopyBody entity-clone service the port doesn't expose).
+        // (Cheats.Speedrun runs that gate + the cheat count itself); a free reset otherwise.
         if (imp == 141)
         {
             // QC CHIMPULSE_SPEEDRUN trailing MUTATOR_CALLHOOK(AbortSpeedrun, this): on a successful teleport-back
@@ -2395,6 +2479,8 @@ public sealed class Commands
                     race.AbortSpeedrun(caller);
                 else if (_world.GameType is VortexArena.Common.Gameplay.Cts cts)
                     cts.AbortSpeedrun(caller);
+                else if (_world.GameType is Ctf ctf)
+                    ctf.AbortSpeedrun(caller);
             }
             return true;
         }
@@ -2440,10 +2526,6 @@ public sealed class Commands
             VehicleBoarding.UseKey(caller);
             if (_world.GameType is VortexArena.Common.Gameplay.Ctf ctf)
                 ctf.HandleUseKey(caller, _world.Clients.Players);
-            // QC MUTATOR_HOOKFUNCTION(ons, PlayerUseKey) (sv_onslaught.qc:1990): next to an own control point,
-            // +use opens the click-radar (the HUD is client-side; HandleUseKey is the faithful server-side gate).
-            else if (_world.GameType is VortexArena.Common.Gameplay.Onslaught ons)
-                ons.HandleUseKey(caller);
             return true;
         }
 
@@ -2637,6 +2719,39 @@ public sealed class Commands
         if (!superspec.Added)
             return true;
         superspec.HandleCommand(ctx.Caller, ctx.Argv);
+        return true;
+    }
+
+    private bool CmdFollowFlagCarrier(CommandContext ctx)
+    {
+        if (ctx.Caller is not { IsObserver: true } caller || _world.GameType is not Ctf ctf
+            || Mutators.ByName("superspec") is not SuperSpecMutator { Added: true } superspec)
+            return true;
+
+        int team = ctx.ArgCount == 2 ? ctx.Arg(1) switch
+        {
+            "red" => Teams.Red,
+            "blue" => Teams.Blue,
+            "yellow" => Teams.Yellow,
+            "pink" => Teams.Pink,
+            _ => Teams.None,
+        } : Teams.None;
+        if (!Teams.Active(ctf.TeamCount).Contains(team))
+            team = Teams.None;
+
+        bool found = false;
+        foreach (Player target in _world.Clients.Players)
+        {
+            if (target.IsObserver || ctf.CarriedBy(target) is null || (team != Teams.None && target.Team != team))
+                continue;
+            found = true;
+            if (team == Teams.None && ReferenceEquals(caller.Spectatee, target))
+                continue;
+            _world.Clients.Spectate(caller, target);
+            return true;
+        }
+        if (!found)
+            superspec.Msg(caller, "", "", "No active flag carrier\n", 1);
         return true;
     }
 
@@ -3087,26 +3202,22 @@ public sealed class Commands
     }
 
     /// <summary>
-    /// QC <c>sv_cmd.qc:628</c> <c>delrec</c> → <c>race_deleteTime(map, pos)</c> (server/race.qc:461): delete race
-    /// records from the given rank up through <c>RANKINGS_CNT</c> on the current map (or a specified map), shifting
-    /// higher ranks down. Usage: <c>sv_cmd delrec &lt;rank&gt; [&lt;map&gt;]</c>. The rank is 1-based (rank 1 = server
-    /// record). race_deleteTime operates on the single global <c>record_type</c> (RACE_RECORD by default,
-    /// CTS_RECORD under the CTS gametype) — NOT both tables — so this resolves the active gametype's record type
-    /// the same way QC's <c>record_type</c> global does (cf. CommandReplies.GetRankings).
+    /// QC <c>delrec</c> removes the requested rank from the selected map's active mode table and compacts
+    /// the remaining ranks. Other modes and the separate CTF fastest-capture record keep their values.
     /// </summary>
     private bool CmdDelRec(CommandContext ctx)
     {
         if (ctx.ArgCount < 2)
         {
             ctx.Print("usage: delrec <rank> [map]");
-            ctx.Print("  <rank> is the ranking up to which records will be deleted");
+            ctx.Print("  <rank> is the record to delete");
             ctx.Print("  if <map> is not provided it will use the current map");
             return true;
         }
 
-        if (!int.TryParse(ctx.Arg(1), out int rank) || rank < 1)
+        if (!int.TryParse(ctx.Arg(1), out int rank) || rank < 1 || rank > RaceRecords.RankingsCnt)
         {
-            ctx.Print("rank must be a positive integer");
+            ctx.Print($"rank must be between 1 and {RaceRecords.RankingsCnt}");
             return true;
         }
 
@@ -3117,15 +3228,14 @@ public sealed class Commands
             return true;
         }
 
-        // QC race_deleteTime acts on the single global record_type, which is CTS_RECORD under the CTS gametype and
-        // RACE_RECORD otherwise (server/world.qc:872 default + the per-gametype overrides). Resolve it the same way
-        // CommandReplies.GetRankings does, so delrec deletes exactly the table the active mode files times into.
-        string gt = _world.GameType?.NetName ?? "";
-        string recordType = gt == "cts"
-            ? VortexArena.Common.Gameplay.RaceRecords.CtsRecord
-            : VortexArena.Common.Gameplay.RaceRecords.RaceRecord;
-        VortexArena.Common.Gameplay.RaceRecords.DeleteTime(map, recordType, rank);
-        ctx.Print($"Deleted records up to rank {rank} on map {map}");
+        string recordType = _world.GameType switch
+        {
+            Cts => RaceRecords.CtsRecord,
+            Ctf => RaceRecords.CtfRecord,
+            _ => RaceRecords.RaceRecord,
+        };
+        RaceRecords.DeleteTime(map, recordType, rank);
+        ctx.Print($"Deleted rank {rank} on map {map}");
         return true;
     }
 
@@ -3223,7 +3333,7 @@ public sealed class Commands
     {
         // QC CommonCommand_cvar_changes: print_to(caller, cvar_changes). The log is rebuilt lazily so it
         // reflects any cvars changed after boot (QC builds it once at init; rebuilding on read is a superset).
-        _world.Commands.Replies.Recompute();
+        Replies.BuildCvarChanges();
         ctx.Print(_world.Commands.Replies.CvarChanges);
         return true;
     }
@@ -3231,7 +3341,7 @@ public sealed class Commands
     private bool CmdCvarPureChanges(CommandContext ctx)
     {
         // QC CommonCommand_cvar_purechanges: print_to(caller, cvar_purechanges).
-        _world.Commands.Replies.Recompute();
+        Replies.BuildCvarChanges();
         ctx.Print(_world.Commands.Replies.CvarPurechanges);
         return true;
     }
@@ -3304,31 +3414,8 @@ public sealed class Commands
     /// <summary>QC GenericCommand_maplist: add (PREPEND) / remove / shuffle / cleanup g_maplist.</summary>
     private bool CmdMaplist(CommandContext ctx)
     {
-        switch (ctx.Arg(1))
-        {
-            case "add" when ctx.ArgCount == 3:
-            {
-                string cur = Cvars.String("g_maplist");
-                // QC PREPENDS for maplist add (unlike addtolist's append).
-                Cvars.Set("g_maplist", cur == "" ? ctx.Arg(2) : ctx.Arg(2) + " " + cur);
-                return true;
-            }
-            case "remove" when ctx.ArgCount == 3:
-            {
-                string rebuilt = "";
-                foreach (string w in VortexArena.Engine.Console.WordList.Words(Cvars.String("g_maplist")))
-                    if (w != ctx.Arg(2)) rebuilt = VortexArena.Engine.Console.WordList.Cons(rebuilt, w);
-                Cvars.Set("g_maplist", rebuilt);
-                return true;
-            }
-            case "shuffle":
-                Cvars.Set("g_maplist", VortexArena.Engine.Console.WordList.Shuffle(Cvars.String("g_maplist"), _maplistRng));
-                return true;
-            case "cleanup":
-                // No reachable map catalog here → identity (keep all words), matching the console surface (R4).
-                return true;
-        }
-        ctx.Print("Usage: maplist <action> [<map>] — actions: add, cleanup, remove, shuffle");
+        VortexArena.Engine.Console.ConsoleCommands.EditMaplist(ctx.Argv, _world.Services.Cvars, ctx.Print,
+            _world.Rotation.MapExists, _world.Rotation.MapSupportsGametype, _maplistRng);
         return true;
     }
 
@@ -3440,7 +3527,7 @@ public sealed class Commands
         // QC mapvoting.qc:138-140 — GameTypeVote_MapInfo_FixName(m) returns null when the map isn't on the
         // server. The port mirrors that with the same map-existence check the console maplist side uses
         // (Rotation.MapExists / MapInfo_CheckMap), which a host wires to the asset catalog.
-        if (!_world.Rotation.MapExists(map))
+        if (!_world.Rotation.MapExists(map) || !_world.Rotation.CanListMap(map))
         {
             ctx.Print("The map you suggested is not available on this server.");
             return true;
@@ -3624,29 +3711,11 @@ public sealed class Commands
     // common reply commands (QC server/command/common.qc — print the cached reply strings)
     // =============================================================================================
 
-    private bool CmdRecords(CommandContext ctx)
-    {
-        // QC precomputes the reply caches at world init; the port rebuilds lazily on read so they reflect the
-        // live g_maplist/monster registry without depending on the Boot seam (a cheap superset of QC).
-        Replies.Recompute();
-        // QC CommonCommand_records: a page arg prints records_reply[num-1] (1..10); else all non-empty pages.
-        int num = (int)ctx.ArgFloat(1);
-        if (num > 0 && num <= 10 && Replies.RecordsReply[num - 1] != "")
-        {
-            ctx.Print(Replies.RecordsReply[num - 1]);
-            return true;
-        }
-        bool any = false;
-        for (int i = 0; i < 10; i++)
-            if (Replies.RecordsReply[i] != "") { ctx.Print(Replies.RecordsReply[i]); any = true; }
-        if (!any) ctx.Print("No records available"); // honest empty (no race-records store at this seam — R8)
-        return true;
-    }
-
-    private bool CmdRankings(CommandContext ctx) { Replies.Recompute(); ctx.Print(Replies.RankingsReply); return true; }
-    private bool CmdLsmaps(CommandContext ctx) { Replies.Recompute(); ctx.Print(Replies.LsmapsReply); return true; }
-    private bool CmdPrintMapList(CommandContext ctx) { Replies.Recompute(); ctx.Print(Replies.MaplistReply); return true; }
-    private bool CmdLadder(CommandContext ctx) { Replies.Recompute(); ctx.Print(Replies.LadderReply); return true; }
+    private bool CmdRecords(CommandContext ctx) { ctx.Write(Replies.GetRecords((int)ctx.ArgFloat(1))); return true; }
+    private bool CmdRankings(CommandContext ctx) { ctx.Write(Replies.GetRankings()); return true; }
+    private bool CmdLsmaps(CommandContext ctx) { ctx.Print(Replies.GetLsmaps()); return true; }
+    private bool CmdPrintMapList(CommandContext ctx) { ctx.Print(Replies.GetMaplist()); return true; }
+    private bool CmdLadder(CommandContext ctx) { ctx.Write(Replies.GetLadder()); return true; }
 
     // =============================================================================================
     // monster editor (QC server/command/common.qc CommonCommand_editmob)
@@ -3675,7 +3744,6 @@ public sealed class Commands
     {
         // QC: disabled in singleplayer; no g_monsters check here (it may be toggled mid-match).
         if (Cvars.Bool("g_campaign")) { outCtx.Print("Monster editing is disabled in singleplayer"); return true; }
-        Replies.Recompute(); // so `editmob spawn list` reflects the live monster registry (QC the cached reply)
 
         Player? caller = ctx.Caller;
         string verb = ctx.Arg(1);
@@ -3706,7 +3774,7 @@ public sealed class Commands
                 string argLower = argument.ToLowerInvariant();
                 int moveflag = ctx.Arg(3) != "" ? (int)ctx.ArgFloat(3) : 1; // QC: follow owner if not defined
 
-                if (argLower == "list") { outCtx.Print(Replies.MonsterlistReply); return true; }
+                if (argLower == "list") { outCtx.Print(Replies.GetMonsterlist()); return true; }
 
                 int monCount = CountMonstersOwnedBy(caller);
 
@@ -3867,7 +3935,7 @@ public sealed class Commands
             : v.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>QC <c>InterpretBoolean</c> (lib/bool.qh): yes/true/on → true; no/false/off → false; else stof != 0.</summary>
-    private static bool InterpretBoolean(string input) => input.ToLowerInvariant() switch
+    public static bool InterpretBoolean(string input) => input.ToLowerInvariant() switch
     {
         "yes" or "true" or "on" => true,
         "no" or "false" or "off" => false,

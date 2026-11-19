@@ -76,7 +76,10 @@ public partial class EditorActionPanel : HudPanel
         int size = (int)Mathf.Clamp(Size2.Y * 0.019f, 11f, 24f);
         float w = MeasureText(line, size);
         float x = Size2.X * 0.5f - w * 0.5f;
-        float y = Size2.Y * (0.5f + DropFraction);
+        // Waypoint diagnostics project their rows downward from the aimed node near the crosshair.
+        float y = c.Tool == EditorTool.Waypoint
+            ? Size2.Y * (0.5f - DropFraction) - size
+            : Size2.Y * (0.5f + DropFraction);
 
         DrawRect(new Rect2(x - 8f, y - 3f, w + 16f, size + 8f), BackColor);
         DrawText(new Vector2(x, y), line, color, size);

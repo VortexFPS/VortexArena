@@ -207,7 +207,7 @@ public partial class QcKeyBinder : MenuListBox
     }
 
     /// <summary>findkeysforcommand: the keys bound to <paramref name="func"/>, in DarkPlaces key-number order.</summary>
-    private static List<string> KeysFor(string func)
+    internal static List<string> KeysFor(string func)
     {
         var keys = new List<string>();
         foreach (KeyValuePair<string, string> kv in BindTable.List())

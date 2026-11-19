@@ -7,7 +7,6 @@ summary:
   worst_gaps:
     - "DEATH_CAMP environmental-suicide penalty omitted from Mayhem's IsEnvironmentalSuicide set — NOW OBSERVABLE: the port has a live CampcheckMutator that deals 'camp'-deathtype damage and a DeathTypes.Camp constant, so when g_campcheck is enabled a camped player's death damage is NOT subtracted from their Mayhem score (Base subtracts it). Conditional on the non-default g_campcheck mutator."
     - "most_available weapon arena ignores the map-present-weapon intersection (no per-map weapon set in the port) — falls back to weapons_most; intended divergence."
-    - "Menu describe blurb, point-limit configure slider (200..2000 step 100), and DM/TDM map-support gating (m_isAlwaysSupported / m_isForcedSupported) are unimplemented — cross-boundary MENUQC/map-pool concern, deferred."
 features:
   - id: mayhem.identity.registration
     name: "Gametype identity + registration (mayhem netname, FFA, USEPOINTS, limit defaults)"
@@ -17,15 +16,15 @@ features:
       - "common/gametypes/gametype/mayhem/sv_mayhem.qc:mayhem_Initialize"
     port_refs:
       - "src/VortexArena.Common/Gameplay/GameTypes/Mayhem.cs:Mayhem (ctor)"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Mayhem.cs:OnInit → SeedTimeLimit(DefaultTimeLimitMinutes)"
       - "src/VortexArena.Server/GameWorld.cs:ResolveGameType"
-      - "src/VortexArena.Server/GameWorld.cs:503 (GameType?.OnInit() on the boot path)"
+      - "src/VortexArena.Server/GameWorld.cs:ApplyMapMatchDefaults"
+      - "src/VortexArena.Common/Menu/PointLimitSettings.cs"
     constants:
       - { name: "netname", base: "mayhem", port: "mayhem", match: true }
       - { name: "teamgame", base: "false (FFA)", port: "false", match: true }
       - { name: "pointlimit_default", base: "1000", port: "1000", match: true }
       - { name: "leadlimit_default", base: "0", port: "0", match: true }
-      - { name: "timelimit_default", base: "15 (min)", port: "15 (SeedTimeLimit applied live in OnInit when timelimit still equals the generic default 20)", match: true }
+      - { name: "timelimit_default", base: "15 minutes", port: "15 minutes through native match boot", match: true }
     status:
       logic: faithful
       values: faithful
@@ -37,9 +36,9 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "GameWorld.cs:502-503 ResolveGameType then GameType?.OnInit(); Mayhem.OnInit (Mayhem.cs:351) calls SeedTimeLimit(15); SeedTimeLimit (Mayhem.cs:371) sets timelimit cvar when it still equals the generic default 20 (Cvars.cs:108 timelimit default = 20). Same pattern as Tdm/TeamMayhem.", result: pass }
+      - { kind: test, ref: "MapInfoGenerationTests.MayhemMenuPointSettingsReachTheScoreRuleAcrossMaps verifies defaults and an authored 20-minute clock with both stores.", result: pass }
     confidence: high
-    notes: "FIXED since baseline: the timelimit=15 default is now applied live. OnInit (called from GameWorld.cs:503 on the boot path) calls SeedTimeLimit(15), which sets the timelimit cvar iff it still equals the generic default 20 — so an explicit host/server.cfg timelimit (incl. 0) still wins, matching QC. Pointlimit/leadlimit defaults (1000/0) correctly hardcoded."
+    notes: "Native boot initializes effective clocks and score limits from defaults, authored metadata and applicable overrides. The selected clock does not inherit the previous map’s limit."
 
   - id: mayhem.score.recompute
     name: "MayhemCalculatePlayerScore — recompute SP_SCORE from damage+frags (methods 1/2/3)"
@@ -324,9 +323,11 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
+      - { kind: test, ref: "MapInfoGenerationTests.MayhemMenuPointSettingsReachTheScoreRuleAcrossMaps exercises thresholds, zero and map defaults through GameWorld.Frame.", result: pass }
+      - { kind: runtime, ref: "Native headless stormkeep boot with g_mayhem_point_limit=400 and fraglimit_override=5 reported fraglimit=400 and timelimit=15 through the server console.", result: pass }
       - { kind: code, ref: "RecomputeLeader enforces point+lead limit each frame via DriveGametypeFrame; ReportsTie wired in CheckRulesAndIntermission — UNCHANGED by Wave-2", result: pass }
     confidence: high
-    notes: "Limit cvar -1 fallback to gametype default handled. Timed-tie overtime participates via ReportsTie. (Note: the POINT limit is enforced; the separate TIME limit default of 15 min is the unrelated gap in mayhem.identity.registration.)"
+    notes: "The mode-specific nonnegative limit wins before the generic fallback. Native boot publishes the resolved limits through fraglimit and leadlimit for gameplay and the listen-server scoreboard."
 
   - id: mayhem.match.reset
     name: "reset_map_players — zero total_damage_dealt on round/map reset"
@@ -353,26 +354,34 @@ features:
     notes: "Freshly-spawned players default GtTotalDamageDealt to 0, so Activate needs no extra zeroing."
 
   - id: mayhem.menu.describe_support
-    name: "Menu describe + map-support gating (m_isAlwaysSupported / m_isForcedSupported / m_configuremenu)"
+    name: "Guide and registration summaries, point-limit controls and map support"
     layer: [presentation, shared]
     base_refs:
-      - "common/gametypes/gametype/mayhem/mayhem.qc:METHOD(mayhem, describe)"
-      - "common/gametypes/gametype/mayhem/mayhem.qh:m_isAlwaysSupported/m_isForcedSupported/m_configuremenu"
-    port_refs: []
+      - "common/gametypes/gametype/mayhem/mayhem.qc:describe"
+      - "common/gametypes/gametype/mayhem/mayhem.qh:gametype_init/m_configuremenu/m_isAlwaysSupported/m_isForcedSupported"
+      - "menu/xonotic/gametypelist.qc:XonoticGametypeList_focusedItemChangeNotify"
+      - "client/mapvoting.qc:MapInfo_Type_Description consumer"
+    port_refs:
+      - "game/menu/CreateGameScreen.cs:MayhemMenu"
+      - "game/menu/dialogs/GuideCatalogText.cs:DescribeGametype"
+      - "game/menu/framework/QcCreateLists.cs:QcGametypeList.SetDescriptionTooltip"
+      - "game/net/NetGame.cs:gametype vote description"
+      - "src/VortexArena.Formats/Bsp/MapInfoCatalog.cs:Generate"
     constants:
-      - { name: "point_limit_slider", base: "200..2000 step 100", port: "none", match: false }
+      - { name: "point_limit_slider", base: "200..2000, step 100, g_mayhem_point_limit", port: "same, including Default -1 and Unlimited 0", match: true }
+      - { name: "generated and forced map eligibility", base: "unconditional generic generation; promotion from DM or TDM", port: "same", match: true }
     status:
-      logic: missing
-      values: missing
+      logic: faithful
+      values: faithful
       timing: na
-      presentation: missing
+      presentation: faithful
       audio: na
-      liveness: na
-    intended_divergence: true
-    divergence_rationale: "Menu blurb (describe), the point-limit configure slider, and map-pool support gating (m_isAlwaysSupported/m_isForcedSupported) are MENUQC / map-pool concerns explicitly deferred in the port's class header (cross-boundary, not gameplay). Not addressed by Wave-1/2 (gameplay-only waves)."
-    gaps:
-      - "No menu description, no point-limit slider, no automatic DM/TDM-map support gating for Mayhem in the port's menu/map pool."
+      liveness: live
+    intended_divergence: false
+    divergence_rationale: null
+    gaps: []
     verification:
-      - { kind: code, ref: "no port symbol for describe/m_configuremenu/m_is*Supported — UNCHANGED by Wave-2", result: fail }
+      - { kind: test, ref: "MapInfoGenerationTests.MayhemMenuPointSettingsReachTheScoreRuleAcrossMaps and NativeMapThresholdsReachCatalogAndDetails; MenuDataSourceTests.MapInfo_CatalogAndDetailsApplyDefaultPromotions.", result: pass }
+      - { kind: code, ref: "The Guide retains the stock paragraphs. Create Game focus and gametype vote use the short translated registration summary.", result: pass }
     confidence: high
-    notes: "Out of gameplay scope; tracked for completeness. The frags-remaining-suppression hook is commented out (dead) in Base too, so not a port gap."
+    notes: "Generic native generation still respects symmetric-objective and Defrag suppression."

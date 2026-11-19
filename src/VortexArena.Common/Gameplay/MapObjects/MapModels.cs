@@ -11,10 +11,8 @@
 //    client reads the shared entity; the fade keys fade_start/fade_end/alpha_max/alpha_min/fade_vertical_offset
 //    ride the entity). The SERVER-side antiwall solid-toggle relay (g_clientmodel_use antiwall_flag, with the
 //    .inactive flag + .default_solid restore) IS now ported (ClientModelUse): a trigger that toggles a
-//    func_clientwall/func_clientillusionary solid/non-solid actually changes the wall's collision. The CLIENT
-//    render halves (Ent_Wall_PreDraw distance-fade alpha + PVS alpha-cull, and the bgmscript ADSR animation)
-//    remain out of scope — a func_clientwall's faces are baked into the static map mesh (no per-entity render
-//    node to drive alpha) and there is no bgmtime music-position clock; no shipped stock map depends on either.
+//    func_clientwall/func_clientillusionary solid/non-solid actually changes the wall's collision. Authored
+//    bgmscript effects are applied by the native local renderer through a separate presentation node.
 //  * External-model props keep their full "models/…" path on Entity.Model — that's the networked-render
 //    contract (ServerNet networks any non-'*' model as a Generic entity and the client loads it by path).
 //    No ResolveModelPath prefixing here: map keys carry full paths, unlike the bare item-def names (T35).
@@ -65,8 +63,7 @@ public static class MapModels
     /// (<paramref name="clientModel"/>: misc_clientmodel / func_clientillusionary / func_clientwall) differs by
     /// the networking we don't need PLUS two behaviors that ARE gameplay-observable and are reproduced here: it
     /// installs <see cref="ClientModelUse"/> (the antiwall solid-toggle relay) instead of the plain colormap use,
-    /// and records <see cref="Entity.DefaultSolid"/> (the original solidity the relay restores). (The
-    /// bgmscriptsustain default at g_clientmodel_init:200-201 belongs to the unported bgmscript ADSR subsystem.)</summary>
+    /// and records <see cref="Entity.DefaultSolid"/> (the original solidity the relay restores).</summary>
     internal static void GModelInit(Entity ent, Solid sol, bool clientModel = false)
     {
         // (QC: geomtype + ODE physics — not ported, no stock map uses it.)

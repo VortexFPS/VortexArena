@@ -1,0 +1,29 @@
+{"seconds": 0.0, "process": "server", "args": ["/tmp/vortex-parity-godot/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64", "--path", "/tmp/va-s1-council.f6OxEF/spawn/project", "--data", "/tmp/va-s1-council.f6OxEF/spawn/data", "--audio-driver", "Dummy", "--no-save-config", "--headless", "--dedicated", "council-viewloc", "--port", "27792", "--gametype", "tdm", "--bots", "0", "--cvar", "sv_public", "0", "--cvar", "sv_cheats", "1", "--cvar", "sv_spectate", "0", "--cvar", "g_warmup", "0", "--cvar", "g_start_delay", "0", "--cvar", "sv_eventlog", "1", "--cvar", "g_spawn_near_teammate", "1", "--cvar", "g_spawn_near_teammate_ignore_spawnpoint", "2", "--cvar", "g_spawn_near_teammate_ignore_spawnpoint_delay", "0", "--cvar", "g_spawn_near_teammate_ignore_spawnpoint_delay_death", "0", "--cvar", "g_spawn_near_teammate_ignore_spawnpoint_check_health", "0", "--cvar", "g_balance_teams_prevent_imbalance", "0", "--cvar", "sv_join_notices", "", "--cvar", "sv_join_notices_time", "90", "--cvar", "sv_spawn_debug", "1", "--cvar", "g_balance_kill_delay", "0", "--cvar", "g_balance_kill_antispam", "0"]}
+{"seconds": 3.211, "process": "Alpha", "args": ["/tmp/vortex-parity-godot/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64", "--path", "/tmp/va-s1-council.f6OxEF/spawn/project", "--data", "/tmp/va-s1-council.f6OxEF/spawn/data", "--audio-driver", "Dummy", "--no-save-config", "--headless", "--connect", "127.0.0.1:27792", "--cvar", "_cl_name", "Alpha", "--cvar", "cl_spawn_near_teammate", "0", "--cvar", "cl_autopause", "0", "--cvar", "cl_frameprofiler", "0.0", "--cvar", "cl_portal_render", "0", "--cvar", "r_warpzone", "0", "--cvar", "r_water", "0", "--cvar", "cl_warm_at_boot", "0", "--cvar", "cl_precache_all_weapons", "0", "--cvar", "gl_texturecompression", "0"]}
+{"seconds": 11.03, "connected": "Alpha", "initial_preference": 0}
+{"seconds": 11.03, "process": "Beta", "args": ["/tmp/vortex-parity-godot/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64", "--path", "/tmp/va-s1-council.f6OxEF/spawn/project", "--data", "/tmp/va-s1-council.f6OxEF/spawn/data", "--audio-driver", "Dummy", "--no-save-config", "--headless", "--connect", "127.0.0.1:27792", "--cvar", "_cl_name", "Beta", "--cvar", "cl_spawn_near_teammate", "1", "--cvar", "cl_autopause", "0", "--cvar", "cl_frameprofiler", "0.0", "--cvar", "cl_portal_render", "0", "--cvar", "r_warpzone", "0", "--cvar", "r_water", "0", "--cvar", "cl_warm_at_boot", "0", "--cvar", "cl_precache_all_weapons", "0", "--cvar", "gl_texturecompression", "0"]}
+{"seconds": 18.452, "connected": "Beta", "initial_preference": 1}
+{"seconds": 19.453, "matched": "S1Probe.*Beta.*spectatee=0", "log": "server"}
+{"seconds": 19.454, "matched": "S1Probe.*Beta.*pref=True", "log": "server"}
+{"seconds": 19.454, "server": "set sv_spectate 1"}
+{"seconds": 19.454, "server": "moveplayer Alpha red"}
+{"seconds": 19.454, "server": "moveplayer Beta red"}
+{"seconds": 22.454, "client": "Alpha", "command": "cmd join"}
+{"seconds": 22.856, "client": "Alpha", "command": "cmd teleporttotarget council_inside"}
+{"seconds": 23.256, "matched": "S1Probe.*Alpha.*region=[0-9]+", "log": "server"}
+{"seconds": 23.257, "client": "Beta", "command": "cmd spectate"}
+{"seconds": 23.659, "matched": "S1Probe.*Beta.*spectatee=2 region=-1 pref=True.*$", "log": "server"}
+{"seconds": 25.662, "client": "Beta", "command": "cmd join"}
+{"seconds": 26.063, "client": "Beta", "command": "cmd sentcvar cl_spawn_near_teammate 0"}
+{"seconds": 26.466, "matched": "S1Probe.*Beta.*pref=True.*\\n(?:[^\\n]*\\n)*?[^\\n]*S1Probe.*Beta.*pref=False", "log": "server"}
+{"seconds": 26.466, "client": "Beta", "command": "cmd spectate"}
+{"seconds": 26.867, "matched": "S1Probe.*Beta.*spectatee=2 region=-1 pref=False", "log": "server"}
+{"seconds": 28.868, "client": "Beta", "command": "cmd join"}
+{"seconds": 29.27, "client": "Beta", "command": "cmd sentcvar cl_spawn_near_teammate 1"}
+{"seconds": 29.671, "matched": "S1Probe.*Beta.*spectatee=0 region=-?[0-9]+ pref=False.*\\n(?:[^\\n]*\\n)*?[^\\n]*S1Probe.*Beta.*pref=True", "log": "server"}
+{"seconds": 32.038, "process": "Gamma", "args": ["/tmp/vortex-parity-godot/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64", "--path", "/tmp/va-s1-council.f6OxEF/spawn/project", "--data", "/tmp/va-s1-council.f6OxEF/spawn/data", "--audio-driver", "Dummy", "--no-save-config", "--headless", "--connect", "127.0.0.1:27792", "--cvar", "_cl_name", "Gamma", "--cvar", "cl_spawn_near_teammate", "0", "--cvar", "cl_autopause", "0", "--cvar", "cl_frameprofiler", "0.0", "--cvar", "cl_portal_render", "0", "--cvar", "r_warpzone", "0", "--cvar", "r_water", "0", "--cvar", "cl_warm_at_boot", "0", "--cvar", "cl_precache_all_weapons", "0", "--cvar", "gl_texturecompression", "0"]}
+{"seconds": 39.455, "connected": "Gamma", "initial_preference": 0}
+{"seconds": 39.456, "matched": "S1Probe.*Gamma.*pref=False", "log": "server"}
+{"seconds": 41.456, "client": "Gamma", "command": "cmd selectteam red"}
+{"seconds": 41.856, "client": "Gamma", "command": "cmd join"}
+{"seconds": 42.257, "server": "status"}

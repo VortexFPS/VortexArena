@@ -4,6 +4,8 @@
 **Port refs:** `game/hud/ScoreboardPanel.cs` · `src/VortexArena.Net/ScoreboardBlock.cs` · `src/VortexArena.Common/Gameplay/Scoring/GameScores.cs` · `game/net/NetGame.cs` (UpdateScoreboard / FeedScoreboardHeader) · `src/VortexArena.Engine/Console/BindTable.cs` (+showscores)
 **Reference rev:** `v0.8.6-1779-g863cd3e84` · **Last audited:** 2026-06-22
 
+For current implementation status, see the [scoreboard registry](../registry/cl-scoreboard.yaml).
+
 ## Overview
 The scoreboard is the full-screen score table shown while `+showscores` is held (and forced up on death/intermission). It is a **configurable column grid** driven by the networked `scores` stat fields: the active `scoreboard_columns` (else `SCOREBOARD_DEFAULT_COLUMNS`) selects which `SP_*` columns appear, filtered per-gametype (`Cmd_Scoreboard_SetFields`), each value formatted by its `SFL_*` flags (`Scoreboard_GetField`/`ScoreString`), rows sorted by the per-mode primary/secondary keys (`Scoreboard_ComparePlayerScores`), grouped into team sections with per-team totals in teamplay. Around the table sit the game-info header (next map, gametype banner, time/frag limits, map + player count), the spectator list, accuracy stats, item stats, race/CTS rankings, map stats (monsters/secrets), and the respawn-status line. v0.8.x also added a fully **interactive scoreboard UI** (`scoreboard_ui_enabled`): arrow-key player/team navigation, team selection + join, spectate, tell/kick, and live column-layout cycling.
 
@@ -65,22 +67,22 @@ The scoreboard is the full-screen score table shown while `+showscores` is held 
 | networking | `ScoreboardBlock` (Serialize/Deserialize) + `ScoreInfoBlock` layout agreement. |
 | item stats | **NOT IMPLEMENTED.** |
 | rankings (race/CTS) | `DrawRankings` + `SetRankings` — present but **DEAD** (no live feeder). |
-| interactive UI (nav/teamsel/spectate/kick/tell/columns_set) | **NOT IMPLEMENTED** (passive overlay). |
-| player-color / ready / handicap / ignored / (Q) icons | **NOT IMPLEMENTED.** |
+| interactive UI (nav/teamsel/spectate/kick/tell/columns_set) | `ScoreboardPanel.UiEnable` / `UiHandleKey`, with the active scoreboard ahead of the radar picker in gameplay input. |
+| player-color / ready / handicap / ignored / (Q) icons | Handicap and viewer-specific ignored art are drawn. Color swatch, ready, and wants-join are still pending. |
 
 ## Parity assessment
-- **Logic/values/sort/formatting:** faithful and **live** for the core column grid (default columns, per-gametype filter, ScoreString/ordinal/time, primary/secondary sort, team grouping, highlights). Verified by `ScoreboardColumnsTests.cs`. NOTE: the cross-fade is faithful in isolation but **dead** on the live path (panel pops via `Visible`; `Active` is never set).
+- **Logic/values/sort/formatting:** faithful and **live** for the core column grid (default columns, per-gametype filter, ScoreString/ordinal/time, primary/secondary sort, team grouping, highlights). Verified by `ScoreboardColumnsTests.cs`. The live net path drives the fade through `Active`. Fully tied active rows use descending reusable client-slot order.
 - **Gaps a player sees:**
   - Ping column always shows a dim `-` (ping never networked) and would use wrong bands (75/200/500 vs 20/80/200) once fed.
   - Packet-loss (`pl`) column always blank (not networked).
   - `fps` and `skill` columns never render (FieldByLabel skips them — they're client-only display fields with no port plumbing).
-  - No player-color square / ready / handicap / ignored / `(Q)` wants-join icons in the name cell.
+  - The name cell lacks the player-color swatch, ready, and `(Q)` wants-join indicators.
   - No item-stats block at all.
   - Rankings block never shows (race/CTS records not networked → SetRankings unfed).
-  - Scoreboard is non-interactive: no arrow navigation, no team-selection/join screen, no spectate/kick/tell, no `scoreboard_columns_set` console cycling, no `scores_per_round` toggle / averages, no `playerid`, `team_size_position`, `spectators_aligned`, `doublerows`, `maxheight` paging.
+  - Aligned spectator columns and some navigation details remain incomplete. See the [scoreboard registry](../registry/cl-scoreboard.yaml) for the current assessment.
   - Column widths are uniform-approximated, not content-measured/condensed.
 - **Intended divergences:** Ping shows `-` instead of QC's `>>>` no-scores glyph (documented as a deliberate neutral placeholder until ping is networked). Networking uses a single change-gated `ScoreboardBlock` (int24 quantization) + content-hashed layout agreement rather than QC's per-entity scorekeeper SendFlags — a faithful re-implementation, not a behavioral change.
-- **Liveness:** core panel is **live** via `NetGame → UpdateScoreboard → SetWireRows`, toggled by `BindTable.ShowScores` (`+showscores`/`score` bind, default TAB). Accuracy + map-stats (monsters) feeds are live. **Dead/absent:** cross-fade (Active never set), spectator list (SetSpectators never called), respawn line (RespawnRemaining never set), rankings (SetRankings targets ScorePanel not ScoreboardPanel), item-stats, interactive UI, ping/pl columns.
+- **Liveness:** core panel is **live** via `NetGame → UpdateScoreboard → SetWireRows`, toggled by `BindTable.ShowScores` (`+showscores`/`score` bind, default TAB). Accuracy + map-stats (monsters) feeds are live. Cross-fade, interactive input and the owner ignore update also use the live NetGame path. See the [paired input and ignore traces](../scoreboard-blocks/README.md).
 
 ## Verification
 - `tests/VortexArena.Tests/ScoreboardColumnsTests.cs`: layout-hash agreement across a mode switch, ScoreInfo round-trip, end-to-end remote-client column render, ScoreString/ordinal/time formatting. (PASS — automated.)

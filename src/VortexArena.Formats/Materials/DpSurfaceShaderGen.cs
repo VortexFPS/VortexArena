@@ -62,6 +62,10 @@ public static class DpSurfaceShaderGen
             sb.Append("uniform sampler2D reflect_mask : hint_default_black, ").Append(filter).Append(";\n");
             sb.Append("uniform samplerCube reflect_cube : filter_linear_mipmap;\n");
         }
+        // These additive model stages receive the CSQC entity's animated alpha.
+        bool effectOpacity = forModel && plan.Blend == DpBlend.Add && def.Name == "ons_ray";
+        if (effectOpacity)
+            sb.Append("instance uniform float effect_opacity : instance_index(15) = 1.0;\n");
         sb.Append("uniform float morph_amount = 0.0;            // GPU MD3 vertex-morph (ModelAnimator), as the other model shaders\n");
         sb.Append("uniform float viewmodel_depth_range = 1.0;   // MATERIALFLAG_SHORTDEPTHRANGE, as PlayerSkinShader\n");
         sb.Append("global uniform float dp_time;                // cl.time\n");
@@ -104,6 +108,7 @@ public static class DpSurfaceShaderGen
         }
         sb.Append('\n');
         sb.Append(SharedFunctions);
+        if (!plan.FullBright) sb.Append(DpColour.DebugLightingShader).AppendLine();
 
         // ---- vertex ----
         sb.Append("void vertex() {\n");
@@ -169,6 +174,7 @@ public static class DpSurfaceShaderGen
             sb.Append("        float terrainblend = max(clamp(COLOR.a * c.a, 0.0, 1.0), 1.0 - c2.a);\n");
             sb.Append("        c = vec4(mix(c2.rgb, c.rgb, terrainblend), 1.0);\n    }\n");
         }
+        if (effectOpacity) sb.Append("    c.a *= effect_opacity;\n");
         if (plan.VertexAlpha) sb.Append("    c.a *= COLOR.a;                       // USEALPHAGENVERTEX\n");
         if (plan.AlphaTest) sb.Append("    if (c.a < 0.5) discard;                // USEALPHAKILL\n");
 
@@ -187,7 +193,7 @@ public static class DpSurfaceShaderGen
             else
             {
                 // MODE_LIGHTGRID without the normal and gloss maps: diffusetex * colormod * 2 * (ambient + diffuse * directed).
-                sb.Append("    if (grid_lit > 2.5 || lightgrid_params.w < 0.5) {\n        rgb *= d_mod;\n    } else {\n");
+                sb.Append("    if (grid_lit > 2.5) {\n        rgb *= d_mod;\n    } else if (native_debug_lighting.x > 0.5) {\n        rgb *= d_mod * native_debug_light(NORMAL);\n    } else if (lightgrid_params.w < 0.5) {\n        rgb *= d_mod;\n    } else {\n");
                 sb.Append("        vec3 tc = vec3(lightgrid_tc.xy, clamp(lightgrid_tc.z, lightgrid_params.x, lightgrid_params.y));\n");
                 sb.Append("        vec3 amb = texture(lightgrid_tex, tc).rgb * lightgrid_params.z;\n");
                 sb.Append("        vec3 dif = texture(lightgrid_tex, tc + vec3(0.0, 0.0, 0.3333333)).rgb * lightgrid_params.z;\n");
@@ -197,10 +203,15 @@ public static class DpSurfaceShaderGen
                 sb.Append("        rgb *= d_mod * (amb + dif * ndl) * world_lightmap_scale;\n    }\n");
             }
         }
-        else if (lightmapped)
-            sb.Append("    rgb *= texture(lightmap_tex, UV2).rgb * (2.0 * world_lightmap_scale);   // MODE_LIGHTMAP: Color_Diffuse = 2 * lightmapintensity\n");
         else if (!plan.FullBright)
-            sb.Append("    rgb *= COLOR.rgb * (2.0 * world_lightmap_scale);   // MODE_VERTEXCOLOR: Color_Diffuse = 2 * lightmapintensity\n");
+        {
+            sb.Append("    if (native_debug_lighting.x > 0.5) {\n        rgb *= native_debug_light(NORMAL);\n    } else {\n");
+            if (lightmapped)
+                sb.Append("        rgb *= texture(lightmap_tex, UV2).rgb * (2.0 * world_lightmap_scale);   // MODE_LIGHTMAP\n");
+            else
+                sb.Append("        rgb *= COLOR.rgb * (2.0 * world_lightmap_scale);   // MODE_VERTEXCOLOR\n");
+            sb.Append("    }\n");
+        }
         if (glow)
             sb.Append("    rgb += texture(glow_tex, uv).rgb").Append(forModel ? " * dp_display(glowmod)" : "").Append(";   // Color_Glow\n");
         sb.Append("    rgb *= map_tint;\n");

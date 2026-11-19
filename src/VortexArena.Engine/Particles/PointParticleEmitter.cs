@@ -74,20 +74,19 @@ public sealed class PointParticleEmitter
     /// (which is cleared first) and returns how many there are. <paramref name="frametime"/> is the client
     /// frame time in seconds (QC <c>drawframetime</c>); <paramref name="rng"/> stands for QC <c>random()</c>.
     /// </summary>
-    public int Step(float frametime, Random rng, List<Vector3> points)
+    public int Step(float frametime, Random rng, List<Vector3> points, float amplitude = 1f)
     {
         points.Clear();
-        // n = doBGMScript(this), which is 1 for an entity with no bgmscript.
-        float n = 1f;
+        float n;
         if (Absolute == Mode.OnlyAtToggle)
-            n = JustToggled ? Impulse : 0f;
+            n = amplitude < 0f ? Impulse * frametime : JustToggled ? Impulse : 0f;
         else
         {
-            n *= Impulse * frametime;
+            n = amplitude * Impulse * frametime;
             if (JustToggled && n < 1f)
                 n = 1f;
         }
-        if (n == 0f)
+        if (!(n > 0f))
             return 0;
 
         Vector3 size = BoxMax - BoxMin;

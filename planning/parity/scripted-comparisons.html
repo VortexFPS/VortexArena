@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scripted multiplayer evidence · Vortex Arena</title>
+<style>
+:root{color-scheme:dark;font:16px/1.5 system-ui,sans-serif;background:#10151b;color:#e6edf2}body{max-width:1200px;margin:auto;padding:28px clamp(16px,4vw,50px) 64px}header{border-top:3px solid #90dbb8}h1{font-size:clamp(2rem,5vw,3.5rem);line-height:1.08;letter-spacing:-.04em}h2{margin-bottom:0}header p,section>p{max-width:80ch}section{border-top:1px solid #455461;margin-top:32px}div{display:grid;grid-template-columns:1fr 1fr;gap:18px}figure{margin:0;min-width:0}figcaption{color:#a7e1c3;font-weight:650;margin-bottom:6px}img{display:block;width:100%;height:auto}a{color:#a7e1c3}@media(max-width:760px){div{grid-template-columns:1fr}}
+</style>
+<header><h1>Scripted multiplayer comparisons</h1><p>Each recording uses two graphical clients on a loopback server. Each pair used matching fixture geometry. The scripts and timelines record the actions, camera positions and sampling times for each engine. Each image opens at its captured resolution.</p><p><a href="ORDERED-FOLLOWUP.md">Read the review</a> · <a href="review/index.html">View or export scope decisions</a></p></header>
+<section id="sandbox-owner">
+<h2>Carrying a Sandbox object</h2>
+<p>On Stormkeep the owner grabs, moves and releases a prop while a guest watches. The two servers saved the prop moving under the owner’s control and returning to ordinary toss physics at its new position. <a href="scripted-sandbox-buffs/README.md">Capture details</a></p>
+<div>
+<figure><figcaption>Xonotic · owner carry and release</figcaption><a href="scripted-sandbox-buffs/captures/original-owner/owner-carry.jpg"><img src="scripted-sandbox-buffs/captures/original-owner/owner-carry.jpg" alt="Xonotic · owner carry and release" loading="lazy"></a></figure>
+<figure><figcaption>Vortex Arena · owner carry and release</figcaption><a href="scripted-sandbox-buffs/captures/native/owner-carry.jpg"><img src="scripted-sandbox-buffs/captures/native/owner-carry.jpg" alt="Vortex Arena · owner carry and release" loading="lazy"></a></figure>
+</div>
+</section>
+<section id="sandbox-readonly">
+<h2>Read-only mode during a carry</h2>
+<p>A guest first tries to edit a prop owned by another player. Both games deny that action. With free editing enabled the guest can carry it. Switching the server to read-only keeps that carry active until release and prevents a new one. <a href="scripted-sandbox-buffs/README.md">Capture details</a></p>
+<div>
+<figure><figcaption>Xonotic · guest and owner views</figcaption><a href="scripted-sandbox-buffs/captures/original/sandbox.jpg"><img src="scripted-sandbox-buffs/captures/original/sandbox.jpg" alt="Xonotic · guest and owner views" loading="lazy"></a></figure>
+<figure><figcaption>Vortex Arena · guest and owner views</figcaption><a href="scripted-sandbox-buffs/captures/native/free-and-readonly.jpg"><img src="scripted-sandbox-buffs/captures/native/free-and-readonly.jpg" alt="Vortex Arena · guest and owner views" loading="lazy"></a></figure>
+</div>
+</section>
+<section id="vampire">
+<h2>Picking up the Vampire buff</h2>
+<p>Both pairs saw the same relic before pickup. After the touch, the owner gained a timed HUD indicator. The original sample showed 57 seconds. The native sample showed 91 before its clock fix and 58 afterward. After the skin fix, the guest also sees the magenta Vampire sign above the carrier. Whole-model translucency remains unverified in the Compatibility renderer. <a href="scripted-sandbox-buffs/README.md">Capture details</a></p>
+<div>
+<figure><figcaption>Xonotic · owner and guest before and after pickup</figcaption><a href="scripted-sandbox-buffs/captures/original/buff.jpg"><img src="scripted-sandbox-buffs/captures/original/buff.jpg" alt="Xonotic · owner and guest before and after pickup" loading="lazy"></a></figure>
+<figure><figcaption>Vortex Arena · after timer and relic corrections</figcaption><a href="scripted-sandbox-buffs/captures/relic-render-fixed/buff.jpg"><img src="scripted-sandbox-buffs/captures/relic-render-fixed/buff.jpg" alt="Vortex Arena · after timer and relic corrections" loading="lazy"></a></figure>
+</div>
+</section>
+<section id="crylink">
+<h2>Crylink flight and fade</h2>
+<p>A fixed observer watches another client fire across an open lane. Both captures show short-lived projectiles fading. The native repeat uses the original projectile model and omits the extra floor light. Software frame sampling limits comparisons of fade duration and brightness. <a href="scripted-objectives/presentation/README.md">Capture details</a></p>
+<div>
+<figure><figcaption>Xonotic · projectile flight</figcaption><a href="scripted-objectives/presentation/crylink-original-matched/flight.webp"><img src="scripted-objectives/presentation/crylink-original-matched/flight.webp" alt="Xonotic · projectile flight" loading="lazy"></a></figure>
+<figure><figcaption>Vortex Arena · original projectile mesh in flight</figcaption><a href="scripted-objectives/presentation/crylink-native-mesh/flight.webp"><img src="scripted-objectives/presentation/crylink-native-mesh/flight.webp" alt="Vortex Arena · original projectile mesh in flight" loading="lazy"></a></figure>
+</div>
+</section>
+<section id="onslaught-point">
+<h2>Damaging and repairing a control point</h2>
+<p>Both Onslaught servers recorded a capture. The observer then watched the captured icon take damage, recover, and return to its neutral pad after destruction. The full recordings cover each phase. <a href="scripted-objectives/README.md">Capture details</a></p>
+<div>
+<figure><figcaption>Xonotic · damaged control point</figcaption><a href="scripted-objectives/ons-original/cracked.webp"><img src="scripted-objectives/ons-original/cracked.webp" alt="Xonotic · damaged control point" loading="lazy"></a></figure>
+<figure><figcaption>Vortex Arena · damaged control point</figcaption><a href="scripted-objectives/ons-native/cracked.webp"><img src="scripted-objectives/ons-native/cracked.webp" alt="Vortex Arena · damaged control point" loading="lazy"></a></figure>
+</div>
+</section>
+<section id="onslaught-generator">
+<h2>Destroying the Onslaught generator</h2>
+<p>The two shooters used the same map and an 8° downward aim. Both servers awarded the red win. Both games cut to the generator. Both native players reached the same camera and saw the extended explosion after the fix. <a href="scripted-objectives/presentation/README.md">Capture details</a></p>
+<div>
+<figure><figcaption>Xonotic · generator death camera</figcaption><a href="scripted-objectives/ons-original-generator-matched/dead-camera.webp"><img src="scripted-objectives/ons-original-generator-matched/dead-camera.webp" alt="Xonotic · generator death camera" loading="lazy"></a></figure>
+<figure><figcaption>Vortex Arena · generator death camera after the fix</figcaption><a href="scripted-objectives/presentation/ons-native-death-camera/red-cut.webp"><img src="scripted-objectives/presentation/ons-native-death-camera/red-cut.webp" alt="Vortex Arena · generator death camera after the fix" loading="lazy"></a></figure>
+</div>
+</section>
+<section id="countdown">
+<h2>Counting down a player and clone</h2>
+<p>A second client watches a standing clone on Running Man CTF. Both servers logged one suicide. Native captures now show the clone’s digits from four to one and its disappearance. The scripts also recorded the player’s first-person countdown. The 50 ms stagger is below the precision of these captures. <a href="scripted-countdown/README.md">Capture details</a></p>
+<div>
+<figure><figcaption>Xonotic · observer at digit two</figcaption><a href="scripted-countdown/original/observer-2.webp"><img src="scripted-countdown/original/observer-2.webp" alt="Xonotic · observer at digit two" loading="lazy"></a></figure>
+<figure><figcaption>Vortex Arena · observer at digit two</figcaption><a href="scripted-countdown/native/observer-2.webp"><img src="scripted-countdown/native/observer-2.webp" alt="Vortex Arena · observer at digit two" loading="lazy"></a></figure>
+</div>
+</section>

@@ -566,22 +566,26 @@ features:
     name: "Standalone ok_weapons activation via g_overkill_weapons (independent of g_overkill)"
     layer: [authority]
     base_refs:
-      - "common/mutators/mutator/overkill/sv_weapons.qc:3 REGISTER_MUTATOR(ok_weapons, expr_evaluate(autocvar_g_overkill_weapons) || MUTATOR_IS_ENABLED(ok))"
-    port_refs: []
+      - "common/mutators/mutator/overkill/sv_weapons.qc:REGISTER_MUTATOR(ok_weapons)"
+      - "lib/cvar.qh:expr_evaluate"
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/Mutators/OkWeaponsMutator.cs:IsEnabled, Hook, Unhook"
+      - "src/VortexArena.Server/GameWorld.cs:MutatorActivation.Apply"
+      - "data/core.pk3dir/mutators.cfg:g_overkill_weapons"
     constants:
-      - { name: "g_overkill_weapons", base: "string cvar; unblocks the 5 OK weapons standalone", port: "none", match: false }
+      - { name: "g_overkill_weapons", base: "0 by default; enables five OK weapons independently", port: "0 by default; independent activation and weapon flag changes", match: true }
     status:
-      logic: missing
-      values: missing
+      logic: faithful
+      values: faithful
       timing: na
       presentation: na
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Base has a SECOND activation path: the ok_weapons mutator un-blocks (clears WEP_FLAG_MUTATORBLOCKED on) the five OK weapons whenever g_overkill_weapons evaluates true, EVEN WITHOUT full Overkill mode (g_overkill). This lets a server add the OK weapons to an otherwise-normal game. The port couples OK-weapon availability to OverkillMutator (g_overkill) only (OverkillMutator.IsEnabled = g_overkill!=0); there is no g_overkill_weapons reader anywhere in src/."
+    gaps: []
     verification:
-      - { kind: code-read, ref: "grep g_overkill_weapons in src/ returns nothing; Base sv_weapons.qc:1-22 REGISTER_MUTATOR(ok_weapons,...) ONADD/ONREMOVE toggles MUTATORBLOCKED", result: pass }
+      - { kind: code_read, ref: "OkWeaponsMutator IsEnabled combines the standalone cvar with the full-mode predicate; Hook/Unhook clear and restore MutatorBlocked for the five weapons.", result: pass }
+      - { kind: test, ref: "OkWeaponsMutatorTests exercises quoted tokens, numeric comparisons, cvar lookup, negation, and the five weapon flags under native mutator activation.", result: pass }
     confidence: high
-    notes: "NEW row (2026-06-27 drift audit) — previously the mode.enablement row only covered the g_overkill path. Niche server-config feature (a string cvar listing OK weapons to allow standalone); not on any shipped gametype path. Severity low."
+    notes: "Conditional activation follows the pinned evaluator, including its operator precedence: numeric equality consumes both triple equality tokens before the string comparison cases."

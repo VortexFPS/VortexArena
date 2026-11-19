@@ -15,6 +15,7 @@
 
 using System.Numerics;
 using VortexArena.Common.Framework;
+using VortexArena.Common.Gameplay.Scoring;
 
 namespace VortexArena.Common.Gameplay;
 
@@ -40,10 +41,13 @@ public readonly struct EffectRequest
     /// <summary>Recipient to exclude (QC Send_Effect_Except ignore), e.g. the shooter for their own muzzleflash. Null = everyone.</summary>
     public readonly Entity? Except;
 
+    /// <summary>Owner of an ejected casing whose visibility depends on the recipient.</summary>
+    public readonly Entity? CasingOwner;
+
     public bool IsTrail => Effect is { IsTrail: true };
 
     public EffectRequest(Effect? effect, string effectName, Vector3 origin, Vector3 velocity, int count,
-        Vector3 colorMin, Vector3 colorMax, Entity? except)
+        Vector3 colorMin, Vector3 colorMax, Entity? except, Entity? casingOwner = null)
     {
         Effect = effect;
         EffectName = effectName;
@@ -53,6 +57,7 @@ public readonly struct EffectRequest
         ColorMin = colorMin;
         ColorMax = colorMax;
         Except = except;
+        CasingOwner = casingOwner;
     }
 
     public override string ToString()
@@ -81,6 +86,8 @@ public static class EffectNetProtocol
     public const int NetColorMin = 1 << 1;  // EFF_NET_COLOR_MIN
     public const int NetColorMax = 1 << 2;  // EFF_NET_COLOR_MAX
     public const int NetColorSame = 1 << 3; // EFF_NET_COLOR_SAME (min == max optimisation)
+    // Native effect bundle extension. The receiving shooter or follower applies their own gun offset.
+    public const int NetFirstPersonCasing = 1 << 4;
 
     /// <summary>
     /// Sentinel "registered effect id" the transport writes in place of a real registry id when the request is
@@ -120,14 +127,14 @@ public static class EffectNetProtocol
     /// Returns null for a non-networkable request (no effect, or a count-0 point effect — the same guards
     /// Send_Effect_Except applies before it ever builds the net entity).
     /// </summary>
-    public static byte[]? Encode(in EffectRequest r)
+    public static byte[]? Encode(in EffectRequest r, bool firstPersonCasing = false)
     {
         if (r.Effect is null) return null;
         bool trail = r.Effect.IsTrail;
         if (!trail && r.Count == 0) return null;
 
         var bytes = new List<byte>(20);
-        EncodeBody(bytes, r, trail);
+        EncodeBody(bytes, r, trail, firstPersonCasing);
         return bytes.ToArray();
     }
 
@@ -150,11 +157,11 @@ public static class EffectNetProtocol
         return bytes.ToArray();
     }
 
-    private static void EncodeBody(List<byte> bytes, in EffectRequest r, bool trail)
+    private static void EncodeBody(List<byte> bytes, in EffectRequest r, bool trail, bool firstPersonCasing = false)
     {
         WriteVector(bytes, r.Origin);
 
-        int flags = ExtraFlags(r);
+        int flags = ExtraFlags(r) | (firstPersonCasing ? NetFirstPersonCasing : 0);
         bytes.Add((byte)flags);
 
         if ((flags & NetVelocity) != 0)
@@ -194,6 +201,8 @@ public static class EffectNetProtocol
 public interface IEffectSink
 {
     void Emit(in EffectRequest request);
+    void Emit(FireballBlastEffect effect);
+    void Emit(AttachedDamageHit hit);
 }
 
 /// <summary>
@@ -209,7 +218,19 @@ public static class EffectEmitter
         public IReadOnlyList<EffectRequest> Log => _log;
         public int Count => _log.Count;
         public void Emit(in EffectRequest request) => _log.Add(request);
-        public void Clear() => _log.Clear();
+        private readonly List<FireballBlastEffect> _fireballBlasts = new();
+        public IReadOnlyList<FireballBlastEffect> FireballBlasts => _fireballBlasts;
+        public void Emit(FireballBlastEffect effect) => _fireballBlasts.Add(effect);
+        private readonly List<AttachedDamageHit> _attachedDamage = new();
+        public IReadOnlyList<AttachedDamageHit> AttachedDamage => _attachedDamage;
+        public void Emit(AttachedDamageHit hit) => _attachedDamage.Add(hit);
+
+        public void Clear()
+        {
+            _attachedDamage.Clear();
+            _log.Clear();
+            _fireballBlasts.Clear();
+        }
         public EffectRequest Last => _log[^1];
     }
 
@@ -243,6 +264,13 @@ public static class EffectEmitter
         // per-effect first-use build here lands in the emitting gameplay scope (the mp.weapon melt hunt).
         using (VortexArena.Common.Diagnostics.Prof.Sample("fx.emit"))
             Sink.Emit(new EffectRequest(effect, effect.NetName, origin, velocity, count, colorMin, colorMax, except));
+    }
+
+    public static void EmitCasing(Entity owner, bool shell, Vector3 origin, Vector3 velocity)
+    {
+        Effect? effect = Effects.ByName(shell ? "CASING_SHELL" : "CASING_BULLET");
+        if (effect is not null)
+            Sink.Emit(new EffectRequest(effect, effect.NetName, origin, velocity, 1, default, default, null, owner));
     }
 
     /// <summary>Emit by stable EFFECT_* name (e.g. "EXPLOSION_BIG"). Convenience over <see cref="Effects.ByName"/>.</summary>
@@ -342,5 +370,43 @@ public static class EffectEmitter
     public static void TeGunshot(Vector3 origin, int count) => Emit("TE_GUNSHOT", origin, default, count);
 
     /// <summary>te_blood — a blood spray (QC te_blood(org, vel, count)); maps to EFFECT_BLOOD.</summary>
-    public static void TeBlood(Vector3 origin, Vector3 velocity, int count) => Emit("BLOOD", origin, velocity, count);
+    public static void TeBlood(Vector3 origin, Vector3 velocity, int count, ModelSpecies species = ModelSpecies.Human)
+    {
+        switch (species)
+        {
+            case ModelSpecies.Alien:
+            case ModelSpecies.RobotSolid:
+            case ModelSpecies.RobotRusty:
+            case ModelSpecies.RobotShiny:
+                EmitByEffectInfoName(ModelSpeciesEffects.Prefix(species) + "blood", origin, velocity, count);
+                break;
+            default:
+                Emit("BLOOD", origin, velocity, count);
+                break;
+        }
+    }
+
+    public static void GibSplash(Vector3 origin, Vector3 velocity, ModelSpecies species)
+    {
+        if (GameScores.Gametype == "cts")
+            return;
+        if (species == ModelSpecies.Human)
+            Emit("MODEL_GIB_SPLASH", origin, velocity);
+        else
+            EmitByEffectInfoName(ModelSpeciesEffects.GibSplashName(species), origin, velocity, 1);
+    }
+
+    /// <summary>The stock hit event carries an amount in sixteenths. On receipt type 2 multiplies it by 16.</summary>
+    public static void GibHit(Vector3 origin, Vector3 force, float amount, ModelSpecies species)
+    {
+        if (GameScores.Gametype != "cts")
+            EmitByEffectInfoName(ModelSpeciesEffects.GibHitName(species), origin, force,
+                (int)System.Math.Clamp(amount * 16f, 1f, 255f));
+    }
+
+    public static void GibChunk(Vector3 origin, Vector3 velocity, ModelSpecies species)
+    {
+        if (GameScores.Gametype != "cts")
+            EmitByEffectInfoName(ModelSpeciesEffects.GibChunkName(species), origin, velocity, 1);
+    }
 }

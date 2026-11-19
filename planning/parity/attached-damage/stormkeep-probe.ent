@@ -1,0 +1,85 @@
+{
+"_keepLights" "1"
+"_q3map2_version" "2.5.17n-git-b4b295d"
+"_q3map2_cmdline" "-keeplights -meta -maxarea -samplesize 8 -mv 1000000 -mi 6000000 -sRGBtex -sRGBcolor; -vis; -light -lightmapsize 1024 -lightmapsearchpower 4 -fastallocate -deluxe -patchshadows -samples 4 -randomsamples -bounce 8 -fastbounce -bouncegrid -nobouncestore -dirty -dirtdepth 64 -dirtscale 0.8 -fill -sRGBtex -sRGBcolor -sRGBlight"
+"message" "Stormkeep"
+"_description" "Medium sized indoor map, well suited for team games"
+"author" "FruitieX, Cuinnton, SavageX, Strahlemann, W. Libert, tZork, Mirio"
+"classname" "worldspawn"
+}
+{
+"origin" "-400 528 0"
+"angle" "315"
+"classname" "info_player_deathmatch"
+}
+{
+"origin" "-256.000000 -288.000000 0.000000"
+"angle" "45.000000"
+"classname" "info_player_deathmatch"
+}
+{
+"origin" "-736.000000 1152.000000 160.000000"
+"angle" "-45.000008"
+"classname" "info_player_deathmatch"
+}
+{
+"origin" "-1040 -448 8"
+"classname" "info_player_deathmatch"
+}
+{
+"origin" "1144.000000 40.000000 -120.000000"
+"angle" "-45.000008"
+"classname" "info_player_deathmatch"
+}
+{
+"angle" "-180.000000"
+"origin" "1760.000000 336.000000 0.000000"
+"classname" "info_player_deathmatch"
+}
+{
+"angle" "135"
+"origin" "1040 240 0"
+"classname" "info_player_deathmatch"
+}
+{
+"origin" "720 -192 0"
+"angle" "225"
+"classname" "info_player_deathmatch"
+}
+{
+"origin" "720 -944 0"
+"angle" "135"
+"classname" "info_player_deathmatch"
+}
+{
+"angle" "225"
+"origin" "464 528 0"
+"classname" "info_player_deathmatch"
+}
+{
+"origin" "-208.000000 880.000000 0.000000"
+"angle" "135.000000"
+"classname" "info_player_deathmatch"
+}
+{
+"angle" "315"
+"origin" "-472 1376 160"
+"classname" "info_player_deathmatch"
+}
+{
+"angle" "45.000000"
+"origin" "-1184.000000 1248.000000 0.000000"
+"classname" "info_player_deathmatch"
+}
+{
+"classname" "misc_teleporter_dest"
+"targetname" "probe_shooter"
+"origin" "1040 240 24"
+"angle" "135"
+}
+{
+"classname" "misc_teleporter_dest"
+"targetname" "probe_victim"
+"origin" "950 330 24"
+"angle" "315"
+}

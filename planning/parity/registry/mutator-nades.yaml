@@ -707,7 +707,7 @@ features:
       - { name: "nade_charge_ring", base: "cl_nade_timer modes", port: "CrosshairPanel.NadeTimer/NadeTimerMode networked", match: true }
       - { name: "hud_colorflash_alpha", base: "0.5 (orb_draw2d)", port: "0.5 (ViewEffects, registered)", match: true }
       - { name: "nade_model_scale", base: "1.5 (cl_nades grenademodel.md3)", port: "1.5 (ProjectileCatalog)", match: true }
-      - { name: "orb_scale/fade/spin", base: "grow×4 / fade×4 / avelocity '0 0 90'", port: "×4 / ×4 / 90deg-yaw (NadeOrbRenderer)", match: true }
+      - { name: "orb presentation", base: "MDL_NADE_ORB skin 1, quadratic growth, square-root fade, accelerated spin", port: "shield.md3 skin 1 with additive texture and lifetime estimated from first sight", match: false }
     status:
       logic: unknown
       values: unknown
@@ -719,9 +719,10 @@ features:
     divergence_rationale: null
     gaps:
       - "NOT RUNTIME/VISUALLY VERIFIED (2026-06-28b): the full nade presentation stack (projectile model/trail, orb 3D model + 2D color flash, darkness blind overlay + SND_BLIND, EF_STARDUST spawn-loc marker, DrawAmmoNades bonus cell) is now CODED and WIRED on the live entity-stream + per-frame view passes — but no in-game screenshot/playtest confirms it draws correctly, and ZERO tests cover it. Status is unknown (not faithful) pending a behavioral check. Code is QC-faithful by inspection."
-      - "sphere.md3 path nit: NadeOrbRenderer requests 'models/sphere.md3' but the asset is at 'models/sphere/sphere.md3' — likely resolves to null and falls back to the additive glow sprite (graceful, but NOT the real sphere model). Verify the orb draws the intended body."
+      - "2026-11-18: models/all.inc maps NADE_ORB to models/ctf/shield.md3. The port now uses that mesh, skin 1, and the cubic flash bounds from net.qc. Native snapshots omit total lifetime, so clients joining mid-effect start at the wrong phase. Exact spin orientation, shader animation and in-game fidelity remain unverified."
       - "Owner-only nade STATs (NadeDarknessTime/NadeBonus/NadeBonusType/NadeBonusScore) are privacy-gated to the owning player; the DrawAmmoNades cell + darkness overlay only show for the local player (faithful — these are own-player HUD)."
     verification:
+      - { kind: code_read, ref: "2026-11-18: models/all.inc NADE_ORB and nades/net.qc orb_setup, orb_draw, orb_draw2d vs NadeOrbRenderer and ViewEffects.UpdateOrbColorFlash. Remote timing uses the snapshot clock.", result: pass }
       - { kind: code, ref: "NadeOrbRenderer (orb scale/fade/spin) + ViewEffects.UpdateOrbColorFlash/UpdateDarknessOverlay + ProjectileCatalog NadeNormal..NadeDarkness + AmmoPanel.DrawAmmoNades + NadeBoom.EmitDetonationFx all present and wired into the live client passes (ClientEntityView NadeOrb spawn/update/remove, NetGame per-frame UpdateDarknessOverlay/UpdateOrbColorFlash + AmmoPanel feed, ServerNet NadeOrb net kind + NadeOrbState + Feedback STATs). Builds clean (0 errors).", result: pass }
       - { kind: code, ref: "ServerNet.cs:1663 -> NetGame.cs networks NadeTimer to the crosshair ring; the ring shows because priming is reachable (Wave-5)", result: pass }
       - { kind: visual, ref: "NO runtime/visual check performed — orb sphere, 2D color flash, darkness blink, nade projectile tint, bonus-nade cell all UNVERIFIED in-game", result: unknown }
@@ -914,18 +915,18 @@ features:
       - "game/net/ClientEntityView.cs:250-262 (NadeOrb decode -> NadeOrbRenderer.OnSpawn/OnUpdate) + :352-355 OnRemove"
       - "game/client/NadeOrbRenderer.cs:138-152 (consumes NadeOrbExpire/type/radius)"
     constants:
-      - { name: "orb payload", base: "type + origin + ltime(lifetime) + radius (Nade_Orb NET_LINKED)", port: "OrbType + Origin + OrbExpire + OrbRadius (EntityField.NadeOrbState)", match: true }
+      - { name: "orb payload", base: "type, origin, expiry, total lifetime, radius", port: "type, origin, expiry, radius", match: false }
     status:
-      logic: faithful
-      values: na
-      timing: na
+      logic: partial
+      values: partial
+      timing: partial
       presentation: na
       audio: na
       liveness: live
-    intended_divergence: true
-    divergence_rationale: "The port replaces DarkPlaces NET_LINKED messages with its own entity-stream protocol; net.qh's SF_NADEORB_* byte/float compaction flags are wire-format details with no behavioral surface. The observable contract — each live orb delivers its type, origin, expiry and radius to the client — is carried by NetEntityKind.NadeOrb + EntityField.NadeOrbState."
+    intended_divergence: false
+    divergence_rationale: null
     gaps:
-      - "Runtime-unverified like the rest of the 2026-06-28b presentation wave: the pack/decode path is code-traced end-to-end but no in-game orb has been observed over the wire."
+      - "The native encoding is a deliberate protocol choice. Omission of total lifetime changes the visual phase when a client first sees an orb late."
     verification:
       - { kind: code, ref: "ServerNet.cs:2303-2306 packs OrbType/OrbExpire/OrbRadius for kind==NadeOrb (Classify 'nade_orb' at :2705); ClientEntityView.cs:250-262 decodes and feeds NadeOrbRenderer on the live entity-stream spawn/update/remove path", result: pass }
       - { kind: visual, ref: "NO runtime check of an orb crossing the wire", result: unknown }

@@ -134,7 +134,8 @@ public sealed class ViewEntityRenderer
                 }
                 // Pose the holder to the player's interpolated frame (same Quake→Godot mapping as EntityNode).
                 h.Holder.Position = Coords.ToGodot(e.Origin);
-                h.Holder.Rotation = new Vector3(0f, -Mathf.DegToRad(e.Angles.Y), 0f);
+                float yaw = (e.Presence as EntityNode)?.RenderYaw(e.Angles.Y) ?? -Mathf.DegToRad(e.Angles.Y);
+                h.Holder.Rotation = new Vector3(0f, yaw, 0f);
             }
         }
 

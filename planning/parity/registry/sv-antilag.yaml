@@ -3,7 +3,7 @@ category: server
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
 last_audited: "2026-06-27"
 summary:
-  feature_count: 14
+  feature_count: 16
   worst_gaps:
     - "g_antilag modes 1 (verified client-side) and 3 (prydon cursor hitscan) are unimplemented: a server set to either gets NO lag compensation at all (port treats anything != 2 as no-rewind). This is the SOLE remaining gap — mode 2 (the stock default and only mode Xonotic normally runs) is fully faithful + live."
 features:
@@ -391,3 +391,60 @@ features:
       - { kind: code, ref: "Base common/turrets/util.qc:39 FireImoBeam calls WarpZone_tracebox_antilag(this, ...) with forent=o (the turret), but tracebox_antilag_force_wz (antilag.qc:174-175) forces lag=0 unless IS_REAL_CLIENT(forent) — a turret is never a real client, so the antilag rewind is a guaranteed no-op in Base. Port PhaserTurret.cs traces with present positions, matching the effective Base behavior. Newly mapped 2026-06-27.", result: pass }
     confidence: medium
     notes: "DEGENERATE Base feature added to the registry for coverage completeness. The WarpZone_tracebox_antilag call in FireImoBeam is syntactically an antilag trace, but because the firing entity is a turret (not IS_REAL_CLIENT), tracebox_antilag_force_wz zeroes the lag and NO rewind happens in Base. The port's turret beam therefore matches Base by also using present positions — there is no real antilag obligation here. (The same is true of any non-client antilag trace caller.) Marked medium confidence because the exact PhaserTurret beam-trace symbol was not line-pinned; the parity conclusion — no rewind required — is robust regardless."
+
+  - id: sv-antilag.hitplot.analysis
+    name: "Hitplot eye trace, rewind, and normalized coordinates"
+    layer: [authority]
+    base_refs:
+      - "server/weapons/tracing.qc:69 (W_HitPlotAnalysis)"
+      - "server/weapons/hitplot.qc:12-80"
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponFiring.cs:SetupShot"
+      - "src/VortexArena.Server/HitPlots.cs:Analyze"
+      - "game/net/ServerNet.cs:BeginLagComp"
+    constants:
+      - { name: "minimum rewind", base: "0.001 s", port: "0.001 s", match: true }
+    status:
+      logic: faithful
+      values: faithful
+      timing: faithful
+      presentation: na
+      audio: na
+      liveness: live
+    intended_divergence: false
+    divergence_rationale: null
+    gaps: []
+    verification:
+      - { kind: test, ref: "HitPlotTests.OrdinaryFire_WritesRewoundScreenCoordinates_OnlyForSelectedClient uses Blaster.WrThink, a rotated view, an asymmetric rewound player box, restoration, and stock weapon ID 1.", result: pass }
+    confidence: high
+    notes: "The independent eye trace uses the net-backed forced-rewind bracket and projects all eight corners while the target is rewound. Rows contain normalized horizontal and vertical coordinates, forward depth, and the pinned stock server weapon ID."
+
+  - id: sv-antilag.hitplot.lifecycle
+    name: "Opt-in local hitplot lifetime per client and match"
+    layer: [authority]
+    base_refs:
+      - "server/weapons/hitplot.qc:82-99"
+      - "common/state.qc:60,78 (client attach and detach)"
+    port_refs:
+      - "src/VortexArena.Server/HitPlots.cs:Open"
+      - "src/VortexArena.Server/GameWorld.cs:StartHitPlots"
+      - "game/net/NetGame.cs:StartListenServer"
+      - "game/net/ServerNet.cs:HandleAuth"
+    constants:
+      - { name: "g_hitplots", base: "0", port: "0", match: true }
+      - { name: "g_hitplots_individuals", base: "empty", port: "empty", match: true }
+    status:
+      logic: faithful
+      values: faithful
+      timing: faithful
+      presentation: na
+      audio: na
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: "IPv6 address separators are flattened in the filename for Windows compatibility. Address selection uses the original peer address."
+    gaps: []
+    verification:
+      - { kind: test, ref: "HitPlotTests covers exact address matching, disconnect close, global opt-in, new match files and shutdown close.", result: pass }
+      - { kind: runtime, ref: "Native stormkeep loopback with g_hitplots_individuals set to local and 127.0.0.1 wrote the two selected clients' headers to separate .plot files under the server's writable data directory.", result: pass }
+    confidence: high
+    notes: "The server resolves output in the writable per-game data directory. A match owns the file handles and closes them when players detach or the world shuts down."

@@ -1,11 +1,10 @@
 unit: cl-damageeffects
 category: effect
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
-last_audited: "2026-07-02"
+last_audited: "2026-11-19"
 summary:
-  feature_count: 9
+  feature_count: 11
   worst_gaps:
-    - "Attached damage effects (cl_damageeffect: flames/bleeding particles stuck to damaged players/objects, bone-nearest attach, lifetime scaled by damage) are entirely missing; the menu 'Damage effects' slider writes a cvar nothing reads."
     - "Turret projectile impact FX + sounds (the whole DEATH_TURRET_* switch: plasma/electro impact, flac hagar-explode, mlrs/hk/hellion rocket-explode, machinegun ric, walker melee spark, tesla smallflash) are missing — turret shots explode invisibly and silently in the port."
     - "Vehicle weapon impact FX + sounds (DEATH_VH_* switch) are missing except the raptor bomb-spread shellfrag burst — RACER_IMPACT / SPIDERBOT_MINIGUN_IMPACT / RAPTOR_CANNON_IMPACT etc. are registered in EffectsList but have zero emit sites."
     - "The client-side blast application (per-entity falloff, damageforcescale push + event_damage on CLIENT-only entities — gibs, casings) is missing: explosions never shove existing gibs/casings around."
@@ -74,7 +73,7 @@ features:
     divergence_rationale: null
     gaps:
       - "Client-only entities (gibs, brass casings) are never shoved by nearby explosions: ModelGibs has no event_damage/blast-push path, so a rocket landing next to a gib pile leaves it inert (Base scatters it)."
-      - "The it.silent flag and per-entity DamageEffect() call driven by this loop are likewise unreachable (see fx.attached_damage)."
+      - "The client radius sweep and its silent flag remain absent. Weapon attachments for authoritative hits use the native path in fx.attached_damage."
     verification:
       - { kind: code, ref: "grep event_damage/push over game/client/ModelGibs.cs and EffectSystem.cs: no blast-reaction path; server-side RadiusDamage (damage-pipeline.radius.splash) only pushes SERVER entities", result: fail }
     confidence: high
@@ -148,63 +147,81 @@ features:
     notes: "The wire capability exists (EFF_NET_COLOR_MIN/MAX, used by beams) so the fix is plumbing the shooter's team palette into the impact Emit calls. Whether the port's faithful particle backend even consumes per-emission tint for these blocks was not verified — hence medium."
 
   - id: cl-damageeffects.fx.attached_damage
-    name: "Attached damage effects on hit entities (cl_damageeffect: flames/bleed particles stuck to the victim, bone-nearest attach)"
+    name: "Attached damage effects on hit entities (cl_damageeffect and nearest eligible posed bone)"
     layer: [presentation]
     base_refs:
       - "common/effects/qc/damageeffects.qc:DamageEffect (131-203)"
       - "common/effects/qc/damageeffects.qh:autocvar_cl_damageeffect* (10-16)"
+      - "server/weapons/tracing.qc:Damage_DamageInfo"
+      - "server/damage.qc:RadiusDamageForSource"
     port_refs:
-      - "game/menu/dialogs/DialogSettingsEffects.cs:127 (menu slider writes the cvar; nothing reads it)"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:Apply"
+      - "src/VortexArena.Common/Gameplay/Effects/AttachedDamageHit.cs"
+      - "game/net/ServerNet.cs:SendAttachedDamage"
+      - "game/client/AttachedDamageEffects.cs:Add/NearestBone"
+      - "game/client/EffectSystem.cs:SpawnCatalogPoint"
     constants:
-      - { name: "cl_damageeffect", base: "1 (0=off, 1=skeletal only, 2=all models)", port: "menu slider only — dead cvar", match: false }
-      - { name: "cl_damageeffect_bones", base: "5 (max concurrent damages on a rigged mesh; non-skeletal limited to 1)", port: "none", match: false }
-      - { name: "lifetime", base: "bound(cl_damageeffect_lifetime_min=3, dmg * cl_damageeffect_lifetime=0.1, cl_damageeffect_lifetime_max=6) s", port: "none", match: false }
-      - { name: "bone blacklist", base: "master, knee_L, knee_R, leg_L, leg_R", port: "none", match: false }
-      - { name: "effect name", base: "damage_<wep.netname> (or wr_damageeffect_getname override)", port: "none", match: false }
-      - { name: "gentle gates", base: "skip when !cl_damageeffect || cl_gentle || cl_gentle_damage", port: "none", match: false }
+      - { name: "cl_damageeffect", base: "1 (0=off, 1=skeletal only, 2=all models)", port: "same, with a rendered snapshot model required", match: true }
+      - { name: "cl_damageeffect_bones", base: "5 by default on a rigged model; unrigged limit 1", port: "same", match: true }
+      - { name: "lifetime", base: "damage × 0.1 bounded to 3–6 seconds by default", port: "same bounds from the authoritative hit's damage; pose streaming consumes the original lifetime", match: true }
+      - { name: "bone blacklist", base: "master, knee_L, knee_R, leg_L, leg_R", port: "same", match: true }
+      - { name: "effect name", base: "damage_<wep.netname> or a weapon override", port: "same name and stock Overkill overrides, resolved in the active catalog", match: true }
+      - { name: "gentle gates", base: "skip when !cl_damageeffect || cl_gentle || cl_gentle_damage", port: "same admission gates", match: true }
     status:
-      logic: missing
-      values: missing
+      logic: faithful
+      values: faithful
       timing: na
-      presentation: missing
+      presentation: partial
       audio: na
-      liveness: dead
-    intended_divergence: false
-    divergence_rationale: null
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: >-
+      Attach to authoritative direct or splash damage targets in each recipient's native snapshot.
+      Stock also sweeps visual models near the broadcast impact and estimates damage and falloff on the client.
+      The native record is optional within the existing framed effect bundle. Original, Mixed and Modern
+      continue to use their existing asset selections.
+    open_dimensions: [presentation]
     gaps:
-      - "Victims shot with rockets/fire weapons never show the lingering damage_<weapon> particle effect attached to the nearest bone — a clearly visible Base combat cue (burning players)."
-      - "The Effects settings dialog exposes 'Damage effects: Disabled/Skeletal/All' but the cvar has zero consumers in game/client — a dead setting."
+      - "The attached weapon cue is live. Exact rendered sprite density and the visual cases for unrigged objects, gentle mode, Mixed and Modern remain unverified."
     verification:
-      - { kind: code, ref: "grep cl_damageeffect over src/ game/ tests/: only DialogSettingsEffects.cs (writer), docs/reference/CVARS.md, and the 2026-06-14 graphics audit (which already flagged it dead)", result: fail }
+      - { kind: test, ref: "tests/VortexArena.Tests/AttachedDamageTests.cs:SimulatedRocketFiresAndRecordsTheVictimHit; OptionalFramedRecordPreservesOtherEventsAndRejectsInvalidBodies", result: pass }
+      - { kind: visual, ref: "planning/parity/attached-damage/README.md stock and native two-client Devastator captures, including a native disabled recipient", result: pass }
     confidence: high
-    notes: "Depends on a per-hit damage event reaching the client with deathtype + hit origin (row net.sv_broadcast) or an equivalent server-side emission at the victim. The damage_* effectinfo blocks themselves are catalog content owned by fx-effectinfo."
+    notes: "The stock impact switch and native generic blood splash are separate from attachment emission."
 
   - id: cl-damageeffects.fx.attached_lifecycle
-    name: "Attached damage-effect lifecycle (DamageEffect_Think: ticrate, distribute, gib/respawn cleanup, first-person self-hide)"
+    name: "Attached damage-effect lifecycle (cadence, distribution, corpse and respawn cleanup, first-person view gates)"
     layer: [presentation]
     base_refs:
       - "common/effects/qc/damageeffects.qc:DamageEffect_Think (84-114)"
-    port_refs: []
+    port_refs:
+      - "game/client/AttachedDamageEffects.cs:Advance"
+      - "src/VortexArena.Common/Gameplay/Effects/AttachedDamageSchedule.cs"
+      - "game/net/ClientEntityView.cs:_Process"
+      - "game/net/NetGame.cs:UpdateCamera"
     constants:
-      - { name: "cl_damageeffect_ticrate", base: "0.1 s between particle spawns", port: "none", match: false }
-      - { name: "cl_damageeffect_distribute", base: "1 — nextthink scaled by owner.total_damages", port: "none", match: false }
-      - { name: "cleanup", base: "expire at cnt; owner gibbed/disconnected (!modelindex || !drawmask); dead->alive edge (csqcmodel_isdead) clears effects so a respawn doesn't inherit corpse flames", port: "none", match: false }
-      - { name: "self-hide", base: "ISPLAYER_LOCAL && !chase_active -> skip particle spawn (still ticks)", port: "none", match: false }
+      - { name: "cl_damageeffect_ticrate", base: "0.1 s between particle spawns", port: "same, evaluated on client frames", match: true }
+      - { name: "cl_damageeffect_distribute", base: "1; scale nextthink by the number of attachments on the owner", port: "same", match: true }
+      - { name: "cleanup", base: "expiry, missing or hidden model, or dead-to-alive transition", port: "expiry, hidden/gibbed or removed model, respawn or map reset; the life bit also catches live-to-live spawns", match: true }
+      - { name: "self-hide", base: "ISPLAYER_LOCAL && !chase_active skips emission while the effect continues ticking", port: "same for the local player; first-person follow also hides the viewed body emission", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
+      logic: faithful
+      values: faithful
+      timing: faithful
+      presentation: faithful
       audio: na
-      liveness: na
-    intended_divergence: false
-    divergence_rationale: null
-    gaps:
-      - "Entire lifecycle absent (no attached effects exist to manage — see fx.attached_damage)."
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: >-
+      The native camera identifies the actual first-person body, including a followed player.
+      A persistent spawn flag in the existing snapshot flags clears stale effects when a death
+      snapshot is missed or a match restart spawns a living player directly into a new life.
+    gaps: []
     verification:
-      - { kind: code, ref: "no attached damage-effect entity exists in game/client (EffectSystem has attached muzzleflashes only)", result: fail }
+      - { kind: test, ref: "tests/VortexArena.Tests/AttachedDamageTests.cs schedule, restart, and snapshot flag tests", result: pass }
+      - { kind: visual, ref: "planning/parity/attached-damage/README.md first-person self and follow, chase, expiry, respawn and live match reset in separate ENet clients", result: pass }
     confidence: high
-    notes: "Split from fx.attached_damage because the think-side rules (distribute throttling, respawn-copy cleanup, first-person hiding) are independent behaviors a port must also get right, not just the spawn."
+    notes: "Explicit emitter retirement stops further spawns. Particles already emitted finish their configured fade. Live captures used deliberately extended attachment lifetimes."
 
   - id: cl-damageeffects.fx.species_bleed
     name: "Species blood-type prefix + WEP_FLAG_BLEED gate (alien_/robot_/animal_ blood; objects don't bleed)"
@@ -212,25 +229,27 @@ features:
     base_refs:
       - "common/effects/qc/damageeffects.qc:species_prefix (116-129)"
       - "common/effects/qc/damageeffects.qc:DamageEffect bleed branch (179-188)"
-    port_refs: []
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/Effects/AttachedDamageHit.cs:EffectName"
+      - "game/client/AttachedDamageEffects.cs"
     constants:
-      - { name: "prefix map", base: "HUMAN '' / ALIEN alien_ / ROBOT_* robot_ / ANIMAL animal_ / RESERVED reserved_", port: "none", match: false }
-      - { name: "bleed gate", base: "WEP_FLAG_BLEED weapons: players get <species>damage_<wep>; non-player models return (objects don't bleed)", port: "none", match: false }
+      - { name: "prefix map", base: "HUMAN '' / ALIEN alien_ / ROBOT_* robot_ / ANIMAL animal_ / RESERVED reserved_", port: "ModelSpeciesEffects.Prefix", match: true }
+      - { name: "bleed gate", base: "WEP_FLAG_BLEED weapons: players get <species>damage_<wep>; non-player models return (objects don't bleed)", port: "AttachedDamageHit.EffectName uses the weapon bleed bit and the player-model gate", match: true }
     status:
-      logic: missing
-      values: missing
+      logic: faithful
+      values: faithful
       timing: na
-      presentation: missing
+      presentation: partial
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "All blood in the port is the single generic BLOOD effect (DamageSystem.cs:536 EffectEmitter.TeBlood) — alien (yellow-green) and robot (oil) player models bleed human red; the species byte has no wire path."
+      - "Attached damage resolves victim species from its model sidecar at the receiver. The native impact channel does not carry Xonotic's per-impact species nibble. Asset coverage and attachment lifecycle are tracked separately."
     verification:
-      - { kind: code, ref: "grep species/alien_/robot_ over game/ and src Gameplay: no hits outside model asset names", result: fail }
+      - { kind: test, ref: "AttachedDamageTests.BleedUsesVictimSpeciesAndSkipsObjects", result: pass }
     confidence: high
-    notes: "Base sources species from the victim's playermodel (sv_model fields) into Damage_DamageInfo's bloodtype arg. The on-hit blood SPLASH itself (Violence_GibSplash) belongs to the gibs unit; this row owns only the species prefix + bleed-gate logic that lives in damageeffects.qc."
+    notes: "The separate native one-shot world splash now selects shipped alien_blood or robot_blood on ordinary damage using authoritative player species. Other species keep the existing blood fallback. See unmapped-audit/shared-constants."
 
   - id: cl-damageeffects.impact.vehicle_fx
     name: "Vehicle weapon impact FX switch (DEATH_VH_*: per-weapon impact sounds + particles, raptor shellfrag toss)"
@@ -240,9 +259,9 @@ features:
     port_refs:
       - "src/VortexArena.Common/Gameplay/Vehicles/Raptor.cs:640 (RAPTOR_BOMB_SPREAD emit at bomb burst)"
       - "game/client/EffectSystem.cs:474-478 (RAPTOR_BOMB_SPREAD -> SpawnRaptorShellfrags)"
-      - "game/client/ModelGibs.cs:TossShellfrags (111)"
+      - "game/client/ModelGibs.cs:TossShellfrags"
     constants:
-      - { name: "raptor fragment burst", base: "3x RaptorCBShellfragToss at 120° yaw steps, vel = normalize + randomvec()*128; + RAPTOR_BOMB_SPREAD + SND_ROCKET_IMPACT", port: "shellfrags + spread ported (client reacts to the emission); the rocket-impact crack sound is NOT played", match: false }
+      - { name: "raptor fragment burst", base: "3x RaptorCBShellfragToss at 120° roll steps, vel = normalize + randomvec()*128; + RAPTOR_BOMB_SPREAD + SND_ROCKET_IMPACT", port: "shellfrags + spread ported (client reacts to the emission); the rocket-impact crack sound is NOT played", match: false }
       - { name: "spiderbot minigun", base: "SND_RIC_RANDOM + EFFECT_SPIDERBOT_MINIGUN_IMPACT", port: "none", match: false }
       - { name: "racer gun / rocket", base: "SND_LASERIMPACT + RACER_IMPACT / SND_ROCKET_IMPACT + RACER_ROCKET_EXPLODE", port: "none", match: false }
       - { name: "raptor cannon / bomb", base: "SND_LASERIMPACT + RAPTOR_CANNON_IMPACT / SND_ROCKET_IMPACT + RAPTOR_BOMB_IMPACT", port: "none", match: false }
@@ -264,7 +283,7 @@ features:
       - { kind: code, ref: "grep '\"RACER_IMPACT\"|\"SPIDERBOT_MINIGUN_IMPACT\"|\"RAPTOR_CANNON_IMPACT\"|\"RAPTOR_BOMB_IMPACT\"|\"BIGPLASMA_IMPACT\"' over src/+game/: only the EffectsList registrations; vehicle weapon fire paths emit muzzleflashes only", result: fail }
       - { kind: test, ref: "tests/VortexArena.Tests/VehicleRuntimeTests.cs:410 Raptor_BombBurst_EmitsShellfragSpreadEffect", result: pass }
     confidence: high
-    notes: "Vehicle-* units own the firing/damage logic; this row owns the impact-point presentation Base dispatches from the DamageInfo handler. The shellfrag client consumer is a faithful port of RaptorCBShellfragToss/Draw per ModelGibs.cs comments (gravity 0.15, avelocity jitter 15)."
+    notes: "Vehicle-* units own the firing/damage logic; this row owns the impact-point presentation Base dispatches from the DamageInfo handler. Shellfrags use the live gib timing settings and point sweeps. The narrower shellfrag row records differences in launch and tumble."
 
   - id: cl-damageeffects.impact.turret_fx
     name: "Turret weapon impact FX switch (DEATH_TURRET_*: per-turret impact sounds + particles)"
@@ -296,3 +315,66 @@ features:
       - { kind: code, ref: "grep EffectEmitter.Emit|ImpactSound over src/.../Turrets/: only muzzleflashes (BLASTER/MACHINEGUN/VORTEX_MUZZLEFLASH), the plasma beam, and turret-death ROCKET_EXPLODE/SMOKE — no impact-point emission", result: fail }
     confidence: high
     notes: "Straightforward fix pattern already proven by the player weapons: add Emit + ImpactSound at each turret projectile explode site. Turret-* units own damage/AI; the impact presentation constants live here."
+
+  - id: cl-damageeffects.fx.model_gib_limit
+    name: "Ordinary model-gib live limit and oldest-first eviction"
+    layer: [presentation]
+    base_refs:
+      - "common/effects/qc/gibs.qh:autocvar_cl_gibs_maxcount"
+      - "common/effects/qc/gibs.qc:TossGib"
+      - "common/effects/qc/rubble.qc:LimitedChildrenRubble"
+      - "common/effects/qc/rubble.qh:LimitedChildrenRubble"
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:GibCorpse"
+      - "game/client/EffectSystem.cs:Spawn"
+      - "game/client/ModelGibs.cs:Toss"
+      - "game/client/RubblePool.cs:TrySpawn"
+    constants:
+      - { name: "cl_gibs_maxcount", base: "100 default, read at spawn", port: "100 default, read from the live client store, capped at 1024", match: false }
+    status:
+      logic: faithful
+      values: partial
+      timing: faithful
+      presentation: faithful
+      audio: na
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: "The native model pool has a fixed ceiling of 1024 normal gibs to bound allocations."
+    gaps:
+      - "Larger cl_gibs_maxcount values are bounded to 1024. Gentle and particle effect modes are outside this model-limit row."
+    verification:
+      - { kind: test, ref: "planning/parity/rubble-limits/probe.txt normal corpse event, Godot Compatibility spawn and MultiMesh assertions", result: pass }
+      - { kind: test, ref: "planning/parity/rubble-limits/network-order.md paired lethal Shotgun event order and same-frame casing and ordinary gib pool checks", result: pass }
+    confidence: high
+    notes: "Ordinary gib models share a single cap and evict oldest first on spawn. Zero clears the model pool on the next normal spawn. Raptor shell fragments use a separate cosmetic budget. Model movement timing and residual collision are tracked in physics-movetypes.matchticrate.interp."
+
+  - id: cl-damageeffects.fx.corpse_splash
+    name: "Player and corpse hit effects, model launch and particle substitutions"
+    layer: [authority, presentation]
+    base_refs:
+      - "server/player.qc:PlayerCorpseDamage"
+      - "common/effects/qc/gibs.qc:Violence_GibSplash_At"
+      - "common/effects/qc/gibs.qc:new_te_bloodshower"
+      - "common/effects/qc/gibs.qc:TossGib"
+      - "lib/random.qc:prandomvec"
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/Effects/EffectEmitter.cs:GibSplash"
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:Killed"
+      - "game/client/EffectSystem.cs:SpawnGibShower"
+      - "game/client/ModelGibs.cs:Splash"
+    constants:
+      - { name: "launch velocity", base: "base × 0.5 + random × 2 + vertical 1", port: "same live cvars and defaults", match: true }
+      - { name: "lifetime", base: "2.5 seconds × [1, 1.15)", port: "same multiplier and live cvar", match: true }
+      - { name: "EKG", base: "client multiplies the amount by five", port: "12 models for a normal player, 52 with EKG", match: true }
+    status: { logic: partial, values: partial, timing: partial, presentation: partial, audio: missing, liveness: live }
+    intended_divergence: false
+    divergence_rationale: null
+    gaps:
+      - "Native does not yet carry the pinned per-event sound permission or play the type-1 launch and chunk splat sounds. Model trails, explosion push and fragment touchdown effects remain open."
+      - "Ordinary native debris sinks during its final second. Stock fades with alpha and can shorten life for low view quality. Native uses a different random sequence and caps shower samples at 1024 per splash, beyond the stock menu slider’s range."
+    verification:
+      - { kind: test, ref: "planning/parity/rubble-limits/gib-options-live/README.md seven pinned and native lethal-shot cases and decoded event order", result: pass }
+      - { kind: test, ref: "planning/parity/rubble-limits/gib-options.txt Godot model, atlas, launch, lifetime and legacy debris regressions", result: pass }
+      - { kind: test, ref: "SharedConstantsGameplayTests exercises real player death with server EKG and gentle settings, plus DM and CTS corpse events", result: pass }
+    confidence: high
+    notes: "Gentle variants take precedence over particle-only mode. CTS suppresses the visual event while preserving corpse removal. The ENet shot fixture exercised the full splash, two hit requests and three separate chunks. Aligned Original frames verified Normal, gentle 2, particle-only and the no-gibs control. The other gentle variants have routing evidence."

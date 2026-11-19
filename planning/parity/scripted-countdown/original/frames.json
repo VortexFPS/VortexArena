@@ -1,0 +1,37 @@
+{
+  "capture": "/tmp/va-countdown-original10",
+  "frames": {
+    "observer-before.webp": {
+      "source": "RedProbe/0000.webp",
+      "sample": 11.498
+    },
+    "observer-4.webp": {
+      "source": "RedProbe/0010.webp",
+      "sample": 12.951
+    },
+    "observer-3.webp": {
+      "source": "RedProbe/0019.webp",
+      "sample": 14.232
+    },
+    "observer-2.webp": {
+      "source": "RedProbe/0027.webp",
+      "sample": 15.407
+    },
+    "observer-1.webp": {
+      "source": "RedProbe/0034.webp",
+      "sample": 16.282
+    },
+    "observer-expiry.webp": {
+      "source": "RedProbe/0050.webp",
+      "sample": 18.329
+    },
+    "player-countdown.webp": {
+      "source": "BlueProbe/0007.webp",
+      "sample": 13.253
+    },
+    "player-expiry.webp": {
+      "source": "BlueProbe/0023.webp",
+      "sample": 17.263
+    }
+  }
+}

@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using Godot;
 using VortexArena.Common.Diagnostics;
+using VortexArena.Common.Gameplay;
 using VortexArena.Common.Services;
 using VortexArena.Engine.Audio;
 using VortexArena.Game.Audio;
@@ -71,6 +72,17 @@ public partial class ClientWorld
     }
 
     private int DpLocalNetId() => AppearanceProvider?.Invoke()?.LocalNetId ?? -1;
+
+    /// <summary>Prepare a sample through the same mounted asset cache used by positional playback.</summary>
+    public void PrecacheSound(string sample)
+    {
+        string bare = Sounds.ByName(sample)?.Sample ?? sample;
+        bool mixerCache = DpNative.Active && DpNative.Bank(AudioLoader) is { } bank
+            && bank.Get(bare, forPlay: false) is { Failed: false };
+        bool loaded = mixerCache || AudioLoader?.Invoke(bare) is not null;
+        if (s_dpTrace)
+            GD.Print($"[dp-audio] precache '{bare}' mounted={loaded} mixer={mixerCache}");
+    }
 
     // S_StartSound for a networked sound. An emitter the client has no number for plays on the world's
     // automatic channel: with no entity to key on, a "single" channel would cut unrelated sounds short.

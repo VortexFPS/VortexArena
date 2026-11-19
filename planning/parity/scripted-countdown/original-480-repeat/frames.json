@@ -1,0 +1,13 @@
+{
+  "capture": "/tmp/va-countdown-original8",
+  "frames": {
+    "observer-during.webp": {
+      "source": "RedProbe/0019.webp",
+      "sample": 13.343
+    },
+    "observer-expiry.webp": {
+      "source": "RedProbe/0055.webp",
+      "sample": 17.846
+    }
+  }
+}

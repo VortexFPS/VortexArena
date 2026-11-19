@@ -1,0 +1,7 @@
+Native Godot ENet before the per-inflictor exception fix, g_projectiles_damage 0
+ORBS evict_oldest
+BLAST receiver=Alpha origin=<1216, 260.34253, -27.96875>
+BLAST receiver=Alpha origin=<1216, 260, 19>
+BLAST receiver=Beta origin=<1216, 260.34253, -27.96875>
+BLAST receiver=Beta origin=<1216, 260, 19>
+ERROR: System.InvalidOperationException: mode zero protects overlapping newest orb from the ordinary blast

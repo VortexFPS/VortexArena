@@ -154,5 +154,108 @@ public class KillCountdownTests : IDisposable
         Assert.Contains(_rec.Log, d => d.Notification.RegistryName == "CENTER_TEAMCHANGE_SPECTATE");
     }
 
+    [Fact]
+    public void DigitAppearsAtTen_FollowsNewIntent_AndClearsAtExpiry()
+    {
+        var (kc, state, player, now, _) = Make(11);
+        kc.Begin(player);
+        kc.Tick(player);
+        Assert.Equal(default, state.VisibleCountdown);
+        now[0] = 1;
+        kc.Tick(player);
+        Assert.Equal(new VortexArena.Net.CountdownIndicatorState(10, 0), state.VisibleCountdown);
+        kc.Begin(player, -2);
+        Assert.Equal(new VortexArena.Net.CountdownIndicatorState(10, -2), state.VisibleCountdown);
+        for (int second = 2; second <= 11; second++)
+        {
+            now[0] = second;
+            kc.Tick(player);
+        }
+        Assert.Equal(default, state.VisibleCountdown);
+    }
+
+    [Fact]
+    public void OneSecondSilentMarkerAndInterruptedCountdownShowNoDigit()
+    {
+        var (kc, state, player, _, _) = Make(1);
+        kc.Begin(player);
+        kc.Tick(player);
+        Assert.True(state.KillCntdownSilent);
+        Assert.Equal(default, state.VisibleCountdown);
+        kc.BeginSilent(player, 4);
+        kc.Tick(player);
+        Assert.Equal(default, state.VisibleCountdown);
+        state.OnSpawn();
+        Assert.Equal(default, state.VisibleCountdown);
+    }
+
+    [Fact]
+    public void PlayerAndCloneStartAtTheirOwnStagger_ThenCancelOnMatchEnd()
+    {
+        var (kc, state, player, now, _) = Make(2);
+        player.Lip = 1;
+        var clone = new VortexArena.Common.Framework.Entity { ClassName = PlayerBody.ClassName, Enemy = player };
+        kc.Entities = () => new[] { clone };
+        kc.Begin(player, Teams.Blue);
+        Assert.Equal(0, player.Lip);
+        kc.TickClones();
+        kc.Tick(player);
+        Assert.Equal(new VortexArena.Net.CountdownIndicatorState(2, 0), clone.CountdownIndicator);
+        Assert.Equal(default, state.VisibleCountdown);
+        now[0] = .05f;
+        kc.Tick(player);
+        Assert.Equal(new VortexArena.Net.CountdownIndicatorState(2, Teams.Blue), state.VisibleCountdown);
+        kc.GameStopped = () => true;
+        kc.Tick(player);
+        kc.TickClones();
+        Assert.Equal(default, clone.CountdownIndicator);
+        Assert.Equal(default, state.VisibleCountdown);
+    }
+
+    [Fact]
+    public void OneSecondTeamChange_CloneRemainsVisibleAndNeutral()
+    {
+        var (kc, state, player, _, _) = Make(1);
+        var body = new VortexArena.Common.Framework.Entity { ClassName = PlayerBody.ClassName, Enemy = player };
+        kc.Entities = () => new[] { body };
+        kc.Begin(player, Teams.Red);
+        kc.Tick(player);
+        kc.TickClones();
+        Assert.Equal(default, state.VisibleCountdown);
+        Assert.Equal(new VortexArena.Net.CountdownIndicatorState(1, 0), body.CountdownIndicator);
+    }
+
+    [Fact]
+    public void ConcurrentCountdowns_UseTheSharedFirstThinkFloor()
+    {
+        var (kc, first, player, _, _) = Make(2);
+        var second = new ServerPlayerState();
+        var other = new Player();
+        kc.StateOf = p => p == player ? first : second;
+        player.Lip = 20;
+        kc.Begin(player);
+        kc.Begin(other);
+        Assert.Equal(1f, first.KillCntdownNextThink);
+        Assert.Equal(1.05f, second.KillCntdownNextThink);
+    }
+
+    [Fact]
+    public void OverduePlayerAndCloneAdvanceOnceFromTheCurrentTick()
+    {
+        var (kc, state, player, now, killed) = Make(3);
+        var body = new VortexArena.Common.Framework.Entity { ClassName = PlayerBody.ClassName, Enemy = player };
+        kc.Entities = () => new[] { body };
+        kc.Begin(player);
+        kc.Tick(player);
+        kc.TickClones();
+        now[0] = 5;
+        kc.Tick(player);
+        kc.TickClones();
+        Assert.Empty(killed);
+        Assert.Equal((byte)2, state.VisibleCountdown.Digit);
+        Assert.Equal(state.VisibleCountdown.Digit, body.CountdownIndicator.Digit);
+        Assert.Equal(6f, state.KillCntdownNextThink);
+    }
+
     private static bool kc_StateActive(KillCountdown kc, Player p) => kc.StateOf(p).KillCntdownActive;
 }

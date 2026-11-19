@@ -1,0 +1,115 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver.
+     at: set_use_vsync (platform/linuxbsd/x11/gl_manager_x11.cpp:364)
+OpenGL API 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 20.1.2, 256 bits)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Disabled maxfps=0 refresh=NaNHz cpu=6c gpu=llvmpipe (LLVM 20.1.2, 256 bits)[0m
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag][0m
+=== VortexArena boot ===[0m
+Weapons:   27[0m
+Items:     21[0m
+Mutators:  46[0m
+GameTypes: 21[0m
+Sounds:    223[0m
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).[0m
+[lb]MenuState] user gamedir mounted: /tmp/va-sandbox-native-keys1/session-native/owner-user/data (drop .pk3 packs in its maps/ subfolder).[0m
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"[0m
+"maxplayers" set to "32"[0m
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).[0m
+[lb]MenuState] cvar help: 1386 engine descriptions.[0m
+[lb]shell] --cvar cl_autopause = "0"[0m
+[lb]shell] --cvar cl_maxfps = "40"[0m
+[lb]shell] --cvar _cl_name = "ParityOwner"[0m
+[lb]shell] --cvar gl_texturecompression = "0"[0m
+[lb]shell] --cvar sensitivity = "4"[0m
+[lb]shell] --cvar showposition = "1"[0m
+[lb]shell] --cvar cl_frameprofiler = "0"[0m
+[lb]shell] --cvar sv_warpzone_trace = "1"[0m
+[lb]video] vid_vsync 0 → requested Disabled, actual Disabled (off — uncapped, may tear)[0m
+[lb]video] cl_maxfps 40 -> Engine.MaxFps 40 (your setting; refresh NaNHz)[0m
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)[0m
+[lb]video] process priority boost unavailable: Permission denied[0m
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] connecting to 127.0.0.1:26717.[0m
+[NetTransport.Client] connecting to 127.0.0.1:26717 …
+[EffectInfo] parsed 'vortex/original/effectinfo.txt': 301 effects (process-lifetime, shared by every match).
+[EffectSystem] effectinfo: 301 effects, particlefont atlas: loaded, style overlay: 0 effects
+[Particles] backend=original (cl_particles_modern=0)
+[AssetLoader] model 'models/items/buff.md3' read failed: Asset not found in any mount: "models/items/buff.md3".
+[lb]LightGrid] this map ships no light grid (BSP lump 15) — models use the PBR + sun fallback.[0m
+[lb]WorldLights] realtime world lighting OFF — back to baked lightmaps.[0m
+[NetGame] precached 24 weapon models, skipped 0 (lazy), 24 muzzle tags.
+[AssetLoader] skeletal parse MISS 'models/player/erebus.iqm' (loader#284d547 cache n=1: [models/player/erebus.iqm])
+[NetGame] precached 36 combat sounds, 1 player models (rendered for pipeline warm).
+[NetGame] roster warm set: [models/player/erebus.iqm] → loader#284d547 cache n=1: [models/player/erebus.iqm]
+[NetGame] connecting to 127.0.0.1:26717.
+[LoadTimeline] connect 127.0.0.1 — load begin → ready, 8510 ms total
+    textures.compress: off (gl_texturecompression 0)
+  client.boot                       37.2 ms    0.4 %
+    fx.warmup                      151.7 ms    1.8 %
+    fx.trails                      932.2 ms   11.0 %
+    gpu.warm-items(build)          723.1 ms    8.5 %
+    world.attach                     0.4 ms    0.0 %
+    editor.nodes                    17.0 ms    0.2 %
+    light                            9.8 ms    0.1 %
+  render.setup                    1920.2 ms   22.6 %
+  camera.hud                       166.6 ms    2.0 %
+  music                              2.9 ms    0.0 %
+  precache.weapons                4488.3 ms   52.7 %
+    precache.weapons.pso-warm      946.2 ms   11.1 %
+  precache.sounds+models           800.9 ms    9.4 %
+  (unaccounted: yields, present, unmeasured)     1094.2 ms
+[ClientNet] handshake accepted by 'Vortex 1.0.0 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0 Server': netId 1.
+[MapLoader] occluder: 52008 verts / 43612 tris (r_occlusion_cull A/B)
+[MapLoader] 'stormkeep' materials: lightmapped=34 vertexLit=3 plain=8 glow=5 normalMapped=34 (deluxe=True, internalPages=0, atlas=1p, cellSize=1024, cells=31, surfaces=380)
+[MapLoader] 'stormkeep' portal surfaces: 2 (from 2 faces), pocket decor: 5 (from 5 faces)
+[DecalSplats] geometry: 106027 render triangles, 502 grid cells
+[Skybox] loaded 'env/extragalactic/asteroids'.
+[lb]LightGrid] GPU lightgrid 54x61x39 (501 KB) bound — per-pixel model lighting active.[0m
+[NetGame] client loaded map 'stormkeep' (dm) for render + prediction collision.
+[LoadTimeline] (late) precache.models.pso-warm: 917.8 ms — finished after the table printed; not included in the total above.
+[wzview] authoritative snap -> <0, 135, 0>
+[lb]md3morph] 'models/players/model/model.md3' frames=30 gpu=True mats: morphable[0m
+[lb]md3morph] 'models/player/relic.md3elic.md3' frames=101 gpu=True mats: std std std std std std std std[0m
+[AssetLoader] skeletal parse MISS 'models/player/nyx.iqm' (loader#284d547 cache n=2: [models/player/erebus.iqm, models/player/nyx.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/megaerebus.iqm' (loader#284d547 cache n=3: [models/player/erebus.iqm, models/player/nyx.iqm, models/player/megaerebus.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/pyria.iqm' (loader#284d547 cache n=4: [models/player/erebus.iqm, models/player/nyx.iqm, models/player/megaerebus.iqm, models/player/pyria.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/seraphina.iqm' (loader#284d547 cache n=5: [models/player/erebus.iqm, models/player/nyx.iqm, models/player/megaerebus.iqm, models/player/pyria.iqm, models/player/seraphina.iqm])
+[AssetLoader] skeletal parse MISS 'models/player/umbra.iqm' (loader#284d547 cache n=6: [models/player/erebus.iqm, models/player/nyx.iqm, models/player/megaerebus.iqm, models/player/pyria.iqm, models/player/seraphina.iqm, models/player/umbra.iqm])
+[IdleWarmer] asset warm queue drained — full asset set is hot.
+Cheats are not enabled on this server (sv_cheats).[0m
+[38;2;0;255;0mSANDBOX - INFO: [39mObject is owned by "ParityOwner", created "[38;2;255;255;0m19-11-2026 04:45:20[39m", last edited "[38;2;255;255;0m19-11-2026 04:45:20[39m"[0m
+Cheats are not enabled on this server (sv_cheats).[0m
+[38;2;0;255;0mSANDBOX - INFO: [39mSandbox mode is active, but in read-only mode. Sandbox commands cannot be used[0m
+Cheats are not enabled on this server (sv_cheats).[0m
+Cheats are not enabled on this server (sv_cheats).[0m
+[lb]perf] entity PVS tests: 78 run, 1435 skipped by memo (94.8% of 1513 avoided BSP descents)[0m
+=== frame profiler session summary (61s, 329 frames) ===[0m
+  fps: avg 5.8  1%low 1  0.1%low 1  (median 157.1ms, worst 823.3ms)[0m
+  hitches: 0 total — 0 primaries: no hitches[0m
+  gc: g0+55 g1+36 g2+20, total pause 150ms[0m
+  alloc: 742.5MB total, 1MB/s recent, peak 158.1MB in one frame @ t=11.2s, heap 133.3MB[0m
+  note: DEBUG build — frame times and the hitch census are NOT release-representative (run the release export via tools/perf-run.ps1 for real numbers)[0m
+  [lb]vram census] 404 resident textures, est 2134 MB (textures only; Godot's vram monitor adds mesh/render-target buffers)[0m
+    compression: mode 0, s3tc yes, ok 0, bc7-fallback 0, failed 0[0m
+    Color               757.4 MB in 160 textures[0m
+    Normal              415.0 MB in 71 textures[0m
+    Glow                378.2 MB in 55 textures[0m
+    Gloss               375.6 MB in 77 textures[0m
+    ReflectMask         203.1 MB in 33 textures[0m
+    Q3BspLightmaps        3.0 MB in 1 textures[0m
+    TwoD                  1.8 MB in 7 textures[0m
+    top 10:[0m
+         21.3 MB  rgba8        vortex/original/particles/particlefont.png[0m
+         21.3 MB  rgba8        textures/erebusfullbright_gloss.png[0m
+         21.3 MB  rgba8        textures/erebusfullbright_norm.png[0m
+         21.3 MB  rgba8        textures/erebusfullbright_shirt.png[0m
+         21.3 MB  rgba8        textures/erebusfullbright.png[0m
+         21.3 MB  rgba8        textures/nexgun_gloss.png[0m
+         21.3 MB  rgba8        textures/nexgun_norm.png[0m
+         21.3 MB  rgba8        textures/nexgun_reflect.png[0m
+         21.3 MB  rgba8        textures/nexgun_shirt.png[0m
+         21.3 MB  rgba8        textures/nexgun.png[0m

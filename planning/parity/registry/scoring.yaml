@@ -205,41 +205,49 @@ features:
     name: "Remaining-frags announcer (Scores_CountFragsRemaining -> REMAINING_FRAG_{1,2,3})"
     layer: [authority]
     base_refs:
-      - "server/world.qc:WinningCondition_Scores"
+      - "server/world.qc:CheckRules_World / WinningCondition_Scores"
+      - "server/scores.qc:WinningConditionHelper"
       - "server/mutators/events.qh:Scores_CountFragsRemaining"
+      - "common/gametypes/gametype/survival/sv_survival.qc:surv_Initialize / Surv_UpdateScores / Scores_CountFragsRemaining"
+      - "common/gametypes/gametype/race/sv_race.qc:CheckRules_World / Scores_CountFragsRemaining"
+      - "common/gametypes/gametype/mayhem/sv_mayhem.qc:commented-out Scores_CountFragsRemaining"
+      - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:commented-out Scores_CountFragsRemaining"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:CountFragsRemaining"
-      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:ResetFragsRemaining"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:314"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:389"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:687"
-      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:905"
-      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:1116"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:265"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:1273"
-      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:731"
+      - "src/VortexArena.Common/Gameplay/Scoring/GameScores.cs:CountFragsRemaining / ResetFragsRemaining"
+      - "src/VortexArena.Server/GameWorld.cs:RunCheckRulesWorld"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Survival.cs:CheckMatchScores / GetMatchStanding"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Deathmatch.cs:RecomputeLeader"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Tdm.cs:UpdateLeaderAndCheckLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Keepaway.cs:AnnounceFragsRemaining"
+      - "src/VortexArena.Common/Gameplay/GameTypes/ClanArena.cs:UpdateLeaderAndCheckLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:UpdateLeaderAndCheckLimit"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:RecomputeLeader"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Race.cs:CheckWinningCondition"
+      - "src/VortexArena.Common/Gameplay/GameTypes/TeamKeepaway.cs:UpdateLeaderAndCheckLimit"
     constants:
-      - { name: "announce thresholds", base: "fragsleft == 1 / 2 / 3 (once via fragsleft_last)", port: "fragsleft 1/2/3 once via _fragsLeftLast", match: true }
-      - { name: "fragsleft = limit - topscore; leadingfragsleft = second + leadlimit - top", base: "world.qc:1592-1604", port: "same formula", match: true }
-      - { name: "leadlimit_and_fraglimit => MAX(frag,lead) else MIN", base: "world.qc:1605-1609", port: "Math.Max/Min on CvarLeadAndFrag", match: true }
-      - { name: "announcer sounds 1fragleft/2fragsleft/3fragsleft (Annce broadcast all)", base: "ANNCE_REMAINING_FRAG_*", port: "NotificationSystem.Send(All, Annce, REMAINING_FRAG_*)", match: true }
+      - { name: "announce thresholds", base: "fragsleft == 1 / 2 / 3 on change", port: "fragsleft 1/2/3 on change via _fragsLeftLast", match: true }
+      - { name: "score and lead distance", base: "limit - top, runner-up + leadlimit - top", port: "same formulas", match: true }
+      - { name: "leadlimit_and_fraglimit", base: "MAX with both limits set and AND enabled, MIN otherwise", port: "same choice", match: true }
+      - { name: "announcer sounds", base: "ANNCE_REMAINING_FRAG_* broadcast", port: "NotificationSystem.Send(All, Annce, REMAINING_FRAG_*)", match: true }
     status:
       logic: faithful
       values: faithful
-      timing: faithful
+      timing: partial
       presentation: na
       audio: faithful
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "PARTIAL MODE COVERAGE (re-verified 2026-06-27 against current src): 8 of Base's 11 Scores_CountFragsRemaining modes call CountFragsRemaining live — Deathmatch (cs:314), TDM (cs:389), Keepaway (cs:687, gated g_keepaway_score_timepoints==0), ClanArena (cs:905), FreezeTag (cs:1116), Duel (cs:265), Race (cs:1273, gated !g_race_qualifying), TeamKeepaway (cs:731, gated !g_tka_score_timepoints), all driven by the GameWorld per-frame leader recompute. Mayhem (Mayhem.cs:706) and TeamMayhem (TeamMayhem.cs:416) deliberately do NOT call it — Base comments-out their hook (intended divergence, not a gap). Survival is the ONE genuinely-missing enabled mode: Base registers MUTATOR_HOOKFUNCTION(surv, Scores_CountFragsRemaining) but the port's Survival.cs has zero CountFragsRemaining caller (grep 2026-06-27 = no match). So 8/11 wired, 2/11 intended-off, 1/11 (surv) missing. (Prior audit's '9 of 11' double-counted the GameWorld driver as a mode.)"
-      - "suddenDeathEnding is always passed false (all callers note checkrules_suddendeathend is framework-owned and not surfaced), so the QC 'force fragsleft=1 during sudden-death overtime end' branch never fires."
+      - "Existing mode-owned callers can evaluate raw limits before the match starts. For example, the DM leader poll uses the configured fraglimit during warmup and can emit a cue when the limit is 1–3. The pin masks positive fraglimit and all leadlimit during warmup and through the start tick. Survival applies that mask in RunCheckRulesWorld."
     verification:
-      - { kind: code_read, ref: "GameScores.CountFragsRemaining mirrors world.qc:1592-1622 (formula, leadlimit_and_fraglimit MAX/MIN, _fragsLeftLast once-gate); grep CountFragsRemaining over src (2026-06-27, re-verified) -> live callers at Deathmatch.cs:314 / Tdm.cs:389 / Keepaway.cs:687 / ClanArena.cs:905 / FreezeTag.cs:1116 / Duel.cs:265 / Race.cs:1273 / TeamKeepaway.cs:731; latch reset in each mode's Activate via ResetFragsRemaining", result: pass }
-      - { kind: code_read, ref: "Base enables the hook for 11 modes (ca/dm/duel/ft/ka/mayhem/rc/surv/tdm/tka/tmayhem); port wires 8 (above); Mayhem.cs:706/TeamMayhem.cs:416 deliberately skip it (Base disables those = intended divergence); Survival.cs has NO CountFragsRemaining caller (grep 2026-06-27 = no match) = the single genuine miss", result: fail }
+      - { kind: code, ref: "Pin 863cd3e8456e18f577f7fe5fef857ff55ae62cc0 enables nine modes. DM, TDM, CA, Freeze Tag, Duel, Race, Keepaway and Team Keepaway already had live call sites. Survival now calls the helper from the host match-score check after round scoring. Race qualifying and timed Keepaway/Team Keepaway stay gated. Mayhem and Team Mayhem's commented hooks are disabled in the pin.", result: pass }
+      - { kind: code, ref: "Pin world.qc:1812-1825 ends the map on expired sudden death before dispatching the score check at line 1825 or the Race override that can call it. The one-frag assignment at lines 1593-1596 is unreachable in the normal pinned match flow.", result: pass }
+      - { kind: test, ref: "LmsSurvivalMatchFlowTests verifies Survival 3/2/1 broadcasts once each after warmup, round-to-round point retention, score and combined lead limits, immediate and deferred match restarts, clean roster state after map replacement, and tied sudden-death expiry without a forced cue.", result: pass }
+      - { kind: runtime, ref: "planning/parity/lms-survival-scoring/README.md, native Darkzone Survival timeout award at point limit 1 and intermission", result: pass }
     confidence: high
-    notes: "Logic/values/timing/audio faithful and LIVE for 8 modes via the per-tick leader recompute. Mayhem/TeamMayhem are intended-off (Base comments their hook out), so the only outstanding gap is Survival + surfacing suddenDeathEnding. The sibling REMAINING_MIN_{1,5} minutes announcer remains live in AnnouncerController. (Re-verified 2026-06-27: port_refs line numbers refreshed; prior '9 modes' corrected to 8 — the GameWorld driver is not a mode.)"
+    notes: "The port uses mode-owned call sites and a common notification helper. Survival separates side-wipe or timeout resolution from the match check, which ranks score first and hunts second and passes ties and limit results into the existing overtime cascade. The expiry branch remains in the helper as a source reference with no live caller. Mayhem and Team Mayhem follow the pin's disabled behavior."
+
 
   - id: scoring.lifecycle.clear
     name: "Score clearing (PlayerScore_Clear via g_score_resetonjoin / Score_ClearAll)"

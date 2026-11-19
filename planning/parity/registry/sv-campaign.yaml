@@ -5,7 +5,7 @@ last_audited: "2026-06-27"
 summary:
   feature_count: 14
   worst_gaps:
-    - "Welcome presentation is a per-client CHAT LINE not Base's CSQC Welcome menu DIALOG (presentation partial). The level number AND the per-level description (shortdesc+longdesc, sourced from the all-levels catalogue) AND the +jump keybind are all reproduced faithfully on the line; the only residual gap is the dialog-vs-chat surface (the in-process listen server has no networked CSQC welcome channel)."
+    - "Native sign-on delivers the campaign briefing in Welcome. Stock campaign-specific title, auto-open rules and formatting of the level description remain partial."
     - "Cosmetic: Base wraps the campaign filename in language_filename() (localized briefings, e.g. campaignxonoticbeta.de.txt); the port reads the un-localized base name only (English-only fidelity; non-English falls back to the base file)."
     - "RESOLVED since the 2026-06-25 baseline: checkrulesEquality is no longer hardcoded false. GameWorld.NextLevel now feeds the live _checkRulesEquality field, derived from GameType.ReportsTie(roster) (the per-mode tie report on all 12 timed score modes) + the all-players-gone draw case; the degenerate exact-tie-at-the-limit case is now scored exactly as Base."
 features:
@@ -423,7 +423,8 @@ features:
       - "server/client.qc:1080 (SendWelcomeMessage)"
     port_refs:
       - "src/VortexArena.Server/Campaign.cs:LevelNum (Campaign_GetLevelNum = Level + 1)"
-      - "src/VortexArena.Server/GameWorld.cs:SendCampaignWelcome (live reader, ~line 1288; per-client via Commands.ChatToPlayer)"
+      - "src/VortexArena.Server/GameWorld.cs:BuildCampaignWelcomeLine, BuildJoinWelcomeDetails"
+      - "game/net/ServerNet.cs:HandleAuth (per-peer HandshakeAccept)"
       - "src/VortexArena.Server/GameWorld.cs:CampaignLevelDescription (~line 1324; reconstructs shortdesc+longdesc via CampaignCatalog)"
       - "src/VortexArena.Server/GameWorld.cs:InfraClientConnect (welcome call)"
       - "src/VortexArena.Server/GameWorld.cs:Campaign.Log wiring (~line 1096 -> Commands.ChatBroadcast, bare-host fallback)"
@@ -439,11 +440,11 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Presentation surface differs from Base: Base's CSQC net_handle_ServerWelcome (client/main.qc:1379) builds a full Welcome MENU DIALOG; the port surfaces the same text as a single per-client CHAT line via Commands.ChatToPlayer (Campaign.Log fallback on a bare host). The level number, the per-level description (shortdesc + longdesc, sourced from the all-levels catalogue keyed by absolute level index), and the +jump keybind (resolved exactly like Base getcommandkey) are ALL reproduced — the only residual divergence is dialog-vs-chat. The 'no per-level description string' gap from the 2026-06-22 baseline is CLOSED (Wave 8e, commit 412ca19): CampaignLevelDescription (GameWorld.cs) now reconstructs the description the SVQC slice drops."
+      - "Native sign-on uses the shared per-level briefing text in the server Welcome dialog. Stock instead opens its campaign-title variant independently of the ordinary MOTD gate and resolves the jump bind locally. Native campaign sign-on presentation remains unverified."
     verification:
       - { kind: code, ref: "Campaign.LevelNum (Campaign.cs:81 -> Level + 1) matches QC Campaign_GetLevelNum = campaign_level + 1; Base CSQC displays that value as 'Level %d:' (main.qc:1392), so level+1 is correct", result: pass }
       - { kind: code, ref: "GameWorld.SendCampaignWelcome (line ~1288) reads Campaign.LevelNum, builds 'Level N: <desc> — Press <jumpkey> to enter the game', and delivers per-client via Commands.ChatToPlayer (line 1310); called from InfraClientConnect gated on !p.IsBot && g_campaign", result: pass }
       - { kind: code, ref: "CampaignLevelDescription (GameWorld.cs:1324) re-parses the campaign file through CampaignCatalog (the menu-side all-levels load that keeps shortdesc/longdesc), keyed by absolute level index, and returns shortdesc[+longdesc] — reproducing the menu's _LEVEL_DESC substitution the SVQC slice drops", result: pass }
       - { kind: code, ref: "Campaign.Log = line => Commands.ChatBroadcast(line) (GameWorld.cs:1096) is the bare-host fallback sink; the live path is the per-client Commands.ChatToPlayer", result: pass }
     confidence: high
-    notes: "Logic/values/liveness faithful/live since Wave-5. Wave 8e (commit 412ca19, AFTER the 2026-06-22 baseline) closed the per-level-description gap: the welcome line now carries the real per-level briefing (shortdesc+longdesc, newlines collapsed to one line) sourced from the all-levels catalogue, and is delivered per-client rather than broadcast. presentation stays partial ONLY because the surface is a chat line, not Base's CSQC Welcome menu dialog (the listen server has no CSQC welcome channel) — a host-plumbing surface difference, not a content gap. Low-risk info-dialog feature."
+    notes: "The per-level description is sourced from the all-levels catalogue and delivered to the joining peer. Hosts without native sign-on retain the per-client chat fallback."

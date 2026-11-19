@@ -164,17 +164,23 @@ public sealed class TraceService : ITraceService
 
     /// <summary>
     /// Sweep a box against a brush or a triangle with DarkPlaces' arithmetic, operation for operation
-    /// (<see cref="TraceBrushVsBrushExact"/>), and honour <see cref="Brush.HasAabbPlanes"/>. Off by default.
+    /// (<see cref="TraceBrushVsBrushExact"/>), and honour <see cref="Brush.HasAabbPlanes"/>.
+    /// Inherits the collision world profile unless overridden.
     ///
-    /// The default sweep is the same algorithm with its sums taken in a different order: it projects the
+    /// The slab profile uses the same sweep algorithm with its sums taken in a different order: it projects the
     /// box's corners relative to the box and adds the box's position, where DarkPlaces projects the corners
     /// at their place in the world. In exact arithmetic the two are one number; in single precision, at map
     /// coordinates in the thousands, they differ in the third decimal. That is far below anything a player
     /// feels, and it is enough to put an item a QuakeC program nudges out of a wall on the other side of a
-    /// decision: whether a box 1/1000 of a unit from a triangle is touching it. Legacy mode, which must
-    /// place things where a DarkPlaces server does, turns this on; the native game has no such obligation.
+    /// decision: whether a box 1/1000 of a unit from a triangle is touching it.
     /// </summary>
-    public bool DarkPlacesArithmetic { get; set; }
+    public bool DarkPlacesArithmetic
+    {
+        get => _darkPlacesArithmeticOverride ?? _world.DarkPlacesArithmetic;
+        set => _darkPlacesArithmeticOverride = value;
+    }
+
+    private bool? _darkPlacesArithmeticOverride;
 
     /// <summary>
     /// trace_t.startsupercontents of the last <see cref="Trace"/>: the contents of every brush (and every
@@ -255,6 +261,27 @@ public sealed class TraceService : ITraceService
             GateWaitTicks += System.Diagnostics.Stopwatch.GetTimestamp() - t0;
             return TraceUnlocked(start, mins, maxs, end, filter, ignore);
         }
+    }
+
+    public bool BoxTouchesBrushModel(Entity model, Entity toucher, Vector3 mins, Vector3 maxs, bool quake3Compat)
+    {
+        object? gate = ConcurrencyGate;
+        if (gate is null)
+            return BoxTouchesBrushModelUnlocked(model, toucher, mins, maxs, quake3Compat);
+        lock (gate)
+            return BoxTouchesBrushModelUnlocked(model, toucher, mins, maxs, quake3Compat);
+    }
+
+    private bool BoxTouchesBrushModelUnlocked(Entity model, Entity toucher, Vector3 mins, Vector3 maxs, bool quake3Compat)
+    {
+        if (_entities is null || !_entities.TryGetEntityBrushModel(model, out var brushes, out EntityMatrix toWorld))
+            return true;
+
+        // QC adds SKY to the passedict's explicit mask on Q3 imports. Keep that mask local to this query.
+        int mask = quake3Compat ? toucher.DpHitContentsMask | SuperContents.Sky : GenericHitMask(toucher);
+        var trace = new SweepState { Fraction = 1f, HitMask = mask };
+        ClipToBrushModel(ref trace, BoxBrush(mins, maxs), toucher.Origin, toucher.Origin, brushes, toWorld, model);
+        return trace.StartSolid;
     }
 
     /// <summary>
@@ -455,8 +482,12 @@ public sealed class TraceService : ITraceService
             Entity touch = ents[i];
             if (touch.IsFreed) continue;
 
-            // solid < SOLID_BBOX (Not/Trigger) never block a move.
-            if (touch.Solid < Solid.BBox) continue;
+            // Only a diagnostic aim trace can hit modeled triggers. Warpzones are crossed by WarpzoneTrace,
+            // which needs the sweep to reach their portal planes instead of clipping to the touch volume.
+            bool visibleTrigger = filter == MoveFilter.NormalWithVisibleTriggers && touch.Solid == Solid.Trigger
+                && touch.Model.Length != 0 && touch.ClassName != "trigger_warpzone";
+            if (touch.Solid < Solid.BBox && !visibleTrigger) continue;
+            bool clipModel = touch.Solid == Solid.Bsp || visibleTrigger;
 
             // NOMONSTERS only clips against BSP (brush model) entities.
             if (filter == MoveFilter.NoMonsters && touch.Solid != Solid.Bsp) continue;
@@ -490,7 +521,7 @@ public sealed class TraceService : ITraceService
             // really has brush-model geometry; everything else (SOLID_BBOX/CORPSE, alias-model SOLID_BSP
             // without brushes) keeps the AABB sweep below.
             // A model of a Quake 1 format map: its clipping hulls (see IEntityProvider.TryGetEntityHullModel).
-            if (touch.Solid == Solid.Bsp &&
+            if (clipModel &&
                 _entities.TryGetEntityHullModel(touch, out Q1HullCollision? entHulls, out int hullModel, out EntityMatrix hullToWorld) && entHulls is not null)
             {
                 Vector3 hullMins = pointMins, hullMaxs = pointMaxs;
@@ -505,7 +536,7 @@ public sealed class TraceService : ITraceService
                 continue;
             }
 
-            if (touch.Solid == Solid.Bsp &&
+            if (clipModel &&
                 _entities.TryGetEntityBrushModel(touch, out IReadOnlyList<Brush> localBrushes, out EntityMatrix toWorld))
             {
                 if (DarkPlacesArithmetic)
@@ -521,7 +552,7 @@ public sealed class TraceService : ITraceService
 
             // A model that is not made of brushes, where DP would trace it (a SOLID_BSP decoration; anything
             // under MOVE_HITMODEL): its triangles. Only a provider that opts in answers true.
-            if ((touch.Solid == Solid.Bsp || filter == MoveFilter.HitModel) &&
+            if ((clipModel || filter == MoveFilter.HitModel) &&
                 _entities.TryGetEntityMeshModel(touch, filter, out CollisionMesh? mesh, out EntityMatrix meshToWorld) && mesh is not null)
             {
                 // "model->TracePoint ... else Collision_ClipTrace_Point(bodymins, bodymaxs)": see CollisionMesh.PointUsesBodyBox

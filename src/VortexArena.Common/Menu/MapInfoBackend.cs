@@ -8,16 +8,17 @@
 // (maps/<bsp> → levelshots/<bsp> → nopreview_map), and disables the gametype checklist entries the map
 // doesn't support.
 //
-// This is a faithful, Godot-free (ADR-0008) port: the parser is pure string work; the file read and the
-// image-existence probe are injected seams the menu host wires to the Godot VFS (tests pass fakes). The
-// QC autogeneration path (writing a .mapinfo by scanning the BSP for spawnpoints/weapons) is NOT ported
-// here — without a .mapinfo the map still appears in the create-game list (MapList scans maps/*.bsp), it
-// just shows the bsp name as the title and an empty gametype set, which is the honest headless behavior.
+// File access, entity-based generation and preview lookup are injected to keep this parser Godot-free.
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using VortexArena.Common.Services;
 
 namespace VortexArena.Common.Menu;
+
+[Flags]
+public enum MapFeatures { None = 0, Weapons = 1, Turrets = 2, Vehicles = 4, Monsters = 8 }
 
 /// <summary>
 /// The parsed contents of one map's <c>.mapinfo</c> — C# successor to the QC <c>MapInfo_Map_*</c> globals
@@ -41,26 +42,105 @@ public sealed class MapInfo
 
     /// <summary>The gametype NetNames this map supports (QC MapInfo_Map_supportedGametypes).</summary>
     public readonly HashSet<string> SupportedGametypes = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string>? _declaredBeforePromotion;
+    private HashSet<string> DeclaredGametypes => _declaredBeforePromotion ?? SupportedGametypes;
+
+    internal void ResetDetailSupport()
+    {
+        _declaredBeforePromotion ??= new HashSet<string>(SupportedGametypes, StringComparer.OrdinalIgnoreCase);
+        SupportedGametypes.Clear();
+        SupportedGametypes.UnionWith(_declaredBeforePromotion);
+    }
 
     /// <summary>True if a "hidden" line was present (QC MAPINFO_FLAG_HIDDEN).</summary>
     public bool Hidden;
+    public bool Forbidden;
+    public bool Frustrating;
+    public bool DoNotWant;
+    public float MinimumGameVersion;
 
-    /// <summary>True if a usable .mapinfo (or .arena/.defi — not ported) was found; false when the parser fell back to bare defaults.</summary>
+    public bool CanList(ICvarService cvars, bool inMenu, bool applyRequiredFlags = true)
+    {
+        float frustrating = cvars.GetFloat("g_maplist_allow_frustrating");
+        return ((!Generated && !HasArenaMetadata) || DeclaredGametypes.Count > 0)
+            && !Forbidden && (!Hidden || (!inMenu && cvars.GetFloat("g_maplist_allow_hidden") != 0))
+            && (!Frustrating || frustrating != 0) && (!applyRequiredFlags || frustrating <= 1 || Frustrating);
+    }
+
+    public bool AvoidInRotation(ICvarService cvars) =>
+        DoNotWant || MinimumGameVersion > cvars.GetFloat("gameversion");
+
+    /// <summary>True if metadata came from an authored or previously generated sidecar.</summary>
     public bool HasMapInfoFile;
+    public bool HasArenaMetadata;
+    public bool Generated { get; internal set; }
+    public readonly Dictionary<string, MapMatchDefaults> MatchDefaults = new(StringComparer.OrdinalIgnoreCase);
+    public readonly Dictionary<string, int> ModeDeclarationLines = new(StringComparer.OrdinalIgnoreCase);
+    public readonly List<MapTempDirective> ServerTempDirectives = new();
+    public readonly List<MapTempDirective> ClientTempDirectives = new();
+    public string? Fog;
+    public MapFeatures Features;
+    public string CdTrack = "";
 
     /// <summary>
     /// QC <c>vlen(MapInfo_Map_maxs - MapInfo_Map_mins)</c> (mapinfo.qc:414): the 3-D bounding diameter of
     /// the map in game units, derived from the <c>size x1 y1 z1 x2 y2 z2</c> line when present.
-    /// <c>null</c> when no <c>size</c> line was found (i.e. the bounds are unknown at parse time).
-    ///
-    /// Used by <see cref="MapInfoBackend.ApplyForcedGametypes"/> to apply the
-    /// <c>Duel.m_isAlwaysSupported(diameter &lt; 3250)</c> guard: if the diameter is known AND ≥ 3250,
-    /// forced-duel is suppressed even for DM maps (matching the intent of duel.qh:19's TODO comment).
+    /// Generated metadata instead uses the extent of the non-worldspawn entity origins.
     /// </summary>
     public float? Diameter;
 
     /// <summary>Does this map support <paramref name="gametypeNetName"/>? (QC MapInfo_Map_supportedGametypes &amp; flags.)</summary>
     public bool Supports(string gametypeNetName) => SupportedGametypes.Contains(gametypeNetName);
+
+    /// <summary>MapInfo_CurrentFeatures requires weapon entities only for the stock melee-only combination.</summary>
+    public static MapFeatures RequiredFeatures(string? mode, ICvarService cvars)
+    {
+        if (cvars.GetFloat("g_melee_only") == 0 || cvars.GetFloat("g_pickup_items") == 0 ||
+            mode is "rc" or "cts" or "nb" or "ca" or "freezetag" or "lms" ||
+            cvars.GetFloat("g_instagib") != 0 || cvars.GetFloat("g_overkill") != 0 ||
+            cvars.GetFloat("g_nix") != 0 || cvars.GetFloat("g_weaponarena") != 0)
+            return MapFeatures.None;
+        return MapFeatures.Weapons;
+    }
+
+    /// <summary>Check the catalog against current settings, preserving open eligibility for missing metadata.</summary>
+    public bool SupportsInCatalog(string gametypeNetName, MapForcedSupport settings) =>
+        (!Generated && !HasArenaMetadata && DeclaredGametypes.Count == 0) || SupportsInDetails(gametypeNetName, settings);
+
+    public bool SupportsInDetails(string gametypeNetName, MapForcedSupport settings) =>
+        DeclaredGametypes.Contains(gametypeNetName)
+        || AllowsForcedGametype(gametypeNetName, settings);
+
+    internal bool AllowsForcedGametype(string gametypeNetName, MapForcedSupport settings)
+    {
+        HashSet<string> declared = DeclaredGametypes;
+        return gametypeNetName.ToLowerInvariant() switch
+        {
+            "duel" => settings.DuelOnDmMaps && declared.Contains("dm"),
+            "tdm" => settings.TdmOnDmMaps && declared.Contains("dm"),
+            "mayhem" or "tmayhem" => declared.Contains("dm") || declared.Contains("tdm"),
+            // Upstream evaluates Team Deathmatch before Team Keepaway.
+            "tka" => (settings.TkaOnKaMaps && declared.Contains("ka"))
+                || (settings.TkaOnTdmMaps && (declared.Contains("tdm") || (settings.TdmOnDmMaps && declared.Contains("dm")))),
+            "surv" => settings.SurvivalOnLmsMaps && declared.Contains("lms"),
+            _ => false,
+        };
+    }
+}
+
+/// <summary>The cvar-controlled rules for offering additional modes on declared maps.</summary>
+public readonly record struct MapForcedSupport(
+    bool DuelOnDmMaps, bool TdmOnDmMaps, bool TkaOnKaMaps, bool TkaOnTdmMaps, bool SurvivalOnLmsMaps)
+{
+    public static MapForcedSupport Default { get; } = new(
+        DuelOnDmMaps: true, TdmOnDmMaps: false, TkaOnKaMaps: true, TkaOnTdmMaps: false, SurvivalOnLmsMaps: true);
+
+    public static MapForcedSupport FromCvars(ICvarService cvars) => new(
+        DuelOnDmMaps: cvars.GetFloat("g_duel_not_dm_maps") == 0f,
+        TdmOnDmMaps: cvars.GetFloat("g_tdm_on_dm_maps") != 0f,
+        TkaOnKaMaps: !cvars.Has("g_tka_on_ka_maps") || cvars.GetFloat("g_tka_on_ka_maps") != 0f,
+        TkaOnTdmMaps: cvars.GetFloat("g_tka_on_tdm_maps") != 0f,
+        SurvivalOnLmsMaps: cvars.GetFloat("g_survival_not_lms_maps") == 0f);
 }
 
 /// <summary>
@@ -71,52 +151,63 @@ public sealed class MapInfo
 /// </summary>
 public sealed class MapInfoBackend
 {
+    // Stock gametype_init short names and selection cvars, shared with the legacy host.
+    public static readonly IReadOnlyList<(string ShortName, string Cvar)> StockGametypeCvars = new (string, string)[]
+    {
+        ("dm", "g_dm"), ("tdm", "g_tdm"), ("ctf", "g_ctf"), ("ca", "g_ca"), ("ft", "g_freezetag"), ("kh", "g_keyhunt"),
+        ("dom", "g_domination"), ("lms", "g_lms"), ("ka", "g_keepaway"), ("tka", "g_tka"), ("cts", "g_cts"), ("rc", "g_race"),
+        ("as", "g_assault"), ("ons", "g_onslaught"), ("nb", "g_nexball"), ("inv", "g_invasion"), ("mayhem", "g_mayhem"),
+        ("tmayhem", "g_tmayhem"), ("duel", "g_duel"), ("surv", "g_survival"),
+    };
+
+    // The stock registry sorts its registered IDs before MapInfo_CurrentGametype examines flags.
+    // For these stock modes their flag names have that same order.
+    private static readonly (string ShortName, string Cvar)[] SelectionOrder =
+        StockGametypeCvars.OrderBy(mode => mode.Cvar, StringComparer.Ordinal).ToArray();
+
+    public static string ConfiguredGametype(ICvarService cvars)
+    {
+        string? previous = ResolveGametype(cvars.GetString("gamecfg"));
+        bool known = false;
+        foreach (var (shortName, flag) in SelectionOrder)
+        {
+            string mode = shortName == "ft" ? "freezetag" : shortName;
+            if (mode == previous) known = true;
+            else if (cvars.GetFloat(flag) != 0) return mode;
+        }
+        return known ? previous! : "dm";
+    }
     private const string Untitled = "<TITLE>";
     private const string Unauthored = "<AUTHOR>";
     private const string Undescribed = "<DESCRIPTION>";
 
     private readonly Func<string, string?> _readText;  // vpath → text, or null when absent
     private readonly Func<string, bool> _imageExists;  // vpath → does the preview image exist
+    private readonly Func<MapInfo, bool>? _generate;
+    private readonly Func<MapInfo, bool>? _readArena;
     private readonly Dictionary<string, MapInfo> _cache = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// QC <c>Duel.m_isForcedSupported</c> (duel.qh:15-28): when true, any map that supports DM but does
-    /// not explicitly list duel is auto-promoted to also support duel. Mirrors <c>!autocvar_g_duel_not_dm_maps</c>
-    /// (default 0 → forced support IS active). The menu host wires this from the cvar so the user can opt
-    /// out by setting <c>g_duel_not_dm_maps 1</c>. Default: true (Base default).
-    /// </summary>
-    public bool ForceDuelOnDmMaps { get; set; } = true;
+    // Keep Duel and TDM first so the existing detail dialog fallback order stays intact.
+    private static readonly string[] ForcedGametypes = { "duel", "tdm", "mayhem", "surv", "tka", "tmayhem" };
 
-    /// <summary>
-    /// QC <c>TeamDeathmatch.m_isForcedSupported</c> (tdm.qh): when <c>autocvar_g_tdm_on_dm_maps</c> is set,
-    /// any map that supports DM but does not explicitly list TDM is auto-promoted to also support TDM.
-    /// NOTE the OPPOSITE polarity to Duel: <c>g_tdm_on_dm_maps</c> defaults to <b>0</b> ("make all DM maps
-    /// automatically support TDM" only when set), so forced TDM support is OFF by default — whereas
-    /// <c>g_duel_not_dm_maps</c> defaults to 0 meaning Duel forced support is ON. The menu host wires this
-    /// from the cvar. Default: false (Base default g_tdm_on_dm_maps 0).
-    /// </summary>
-    public bool ForceTdmOnDmMaps { get; set; } = false;
+    public MapForcedSupport ForcedSupport { get; init; } = MapForcedSupport.Default;
 
     /// <param name="readText">Reads a map's .mapinfo text (e.g. "maps/foo.mapinfo"), or null if it isn't present.</param>
     /// <param name="imageExists">Probes whether a preview image vpath exists (the QC draw_PictureExists chain).</param>
-    public MapInfoBackend(Func<string, string?> readText, Func<string, bool> imageExists)
+    /// <param name="generate">Populates raw metadata for a native map after both sidecar lookups miss.</param>
+    public MapInfoBackend(Func<string, string?> readText, Func<string, bool> imageExists,
+        Func<MapInfo, bool>? generate = null, Func<MapInfo, bool>? readArena = null)
     {
         _readText = readText ?? throw new ArgumentNullException(nameof(readText));
         _imageExists = imageExists ?? (_ => false);
+        _generate = generate;
+        _readArena = readArena;
     }
 
     /// <summary>
     /// Get (and cache) the parsed info for map <paramref name="bspName"/> — QC <c>MapInfo_Get_ByName</c>
     /// with the cache-retrieve shortcut (mapinfo.qc:1050-1052). The bsp name is the file stem
     /// (e.g. "stormkeep"); a "/" in it is rejected like the QC (mapinfo.qc:1044-1048).
-    ///
-    /// After parsing, applies <c>Duel.m_isForcedSupported</c>: if DM is supported and duel is not, and
-    /// <see cref="ForceDuelOnDmMaps"/> is true (the default, matching <c>g_duel_not_dm_maps=0</c>), duel
-    /// is added to the supported set. The same pass applies <c>TeamDeathmatch.m_isForcedSupported</c>
-    /// (tdm.qh): if DM is supported and TDM is not, and <see cref="ForceTdmOnDmMaps"/> is true (i.e.
-    /// <c>g_tdm_on_dm_maps</c> is set — default OFF), TDM is added too. This matches QC's
-    /// <c>MapInfo_Get_ByName</c> (mapinfo.qc:1386):
-    /// <c>FOREACH(Gametypes, it.m_isForcedSupported(it), _MapInfo_Map_ApplyGametypeEx(...))</c>.
     /// </summary>
     public MapInfo Get(string bspName)
     {
@@ -124,60 +215,42 @@ public sealed class MapInfoBackend
             return cached;
 
         MapInfo info = Parse(bspName);
-        // QC m_isForcedSupported (mapinfo.qc:1386 FOREACH(Gametypes, it.m_isForcedSupported(it), ...)):
-        // add duel to any DM map unless g_duel_not_dm_maps, and add tdm to any DM map when g_tdm_on_dm_maps.
-        ApplyForcedGametypes(info, forceDuelOnDmMaps: ForceDuelOnDmMaps, forceTdmOnDmMaps: ForceTdmOnDmMaps);
+        ApplyForcedGametypes(info, ForcedSupport);
         _cache[bspName] = info;
         return info;
     }
 
-    /// <summary>
-    /// Apply the <c>m_isForcedSupported</c> set-promotions to an already-parsed <see cref="MapInfo"/>:
-    /// <list type="bullet">
-    /// <item><c>Duel.m_isForcedSupported</c> (duel.qh:15-28): if the map supports DM but not duel, and
-    /// <paramref name="forceDuelOnDmMaps"/> is true (i.e. <c>g_duel_not_dm_maps == 0</c>), add <c>"duel"</c>.</item>
-    /// <item><c>TeamDeathmatch.m_isForcedSupported</c> (tdm.qh): if the map supports DM but not tdm, and
-    /// <paramref name="forceTdmOnDmMaps"/> is true (i.e. <c>g_tdm_on_dm_maps</c> is set — default OFF),
-    /// add <c>"tdm"</c>.</item>
-    /// </list>
-    /// Can also be called by callers that manage their own mapinfo cache (e.g. <c>MapInfoCache</c>).
-    /// </summary>
-    public static void ApplyForcedGametypes(MapInfo info, bool forceDuelOnDmMaps, bool forceTdmOnDmMaps = false)
+    /// <summary>Add forced modes to the details for an already-parsed map.</summary>
+    public static void ApplyForcedGametypes(MapInfo info, MapForcedSupport settings)
     {
-        if (forceDuelOnDmMaps
-            && info.SupportedGametypes.Contains("dm")
-            && !info.SupportedGametypes.Contains("duel")
-            // QC Duel.m_isAlwaysSupported (duel.qh:12-14): duel auto-supports only maps with diameter < 3250.
-            // Applied here to the forced-support path too (matching duel.qh:19's TODO: size check should guard
-            // m_isForcedSupported as well). When Diameter is null (no size line in .mapinfo), we conservatively
-            // allow forced-duel — the map might be small enough, and we can't prove otherwise from the .mapinfo.
-            && !(info.Diameter.HasValue && info.Diameter.Value >= 3250f))
-        {
-            info.SupportedGametypes.Add("duel");
-        }
-        // QC TeamDeathmatch.m_isForcedSupported (tdm.qh): g_tdm_on_dm_maps makes DM maps also support TDM.
-        if (forceTdmOnDmMaps
-            && info.SupportedGametypes.Contains("dm")
-            && !info.SupportedGametypes.Contains("tdm"))
-        {
-            info.SupportedGametypes.Add("tdm");
-        }
+        info.ResetDetailSupport();
+        foreach (string mode in ForcedGametypes)
+            if (info.AllowsForcedGametype(mode, settings))
+                info.SupportedGametypes.Add(mode);
     }
 
     /// <summary>Drop the cache (QC MapInfo_Cache invalidation on a content reload).</summary>
     public void ClearCache() => _cache.Clear();
 
-    private MapInfo Parse(string bspName)
+    /// <summary>Read the declared metadata without applying the current gametype policy.</summary>
+    public MapInfo Parse(string bspName)
     {
         var info = new MapInfo { BspName = bspName };
 
-        if (bspName.IndexOf('/') >= 0) // mapinfo.qc:1044-1048 — invalid char in map name
+        if (bspName.Length == 0 || bspName.IndexOfAny(new[] { '/', '\\' }) >= 0)
             return Finish(info, rawTitle: Untitled, rawAuthor: Unauthored, rawDescription: Undescribed);
 
         string? text = _readText("maps/" + bspName + ".mapinfo");
+        if (text is null && _readArena?.Invoke(info) == true)
+            return FinishGenerated(info);
+        text ??= _readText("maps/autogenerated/" + bspName + ".mapinfo");
         if (text == null)
         {
-            // No .mapinfo and no .arena/.defi (not ported) and no autogeneration here: bare defaults.
+            if (_generate?.Invoke(info) == true)
+            {
+                info.Generated = true;
+                return FinishGenerated(info);
+            }
             return Finish(info, rawTitle: Untitled, rawAuthor: Unauthored, rawDescription: Undescribed);
         }
 
@@ -188,8 +261,10 @@ public sealed class MapInfoBackend
         string rawAuthor = Unauthored;
         string rawDescription = Undescribed;
 
+        int lineNumber = 0;
         foreach (string line in SplitLines(text))
         {
+            lineNumber++;
             string s = line;
 
             // mapinfo.qc:1164-1175 — comment styles + trailing "//".
@@ -205,7 +280,7 @@ public sealed class MapInfoBackend
             if (t.Length == 0)
                 continue;
 
-            switch (t)
+            switch (t.ToLowerInvariant())
             {
                 case "title":
                     rawTitle = rest;
@@ -216,8 +291,36 @@ public sealed class MapInfoBackend
                 case "author":
                     rawAuthor = rest;
                     break;
+                case "cdtrack":
+                    info.CdTrack = rest.Trim();
+                    break;
+                case "has":
+                    info.Features |= Car(rest, out _).ToLowerInvariant() switch
+                    {
+                        "weapons" or "new_toys" => MapFeatures.Weapons,
+                        "turrets" => MapFeatures.Turrets,
+                        "vehicles" => MapFeatures.Vehicles,
+                        "monsters" => MapFeatures.Monsters,
+                        _ => MapFeatures.None,
+                    };
+                    break;
                 case "hidden":
                     info.Hidden = true;
+                    break;
+                case "forbidden":
+                    info.Forbidden = true;
+                    break;
+                case "frustrating":
+                    info.Frustrating = true;
+                    break;
+                case "donotwant":
+                case "noautomaplist":
+                    info.DoNotWant = true;
+                    break;
+                case "gameversion_min":
+                    if (float.TryParse(Car(rest, out _), System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float version))
+                        info.MinimumGameVersion = System.Math.Max(info.MinimumGameVersion, version);
                     break;
                 case "type":   // legacy keyword (mapinfo.qc:1216-1226)
                 case "gametype":
@@ -225,14 +328,58 @@ public sealed class MapInfoBackend
                     string gt = Car(rest, out _);
                     string? netName = ResolveGametype(gt);
                     if (netName != null)
+                    {
                         info.SupportedGametypes.Add(netName);
+                        info.ModeDeclarationLines[netName] = lineNumber;
+                        if (t.Equals("gametype", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Car(rest, out string options);
+                            info.MatchDefaults[netName] = MapMatchDefaults.Parse(options);
+                        }
+                        else if (netName.Equals("kh", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Car(rest, out string limits);
+                            string points = Car(limits, out string afterPoints);
+                            string time = Car(afterPoints, out string afterTime);
+                            string teams = Car(afterTime, out string afterTeams);
+                            string lead = Car(afterTeams, out _);
+                            info.MatchDefaults[netName] = MapMatchDefaults.Parse(
+                                $"pointlimit={points} timelimit={time} teams={teams} leadlimit={lead}");
+                        }
+                        else if (netName.Equals("tdm", StringComparison.OrdinalIgnoreCase)
+                            || netName.Equals("tmayhem", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Car(rest, out string limits);
+                            Car(limits, out string afterScore);
+                            Car(afterScore, out string afterTime);
+                            string teams = Car(afterTime, out _);
+                            info.MatchDefaults[netName] = MapMatchDefaults.Parse($"teams={teams}");
+                        }
+                    }
+                    break;
+                }
+                case "fog":
+                    if (MapFogSettings.TryParse(rest, out _))
+                        info.Fog = rest;
+                    break;
+                case "settemp_for_type":
+                case "clientsettemp_for_type":
+                {
+                    string selector = Car(rest, out string body);
+                    string? mode = selector == "all" ? selector : ResolveGametype(selector);
+                    if (mode is not null && body.Length > 0)
+                    {
+                        var directives = t.Equals("clientsettemp_for_type", StringComparison.OrdinalIgnoreCase)
+                            ? info.ClientTempDirectives : info.ServerTempDirectives;
+                        directives.Add(new MapTempDirective(mode, lineNumber, body));
+                    }
                     break;
                 }
                 case "size":
                 {
                     // QC mapinfo.qc:1236-1271: "size x1 y1 z1 x2 y2 z2" — the lightgrid / world bounding box.
                     // Parse into MapInfo_Map_mins/maxs and compute vlen(maxs-mins) for the diameter gate
-                    // (QC _MapInfo_Generate:414; used here for Duel.m_isAlwaysSupported diameter<3250).
+                    // QC _MapInfo_Generate also measures diameter for generation-time mode inference.
                     // The QC rejects lines where mins >= maxs on any axis; we mirror that guard.
                     string[] tok = rest.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                     if (tok.Length >= 6
@@ -249,8 +396,7 @@ public sealed class MapInfoBackend
                     }
                     break;
                 }
-                // has / fog / cdtrack / settemp_for_type / flags: parsed-and-ignored here (the menu
-                // map-info dialog only displays title/author/description/preview + the gametype checklist).
+                // Fog and settemp directives are applied by map boot in QC.
                 default:
                     break;
             }
@@ -258,6 +404,10 @@ public sealed class MapInfoBackend
 
         return Finish(info, rawTitle, rawAuthor, rawDescription);
     }
+
+    private static MapInfo FinishGenerated(MapInfo info) =>
+        Finish(info, info.Title.Length > 0 ? info.Title : Untitled,
+            info.Author.Length > 0 ? info.Author : Unauthored, info.Description);
 
     // Apply the QC display normalization (mapinfo.qc:1360-1373): decolorize, strip author from title.
     private static MapInfo Finish(MapInfo info, string rawTitle, string rawAuthor, string rawDescription)
@@ -296,7 +446,7 @@ public sealed class MapInfoBackend
     /// <c>MapInfo_Type_FromString</c> (mapinfo.qc:620-648): the deprecated-name remaps, then the gametype's
     /// short name (QC <c>mdl</c>). One port-specific fixup: QC's <c>ft</c> maps to the port's
     /// <c>freezetag</c> NetName (the lone NetName↔short-name mismatch, mirrored from CreateGameScreen).
-    /// Returns null for an unknown token (QC returns NULL and the line is ignored). Q3-only forms (arena→ca)
+    /// Preserves custom mode names. Q3-only forms (arena→ca)
     /// are accepted unconditionally here since the create-game list shows all supported modes.
     /// </summary>
     public static string? ResolveGametype(string token)
@@ -305,7 +455,7 @@ public sealed class MapInfoBackend
             return null;
 
         // mapinfo.qc:624-639 — deprecated / compat name remaps to the canonical short name.
-        string gt = token switch
+        string gt = token.ToLowerInvariant() switch
         {
             "nexball" => "nb",
             "freezetag" => "ft",
@@ -322,7 +472,7 @@ public sealed class MapInfoBackend
         };
 
         // Port fixup: QC short name "ft" ↔ port NetName "freezetag" (CreateGameScreen.GametypeIconName).
-        if (gt == "ft")
+        if (gt.Equals("ft", StringComparison.OrdinalIgnoreCase))
             return "freezetag";
 
         return gt;

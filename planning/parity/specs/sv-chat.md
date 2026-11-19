@@ -138,7 +138,7 @@ to the net layer on both the stock and threaded paths (the historical T46 "deliv
   observable effect on stock gameplay.
 - **Ignore keyed by PersistentId, no ServerProgsDB.** The permanent (return-2, db-persisted-across-sessions) ignore tier
   is dropped; PersistentId already survives a reconnect within the match.
-- **`MX_Say` (matrix bridge) omitted.** No external matrix/IRC bridge in the port.
+- **Matrix public chat.** A configured native dedicated server relays accepted public player chat to its selected room. Incoming Matrix text uses the server chat path. [Console controls and two-way loopback check](../matrix/VERIFICATION.md)
 - **Delivery abstracted behind sinks** for headless testability (the `Delivered`/`DeliveredCenter` capture lists).
 
 ## Verification

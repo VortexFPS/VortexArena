@@ -57,6 +57,9 @@ features:
     liveness: live
   intended_divergence: false           # true ONLY for deliberate port-specific changes
   divergence_rationale: null           # required string when intended_divergence: true
+  # Optional on a mixed row with intended_divergence: true. List the dimensions with
+  # a separate unresolved behavioral difference. Only those contribute to the backlog score.
+  # open_dimensions: [timing, presentation]
   gaps:                                 # concrete, specific defects. [] when fully faithful.
     - "Flag entity is static at base: no waving frame animation, no yaw rotation."
   verification:                         # how the status was established. [] if unverified.

@@ -1,0 +1,62 @@
+{
+  "observer-before.webp": {
+    "seconds": 15.592,
+    "frame": "impact-RedProbe/0098.webp",
+    "sample": 15.558,
+    "sha256": "992a2adbb5522f5c9d3e22520aa48ddee84a517e974da0ed5782e622064a133b"
+  },
+  "observer-receipt.webp": {
+    "seconds": 15.79,
+    "frame": "impact-RedProbe/0103.webp",
+    "sample": 15.759,
+    "sha256": "992a2adbb5522f5c9d3e22520aa48ddee84a517e974da0ed5782e622064a133b"
+  },
+  "observer-fade.webp": {
+    "seconds": 16.878,
+    "frame": "impact-RedProbe/0130.webp",
+    "sample": 16.841,
+    "sha256": "0c8c5da38906e9889f4e39854569c4eea239d77902b8f7209a81aaaefc1e257c"
+  },
+  "observer-cleared.webp": {
+    "seconds": 17.261,
+    "frame": "impact-RedProbe/0139.webp",
+    "sample": 17.226,
+    "sha256": "7b79e5fac16e9af10e331abb23dc0549346c3b6b8d4e3c62f9440c3e783e1fae"
+  },
+  "shooter-before.webp": {
+    "seconds": 15.488,
+    "frame": "impact-BlueProbe/0095.webp",
+    "sample": 15.456,
+    "sha256": "87449894636d943d023b6679af5cdd8296a0edec4b094a4250c77577aaae7821"
+  },
+  "shooter-grow.webp": {
+    "seconds": 16.531,
+    "frame": "impact-BlueProbe/0121.webp",
+    "sample": 16.499,
+    "sha256": "28ab75b845d011bf57f89c56e4f3d6c00f2ae8bf94a3c4a81be7b164f051699a"
+  },
+  "shooter-fade.webp": {
+    "seconds": 16.692,
+    "frame": "impact-BlueProbe/0125.webp",
+    "sample": 16.66,
+    "sha256": "e92270ab4d7bfd44d3b68d4adde47af6d062b8609f350b876b11d18bc4d9ffc0"
+  },
+  "shooter-cleared.webp": {
+    "seconds": 16.972,
+    "frame": "impact-BlueProbe/0132.webp",
+    "sample": 16.94,
+    "sha256": "f746cd8d9ef8914166cccbf7de0cc8a7f54808d1b712aa4ebf323d92d1f81186"
+  },
+  "observer-timeout.webp": {
+    "seconds": 25.607,
+    "frame": "timeout-RedProbe/0120.webp",
+    "sample": 25.575,
+    "sha256": "a696306fd2c9b4db8584f54d606db1911b32756c7373c5afb4914eef167f493e"
+  },
+  "observer-self-damage.webp": {
+    "seconds": 37.717,
+    "frame": "self-damage-RedProbe/0112.webp",
+    "sample": 37.684,
+    "sha256": "7ba513db6c890bda8f6c9a9624b5484dcdca31cd5f1efb1af799f645663fae7b"
+  }
+}

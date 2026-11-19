@@ -9,7 +9,6 @@ last_audited: "2026-07-02"
 summary:
   feature_count: 18
   worst_gaps:
-    - "Strafe sonar (audible strafe-quality feedback: interval/volume/pitch ramps + sound7 call, extra.qc StrafeHUD_Sonar) is entirely missing — no port code, none of the 13 hud_panel_strafehud_sonar_* cvars registered."
     - "Live feed is Player-only (NetGame.cs:4382): WishDir/JumpHeld/OnSlick/FovX/RaceCheckpointTime/SpeedUnit are never fed, so the live panel permanently runs the QC non-local fallback (wishangle fixed 45°, movespeed=maxspeed, no jump-held anti-flicker, no slick, start-speed text never latches); on a pure network client LocalServerPlayer is null and the panel never draws at all."
     - "Ground friction-replica constant wrong: port dtR = 1/60 vs Base PHYS_FRICTION_REPLICA_DT = 0.00390625 (1/256) — on-ground strafespeed/frictionspeed and thus ground zone angles are computed with the wrong geometric base."
     - "PHYS_* mappings: PhysSlickAccelerate reads sv_airaccelerate (stock 2) instead of sv_slickaccelerate (stock 15); PhysAirStopAccelerateFull reads sv_aircontrol==0 instead of sv_airstopaccelerate_full; raw global cvars mean per-player stat modifiers (haste, crouch 0.5 maxspeed_mod) never reach the HUD."
@@ -522,25 +521,28 @@ features:
       - "client/hud/panel/strafehud/extra.qc:StrafeHUD_Sonar (216)"
       - "client/hud/panel/strafehud/extra.qc:StrafeHUD_UpdateSonarSound (246)"
       - "client/hud/panel/strafehud.qh:autocvar_hud_panel_strafehud_sonar* (102-113)"
-    port_refs: []
+    port_refs:
+      - "game/hud/StrafeHudPanel.cs:RegisterDefaults, DrawPanel, UpdateSonar, UpdateSonarSample, PlaySonar"
+      - "game/net/NetGame.cs:SonarAssets and SonarSimulationTime setup"
+      - "game/audio/DpNative.cs:Local"
     constants:
-      - { name: "sonar defaults", base: "off; audio 'misc/talk'; start 0.5; interval 0.333333/-0.222222/1; volume 0.333333/0.666666/1; pitch 0.9/0.1/1", port: "none (cvars not registered)", match: false }
-      - { name: "sound call", base: "sound7(csqcplayer, CH_INFO, snd, vol*VOL_BASE, ATTN_NONE, pitch*100, 0)", port: "none", match: false }
+      - { name: "sonar defaults", base: "off; audio 'misc/talk'; start 0.5; interval 0.333333/-0.222222/1; volume 0.333333/0.666666/1; pitch 0.9/0.1/1", port: "same across all 12 archived cvars", match: true }
+      - { name: "cue parameters", base: "CH_INFO (0), ATTEN_NONE, volume bounded to [0,1] times 0.7, pitch clamped to at least 0.000001 percent", port: "same with pitch expressed as a playback multiplier", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
+      logic: faithful
+      values: faithful
+      timing: faithful
       presentation: na
-      audio: missing
-      liveness: na
+      audio: faithful
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Entire feature absent: no sonar code, none of the 13 hud_panel_strafehud_sonar_* cvars registered, no sound path/precache handling. Default-off in Base, but racers who enable it get nothing."
+    gaps: []
     verification:
-      - { kind: code, ref: "grep -i sonar over src/ game/ tests/: zero hits in StrafeHudPanel.cs or anywhere", result: fail }
+      - { kind: code, ref: "Pinned QC extra.qc:216-272, strafehud.qh:102-113 and common/sounds/sound.qh:94-120. The native HUD passes its signed strafe ratio after draw and resolves, precaches and plays the mounted sample through the native audio services.", result: pass }
+      - { kind: test, ref: "tests/fixtures/strafe-sonar/run.sh. Godot 4.6.3 fixed-step HUD draw started CH_INFO and produced centered PCM. Probe checked the default and panel disable gates, signed threshold, cooldown including silent cues, ramp exponents, pitch and volume, WAV precedence, OGG fallback and SFX backend.", result: pass }
     confidence: high
-    notes: null
+    notes: "Godot HUD draws at a held simulation time stayed silent after the first beep. Advancing the clock past the configured interval resumed it. Sonar inherits the existing HUD's movement-input and observer limitations from the relevant rows above."
 
   - id: cl-strafehud.coverage.infra
     name: "Infra/coverage: _mod include shims, skin-export stub, demo sweep for the HUD editor"

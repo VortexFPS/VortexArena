@@ -1,0 +1,49 @@
+{"seconds": 0.0, "event": "both graphical clients connected", "port": 30378}
+{"seconds": 2.0, "client": "BlueProbe", "command": "cmd join"}
+{"seconds": 7.937, "client": "BlueProbe", "command": "bind F8 +fire"}
+{"seconds": 9.29, "server": "status"}
+{"seconds": 9.29, "server": "g_weaponarena"}
+{"seconds": 9.29, "server": "g_balance_fireball_primary_bfgradius"}
+{"seconds": 9.29, "server": "g_balance_fireball_primary_animtime"}
+{"seconds": 9.29, "server": "g_balance_fireball_primary_radius"}
+{"seconds": 9.291, "server": "g_balance_fireball_primary_refire"}
+{"seconds": 9.291, "server": "g_balance_fireball_primary_laserradius"}
+{"seconds": 9.291, "server": "g_balance_fireball_primary_force"}
+{"seconds": 9.291, "server": "slowmo"}
+{"seconds": 9.291, "server": "echo FIREBALL_TRIAL impact"}
+{"seconds": 9.291, "server": "g_balance_fireball_primary_lifetime 15"}
+{"seconds": 9.291, "server": "g_balance_fireball_primary_radius 32"}
+{"seconds": 9.291, "server": "g_balance_fireball_primary_speed 1200"}
+{"seconds": 9.291, "server": "g_balance_fireball_primary_lifetime"}
+{"seconds": 9.291, "server": "g_balance_fireball_primary_radius"}
+{"seconds": 9.291, "server": "g_balance_fireball_primary_speed"}
+{"seconds": 9.291, "client": "BlueProbe", "command": "cmd teleporttotarget probe_fire"}
+{"seconds": 11.126, "trial": "impact", "phase": "capture start"}
+{"seconds": 11.578, "client": "BlueProbe", "event": "attack down", "key": "F8"}
+{"seconds": 12.415, "client": "BlueProbe", "event": "attack up", "key": "F8"}
+{"seconds": 18.951, "trial": "impact", "phase": "capture end", "stock_draw_calls": null}
+{"seconds": 18.951, "server": "echo FIREBALL_TRIAL timeout"}
+{"seconds": 18.951, "server": "g_balance_fireball_primary_lifetime 0.001"}
+{"seconds": 18.951, "server": "g_balance_fireball_primary_radius 32"}
+{"seconds": 18.951, "server": "g_balance_fireball_primary_speed 1"}
+{"seconds": 18.951, "server": "g_balance_fireball_primary_lifetime"}
+{"seconds": 18.951, "server": "g_balance_fireball_primary_radius"}
+{"seconds": 18.951, "server": "g_balance_fireball_primary_speed"}
+{"seconds": 18.951, "client": "BlueProbe", "command": "cmd teleporttotarget probe_timeout"}
+{"seconds": 20.737, "trial": "timeout", "phase": "capture start"}
+{"seconds": 21.188, "client": "BlueProbe", "event": "attack down", "key": "F8"}
+{"seconds": 22.038, "client": "BlueProbe", "event": "attack up", "key": "F8"}
+{"seconds": 28.544, "trial": "timeout", "phase": "capture end", "stock_draw_calls": null}
+{"seconds": 28.544, "server": "echo FIREBALL_TRIAL self-damage"}
+{"seconds": 28.544, "server": "g_balance_fireball_primary_lifetime 15"}
+{"seconds": 28.544, "server": "g_balance_fireball_primary_radius 250"}
+{"seconds": 28.544, "server": "g_balance_fireball_primary_speed 1200"}
+{"seconds": 28.544, "server": "g_balance_fireball_primary_lifetime"}
+{"seconds": 28.544, "server": "g_balance_fireball_primary_radius"}
+{"seconds": 28.544, "server": "g_balance_fireball_primary_speed"}
+{"seconds": 28.544, "client": "BlueProbe", "command": "cmd teleporttotarget probe_fire"}
+{"seconds": 30.345, "trial": "self-damage", "phase": "capture start"}
+{"seconds": 30.801, "client": "BlueProbe", "event": "attack down", "key": "F8"}
+{"seconds": 31.652, "client": "BlueProbe", "event": "attack up", "key": "F8"}
+{"seconds": 38.219, "trial": "self-damage", "phase": "capture end", "stock_draw_calls": null}
+{"seconds": 38.219, "server": "status"}

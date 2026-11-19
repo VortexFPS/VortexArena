@@ -66,11 +66,11 @@ public sealed partial class AttachedCosmeticModel : Node3D
         if (string.IsNullOrEmpty(modelPath))
             return null;
 
-        var node = new AttachedCosmeticModel { Name = string.IsNullOrEmpty(name) ? "Cosmetic" : name };
         Node3D? model = BuildChild(assets, modelPath, skin, rawFrame, name, md3Loader, modelLoader, out ModelAnimator? animator);
         if (model is null)
             return null;
 
+        var node = new AttachedCosmeticModel { Name = string.IsNullOrEmpty(name) ? "Cosmetic" : name };
         node._model = model;
         node._animator = animator;
         model.Name = "Model";
@@ -136,6 +136,11 @@ public sealed partial class AttachedCosmeticModel : Node3D
         if (assets is null)
             return null;
 
+        // The relic skin selects the sign and ring shaders. Use the asset builder's autosprite path.
+        if (rawFrame < 0 && CosmeticModelLayer.IsBuffRelic(modelPath)
+            && modelLoader?.Invoke(modelPath, skin) is { } relic)
+            return relic;
+
         if (modelPath.EndsWith(".md3", StringComparison.OrdinalIgnoreCase))
         {
             // Parse the raw MD3 through the host-wired loader (AssetLoader.LoadMd3, cached). Without a loader
@@ -190,6 +195,14 @@ public sealed partial class AttachedCosmeticModel : Node3D
         // Plain-MD3 fallback: multiply AlbedoColor on a per-surface StandardMaterial3D override.
         foreach (MeshInstance3D mi in _meshes)
         {
+            // SpriteBuilder puts the billboard material on the mesh instance itself.
+            if (mi.MaterialOverride is StandardMaterial3D material)
+            {
+                var tinted = (StandardMaterial3D)material.Duplicate();
+                tinted.AlbedoColor = colormod;
+                mi.MaterialOverride = tinted;
+                continue;
+            }
             if (mi.Mesh is null)
                 continue;
             int count = mi.Mesh.GetSurfaceCount();

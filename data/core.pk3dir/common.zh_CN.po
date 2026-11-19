@@ -1754,7 +1754,7 @@ msgstr ""
 #: qcsrc/common/gametypes/gametype/duel/duel.qc:17
 #, c-format
 msgid "%s is often played with %s rules."
-msgstr "%s通常以%s规则游玩。"
+msgstr "%s通常以 %s（Xonotic 专家模式）规则游玩。"
 
 #: qcsrc/common/gametypes/gametype/duel/duel.qc:17
 #: qcsrc/menu/xonotic/guide/pages.qc:183 qcsrc/menu/xonotic/guide/pages.qc:186

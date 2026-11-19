@@ -1,0 +1,36 @@
+server
+"g_balance_fireball_primary_radius" is "32"
+"g_balance_fireball_primary_lifetime" is "15"
+"g_balance_fireball_primary_radius" is "32"
+"g_balance_fireball_primary_speed" is "1200"
+FIREBALL_AUTH explode x=1220.0979 y=339.933075 z=-15.968751 before=100 after=100 cnt=0 bfgRadius=96
+"g_balance_fireball_primary_lifetime" is "0.001"
+"g_balance_fireball_primary_radius" is "32"
+"g_balance_fireball_primary_speed" is "1"
+FIREBALL_AUTH explode x=1223.30701 y=306.269104 z=27.4744339 before=100 after=100 cnt=1 bfgRadius=96
+"g_balance_fireball_primary_lifetime" is "15"
+"g_balance_fireball_primary_radius" is "250"
+"g_balance_fireball_primary_speed" is "1200"
+FIREBALL_AUTH explode x=1220.0979 y=339.933075 z=-15.968751 before=100 after=-0.386100769 cnt=0 bfgRadius=96
+
+RedProbe
+FIREBALL_MODEL receipt origin=<1220.0979, 339.93307, -15.968751> radius=96 model=Md3Morph wall_ms=56143
+FIREBALL_MODEL material=ShaderMaterial texture=1x1 extent=64 final_scale=1.5 wall_ms=56143
+FIREBALL_MODEL sample age=0 scale=0 alpha=0.200000003 lingering=True wall_ms=56144
+FIREBALL_MODEL sample age=0.0257662497 scale=0.128831252 alpha=0.200000003 lingering=True wall_ms=56245
+FIREBALL_MODEL sample age=0.223323256 scale=1.11661625 alpha=0.0613413937 lingering=True wall_ms=57135
+FIREBALL_MODEL sample age=0.247691751 scale=1.23845863 alpha=0.0418465994 lingering=True wall_ms=57232
+FIREBALL_MODEL sample age=0.27357325 scale=1.36786616 alpha=0.0211413987 lingering=True wall_ms=57336
+FIREBALL_MODEL sample age=0.298673511 scale=1.49336755 alpha=0.00106118922 lingering=False wall_ms=57436
+
+BlueProbe
+FIREBALL_MODEL receipt origin=<1220.0979, 339.93307, -15.968751> radius=96 model=Md3Morph wall_ms=55882
+FIREBALL_MODEL material=ShaderMaterial texture=1x1 extent=64 final_scale=1.5 wall_ms=55883
+FIREBALL_MODEL sample age=0 scale=0 alpha=0.200000003 lingering=True wall_ms=55883
+FIREBALL_MODEL sample age=0.0282877497 scale=0.141438738 alpha=0.200000003 lingering=True wall_ms=55993
+FIREBALL_MODEL sample age=0.184382498 scale=0.921912432 alpha=0.0924940035 lingering=True wall_ms=56618
+FIREBALL_MODEL sample age=0.212602004 scale=1.06300998 alpha=0.0699183941 lingering=True wall_ms=56731
+FIREBALL_MODEL sample age=0.239028007 scale=1.19513988 alpha=0.0487775914 lingering=True wall_ms=56836
+FIREBALL_MODEL sample age=0.265449017 scale=1.327245 alpha=0.0276407842 lingering=True wall_ms=56942
+FIREBALL_MODEL sample age=0.292916775 scale=1.46458387 alpha=0.00566657772 lingering=True wall_ms=57052
+FIREBALL_MODEL sample age=0.31893003 scale=1.5 alpha=0 lingering=False wall_ms=57156

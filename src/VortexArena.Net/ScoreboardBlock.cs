@@ -45,6 +45,7 @@ public readonly struct ScoreRowWire
 /// <summary>The parsed scoreboard (client side after <see cref="ScoreboardBlock.Deserialize"/>).</summary>
 public sealed class ScoreboardWire
 {
+    /// <summary>Ascending server client-slot order. Fully tied active rows display in reverse order.</summary>
     public readonly List<ScoreRowWire> Rows = new();
     public readonly List<(int team, int score)> Teams = new();
     /// <summary>QC the race/CTS rankings table (Scoreboard_Rankings_Draw grecordtime[]/grecordholder[]): the

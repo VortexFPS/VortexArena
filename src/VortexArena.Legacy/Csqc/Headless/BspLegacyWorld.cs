@@ -203,7 +203,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
                 return true;
             }
             BspData bsp = BspReader.Read(file);
-            UseMap(worldModel, bsp, BuildCollision(bsp, file));
+            UseMap(worldModel, bsp, BuildCollision(bsp));
             return true;
         }
         catch (Exception e) when (e is not OutOfMemoryException)
@@ -269,25 +269,17 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
     /// hierarchy. What <see cref="UseMap(string, BspData?, BspCollisionBuilder.Result)"/> expects to be
     /// handed, and what the server half builds for itself.
     /// </summary>
-    /// <param name="mapFile">The bytes the map was parsed from (see <see cref="BspCollisionOptions.MapFile"/>).</param>
-    public static BspCollisionBuilder.Result BuildCollision(BspData bsp, ReadOnlyMemory<byte> mapFile) =>
-        BspCollisionBuilder.Build(bsp, null, BspCollisionOptions.DarkPlaces(mapFile));
+    public static BspCollisionBuilder.Result BuildCollision(BspData bsp) =>
+        BspCollisionBuilder.Build(bsp, null, BspCollisionOptions.DarkPlaces);
 
     /// <summary>
     /// Takes a map that is already parsed, in place of <see cref="LoadMap"/>, and builds its collision
     /// once: for an owner that needs the parsed map for drawing and should not parse the file twice.
-    /// (The file is read once more, unparsed, for the patches' LOD bounds.)
     /// </summary>
     public void UseMap(string worldModel, BspData bsp)
     {
         ArgumentNullException.ThrowIfNull(bsp);
-        byte[] file = Array.Empty<byte>();
-        try
-        {
-            if (!string.IsNullOrEmpty(worldModel) && LegacyQcHost.IsSafePath(worldModel) && _files.Exists(worldModel)) file = _files.ReadBytes(worldModel);
-        }
-        catch (IOException) { /* no LOD bounds: no two patches are grouped */ }
-        UseMap(worldModel, bsp, BuildCollision(bsp, file));
+        UseMap(worldModel, bsp, BuildCollision(bsp));
     }
 
     /// <summary>
@@ -296,8 +288,7 @@ public sealed class BspLegacyWorld : ILegacyWorld, TraceService.IEntityProvider
     /// <param name="bsp">The parsed map, for bounds and visibility; null for collision built by hand
     /// (then there is no visibility data and the bounds are the brushes').</param>
     /// <param name="built">The collision, from <see cref="BuildCollision"/>. It is used as it is.
-    /// The one exception is for a caller that still hands over the shared builder's default
-    /// (patch slabs) together with the map it came from: slabs are not what a DarkPlaces server
+    /// The one exception is for a caller that still hands over the shared builder's slab profile together with the map it came from: slabs are not what a DarkPlaces server
     /// collides with, so that result is set aside and the collision built again here - the cost
     /// <see cref="UseMap(string, BspData)"/> exists to avoid.</param>
     public void UseMap(string worldModel, BspData? bsp, BspCollisionBuilder.Result built)

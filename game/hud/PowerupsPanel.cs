@@ -13,7 +13,7 @@ namespace VortexArena.Game.Hud;
 /// <c>HUD_Powerups_add</c> hook, each with a name, icon, color, current time and lifetime, then found the
 /// best column×row partitioning of the panel rect (targeting a 6:1 cell aspect), and drew per-cell a
 /// countdown progress bar (<c>HUD_Panel_DrawProgressBar</c>) plus an icon+number (<c>DrawNumIcon</c>). When
-/// a powerup is permanent (jetpack / unlimited-superweapons) it draws the infinity glyph; when a timed
+/// a displayed powerup is permanent (e.g. jetpack) it draws the infinity glyph; when a timed
 /// powerup is in its last 5 seconds it pulses with an expanding flash (<c>DrawNumIcon_expanding</c>).
 ///
 /// Data source (QC <c>HUD_Powerups_add</c> → <c>StatusEffects_tick</c> → <c>m_tick</c> → <c>addPowerupItem</c>):
@@ -23,9 +23,10 @@ namespace VortexArena.Game.Hud;
 /// (carried in this panel's metadata table since the C# <see cref="StatusEffectDef"/> has none) and remaining
 /// time. (NOTE: a live player's active powerups live in <see cref="Entity.StatusEffects"/>; the
 /// <c>Entity.*Finished</c> fields are world-item carriers and are always 0 on a player.) The persistent
-/// item-flag powerups (jetpack / fuel-regen / unlimited-superweapons) on <see cref="Entity.Items"/> are also
-/// surfaced as infinity (∞) entries. The current time comes from <see cref="Now"/> if set, else the sim clock
-/// (<see cref="Api.Clock"/>). The net/demo layer may still override the whole set via <see cref="Set"/>.
+/// item-flag powerups (jetpack / fuel-regen) on <see cref="Entity.Items"/> are also surfaced as infinity (∞)
+/// entries. The Superweapons row is hidden while unlimited superweapon lifetime is active. The current time
+/// comes from <see cref="Now"/> if set, else the sim clock (<see cref="Api.Clock"/>). The net/demo layer may
+/// still override the whole set via <see cref="Set"/>.
 /// </summary>
 public partial class PowerupsPanel : HudPanel
 {
@@ -138,10 +139,7 @@ public partial class PowerupsPanel : HudPanel
 
     /// <summary>
     /// Register the powerups panel's behavior cvars (QC <c>hud_panel_powerups_*</c>, see HUD_Powerups_Export +
-    /// _hud_common.cfg). Auto-invoked by HudConfig via reflection. Defaults are the luma skin values. NOTE: the
-    /// per-powerup colors come from each effect's QC <c>m_color</c> (the powerupItems colormod), NOT from any
-    /// <c>hud_progressbar_*_color</c> cvar — so those are not registered here; <c>hud_progressbar_alpha</c> is the
-    /// only shared global this panel reads (registered idempotently in case no other panel got to it first).
+    /// _hud_common.cfg). Auto-invoked by HudConfig via reflection. Defaults are the luma skin values.
     /// </summary>
     public static void RegisterDefaults(CvarService c)
     {
@@ -157,6 +155,7 @@ public partial class PowerupsPanel : HudPanel
 
         // Shared progress-bar alpha (global; QC autocvar_hud_progressbar_alpha). Idempotent.
         c.Register("hud_progressbar_alpha", "0.6", CvarFlags.Save);
+        c.Register("hud_progressbar_superweapons_color", "0.77 0.67 0", CvarFlags.Save);
     }
 
     // (perf 2026-08-03, R1) Driven centrally by HudManager — no per-panel Godot _Process callback.
@@ -214,6 +213,10 @@ public partial class PowerupsPanel : HudPanel
             StatusEffectDef? def = catalog[s.DefId];
             if (def is null) continue;
             if (def.Hidden) continue; // QC m_tick: hidden effects (frozen/burning/spawnshield/stunned/webbed) skip
+            // QC superweapons.qc: wait for the ordinary item bit and hide the row whenever unlimited is set.
+            bool isSuperweapon = def.Name == "superweapon";
+            if (isSuperweapon && (items & (ItemFlag.Superweapon | ItemFlag.UnlimitedSuperweapons)) != ItemFlag.Superweapon)
+                continue;
 
             // Remaining time (QC: bound(0, statuseffect_time - time, 99)).
             float left = s.ExpireTime > 0f ? Mathf.Clamp(s.ExpireTime - now, 0f, 99f) : 0f;
@@ -234,44 +237,26 @@ public partial class PowerupsPanel : HudPanel
                 // A buff (or unknown non-hidden effect): derive the label/icon from the def name.
                 label = BuffLabel(def.Name);
                 icon = def.Name; // buffs use their "buff_<name>" skin icon
-                color = new Color(0.4f, 1f, 0.6f); // generic buff tint (no per-buff color in the C# def)
+                color = def.IsBuff
+                    ? new Color(def.Color.R, def.Color.G, def.Color.B)
+                    : new Color(0.4f, 1f, 0.6f);
+            }
+
+            if (isSuperweapon)
+            {
+                // The timed stock row takes its tint from the HUD skin rather than the entity colormod.
+                color = TryParseRgb(GlobalStr("hud_progressbar_superweapons_color"), out Color configured)
+                    ? configured : new Color(0.77f, 0.67f, 0f);
             }
 
             rows.Add(new PowerupEntry(label, icon, infinite ? 1f : left, life, color, infinite));
         }
 
-        // --- Permanent item-flag powerups (port extension: QC surfaces these via the PERSISTENT status-effect
-        // path, but in this port jetpack / fuel-regen / unlimited-superweapons are held .items bits, not status
-        // effects). Shown as infinite (∞) entries so the held bit is still visible. Skipped if already covered
-        // by an active status effect above (e.g. a finite superweapon timer).
+        // Jetpack and fuel regeneration are held item flags. Show them as infinite (∞) entries.
         if ((items & ItemFlag.Jetpack) != 0)
             rows.Add(new PowerupEntry("Jetpack", "jetpack", 1f, StatusEffectLifetime, new Color(0.5f, 0.5f, 0.5f), infinite: true));
         if ((items & ItemFlag.FuelRegen) != 0)
             rows.Add(new PowerupEntry("Fuel regenerator", "fuelregen", 1f, StatusEffectLifetime, new Color(1f, 0.5f, 0f), infinite: true));
-        if ((items & ItemFlag.UnlimitedSuperweapons) != 0 && !HasActiveEffect("superweapon"))
-            rows.Add(new PowerupEntry("Superweapons", "superweapons", 1f, StatusEffectLifetime, new Color(1f, 1f, 1f), infinite: true));
-    }
-
-    /// <summary>True when the player currently has the named status effect with a live (non-expired) timer.</summary>
-    private bool HasActiveEffect(string effectName)
-    {
-        Player? p = Player;
-        if (p is null) return false;
-        List<ActiveStatusEffect>? effects = p.StatusEffects;
-        if (effects is null) return false;
-        float now = CurrentTime();
-        IReadOnlyList<StatusEffectDef> catalog = StatusEffectsCatalog.All;
-        int catalogCount = catalog.Count;
-        // Indexed (Count re-read each step) so a concurrent sim-side mutation can't throw in the draw path.
-        for (int i = 0; i < effects.Count; i++)
-        {
-            ActiveStatusEffect s = effects[i];
-            if (s.DefId < 0 || s.DefId >= catalogCount) continue;
-            StatusEffectDef? def = catalog[s.DefId];
-            if (def is null || def.Name != effectName) continue;
-            if (s.ExpireTime <= 0f || s.ExpireTime - now > 0f) return true;
-        }
-        return false;
     }
 
     /// <summary>"buff_speed" -> "Speed".</summary>

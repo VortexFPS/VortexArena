@@ -57,7 +57,6 @@ public sealed class BuffsMutator : MutatorBase
     private float _luckMult = 2f;                // g_buffs_luck_damagemultiplier
     private float _magnetRangeItem = 250f;       // g_buffs_magnet_range_item
     private float _magnetRangeBuff = 100f;       // g_buffs_magnet_range_buff
-    private float _pickupDelay = 0.7f;           // g_buffs_pickup_delay
     private float _waypointDistance = 1024f;     // g_buffs_waypoint_distance (radar/HUD waypoint max view distance)
 
     // ---- inferno (burn-on-hit + fire/lava resistance) ----
@@ -68,7 +67,6 @@ public sealed class BuffsMutator : MutatorBase
     private float _infernoBurnFactor = 2f;       // g_buffs_inferno_burntime_factor
 
     // ---- swapper (swap places with the nearest enemy on drop-weapon) ----
-    private float _swapperRange = 1500f;         // g_buffs_swapper_range
 
     // ---- hook handlers ----
     private HookHandler<MutatorHooks.DamageCalculateArgs>? _onDamageCalc;
@@ -77,6 +75,7 @@ public sealed class BuffsMutator : MutatorBase
     private HookHandler<MutatorHooks.PlayerPhysicsArgs>? _onPhysics;
     private HookHandler<MutatorHooks.PlayerPreThinkArgs>? _onPreThink;
     private HookHandler<MutatorHooks.WeaponRateFactorArgs>? _onRate;
+    private HookHandler<MutatorHooks.WeaponSpeedFactorArgs>? _onProjectileSpeed;
     private HookHandler<MutatorHooks.ForbidThrowCurrentWeaponArgs>? _onForbidThrow;
     private HookHandler<MutatorHooks.PlayerUseKeyArgs>? _onUseKey;
     private HookHandler<MutatorHooks.FilterItemArgs>? _onFilterItem;
@@ -89,6 +88,7 @@ public sealed class BuffsMutator : MutatorBase
         _onPhysics ??= OnPlayerPhysics;
         _onPreThink ??= OnPlayerPreThink;
         _onRate ??= OnWeaponRateFactor;
+        _onProjectileSpeed ??= OnWeaponSpeedFactor;
         _onForbidThrow ??= OnForbidThrowCurrentWeapon;
         _onUseKey ??= OnPlayerUseKey;
         _onFilterItem ??= OnFilterItem;
@@ -99,6 +99,7 @@ public sealed class BuffsMutator : MutatorBase
         MutatorHooks.PlayerPhysics.Add(_onPhysics);
         MutatorHooks.PlayerPreThink.Add(_onPreThink);
         MutatorHooks.WeaponRateFactor.Add(_onRate);
+        MutatorHooks.WeaponSpeedFactor.Add(_onProjectileSpeed);
         MutatorHooks.ForbidThrowCurrentWeapon.Add(_onForbidThrow);
         MutatorHooks.PlayerUseKey.Add(_onUseKey);
         MutatorHooks.FilterItem.Add(_onFilterItem);
@@ -131,17 +132,13 @@ public sealed class BuffsMutator : MutatorBase
             R(ref _luckMult, "g_buffs_luck_damagemultiplier");
             R(ref _magnetRangeItem, "g_buffs_magnet_range_item");
             R(ref _magnetRangeBuff, "g_buffs_magnet_range_buff");
-            R(ref _pickupDelay, "g_buffs_pickup_delay");
             R(ref _waypointDistance, "g_buffs_waypoint_distance");
             R(ref _infernoDamageMult, "g_buffs_inferno_damagemultiplier");
             R(ref _infernoBurnMinTime, "g_buffs_inferno_burntime_min_time");
             R(ref _infernoBurnTargetDamage, "g_buffs_inferno_burntime_target_damage");
             R(ref _infernoBurnTargetTime, "g_buffs_inferno_burntime_target_time");
             R(ref _infernoBurnFactor, "g_buffs_inferno_burntime_factor");
-            R(ref _swapperRange, "g_buffs_swapper_range");
 
-            // QC buffs_Initialize: spawn the configured number of buffs if none exist yet.
-            SpawnInitialBuffs();
         }
     }
 
@@ -161,6 +158,7 @@ public sealed class BuffsMutator : MutatorBase
         if (_onPhysics is not null) MutatorHooks.PlayerPhysics.Remove(_onPhysics);
         if (_onPreThink is not null) MutatorHooks.PlayerPreThink.Remove(_onPreThink);
         if (_onRate is not null) MutatorHooks.WeaponRateFactor.Remove(_onRate);
+        if (_onProjectileSpeed is not null) MutatorHooks.WeaponSpeedFactor.Remove(_onProjectileSpeed);
         if (_onForbidThrow is not null) MutatorHooks.ForbidThrowCurrentWeapon.Remove(_onForbidThrow);
         if (_onUseKey is not null) MutatorHooks.PlayerUseKey.Remove(_onUseKey);
         if (_onFilterItem is not null) MutatorHooks.FilterItem.Remove(_onFilterItem);
@@ -264,9 +262,9 @@ public sealed class BuffsMutator : MutatorBase
     }
 
     // void buffs_DelayedInit / buff_Init — spawn g_buffs_spawn_count buff items if none exist.
-    private void SpawnInitialBuffs()
+    public static void SpawnInitialBuffs()
     {
-        if (Api.Cvars.GetFloat("g_buffs") <= 0f) return;
+        if (Api.Services is null || Api.Cvars.GetFloat("g_buffs") <= 0f) return;
         int count = (int)Api.Cvars.GetFloat("g_buffs_spawn_count");
         if (count <= 0) return;
 
@@ -274,6 +272,7 @@ public sealed class BuffsMutator : MutatorBase
         foreach (Entity _ in Api.Entities.FindByClass("item_buff"))
             return;
 
+        var mutator = new BuffsMutator();
         for (int i = 0; i < count; i++)
         {
             // QC buffs_DelayedInit: each auto-seeded buff gets spawnflags|=64 (always randomize/relocate) BEFORE
@@ -281,7 +280,7 @@ public sealed class BuffsMutator : MutatorBase
             Entity e = Api.Entities.Spawn();
             e.BuffAlwaysRelocate = true;
             e.Velocity = Prandom.Vec() * 250f;
-            ConfigureBuffEntity(e, null); // null type -> randomize (QC buff_Init's buff_NewType)
+            mutator.ConfigureBuffEntity(e, null); // null type -> randomize (QC buff_Init's buff_NewType)
         }
     }
 
@@ -319,14 +318,14 @@ public sealed class BuffsMutator : MutatorBase
         e.ClassName = "item_buff";
         e.Solid = Solid.Trigger;
         e.Flags |= EntFlags.Item;
-        e.MoveType = MoveType.Toss;
+        e.NoAlign |= (e.SpawnFlags & 1) != 0;
+        e.BuffAlwaysRelocate |= (e.SpawnFlags & 64) != 0;
+        e.MoveType = e.NoAlign ? MoveType.None : MoveType.Toss;
         e.Gravity = 1f;
-        e.Effects |= EffectFlags.FullBright | EffectFlags.Stardust | EffectFlags.NoShadow;
+        e.Effects |= EffectFlags.Stardust | EffectFlags.NoShadow;
         e.BuffDef = buff;
         Api.Entities.SetModel(e, buff.Model ?? MdlBuff);
-        // QC buff_Init/buff_Think (sv_buffs.qc:305-307): this.skin = buff.m_skin — the relic.md3 ships one skin
-        // per buff type, so the picked buff renders in its own colour. (this.color/this.glowmod = buff.m_color
-        // are item-tint fields the port does not network for world items yet — see buffs.item.spawnfunc.)
+        // The relic ships one skin per buff type. The client uses the networked skin to resolve the buff tint.
         e.Skin = buff.Skin;
         // QC: setsize(this, ITEM_D_MINS, ITEM_L_MAXS) = '-30 -30 0'..'30 30 70'.
         Api.Entities.SetSize(e, ItemBoxes.DefaultMins, ItemBoxes.LargeMaxs);
@@ -337,7 +336,7 @@ public sealed class BuffsMutator : MutatorBase
         float activate = Cvar("g_buffs_cooldown_activate", 5f) + MathF.Max(0f, gameStart - Api.Clock.Time);
         e.BuffLifetime = 0f;
         e.NextThink = Api.Clock.Time + activate;
-        e.BuffActive = false;
+        SetPickupActive(e, false);
         e.Owner = null;
         e.Touch = (self, toucher) => BuffTouch(self, toucher);
         // After the activate cooldown the item turns active (QC buff_Think activate-cooldown branch), then the
@@ -350,7 +349,7 @@ public sealed class BuffsMutator : MutatorBase
     // its steady lifetime think.
     private void ActivateBuff(Entity item)
     {
-        item.BuffActive = true;
+        SetPickupActive(item, true);
         // QC buff_Think reactivation: SND_STRENGTH_RESPAWN + Send_Effect(EFFECT_ITEM_RESPAWN, CENTER_OR_VIEWOFS).
         SoundSystem.PlayOn(item, "STRENGTH_RESPAWN");
         EffectEmitter.Emit("ITEM_RESPAWN", Center(item));
@@ -435,15 +434,16 @@ public sealed class BuffsMutator : MutatorBase
             RemoveAllBuffs(toucher);
         }
 
-        item.BuffActive = false;
+        SetPickupActive(item, false);
         item.BuffLifetime = 0f; // QC: this.lifetime = 0 (a picked-up item no longer auto-relocates)
         item.Owner = toucher;
         // QC buff_Touch: the collected item's waypoint goes away while it's on its respawn cooldown.
         WaypointSprites.Kill(item.BuffWaypoint);
         item.BuffWaypoint = null;
 
-        // QC: bufftime = this.buffs_finished ? ... : thebuff.m_time(thebuff); fall back to 999 / cvar time.
-        float bufftime = BuffTime(thebuff);
+        // QC buff_Init legacy duration fallback and buff_Touch's per-item override.
+        float bufftime = item.BuffsFinished != 0f ? item.BuffsFinished
+            : item.Count != 0 ? item.Count : BuffTime(thebuff);
         ApplyBuff(toucher, thebuff, bufftime);
 
         // QC: Send_Effect(EFFECT_ITEM_PICKUP, CENTER_OR_VIEWOFS(this), '0 0 0', 1).
@@ -459,6 +459,17 @@ public sealed class BuffsMutator : MutatorBase
 
         // QC: the item goes on cooldown then respawns (re-randomizing its type). Keep the entity alive.
         ScheduleRespawn(item);
+    }
+
+    private static void SetPickupActive(Entity item, bool active)
+    {
+        // QC buff_Customize fades the inactive relic and removes its fullbright flag.
+        item.BuffActive = active;
+        item.Alpha = active ? 1f : 0.3f;
+        if (active)
+            item.Effects |= EffectFlags.FullBright;
+        else
+            item.Effects &= ~EffectFlags.FullBright;
     }
 
     // float Buff.m_time — cvar g_buffs_<name>_time, default 60s; 0 → "permanent-ish" 999.
@@ -488,7 +499,7 @@ public sealed class BuffsMutator : MutatorBase
             Api.Entities.SetModel(self, self.BuffDef?.Model ?? MdlBuff);
             // QC buff_Think type-change retint: this.skin = buff.m_skin after a re-randomize.
             self.Skin = self.BuffDef?.Skin ?? 0;
-            self.BuffActive = true;
+            SetPickupActive(self, true);
             // QC buff_Think activate-cooldown elapse: SND_STRENGTH_RESPAWN + EFFECT_ITEM_RESPAWN on reactivation.
             SoundSystem.PlayOn(self, "STRENGTH_RESPAWN");
             EffectEmitter.Emit("ITEM_RESPAWN", Center(self));
@@ -667,7 +678,7 @@ public sealed class BuffsMutator : MutatorBase
     // void buff_RemoveAll(actor) — strip every buff, then set the pickup delay. The per-buff m_remove side effects
     // (ammo bit / clip loads, flight gravity) now live in each buff def's OnRemove (wired in Hook), so they run on
     // EVERY removal path via StatusEffectsCatalog.Remove — here, on timed expiry, and on death — not just here.
-    private void RemoveAllBuffs(Entity actor)
+    private static void RemoveAllBuffs(Entity actor)
     {
         foreach (var d in StatusEffectsCatalog.All)
         {
@@ -676,7 +687,11 @@ public sealed class BuffsMutator : MutatorBase
         }
         actor.Effects &= ~EffectFlags.NoShadow;
         if (Api.Services is not null)
-            actor.BuffShield = Api.Clock.Time + MathF.Max(0f, _pickupDelay);
+        {
+            const string cvar = "g_buffs_pickup_delay";
+            float delay = string.IsNullOrEmpty(Api.Cvars.GetString(cvar)) ? 0.7f : Api.Cvars.GetFloat(cvar);
+            actor.BuffShield = Api.Clock.Time + MathF.Max(0f, delay);
+        }
     }
 
     // QC AmmoBuff.m_remove: restore the pre-buff unlimited-ammo bit + the saved clip loads. Wired onto the
@@ -908,13 +923,18 @@ public sealed class BuffsMutator : MutatorBase
         return false;
     }
 
-    // =====================================================================================
-    //  ForbidThrowCurrentWeapon — swapper buff: drop-weapon swaps you with the nearest enemy
-    // =====================================================================================
+    private static bool OnWeaponSpeedFactor(ref MutatorHooks.WeaponSpeedFactorArgs args)
+    {
+        if (StatusEffectsCatalog.Stunned is { } stunned && StatusEffectsCatalog.Has(args.Actor, stunned))
+        {
+            float multiplier = string.IsNullOrEmpty(Api.Cvars.GetString("g_buffs_disability_weaponspeed"))
+                ? 0.7f : Api.Cvars.GetFloat("g_buffs_disability_weaponspeed");
+            args.Factor *= multiplier;
+        }
+        return false;
+    }
 
-    // QC swapper ForbidThrowCurrentWeapon: pressing drop-weapon while the swapper buff is held teleports you to
-    // swap places with the nearest enemy in range (origin/velocity/angles exchanged), consuming the buff.
-    // Returning true suppresses the normal weapon drop.
+    // QC swapper ForbidThrowCurrentWeapon: swapping consumes the buff and suppresses the normal weapon drop.
     private bool OnForbidThrowCurrentWeapon(ref MutatorHooks.ForbidThrowCurrentWeaponArgs args)
     {
         if (Api.Services is null || VehicleCommon.GameStopped) return false;
@@ -923,13 +943,18 @@ public sealed class BuffsMutator : MutatorBase
 
         // Find the nearest valid enemy within g_buffs_swapper_range.
         Entity? closest = null;
-        float bestDist2 = _swapperRange * _swapperRange;
-        foreach (Entity head in Api.Entities.FindInRadius(player.Origin, _swapperRange))
+        float range = Api.Cvars.Has("g_buffs_swapper_range") ? Api.Cvars.GetFloat("g_buffs_swapper_range") : 1500f;
+        float bestDist2 = range * range;
+        var hits = new List<WarpzoneRadiusHit>();
+        WarpzoneRadiusQuery.FindRadiusWarpzone(WarpzoneTrace.AmbientManager, player.Origin, range, hits,
+            tracePortalExits: true);
+        foreach (var hit in hits)
         {
+            Entity head = hit.Entity;
             if (!IsPlayer(head) || ReferenceEquals(head, player)) continue;
-            if (Teams.SameTeam(head, player)) continue;       // QC DIFF_TEAM
+            if (GameScores.Teamplay && head.Team == player.Team) continue;
             if (head.DeadState != DeadFlag.No || IsFrozen(head) || head.Vehicle is not null) continue;
-            float d2 = (head.Origin - player.Origin).LengthSquared();
+            float d2 = hit.DistanceSquaredToBounds();
             if (d2 < bestDist2) { bestDist2 = d2; closest = head; }
         }
         if (closest is null) return false;
@@ -937,26 +962,36 @@ public sealed class BuffsMutator : MutatorBase
         Vector3 myOrg = player.Origin, myVel = player.Velocity, myAng = player.Angles;
         Vector3 theirOrg = closest.Origin, theirVel = closest.Velocity, theirAng = closest.Angles;
 
-        // QC: Drop_Special_Items(closest) + MUTATOR_CALLHOOK(PortalTeleport, player) — both omitted here (the
-        // DropSpecialItems / PortalTeleport hooks are not ported; see todos). Core position/velocity swap:
+        MutatorHooks.FireDropSpecialItems(closest);
+        WarpzoneManager.NotifyPortalTeleport(player);
         Api.Entities.SetOrigin(player, theirOrg);
         Api.Entities.SetOrigin(closest, myOrg);
-        player.Velocity = theirVel;
-        player.Angles = theirAng;
-        player.OldOrigin = theirOrg;
-        closest.Velocity = myVel;
-        closest.Angles = myAng;
-        closest.OldOrigin = myOrg;
+        ApplySwapMotion(player, theirOrg, theirVel, theirAng);
+        ApplySwapMotion(closest, myOrg, myVel, myAng);
+
+        closest.Pusher = player;
+        closest.PushLTime = Api.Clock.Time + Cvar("g_maxpushtime", 8f);
+        closest.IsTypeFrag = closest.ButtonChat;
 
         // QC: SND_KA_RESPAWN + EFFECT_ELECTRO_COMBO at both endpoints.
         SoundSystem.PlayOn(player, "KA_RESPAWN");
         SoundSystem.PlayOn(closest, "KA_RESPAWN");
-        EffectEmitter.Emit("ELECTRO_COMBO", Center(player));
-        EffectEmitter.Emit("ELECTRO_COMBO", Center(closest));
+        EffectEmitter.Emit("ELECTRO_COMBO", theirOrg);
+        EffectEmitter.Emit("ELECTRO_COMBO", myOrg);
 
         // QC: buff_RemoveAll(player) — the swap consumes the buff.
         RemoveAllBuffs(player);
         return true;
+    }
+
+    private static void ApplySwapMotion(Entity player, Vector3 origin, Vector3 velocity, Vector3 angles)
+    {
+        player.Velocity = player.OldVelocity = velocity;
+        player.Angles = player.ViewAngles = angles;
+        player.FixAngle = true;
+        player.FixAngleAngles = angles;
+        player.OldOrigin = origin;
+        player.AntilagNeedsClear = true;
     }
 
     // =====================================================================================
@@ -982,7 +1017,6 @@ public sealed class BuffsMutator : MutatorBase
                 "ITEM_BUFF_LOST", player.NetName, held.RegistryId);
 
         RemoveAllBuffs(player); // sets buff_shield = time + g_buffs_pickup_delay
-        player.BuffShield = Api.Clock.Time + MathF.Max(0f, _pickupDelay);
         SoundSystem.PlayOn(player, "BUFF_LOST");
         return true;
     }

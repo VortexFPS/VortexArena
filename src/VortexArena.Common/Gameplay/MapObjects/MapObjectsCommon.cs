@@ -172,8 +172,8 @@ namespace VortexArena.Common.Gameplay
         /// QC threads a third <c>trigger</c> argument to every <c>.use</c> (<c>t.use(t, actor, this)</c> in
         /// SUB_UseTargets) — the entity that fired the target. The port's <see cref="Framework.EntityUse"/>
         /// delegate is 2-arg, so to keep the 78 .use sites unchanged we stash the firing trigger here for the
-        /// duration of the dispatch. Only <c>door_use</c> reads it (the BIDIR rotating-door reverse path); every
-        /// other path leaves it null, matching QC's <c>NULL</c> trigger on touch/damage/blocked opens.
+        /// duration of the dispatch. Rotating doors use it for bidirectional swing and <c>target_kill</c>
+        /// uses it as the damage attacker. A direct use outside the dispatch has no firing trigger.
         /// </summary>
         public static Framework.Entity? CurrentUseTrigger;
 

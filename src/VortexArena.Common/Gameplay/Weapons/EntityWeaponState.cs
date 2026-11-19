@@ -56,6 +56,9 @@ public partial class Entity
     /// </summary>
     public bool DamagedByContents;
 
+    /// <summary>QC <c>.damagedbytriggers</c>: non-creature opt-in for hurt volumes and kill targets.</summary>
+    public bool DamagedByTriggers;
+
     /// <summary>
     /// QC <c>.contents_damagetime</c> (server/main.qc CreatureFrame_hotliquids) — the next sim time this entity
     /// may take liquid content damage (rate-limited by <c>g_balance_contents_damagerate</c>). 0 = ready now.

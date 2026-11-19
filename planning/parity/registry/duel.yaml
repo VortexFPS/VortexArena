@@ -5,7 +5,7 @@ last_audited: "2026-06-28"
 summary:
   feature_count: 9
   worst_gaps:
-    - "ALL 9 duel features now faithful+live: this wave closed the last open dimension — the m_isAlwaysSupported diameter<3250 map-size gate landed (ApplyForcedGametypes now reads MapInfo.Diameter against a 3250f threshold; two new diameter tests). Player-cap (both paths), powerup filter, duel title, forced colors, frag matrix, match-end latch, respawn, identity all re-verified faithful+live post Waves 16-17. Residuals are inert at defaults: leadlimit=0 unmodeled (N/A for 1v1 FFA), g_duel_respawn_* override layer (falls back to the matching generic 2s), and the null-diameter conservative-allow edge in forced-duel (map-listing only, arguably closer to Base m_isForcedSupported which applies no size check)."
+    - "BSP generation uses a strict diameter threshold of 3250. The map details dialog, playable catalog and hosted rotation all apply the DM fallback to large deathmatch maps when enabled."
 features:
   - id: duel.identity.registration
     name: "Duel gametype identity + default match limits"
@@ -79,9 +79,9 @@ features:
     base_refs:
       - "common/gametypes/gametype/duel/sv_duel.qc:MUTATOR_HOOKFUNCTION(duel, FilterItemDefinition)"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:128:OnFilterItemDefinition"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:118:WithPowerups"
-      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:152:Activate"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:OnFilterItemDefinition"
+      - "src/VortexArena.Common/Gameplay/GameTypes/Duel.cs:Activate"
+      - "src/VortexArena.Common/Gameplay/Items/PowerupItem.cs:PowerupPickup"
       - "src/VortexArena.Common/Gameplay/Items/StartItem.cs:FilterItemDefinition.Call"
     constants:
       - { name: "g_duel_with_powerups", base: "0", port: "0 (read via WithPowerups, live)", match: true }
@@ -96,9 +96,10 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code_read, ref: "Duel.Activate (Duel.cs:169-170) does MutatorHooks.FilterItemDefinition.Add(OnFilterItemDefinition); Activate dispatched live at GameWorld.cs:2999-3000 (case Duel duel). OnFilterItemDefinition (Duel.cs:128-136) returns !WithPowerups for powerup classnames (item_strength/item_shield/item_invincible), matching Base instanceOfPowerup -> !autocvar_g_duel_with_powerups. Default g_duel_with_powerups 0 => powerups filtered. Same registration pattern as Mayhem/TeamMayhem.", result: pass }
+      - { kind: code_read, ref: "StartItem assigns the resolved pickup before calling FilterItemDefinition. Duel.Activate registers the hook. It reads Pickup.IsPowerup and the current g_duel_with_powerups.", result: pass }
+      - { kind: ingame, ref: "planning/parity/duel-powerups/README.md records four consecutive Stormkeep loads on each dedicated host. Default-off suppressed all eight authored powerups, enabling restored them, and turning it off suppressed them again. A separate aliases-only load resolved item_invincible and item_haste to Shield and Speed. Small health survived every load.", result: pass }
     confidence: high
-    notes: "Faithful + live (re-verified post Waves 16-17). args.Definition.ClassName is the classname stand-in for instanceOfPowerup. FilterItemHookTests covers the duel filter. (Line refs drifted: OnFilterItemDefinition Duel.cs:128, WithPowerups 118, Activate 152, activation switch GameWorld.cs:2999.)"
+    notes: "Eight native map-spawn regressions exercise six canonical names and two compatibility aliases. The paired fixture exercised ordinary Duel with the global and per-item powerup switches enabled."
 
   - id: duel.scoring.frag_matrix
     name: "Deathmatch frag/obituary scoring matrix (inherited)"
@@ -255,16 +256,15 @@ features:
       - "common/gametypes/gametype/duel/duel.qh:m_isAlwaysSupported"
       - "common/gametypes/gametype/duel/duel.qh:m_isForcedSupported"
     port_refs:
-      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:145:ApplyForcedGametypes"
-      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:121:Get (calls ApplyForcedGametypes)"
-      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:88:ForceDuelOnDmMaps"
-      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:60:MapInfo.Diameter (parsed, not yet gated on)"
-      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:226:Parse (size case -> Diameter)"
-      - "game/menu/CreateGameScreen.cs:590:forceDuelOnDm (g_duel_not_dm_maps wiring)"
-      - "game/menu/dialogs/DialogCreateGameMapInfo.cs:50:ForceDuelOnDmMaps (g_duel_not_dm_maps wiring)"
+      - "src/VortexArena.Formats/Bsp/MapInfoCatalog.cs:Generate"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:MapInfo.SupportsInCatalog"
+      - "src/VortexArena.Common/Menu/MapInfoBackend.cs:MapInfo.AllowsForcedGametype"
+      - "game/menu/CreateGameScreen.cs:MapInfoCache.Supports"
+      - "game/menu/dialogs/DialogCreateGameMapInfo.cs:BuildUi"
+      - "game/net/NetGame.cs:Rotation.MapSupportsGametype"
     constants:
-      - { name: "g_duel_not_dm_maps", base: "0 (=> force duel on DM maps)", port: "read via ForceDuelOnDmMaps = (g_duel_not_dm_maps==0), default true", match: true }
-      - { name: "max_diameter", base: "3250 (units)", port: "3250f literal in ApplyForcedGametypes guard (MapInfoBackend.cs:154); Diameter parsed (cs:248) AND now gated on", match: true }
+      - { name: "g_duel_not_dm_maps", base: "0 (force duel on DM maps)", port: "0 (same)", match: true }
+      - { name: "max_diameter", base: "3250 units (BSP generation)", port: "diameter < 3250", match: true }
     status:
       logic: faithful
       values: faithful
@@ -274,11 +274,9 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "FIXED (m_isForcedSupported half): MapInfoBackend.ApplyForcedGametypes (MapInfoBackend.cs:145-165) promotes any DM map to also support duel unless g_duel_not_dm_maps, called live from MapInfoBackend.Get and wired from the menu cvar at CreateGameScreen.cs + DialogCreateGameMapInfo.cs. Unit-tested in MenuDataSourceTests.cs:346-428. Matches QC MapInfo_Get_ByName FOREACH(Gametypes, it.m_isForcedSupported...)."
-      - "FIXED THIS WAVE (m_isAlwaysSupported diameter<3250 half): the .mapinfo 'size x1 y1 z1 x2 y2 z2' line is parsed into MapInfo.Diameter = vlen(maxs-mins) (MapInfoBackend.cs:231-250, with the QC mins<maxs guard), AND ApplyForcedGametypes now reads it — the forced-duel branch carries the `!(info.Diameter.HasValue && info.Diameter.Value >= 3250f)` term (MapInfoBackend.cs:154), so a sized map with diameter >= 3250 is no longer promoted to duel. The 3250f literal exists in src (cs:154; also doc-referenced cs:57). Tests MapInfo_ForcedDuelOnDmMap_Suppressed_When_DiameterTooLarge (MenuDataSourceTests.cs:401) and _AllowedWhenDiameterSmall (:418) exercise both sides of the threshold."
-      - "RESIDUAL (minor, intended-conservative): when a map declares NO 'size' line, Diameter is null and the port ALLOWS forced-duel (MapInfoBackend.cs:152-153 comment: cannot prove the map is too large from .mapinfo alone). Base m_isAlwaysSupported returns diameter<3250, which is false for an unknown/zero diameter — but Base's m_isForcedSupported (the path mirrored here) does not actually apply the size check at all (duel.qh:19 TODO), so the port is if anything closer to Base intent. The pure-BSP autogeneration path (no .mapinfo => Diameter null) thus also forces-in duel. Low impact (map-listing only)."
+    gaps: []
     verification:
-      - { kind: code_read, ref: "ApplyForcedGametypes (MapInfoBackend.cs:145-165) adds 'duel' when forceDuelOnDmMaps && supports 'dm' && !supports 'duel' && !(Diameter>=3250) — the diameter term is now present (cs:154). MapInfo.Diameter parsed from the size line (Parse size case, MapInfoBackend.cs:231-250, sqrt(dx^2+dy^2+dz^2) with the mins<maxs guard). ForceDuelOnDmMaps default true (MapInfoBackend.cs:88) from g_duel_not_dm_maps==0 at the two menu call sites. grep 3250 over src now hits MapInfoBackend.cs:57/154 (was zero last audit). Tests: MenuDataSourceTests.cs:401 (Suppressed_When_DiameterTooLarge, bounds give >=3250) + :418 (AllowedWhenDiameterSmall, ~1536) both present and assert Diameter parsed.", result: pass }
+      - { kind: test, ref: "MapInfoGenerationTests.NativeMapThresholdsReachCatalogAndDetails checks generated eligibility through both APIs on nine maps with varied spawn counts and diameters.", result: pass }
+      - { kind: test, ref: "MenuDataSourceTests.MapInfo_CatalogEvaluatesCurrentFlagsAgainstDeclaredModes / MapInfo_LargeDmMapOffersDuelInCatalogAndDetails / MapInfo_ForcedDuelOnDmMap_AllowedWhenDiameterSmall", result: pass }
     confidence: high
-    notes: "FAITHFUL + LIVE (advanced from partial this wave). The m_isAlwaysSupported diameter<3250 gate landed: ApplyForcedGametypes now consults MapInfo.Diameter with the 3250f threshold and the two diameter tests the prior audit said were missing now exist. Both halves of duel map-support gating (m_isForcedSupported DM->duel forcing + m_isAlwaysSupported size cap) are implemented, live (called from MapInfoBackend.Get on the menu path), and unit-tested. Only residual is the null-diameter conservative-allow edge (no size line => forced-in), which is arguably closer to Base m_isForcedSupported (no size check) than to m_isAlwaysSupported. Low gameplay impact (map listing, not in-match)."
+    notes: "The catalog, detail dialog, and hosted rotation apply the upstream DM fallback consistently regardless of declared size. The 3250-unit threshold belongs to BSP autogeneration."

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using Godot;
 using VortexArena.Common.Menu;
@@ -13,11 +14,12 @@ namespace VortexArena.Game.Menu;
 ///
 /// The list is demolist.qc getDemos: <c>demos/*/*.dem</c> and <c>demos/*.dem</c> through the game's file system,
 /// a subdirectory's demos first with their directory in SKINCOLOR_DEMOLIST_SUBDIR, the lot sorted. Play and Timedemo
-/// send <c>playdemo</c> / <c>timedemo</c> as XonoticDemoList_startDemo / timeDemo do.
+/// start playback or benchmarking through the legacy viewer.
 /// </summary>
 public partial class DialogMediaDemo : QcTab
 {
     private QcNameList _list = null!;
+    private List<(string Name, string Path)> _demos = new();
     private string? _filter;
 
     public DialogMediaDemo() : base(rows: 17f, columns: 6.5f, intendedWidth: 0.96f) { }
@@ -55,7 +57,11 @@ public partial class DialogMediaDemo : QcTab
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>XonoticDemoList_getDemos.</summary>
-    private void GetDemos() => _list.SetNames(Scan("demos/", new[] { ".dem" }, _filter, "COLOR_DEMOLIST_SUBDIR"));
+    private void GetDemos()
+    {
+        _demos = ScanEntries("demos/", new[] { ".dem" }, _filter, "COLOR_DEMOLIST_SUBDIR");
+        _list.SetNames(_demos.Select(demo => demo.Name).ToList());
+    }
 
     /// <summary>
     /// getDemos_for_ext / getScreenshots_for_ext for each extension: <c>dir/*/filter.ext</c>, then
@@ -63,8 +69,12 @@ public partial class DialogMediaDemo : QcTab
     /// gets a leading "/" (it sorts first) and its directory drawn in <paramref name="subdirColor"/>. buf_sort.
     /// </summary>
     internal static List<string> Scan(string dir, string[] extensions, string? glob, string subdirColor)
+        => ScanEntries(dir, extensions, glob, subdirColor).Select(entry => entry.Name).ToList();
+
+    private static List<(string Name, string Path)> ScanEntries(
+        string dir, string[] extensions, string? glob, string subdirColor)
     {
-        var names = new List<string>();
+        var entries = new List<(string Name, string Path)>();
         Color sub = MenuSkin.SkinColor(subdirColor, 0.5f, 0.5f, 0.5f);
         string code = Hex(sub);
         foreach (string ext in extensions)
@@ -76,11 +86,16 @@ public partial class DialogMediaDemo : QcTab
                 if (slash != s.LastIndexOf('/')) continue; // one directory level, as dir/*/ matches
                 if (!Matches(slash >= 0 ? s[(slash + 1)..] : s, glob)) continue;
                 s = MenuTextFormat.Decolorize(s);
-                names.Add(slash >= 0 ? "/" + code + s.Replace("/", "^7/") : s);
+                string name = slash >= 0 ? "/" + code + s.Replace("/", "^7/") : s;
+                entries.Add((name, path));
             }
         }
-        names.Sort(StringComparer.Ordinal);
-        return names;
+        entries.Sort(static (left, right) =>
+        {
+            int byName = string.CompareOrdinal(left.Name, right.Name);
+            return byName != 0 ? byName : string.CompareOrdinal(left.Path, right.Path);
+        });
+        return entries;
     }
 
     /// <summary>rgb_to_hexcolor.</summary>
@@ -93,10 +108,7 @@ public partial class DialogMediaDemo : QcTab
     private string? SelectedDemo()
     {
         int i = _list.SelectedItem;
-        if (i < 0 || i >= _list.Names.Count) return null;
-        string s = _list.Names[i];
-        if (s.StartsWith('/')) s = s[1..];
-        return MenuTextFormat.Decolorize(s);
+        return i >= 0 && i < _demos.Count ? _demos[i].Path : null;
     }
 
     // XonoticDemoList_startDemo / timeDemo, behind DemoConfirm_ListClick_Check_Gamestatus: in a match the player
@@ -104,13 +116,13 @@ public partial class DialogMediaDemo : QcTab
     private void StartDemo()
     {
         if (SelectedDemo() is { } s)
-            Confirm(timing: false, () => MenuCommand.Run($"playdemo \"demos/{s}.dem\"; wait; togglemenu"));
+            Confirm(timing: false, () => MenuCommand.PlayDemo?.Invoke(s, false));
     }
 
     private void TimeDemo()
     {
         if (SelectedDemo() is { } s)
-            Confirm(timing: true, () => MenuCommand.Run($"timedemo \"demos/{s}.dem\"; wait; togglemenu"));
+            Confirm(timing: true, () => MenuCommand.PlayDemo?.Invoke(s, true));
     }
 
     private void Confirm(bool timing, System.Action start)

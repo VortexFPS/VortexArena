@@ -3,13 +3,13 @@ category: misc
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
 last_audited: "2026-07-02"  # NEW unit (unmapped-area audit wave): the GENERIC/shared command surface (common/command/*), the CSQC client command surface (client/command/cl_cmd.qc), and the server reply builders (server/command/getreplies.qc). Boundaries: server vote/timeout/common-info/admin/ban commands are owned by sv-commands-votes; cheat commands by sv-cheats — NOT duplicated here (dispatch shells cited there too).
 summary:
-  feature_count: 24
+  feature_count: 25
   worst_gaps:
-    - "cl_cmd hud group is half-dead: `hud save` (HUD_Panel_ExportCfg — export the HUD layout to a cfg) has NO handler (HudConfigEditor Ctrl+S emits the command into the interpreter and nothing consumes it), and `scoreboard_columns_set` is dead — ScoreboardPanel.ColumnSpec has a faithful Cmd_Scoreboard_SetFields parser but NO assignment site anywhere (always default columns)."
-    - "handlevote is not ported: the QC vyes/vno binds (F1/F2 call-vote keys) and the uid2name dialog buttons emit commands nothing handles (DialogUid2Name.cs:61 comments them 'logged inert'); a call vote can only be answered by typing `vote yes|no` in the console."
-    - "getreplies: getladder is a hardcoded 'No ladder on this server!' (no cross-map ladder computation), getrecords mutator-hook pages are always empty (records prints 'No records available' even in modes with records, e.g. CTF captime), and getlsmaps lists the rotation cvar instead of enumerating the map catalog (no new-map asterisks, no LSMAPS_MAX 250 cap)."
-    - "maplist add's map-existence gate (QC fexists maps/<map>.bsp) and maplist cleanup's MapInfo_CheckMap filter are inert on BOTH live paths: the server CmdMaplist has no exist-check and cleanup is identity; the console ConsoleCommands has a MapExists hook but it is only wired in tests."
-    - "A tail of generic/client verbs is missing outright: dumpcommands (file dump), qc_curl, restartnotifs, the `red`/markup chat easter eggs (markup.qc unported — &smiley chat markup never converted), localprint, mv_download, print_cptimes, boxparticles/debugmodel/create_scrshot_ent debug commands."
+    - "The local HUD command group has graphical evidence for editor toggles, named exports, mounted QuickMenus, radar and temporary scoreboard columns. End-to-end automatic server interactions have separate assessments."
+    - "A native remote client answered normal votes with F1/F2 and the nickname question independently. For local rankings, the player chooses nickname sharing in First Run, Profile or a manually opened match dialog."
+    - "Record reports and installed-map listings now have dedicated and remote evidence. The native replies refresh on request and keep their empty-ladder message."
+    - "Map list additions check the mounted BSP, and cleanup uses active-mode eligibility. The two dedicated hosts reproduced the same rotation."
+    - "Generic/client verbs still missing include qc_curl, restartnotifs, the `red`/markup chat easter eggs, mv_download, print_cptimes, and the boxparticles/debugmodel/create_scrshot_ent debug commands."
 features:
   - id: console-commands.generic.dispatch_infra
     name: "Generic-command dispatch + registry macros (GenericCommand, GENERIC_COMMANDS, Command class, per-program aliases)"
@@ -84,31 +84,30 @@ features:
       - "common/command/generic.qh:maplist_shuffle (decl)"
     port_refs:
       - "src/VortexArena.Engine/Console/ConsoleCommands.cs:CmdMaplist (346)"
-      - "src/VortexArena.Engine/Console/ConsoleCommands.cs:MapExists (292, hook)"
+      - "src/VortexArena.Engine/Console/ConsoleCommands.cs:MapExists"
       - "src/VortexArena.Server/Commands.cs:CmdMaplist (3060)"
       - "src/VortexArena.Engine/Console/WordList.cs:Shuffle"
     constants:
       - { name: "add position", base: "PREPEND (strcat(map, ' ', list))", port: "PREPEND (both impls)", match: true }
-      - { name: "add existence gate", base: "fexists(maps/<map>.bsp) else ERROR", port: "console: MapExists hook (null on live path); server: NO check", match: false }
+      - { name: "add existence gate", base: "BSP must exist", port: "mounted BSP check", match: true }
       - { name: "shuffle algorithm", base: "Fisher-Yates via random() buffer insert", port: "WordList.Shuffle (rng permutation)", match: true }
-      - { name: "cleanup filter", base: "MapInfo_CheckMap over current gametype/features", port: "identity unless MapExists wired (never on live path)", match: false }
+      - { name: "cleanup filter", base: "MapInfo_CheckMap over current gametype/features", port: "mounted BSP, active mode and required features", match: true }
     status:
       logic: faithful
-      values: partial
+      values: faithful
       timing: na
-      presentation: na
+      presentation: partial
       audio: na
       liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "maplist add accepts nonexistent maps on both live paths: the server CmdMaplist (Commands.cs:3064-3070) has no existence check at all; the console CmdMaplist's MapExists hook is only assigned in tests (GenericCommandsTests.cs:94) — never wired to a live map catalog."
-      - "maplist cleanup is inert on the live path (server: explicit identity, Commands.cs:3082-3084; console: identity because MapExists is null) — a rotation polluted with unusable maps is never filtered, unlike QC's MapInfo_CheckMap pass."
+      - "The original prints its full command help after the missing-map error. Native prints the error and its compact usage line."
     verification:
-      - { kind: test, ref: "tests/VortexArena.Tests/GenericCommandsTests.cs:Maplist_Add_Prepends / Maplist_Shuffle_IsAPermutation / Maplist_Add_RejectsMissingMap_WhenCatalogWired (hook works when wired)", result: pass }
-      - { kind: code, ref: "grep 'MapExists =' → only test files assign the ConsoleCommands hook; Commands.cs:3060-3088 confirms no server-side gate", result: fail }
+      - { kind: test, ref: "GenericCommandsTests.Maplist_Cleanup_KeepsOnlyExistingMaps_WhenCatalogWired and ServerClientCommandsTests.Maplist_AddChecksTheBspAndCleanupRetainsSupportedDuplicatesInOrder", result: pass }
+      - { kind: code, ref: "planning/parity/record-reports/map-catalog.txt (paired dedicated command output)", result: pass }
     confidence: high
-    notes: "add/remove/shuffle logic is faithful (including the add-PREPENDS-vs-addtolist-appends asymmetry). The two catalog-dependent behaviors (add existence gate, cleanup filter) are the gaps."
+    notes: "The paired CTF hosts rejected the missing map, kept the same eligible entries and prepended an installed duplicate. The native startup server.cfg also exercised maplist add. The listen console routes edits to the authoritative command store, while offline edits use the configured mode and local content."
 
   - id: console-commands.generic.settemp
     name: "settemp / settemp_restore — temporary cvar override with capture-once restore"
@@ -207,24 +206,22 @@ features:
     layer: [shared]
     base_refs:
       - "common/command/generic.qc:GENERIC_COMMAND(dumpcommands) (172)"
-    port_refs: []
+    port_refs:
+      - "src/VortexArena.Engine/Console/CommandAliasDump.cs"
+      - "src/VortexArena.Server/Commands.AliasDump.cs"
+      - "game/menu/framework/MenuCommand.cs"
     constants:
-      - { name: "output file", base: "data/data/<sv_cmd|cl_cmd|menu_cmd>_dump.txt", port: "none", match: false }
-    status:
-      logic: missing
-      values: missing
-      timing: na
-      presentation: na
-      audio: na
-      liveness: na
+      - { name: "filenames by program", base: "sv_cmd_dump.txt, cl_cmd_dump.txt, menu_cmd_dump.txt", port: "sv_cmd_dump.txt, cl_cmd_dump.txt, menu_cmd_dump.txt", match: true }
+    status: { logic: faithful, values: partial, timing: na, presentation: na, audio: na, liveness: live }
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No file-dump of the command tables. The port's console `cmdlist`/`help` (ConsoleCommands.cs:80-83, Commands.cs CmdHelp:1279) print to console but nothing writes the QC alias-dump txt used by doc tooling."
+      - "The export lists the commands and descriptions actually present in each native program. Registered names and help text differ between the games."
     verification:
-      - { kind: code, ref: "grep -i dumpcommands over src/ game/ tests/ → no matches", result: fail }
+      - { kind: test, ref: "tests/VortexArena.Tests/LocalDiagnosticTests.cs:CommandDumpUsesServerScopesAndTheLiveRegisteredNames", result: pass }
+      - { kind: runtime, ref: "planning/parity/local-commands/README.md", result: pass }
     confidence: high
-    notes: "Low player impact (a doc/packaging tool). cmdlist+help cover the interactive discovery use."
+    notes: "All three native program exports ran. Stock server and menu files were captured. Stock client scope has source evidence."
 
   - id: console-commands.generic.qc_curl
     name: "qc_curl — HTTP GET/POST from the console (--cvar / --exec sinks)"
@@ -362,12 +359,13 @@ features:
     base_refs:
       - "client/command/cl_cmd.qc:LocalCommand_hud (251)"
     port_refs:
-      - "game/hud/HudConfigEditor.cs:Configuring (114, _hud_configure live editor)"
-      - "game/menu/dialogs/DialogHudConfirm.cs:60 (menu entry → map _hudsetup; _hud_configure 1)"
-      - "game/net/NetGame.cs:5219-5243 (quickmenu toggle bind + hud radar 1 / +hud_panel_radar_maximized intercepts)"
+      - "game/console/ConsoleOverlay.cs:RegisterHostCommands (cl_cmd dispatch and bare scoreboard_columns_set)"
+      - "game/hud/HudConfigEditor.cs:RegisterEditorCommands"
+      - "game/hud/HudConfigEditor.cs:ExportCfg"
+      - "game/menu/dialogs/DialogHudConfirm.cs"
+      - "game/net/NetGame.cs:RunBoundCommand"
       - "game/hud/QuickMenuPanel.cs:Toggle"
-      - "game/hud/ScoreboardPanel.cs:EnsureColumns (482, Cmd_Scoreboard_SetFields parser)"
-      - "game/hud/HudConfigEditor.cs:323 (Ctrl+S emits 'hud save myconfig')"
+      - "game/hud/ScoreboardPanel.cs:EnsureColumns"
     constants: []
     status:
       logic: partial
@@ -375,42 +373,46 @@ features:
       timing: na
       presentation: partial
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "`hud save <name>` (HUD_Panel_ExportCfg — write the current HUD layout to data/<name>.cfg) is DEAD: HudConfigEditor Ctrl+S emits the command (HudConfigEditor.cs:323) but NO handler exists anywhere (no RegisterCommand(\"hud\") / no server verb) — the line falls into the unknown-command router and is discarded. HUD layout export is impossible."
-      - "`hud scoreboard_columns_set <spec>` is DEAD: ScoreboardPanel.ColumnSpec (ScoreboardPanel.cs:207) is a faithful Cmd_Scoreboard_SetFields parser but grep '.ColumnSpec' finds NO assignment site — neither a command nor the hud_panel_scoreboard_fields cvar feeds it, so the default column layout is always used. scoreboard_columns_help is also absent."
-      - "`hud quickmenu [default|file <submenu> <file>]` argument forms are ignored: NetGame:5203 toggles the panel on the bare command but the mode/submenu/file arguments (QuickMenu_Open(mode, submenu, file)) are not parsed — hud_panel_quickmenu_file custom menus can't be targeted from a bind argument."
-      - "`hud clickradar` (mouse-cursor radar, no-maximize variant) is approximated: the port has one maximized-radar mode with mouse input (NetGame:5051-5075) rather than QC's separate radar/clickradar toggles."
+      - "Exact help and feedback text across all modes and the HUD_Command extension hook remain unverified."
     verification:
-      - { kind: code, ref: "grep RegisterCommand(\"hud\" / '\"hud\"' over src+game → no handler; grep '.ColumnSpec' → property definition only", result: fail }
-      - { kind: code, ref: "hud configure equivalent live: DialogHudConfirm.cs:60 + HudConfigEditor gates on _hud_configure (:114); quickmenu/radar binds live in RunBoundCommand", result: pass }
+      - { kind: runtime, ref: "planning/parity/quickmenu-radar/README.md — mounted PK3 menu, explicit file, default, quoted submenu, fallback and KEEP_OPEN. Captures cover explicit radar on/off, held release and persistent click mode.", result: pass }
+      - { kind: runtime, ref: "planning/parity/scoreboard-blocks/column-commands.txt — nested and bare column commands, temporary ALL, original cvar retained, reload and expand_default.", result: pass }
+      - { kind: runtime, ref: "planning/parity/hud-commands/README.md — Boil console toggled 0 to 1 to 0, exported a quoted name with a changed grid value, and the post-disconnect command kept the next-match flag clear.", result: pass }
+      - { kind: code, ref: "RegisterEditorCommands toggles the live _hud_configure gate and routes named saves to ExportCfg. Ctrl+S and the menu use the same exporter.", result: pass }
+      - { kind: code, ref: "ConsoleOverlay.RunScoreboardColumns dispatches the selected fields. The scoreboard distinguishes the temporary layout from the saved scoreboard_columns setting.", result: pass }
     confidence: high
-    notes: "The FEATURES behind configure/quickmenu/radar are live via cvar+bind plumbing (the QC command was just their entry point); save and scoreboard_columns_set are the real functionality losses."
+    notes: "Named HUD exports use the writable game data directory and include current panel settings."
 
   - id: console-commands.client.localprint
     name: "cl_cmd localprint — self-centerprint a message"
     layer: [presentation]
     base_refs:
       - "client/command/cl_cmd.qc:LocalCommand_localprint (345)"
-    port_refs: []
+    port_refs:
+      - "game/hud/HudManager.cs:_Ready"
+      - "game/hud/CenterPrintPanel.cs:Add"
+      - "game/console/ConsoleOverlay.cs:RegisterHostCommands"
     constants: []
     status:
-      logic: missing
+      logic: faithful
       values: na
       timing: na
-      presentation: missing
+      presentation: partial
       audio: na
-      liveness: na
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No localprint command: the centerprint_AddStandard API exists (game/hud/CenterPrintPanel.cs:60) but no console verb reaches it, so cfg/quickmenu entries that localprint (e.g. reminder macros) print nothing."
+      - "The message uses the native centerprint renderer. Exact font metrics and fade frames still need paired runtime measurements."
     verification:
-      - { kind: code, ref: "grep localprint over src+game → comment matches only", result: fail }
+      - { kind: visual, ref: "planning/parity/hud-commands/boil-localprint.webp — the quoted green message including its semicolon appears in the live HUD. The following unused argument is omitted.", result: pass }
+      - { kind: code, ref: "cl_cmd dispatches parsed arguments. A live HUD sends argv[1] to the standard CenterPrintPanel.Add path and ignores later arguments. The pin reads hud_panel_centerprint_time for standard messages.", result: pass }
     confidence: high
-    notes: "One-line bridge (command → CenterPrintPanel.AddStandard) would close it."
+    notes: "The command affects only the invoking client."
 
   - id: console-commands.client.sendcvar_replication
     name: "sendcvar + cmd sentcvar + GetCvars/REPLICATE plumbing (client cvar replication to the server)"
@@ -450,26 +452,35 @@ features:
     name: "cl_cmd handlevote yes|no (+ vyes/vno binds, uid2name dialog interception)"
     layer: [presentation]
     base_refs:
-      - "client/command/cl_cmd.qc:LocalCommand_handlevote (203)"
-    port_refs: []
+      - "client/command/cl_cmd.qc:LocalCommand_handlevote"
+      - "lib/bool.qh:InterpretBoolean"
+    port_refs:
+      - "game/console/ConsoleOverlay.cs:handlevote"
+      - "game/menu/dialogs/DialogUid2Name.cs:Answer"
+      - "game/net/NetGame.cs:LocalServerPlayer"
+      - "game/net/ClientNet.cs:SendStringCommand"
+      - "src/VortexArena.QuakeC/Builtins/QcStringBuiltins.cs:StringToFloat"
+      - "game/net/ClientNet.cs:PumpReplicatedCvars"
     constants:
-      - { name: "bool parse", base: "InterpretBoolean(argv(1)) -> 'cmd vote yes|no'", port: "none", match: false }
-      - { name: "uid2name branch", base: "uid2name_dialog -> setreport cl_allow_uid2name 0|1", port: "DialogUid2Name sets the cvar directly but its vyes/vno are inert", match: false }
+      - { name: "vote choice", base: "InterpretBoolean(argv(1)) uses stof for numbers and ignores later operands", port: "same conversion for typed commands and aliases", match: true }
+      - { name: "nickname answer", base: "setreport cl_allow_uid2name 0 or 1", port: "archived cvar and per-client replication", match: true }
     status:
-      logic: missing
-      values: missing
+      logic: faithful
+      values: faithful
       timing: na
-      presentation: missing
+      presentation: partial
       audio: na
-      liveness: na
-    intended_divergence: false
-    divergence_rationale: null
-    gaps:
-      - "No handlevote and no vyes/vno handlers: the F1/F2 call-vote answer keys (QC alias vyes = 'cl_cmd handlevote yes') do nothing — grep vyes over game/console/BindInput.cs and NetGame.cs finds no handler; DialogUid2Name.cs:61 documents its vyes/vno as 'logged inert'. Voting on a call-vote requires typing 'vote yes|no' in the console (which IS live via the server vote command, owned by sv-commands-votes)."
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: "Approved records.nickname_prompt keeps First Run and Profile as the prompts for native local rankings. The in-match dialog opens on request. Xonotic can open it automatically."
+    gaps: []
     verification:
-      - { kind: code, ref: "grep vyes|vno|handlevote over game/ → only VotePanel keybind-hint text + the inert DialogUid2Name buttons", result: fail }
+      - { kind: visual, ref: "planning/parity/hud-commands/name-prompt.webp (native nickname prompt)", result: pass }
+      - { kind: code, ref: "planning/parity/hud-commands/vote-input.txt (separate remote F1/F2, a pending poll during name opt-out and a typed uppercase yes)", result: pass }
+      - { kind: manual, ref: "planning/parity/hud-commands/final-votes.md (pinned operands, native caller ownership, key input and profile restart)", result: pass }
     confidence: high
-    notes: "VotePanel even renders the getcommandkey Yes/No hints (VotePanel.cs:65-68) for binds that cannot work — a player-facing trap."
+    notes: "Dedicated operator votes start without a player ballot. A visible nickname dialog consumes its own answer and leaves a server poll pending."
+
 
   - id: console-commands.client.mv_download
     name: "cl_cmd mv_download — request a mapshot image during map vote"
@@ -545,17 +556,19 @@ features:
     notes: "Dev/mapper tooling, off the normal match path."
 
   - id: console-commands.replies.rankings
-    name: "getrankings — race/CTS top-N times reply for the current map"
+    name: "getrankings — top-99 times for the current map"
     layer: [authority]
     base_refs:
-      - "server/command/getreplies.qc:getrankings (46)"
+      - "server/command/getreplies.qc:getrankings"
+      - "server/race.qc:race_readTime"
+      - "server/world.qc:record_type"
     port_refs:
-      - "src/VortexArena.Server/CommandReplies.cs:GetRankings (146)"
-      - "src/VortexArena.Server/Commands.cs:CmdRankings (3401)"
+      - "src/VortexArena.Server/CommandReplies.cs:GetRankings"
+      - "src/VortexArena.Server/Commands.cs:CmdRankings"
     constants:
-      - { name: "row format", base: "strpad(8,ordinal) ' ' strpad(-8,TIME_ENCODED) ' ' name \\n", port: "PadLeft(8)/PadRight(8) same order (CommandReplies.cs:173)", match: true }
-      - { name: "record type", base: "CTS_RECORD if g_cts else RACE_RECORD", port: "cts→CtsRecord / rc→RaceRecord (CommandReplies.cs:153)", match: true }
-      - { name: "empty case", base: "No records are available for the map: <map>", port: "verbatim", match: true }
+      - { name: "row format", base: "ordinal width 8, clock time width 8, then holder", port: "same widths and order", match: true }
+      - { name: "record type", base: "CTS, CTF or default Race", port: "CTS, CTF or default Race", match: true }
+      - { name: "rank count", base: "99", port: "99", match: true }
     status:
       logic: faithful
       values: faithful
@@ -567,39 +580,50 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "CommandReplies.cs:146-180 reads the live RaceRecords store (ReadTime/ReadName 1..RankingsCnt) with QC's format; CmdRankings recomputes lazily then prints", result: pass }
-    confidence: medium
-    notes: "Recompute-on-read is a cheap superset of QC's init-time strzone (values always fresh). Not verified against an actual populated race DB in-game."
+      - { kind: visual, ref: "planning/parity/record-reports/README.md (remote CTF and dedicated Race/CTS)", result: pass }
+      - { kind: test, ref: "ServerClientCommandsTests.Records_RaceModesReturnScopedRankOneInClockFormat", result: pass }
+    confidence: high
+    notes: "Reads the active map and record table on demand. The native reply sees records updated during the current match."
 
   - id: console-commands.replies.records_ladder
-    name: "getrecords (mutator-hook record pages) + getladder (cross-map ladder table)"
+    name: "getrecords pages and cross-map getladder"
     layer: [authority]
     base_refs:
-      - "server/command/getreplies.qc:getrecords (35)"
-      - "server/command/getreplies.qc:getladder (71)"
+      - "server/command/getreplies.qc:getrecords"
+      - "server/command/getreplies.qc:getladder"
+      - "server/command/common.qc:CommonCommand_records"
+      - "common/gametypes/gametype/race/sv_race.qc:MUTATOR_HOOKFUNCTION(rc, GetRecords)"
+      - "common/gametypes/gametype/cts/sv_cts.qc:MUTATOR_HOOKFUNCTION(cts, GetRecords)"
+      - "common/gametypes/gametype/ctf/sv_ctf.qc:MUTATOR_HOOKFUNCTION(ctf, GetRecords)"
     port_refs:
-      - "src/VortexArena.Server/CommandReplies.cs:Recompute (70-71, RecordsReply zeroed)"
-      - "src/VortexArena.Server/CommandReplies.cs:GetLadder (183, hardcoded empty)"
-      - "src/VortexArena.Server/Commands.cs:CmdRecords (3382)"
+      - "src/VortexArena.Server/CommandReplies.cs:GetRecords"
+      - "src/VortexArena.Server/CommandReplies.cs:GetLadder"
+      - "src/VortexArena.Server/Commands.cs:CmdRecords"
+      - "game/net/NetGame.cs:RecordMapCatalog"
+      - "game/net/ServerNet.cs:HandleClientCommand"
     constants:
-      - { name: "LADDER_FIRSTPOINT scoring", base: "floor(100/i) pts per place, 100/10 speed award", port: "none", match: false }
-      - { name: "ladder empty case", base: "No ladder on this server!", port: "always returned", match: false }
+      - { name: "record pages", base: "10 pages of 200 catalog positions", port: "10 pages of 200 catalog positions", match: true }
+      - { name: "ladder scoring", base: "floor(100/i) per rank, 10 per speed award", port: "same", match: true }
+      - { name: "ladder size", base: "30 holders from ranks 1–10 and speed awards", port: "same", match: true }
+      - { name: "empty ladder", base: "unconditional table header", port: "No ladder on this server!", match: false }
     status:
-      logic: stub
-      values: missing
-      timing: na
-      presentation: missing
+      logic: faithful
+      values: faithful
+      timing: partial
+      presentation: partial
       audio: na
       liveness: live
-    intended_divergence: false
-    divergence_rationale: null
+    intended_divergence: true
+    divergence_rationale: "The existing console specification calls for up-to-date replies and the server regression requires an explicit empty-ladder message. The paired gameplay run confirmed both visible differences."
     gaps:
-      - "getrecords: the GetRecords mutator hook (each gametype contributing its record page — CTF captime, race records, etc.) has no port; RecordsReply[0..9] are hard-zeroed every Recompute (CommandReplies.cs:70-71), so `records` always prints 'No records available' even when the mode has records."
-      - "getladder: no cross-map ladder computation (speed awards, per-place counts, LADDER_FIRSTPOINT floor(100/i) scoring, top-N table) — GetLadder() returns the QC empty-case string unconditionally, even on a server with a populated race DB."
+      - "An empty native ladder retains its existing empty message. The pin renders an empty table because it initializes the header before checking the output string."
+      - "Native reports read the database and mounted map catalog on demand. The pin uses replies cached at world initialization and refreshed by some record paths."
     verification:
-      - { kind: code, ref: "CommandReplies.cs:70-71 + :183; the commands themselves are registered + live (Commands.cs:914/918)", result: fail }
+      - { kind: visual, ref: "planning/parity/record-reports/README.md (native ENet client and dedicated console)", result: pass }
+      - { kind: test, ref: "ServerClientCommandsTests.Records_CtfPagesUseMapPositionsAndSeparateFastestCapture and Ladder_*", result: pass }
+      - { kind: visual, ref: "planning/parity/record-lifecycle/earned/README.md (gameplay-earned records and paired empty-ladder and refresh observations)", result: pass }
     confidence: high
-    notes: "The command surface is live (honest-empty), the reply computation is the gap. Rankings (previous row) shows the RaceRecords store IS reachable from this seam, so getladder is implementable."
+    notes: "Records queries the same mode-filtered VFS catalog as rotation. The paged CTF report uses fastest capture, and the ladder uses ranked captures plus Race speed awards."
 
   - id: console-commands.replies.maplists_monsters
     name: "getmaplist (printmaplist) / getlsmaps (lsmaps) / getmonsterlist reply builders"
@@ -609,33 +633,30 @@ features:
       - "server/command/getreplies.qc:getlsmaps (252)"
       - "server/command/getreplies.qc:getmonsterlist (296)"
     port_refs:
-      - "src/VortexArena.Server/CommandReplies.cs:GetMaplist (82)"
-      - "src/VortexArena.Server/CommandReplies.cs:GetLsmaps (106)"
-      - "src/VortexArena.Server/CommandReplies.cs:GetMonsterlist (126)"
-      - "src/VortexArena.Server/Commands.cs:CmdLsmaps (3402) / CmdPrintMapList (3403)"
+      - "src/VortexArena.Server/CommandReplies.cs:GetMaplist / GetLsmaps / GetMonsterlist"
+      - "src/VortexArena.Server/Commands.cs:CmdLsmaps / CmdPrintMapList"
     constants:
       - { name: "maplist header", base: "^7Maps in list (N): + ^2/^3 alternating", port: "same", match: true }
-      - { name: "lsmaps header", base: "^7Maps available (N)[new-maps note]: ", port: "^7Maps available (N): (no note)", match: false }
-      - { name: "LSMAPS_MAX", base: "250 (+ '(n not listed)' overflow)", port: "none", match: false }
-      - { name: "new-map marker", base: "^4*/^5* blue asterisks when no record exists (race/cts/ctf)", port: "none", match: false }
+      - { name: "lsmaps header", base: "optional blue-asterisk note", port: "same when a listed map lacks a result", match: true }
+      - { name: "LSMAPS_MAX", base: "250 plus overflow count", port: "same", match: true }
+      - { name: "new-map marker", base: "blue asterisk for absent rank one in Race/CTS or absent fastest CTF capture", port: "same three lookups", match: true }
       - { name: "monsterlist", base: "^7Monsters available: alternating ^2/^3 netnames, trailing space", port: "same (MON_FLAG_HIDDEN filter moot — no hidden monsters)", match: true }
     status:
       logic: partial
-      values: partial
+      values: faithful
       timing: na
       presentation: partial
       audio: na
       liveness: live
-    intended_divergence: false
-    divergence_rationale: null
+    intended_divergence: true
+    divergence_rationale: "The established native rotation has three sources. Showing the effective rotation when the cvar is empty also covers long rotations stored in a file and the installed-map fallback. Maplist page sizing remains part of the existing native command contract."
     gaps:
-      - "getmaplist skips QC's MapInfo_CheckMap filter (colorizes every g_maplist word; an unusable map still lists — consistent with the maplist-cleanup gap)."
-      - "getlsmaps lists the g_maplist rotation instead of enumerating the full MapInfo catalog filtered by forbidden flags, and drops the new-map blue-asterisk marking + the LSMAPS_MAX 250 cap — on a big-content server 'lsmaps' under-reports what is actually available."
+      - "For an empty rotation cvar the native host can report its effective rotation, including the map-list file or the mounted catalog. The pinned reply tests the cvar alone."
     verification:
-      - { kind: test, ref: "tests/VortexArena.Tests/ServerClientCommandsTests.cs:PrintMapList_ShowsTheRotation", result: pass }
-      - { kind: code, ref: "CommandReplies.cs:82-137 vs getreplies.qc:233-307 (deviations documented in the file's doc comments)", result: pass }
+      - { kind: test, ref: "ServerClientCommandsTests.Lsmaps_MarksUnplayedMapsUsingTheActiveRecordTable and Lsmaps_TruncatesAt250AndCountsOmittedMaps", result: pass }
+      - { kind: code, ref: "planning/parity/record-reports/map-catalog.txt (pinned and native CTF catalog and filtered rotation)", result: pass }
     confidence: high
-    notes: "getmonsterlist is faithful. The lsmaps/maplist deltas trace to the same missing map-catalog seam as generic.maplist."
+    notes: "The paired fixture compared the two shared CTF maps and the explicit rotation. The pinned reply retained its cached rotation after a successful add. Native reflected the edit immediately. Native lsmaps reads the installed catalog and current record state, including the CTF fastest-capture table independently of leaderboard ranks."
 
   - id: console-commands.replies.infra
     name: "Reply-cache infrastructure (init-time precompute, print_to delivery) — coverage"
@@ -644,8 +665,8 @@ features:
       - "server/command/getreplies.qc:1-33 (module header + cache contract)"
       - "server/command/getreplies.qh (reply-string globals + GetCvars decls)"
     port_refs:
-      - "src/VortexArena.Server/CommandReplies.cs:Recompute (63)"
-      - "src/VortexArena.Server/Commands.cs:3382-3404 (the reply commands print the cached fields)"
+      - "src/VortexArena.Server/CommandReplies.cs:GetMaplist / GetLsmaps / GetRecords / GetRankings / GetLadder"
+      - "src/VortexArena.Server/Commands.cs:common reply commands"
     constants: []
     status:
       logic: faithful
@@ -655,10 +676,11 @@ features:
       audio: na
       liveness: live
     intended_divergence: true
-    divergence_rationale: "QC strzones the reply strings once at world init (server/world.qc); the port recomputes lazily on each command read (CommandReplies doc, 'cheap superset' — always-fresh values, no stale-after-cvar-change cache)."
+    divergence_rationale: "The pin caches replies at world setup. A successful gametype switch refreshes lsmaps, and Race ranking writes or removals refresh rankings. Native builds the requested reply on demand so current settings, installed maps and saved records are reflected immediately."
     gaps: []
     verification:
-      - { kind: code, ref: "CommandReplies.cs:59-73 + CmdRecords/CmdRankings/... call Replies.Recompute() then print", result: pass }
+      - { kind: test, ref: "ServerClientCommandsTests.MapReplies_ReadOnlyTheirOwnCatalogAndRefreshAfterARecord", result: pass }
+      - { kind: code, ref: "planning/parity/record-reports/map-catalog.txt (paired printmaplist cache observation)", result: pass }
     confidence: high
     notes: "The consuming CommonCommand_* command shells (records/rankings/lsmaps/printmaplist/ladder/who/time/info) are owned by sv-commands-votes.common.info_commands; this unit owns the reply GENERATORS."
 
@@ -688,3 +710,50 @@ features:
       - { kind: code, ref: "sv-commands-votes.yaml timeout.state_machine constants block (sv_timeout 0 / length 120 / number 2 / slowmo value) covers this header's declarations", result: pass }
     confidence: high
     notes: "Coverage row only. common.qc (the command bodies) is owned by sv-commands-votes; this header was the last unmapped file in this unit's scope."
+
+  - id: console-commands.local.balance_diagnostics
+    name: "Local balance exports and entity and cvar diagnostics"
+    layer: [authority, shared]
+    base_refs:
+      - "common/debug.qh:GENERIC_COMMAND(cvar_localchanges)"
+      - "common/weapons/config.qc:Dump_Weapon_Settings"
+      - "common/turrets/config.qc:Dump_Turret_Settings"
+    port_refs:
+      - "src/VortexArena.Server/Commands.LocalDiagnostics.cs:DumpBalance"
+      - "src/VortexArena.Engine/Console/LocalDiagnostics.cs"
+      - "src/VortexArena.Server/BalanceDumpCatalog.cs"
+    constants:
+      - { name: "stock default export", base: "25 weapons, 12 turrets", port: "25 weapons, 12 turrets", match: true }
+    status: { logic: partial, values: faithful, timing: na, presentation: na, audio: na, liveness: live }
+    intended_divergence: false
+    divergence_rationale: null
+    gaps:
+      - "The native console cannot inspect legacy VM string-buffer handles. Native and legacy diagnostics use their respective entity stores."
+    verification:
+      - { kind: test, ref: "tests/VortexArena.Tests/LocalDiagnosticTests.cs", result: pass }
+      - { kind: runtime, ref: "Original and native default Darkzone dedicated servers produced byte-identical weapons_dump.cfg (851 settings) and turrets_dump.cfg (370 settings). Dedicated stdin and the headless listen console exercised custom names and local diagnostics.", result: pass }
+    confidence: high
+
+  - id: console-commands.local.entity_debug_label
+    name: "Local aimed entity diagnostic (sv_show_entnum)"
+    layer: [authority, presentation]
+    base_refs:
+      - "common/debug.qh:DebugText3d"
+      - "server/client.qc:show_entnum"
+      - "server/weapons/tracing.qc:crosshair_trace_plusvisibletriggers__is_wz"
+    port_refs:
+      - "game/net/NetGame.DebugLabels.cs:UpdateLocalDebugLabels"
+      - "src/VortexArena.Engine/Collision/TraceService.cs:ClipToEntities"
+      - "src/VortexArena.Server/LocalDebugLabels.cs:AimAtEntity"
+      - "game/client/LocalDebugLabelLayer.cs:_Draw"
+    constants:
+      - { name: "label lifetime", base: "7 gameplay seconds", port: "7 gameplay seconds", match: true }
+      - { name: "sv_show_entnum default", base: "0", port: "0", match: true }
+    status: { logic: faithful, values: faithful, timing: faithful, presentation: faithful, audio: na, liveness: live }
+    intended_divergence: true
+    divergence_rationale: "The native listen host projects diagnostics from its rendered camera and reads native entity IDs and fields. Stock broadcasts the temporary QuakeC event to clients. Native diagnostics remain local to the listen host."
+    gaps: []
+    verification:
+      - { kind: runtime, ref: "planning/parity/debug-labels/README.md", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/LocalDebugLabelTests.cs", result: pass }
+    confidence: high

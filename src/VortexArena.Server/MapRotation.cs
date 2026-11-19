@@ -22,6 +22,8 @@ public sealed class MapRotation
 
     /// <summary>Does the named map file exist? (QC <c>fexists</c>). Default true (no asset layer).</summary>
     public Func<string, bool> MapExists { get; set; } = static _ => true;
+    public Func<string, bool> CanListMap { get; set; } = static _ => true;
+    public Func<string, bool> AvoidInRotation { get; set; } = static _ => false;
 
     /// <summary>Does the map support the current gametype? (QC <c>MapInfo_CheckMap</c>). Default true.</summary>
     public Func<string, bool> MapSupportsGametype { get; set; } = static _ => true;
@@ -57,10 +59,9 @@ public sealed class MapRotation
     /// resumes after it). Returns the buffer size.
     ///
     /// <para>An empty <c>g_maplist</c> means "every map that supports the current gametype"
-    /// (<see cref="AllowedMaps"/>). Base used to write those names back into the cvar, which broke on servers
-    /// whose full list exceeded the 16383-byte QC string limit — the list came back truncated mid-name
-    /// (xonotic-data#3002) — so neither side serialises it any more: the rotation buffer holds one map per
-    /// entry and the cvar stays empty.</para>
+    /// (<see cref="AllowedMaps"/>). The pinned Base writes those names back into the cvar, which can truncate
+    /// large catalogs at the QC string limit (xonotic-data#3002). Native keeps one map per buffer entry and
+    /// leaves the cvar empty.</para>
     /// </summary>
     public int Init(string currentMap)
     {
@@ -178,13 +179,12 @@ public sealed class MapRotation
     private int MethodRepeat()
         => MapCheck(_current, 2) ? _current : -1;
 
-    /// <summary>QC <c>Map_Check</c>: pass≤1 excludes recent maps + checks gametype support; pass 2 is existence-only.</summary>
+    /// <summary>QC <c>Map_Check</c>: ordinary selection excludes recent and do-not-want maps. The last resort still checks gametype support.</summary>
     private bool MapCheck(int index, int pass)
     {
         if (index < 0 || index >= _buffer.Count) return false;
         string m = _buffer[index];
-        if (pass <= 1 && IsRecent(m)) return false;
-        if (pass == 2) return MapExists(m);
+        if (pass <= 1 && (IsRecent(m) || AvoidInRotation(m))) return false;
         return MapExists(m) && MapSupportsGametype(m);
     }
 

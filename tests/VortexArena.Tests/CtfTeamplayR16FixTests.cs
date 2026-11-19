@@ -29,6 +29,8 @@ public sealed class CtfTeamplayR16FixTests : System.IDisposable
     public CtfTeamplayR16FixTests()
     {
         GameRegistries.Bootstrap();
+        Notifications.RegisterAll();
+        NotificationSystem.Sink = NotificationSystem.Recorder;
         Api.Services = new EngineServices(new CollisionWorld());
     }
 

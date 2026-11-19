@@ -1,0 +1,122 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: The separate rendering thread feature is experimental. Feel free to try it since it will eventually become a stable feature.
+However, bear in mind that at the moment it can lead to project crashes or instability.
+So, unless you want to test the engine, set the "rendering/driver/threads/thread_model" project setting to 'Safe'.
+     at: setup2 (main/main.cpp:3415)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Enabled maxfps=0 refresh=-1Hz cpu=6c gpu=[0m
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag][0m
+=== VortexArena boot ===[0m
+Weapons:   27[0m
+Items:     21[0m
+Mutators:  46[0m
+GameTypes: 21[0m
+Sounds:    223[0m
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).[0m
+[lb]MenuState] user gamedir mounted: /tmp/va-scripted-relic-render5/session-native/server-user/data (drop .pk3 packs in its maps/ subfolder).[0m
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"[0m
+"maxplayers" set to "32"[0m
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).[0m
+[lb]MenuState] cvar help: 1386 engine descriptions.[0m
+[lb]shell] --cvar sv_public = "0"[0m
+[lb]shell] --cvar sv_eventlog = "1"[0m
+[lb]shell] --cvar g_warmup = "0"[0m
+[lb]shell] --cvar skill = "5"[0m
+[lb]shell] --cvar sv_cheats = "2"[0m
+[lb]shell] --cvar g_spawnshieldtime = "0"[0m
+[lb]shell] --cvar g_buffs_random_location = "0"[0m
+[lb]shell] --cvar g_buffs_randomize = "0"[0m
+[lb]shell] --cvar g_start_delay = "0"[0m
+[lb]shell] --cvar g_buffs = "1"[0m
+[lb]shell] --cvar g_buffs_replace_powerups = "0"[0m
+[lb]shell] --cvar g_buffs_spawn_count = "0"[0m
+[lb]shell] --cvar g_sandbox = "1"[0m
+[lb]shell] --cvar g_sandbox_info = "2"[0m
+[lb]shell] --cvar g_sandbox_editor_free = "1"[0m
+[lb]shell] --cvar g_sandbox_editor_distance_spawn = "88"[0m
+[lb]shell] --cvar g_sandbox_storage_autoload = "0"[0m
+[lb]shell] --cvar g_sandbox_storage_autosave = "0.2"[0m
+[lb]shell] --cvar g_grab_range = "200"[0m
+[lb]shell] --cvar timelimit = "0"[0m
+[lb]shell] --cvar g_buffs_cooldown_activate = "1"[0m
+[lb]shell] --cvar sv_spectate = "0"[0m
+[lb]video] vid_vsync 0 → requested Disabled, actual Enabled (off — uncapped, may tear)[0m
+[lb]video] cl_maxfps 256 -> Engine.MaxFps 144 (auto: nothing set a cap, using max(144, refresh); refresh -1Hz)[0m
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)[0m
+[lb]video] process priority boost unavailable: Permission denied[0m
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] hosting listen server: gametype=dm map=stormkeep bots=0 skill=-1 timelimit=0 fraglimit=0[0m
+[NetGame] dedicated slim: headless host — client render/audio asset loads are skipped (server keeps collision, entities, muzzle tags, waypoints). `sv_dedicated_slim 0` restores the full load.
+[NetGame] DEDICATED: no local client — no loopback connection, carrier, camera, HUD or prediction. All player slots are available to real clients.
+[lb]GameWorld] tick rate: sys_ticrate=0.015625 -> 64 Hz [lb]sharedStore=True, cfgLoaded=False][0m
+[NetGame] dedicated loop cap: Engine.MaxFps 64 (sim tickrate 64 Hz).
+[NetTransport.Server] listening on UDP 26711 (max 32).
+[ServerNet] LAN discovery: answering getinfo on UDP 26712 (game port 26711).
+[ServerConsole] reading commands from stdin (type 'status', 'help', 'quit'; --no-console to disable).
+[NetGame] precached 0 weapon models, skipped 24 (lazy), 24 muzzle tags.
+[NetGame] listen server on 127.0.0.1:26711 (map 'stormkeep', dm, 0 bots) — self-connecting.
+[LoadTimeline] host stormkeep — load begin → ready, 481 ms total
+    textures.compress: nothing compressed (gl_texturecompression 1, no eligible textures)
+    bsp.parse             27.8 ms    5.8 %
+    collision.build      143.9 ms   29.9 %
+    world.boot           106.0 ms   22.1 %
+  server.start           312.4 ms   65.0 %
+  precache.weapons       123.4 ms   25.7 %
+  (unaccounted: yields, present, unmeasured)       44.8 ms
+[ServerNet] peer 1933483072 connected (awaiting handshake).
+:connect:1:-1:127.0.0.1
+:join:1:-1:127.0.0.1:ParityOwner
+[ServerNet] peer 1933483072 accepted as 'ParityOwner' (netId 1933483072, id 1f69d540).
+[ServerNet] peer 169488354 connected (awaiting handshake).
+:connect:2:-2:127.0.0.1
+:join:2:-2:127.0.0.1:ParityGuest
+[ServerNet] peer 169488354 accepted as 'ParityGuest' (netId 169488354, id c74ae471).
+gametype: dm  time: 27.9
+players: 2 (0 bots)
+  ParityOwner      score    0  k/d 0/0
+  ParityGuest      score    0  k/d 0/0
+gametype: dm  time: 38.2
+players: 2 (0 bots)
+  ParityOwner      score    0  k/d 0/0
+  ParityGuest      score    0  k/d 0/0
+[lb]hitch MIXED] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — 30.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 0.6 rcpu 0.0 gpu 0.0 rest 30.6 late 31.2 | alloc 0B | ticks 1 | watchdog: 14/14 samples in '(post-process)' | DEBUG-BUILD[0m
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6[0m
+:part:1
+:anticheat:_time:1:27.84375
+:anticheat:speedhack:0.096886:-
+:anticheat:speedhack_m1:0.71996:-
+:anticheat:speedhack_m2:0.746619:-
+:anticheat:speedhack_m3:0.77193:-
+:anticheat:speedhack_m4:0.795063:-
+:anticheat:speedhack_m5:0.81563:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0.149532:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+[ServerNet] peer 1933483072 disconnected (ParityOwner).
+shutting down…
+[lb]hitch MIXED ×8] 31.3–546.9ms over 2.0s (med 15.6) — 30.6ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+=== frame profiler session summary (43s, 2516 frames) ===[0m
+  fps: avg 60.7  1%low 64  0.1%low 4  (median 15.6ms, worst 546.9ms)[0m
+  hitches: 8 total — 8 primaries: 8 MIXED[0m
+    worst[lb]1]: 546.9ms MIXED (ng.process) @ t=42.0s[0m
+    worst[lb]2]: 437.5ms MIXED (proc:other) @ t=42.3s[0m
+    worst[lb]3]: 265.6ms MIXED (proc:other) @ t=41.2s[0m
+    worst[lb]4]: 218.8ms MIXED (proc:other) @ t=42.9s[0m
+    worst[lb]5]: 156.3ms MIXED (proc:other) @ t=41.4s[0m
+  gc: g0+21 g1+13 g2+4, total pause 92ms[0m
+  alloc: 184.0MB total, 0MB/s recent, peak 88.5MB in one frame @ t=1.3s, heap 49.0MB[0m
+  note: DEBUG build — frame times and the hitch census are NOT release-representative (run the release export via tools/perf-run.ps1 for real numbers)[0m
+  [lb]vram census] 0 resident textures, est 0 MB (textures only; Godot's vram monitor adds mesh/render-target buffers)[0m
+    compression: mode 1, s3tc unprobed (nothing compressed this session), ok 0, bc7-fallback 0, failed 0[0m
+    top 0:[0m

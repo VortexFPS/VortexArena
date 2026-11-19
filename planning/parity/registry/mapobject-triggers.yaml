@@ -5,7 +5,6 @@ last_audited: "2026-06-28"
 summary:
   feature_count: 24
   worst_gaps:
-    - "trigger_viewlocation: no client 2.5D side-scroller camera consumer — server still stamps player.ViewLoc each frame (and the wave wired the .viewloc MOVEMENT gating into PlayerPhysics: swim/ladder/crouch), but the VIEW is never locked to the start->end line (presentation missing / liveness partial). The port client is free-look only."
     - "trigger_push: no animdecide_setaction(ANIMACTION_JUMP) third-person jump pose on launch (jumppads.qc) — needs a LOWER-body anim-action seam (port AnimDecide only does UPPER-body TAUNT/MELEE); same gap as PlayerPhysics jump / walljump grunt. presentation stays partial; the jumppadcount/jumppadsused bookkeeping + q3 gravity correction + q3 1.5s debounce are ported."
     - "trigger_gamestart wait>0 fidelity is now byte-faithful via the now-wired LogicGates.GameStartTimeProvider, but game_starttime still defaults to 0 in the headless gametype (the host applies the real countdown upstream) — intended_divergence."
 features:
@@ -83,7 +82,7 @@ features:
     constants:
       - { name: "dmg default", base: "10000 (q3compat 5)", port: "IsQ3Compat ? 5 : 10000 (HurtSetup:306)", match: true }
       - { name: "creature cooldown", base: "1s (q3compat non-HURT_SLOW 0.05s)", port: "(IsQ3Compat && !HurtSlow) ? 0.05 : 1 (HurtTouch:340)", match: true }
-      - { name: "SPAWNFLAG_HURT_SLOW", base: "BIT(0) (keeps 1s under q3)", port: "1<<0 (Triggers.HurtSlow:292)", match: true }
+      - { name: "SPAWNFLAG_HURT_SLOW", base: "BIT(4) (keeps 1s under q3)", port: "1<<4 (Triggers.HurtSlow)", match: true }
       - { name: "deathtype", base: "DEATH_HURTTRIGGER (routes to DEATH_SELF/MURDER_VOID notif, all.inc:11)", port: "DeathTypes.Void", match: true }
       - { name: "default message", base: "\"was in the wrong place\"", port: "same", match: true }
       - { name: "INVERT_TEAMS gate", base: "((spawnflags&INVERT_TEAMS)==0)==(team!=toucher.team)", port: "exact match", match: true }
@@ -98,9 +97,9 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code_read, ref: "hurt.qc:26/64 q3 values vs Triggers.cs HurtSetup:306 (dmg = IsQ3Compat ? 5 : 10000) + HurtTouch:340 (cooldown = (IsQ3Compat && (spawnflags & HurtSlow)==0) ? 0.05 : 1) + HurtSlow=1<<0; team gate present; non-creature gated on IsPushable as the damagedbytriggers stand-in; all.inc:11 HURTTRIGGER->VOID notif. IsQ3Compat is live (CompatRemaps, set per-map at load)", result: pass }
+      - { kind: test, ref: "TargetUtilitiesTests.HurtAndKill_RequireExplicitNonCreatureEligibility_AndAttributeDamage and ObjectiveSpawn_OptsIntoTriggerDamageOnlyWhenConfigured exercise the real touch handler, stock damage type, sender and CTF and KeyHunt options.", result: pass }
     confidence: high
-    notes: "FIX (re-audit 2026-06-27): the q3compat gap is now CLOSED — the baseline row was STALE. The current port DOES apply the q3 path: HurtSetup:306 sets dmg = IsQ3Compat ? 5 : 10000, and HurtTouch:340 uses the 0.05s creature cooldown under q3compat UNLESS SPAWNFLAG_HURT_SLOW (Triggers.HurtSlow=1<<0) restores the 1s cadence. values partial->faithful, gap cleared. team/INVERT gate, non-creature IsPushable gate (damagedbytriggers stand-in), use-attacker takeover, DEATH_HURTTRIGGER->Void all faithful and live."
+    notes: "Creature damage honors the per-target cooldown and player takeover. Damageable non-creatures use DamagedByTriggers and receive the hurt volume as attacker. CTF flag and KeyHunt key spawn latch the field from their return-when-unreachable settings."
 
   - id: mapobject-triggers.heal.trigger_heal
     name: "trigger_heal / target_heal — heal volume / relay"
@@ -708,32 +707,46 @@ features:
     notes: "FIX (re-audit 2026-06-28): the fade-curve gap is CLOSED. The wave REWROTE game/client/MusicPlayer.cs from the old two-AudioStreamPlayer A/B crossfade to QC's faithful per-source .state model: every listed source keeps a SourceState (0..1), the BEST source ramps UP by dt/fade_time and ALL others ramp DOWN by dt/fade_rate, every source plays simultaneously at state*volume*bgm, and a source is freed when state hits 0 (AdvanceAllSources:358-436 ports TargetMusic_Advance). fade_time/fade_rate now ride the entity (MapObjectFieldsExtra parse -> Fades()). values/timing/presentation partial->faithful. Live via _Process. The lone residual (UNSET fade key -> 2.0s default instead of QC's instant) is now an intended_divergence, not a gap. 3-layer priority + lifetime window + touch freshness + reset hooks unchanged-faithful."
 
   - id: mapobject-triggers.viewloc.trigger_viewlocation
-    name: "trigger_viewlocation + target_viewlocation_start/end — 2.5D camera regions"
+    name: "trigger_viewlocation and target anchors for 2.5D camera regions"
     layer: [authority, presentation]
     base_refs:
       - "common/mapobjects/trigger/viewloc.qc:viewloc_think"
       - "common/mapobjects/trigger/viewloc.qc:viewloc_init"
-      - "common/mapobjects/trigger/viewloc.qc:spawnfunc(target_viewlocation_start)"
+      - "common/viewloc.qc:viewloc_PlayerPhysics"
+      - "common/viewloc.qc:viewloc_SetViewLocation"
+      - "common/viewloc.qc:CursorToWorldCoord"
+      - "client/view.qc:ViewLocation_Mouse"
+      - "client/view.qc:View_UpdateFov"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/MapObjects/ViewLocation.cs:TriggerViewLocationSetup"
       - "src/VortexArena.Common/Gameplay/MapObjects/ViewLocation.cs:ViewLocThink"
-      - "src/VortexArena.Common/Gameplay/MapObjects/ViewLocation.cs:StartSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/ViewLocationState.cs:RemapMovement"
+      - "src/VortexArena.Common/Gameplay/MapObjects/ViewLocationState.cs:ResolveCamera"
+      - "src/VortexArena.Common/Gameplay/MapObjects/ViewLocationState.cs:FreeAimRayEnd"
+      - "game/hud/CrosshairPanel.cs:DrawViewLocationCursor"
+      - "src/VortexArena.Net/ViewLocationWire.cs:Read"
+      - "game/net/NetGame.cs:UpdateCamera"
     constants:
-      - { name: "start cnt", base: "1", port: "1", match: true }
-      - { name: "end cnt", base: "2", port: "2", match: true }
-      - { name: "angle anglehack", base: "angle -> angles_y", port: "folded by field-parse layer", match: true }
+      - { name: "start and end cnt", base: "1 and 2", port: "1 and 2", match: true }
+      - { name: "close snap yaw threshold", base: "60 degrees", port: "60 degrees", match: true }
+      - { name: "rail render FOV", base: "110 degrees at 4:3", port: "110 degrees at 4:3", match: true }
     status:
-      logic: faithful
+      logic: partial
       values: faithful
-      timing: faithful
-      presentation: missing
+      timing: partial
+      presentation: partial
       audio: na
-      liveness: partial
-    intended_divergence: false
-    divergence_rationale: null
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: "ADR-0005 and ADR-0011 carry resolved region anchors in authoritative native snapshots. Stock uses DarkPlaces CSQC entity links."
     gaps:
-      - "no client 2.5D side-scroller CAMERA consumer: the server stamps player.ViewLoc each frame and the wave wired the .viewloc MOVEMENT gating into PlayerPhysics (swim drift/ladder/crouch — PlayerPhysics.cs:782,815,849,1101,1291), but no client locks the VIEW to the start->end line, so the side-scroller camera region has no visible effect (still no .ViewLoc camera consumer under game/client/)"
+      - "Entry and exit latency between authoritative snapshots remains unmeasured."
+      - "The FREEAIM cursor uses the configured art, size and color. Its separate draw path still omits stock crosshair fades and feedback animations."
     verification:
-      - { kind: code_read, ref: "viewloc.qc vs ViewLocation.cs (anchor resolve at INITPRIO_FINDTARGET, per-frame clear+re-stamp, angle fold — ViewLocation.cs unchanged this wave). .ViewLoc is now read in PlayerPhysics.cs (swim/ladder/crouch movement gating) but NO client camera consumer found in game/client/ (FirstPersonView 'ViewLock' is cl_lockview, a substring false-positive, not viewloc)", result: pass }
+      - { kind: test, ref: "OrderedAuditGameplayTests.ViewLocationTriggerBindsAnchorsAndClearsWhenPlayerLeaves", result: pass }
+      - { kind: test, ref: "OrderedAuditGameplayTests.ViewLocationRemapsInputsAndFacing / ViewLocationClampsCameraAndPreservesCloseSnapTransition / ViewLocationWireCarriesBothAnchorsAndExplicitExit", result: pass }
+      - { kind: live, ref: "Ordered S1 graphical fixture verifies the authored fixed camera coordinates in planning/parity/unmapped-audit/ordered-gameplay-smoke.webp", result: pass }
+      - { kind: live, ref: "planning/parity/view-location/README.md records rail entry, exit in the empty corner of a sloped brush, reentry and exit for a player and a remote follower.", result: pass }
+      - { kind: test, ref: "ViewLocationCameraTests covers combined flag priority, yaw retention, coincident targets and FREEAIM ray depth and avatar aim.", result: pass }
+      - { kind: live, ref: "planning/parity/view-location/FREEAIM.md records cursor input and follow cameras on the combined snap fixture.", result: pass }
     confidence: high
-    notes: "RE-VERIFIED 2026-06-28: server half faithful+live (anchors resolved post-spawn, per-frame think clears+re-stamps .viewloc via box-overlap). NEW this wave: the QC .viewloc MOVEMENT behavior (swim downward drift, ladder vertical-from-prev-wishmove, force-crouch on down without FREEMOVE) is now consumed live in PlayerPhysics.cs:782/815/849/1101/1291 — but that is the movement-side, NOT the camera. The CSQC 2.5D side-scroller CAMERA that locks the view to the start->end line is still unported (port client is free-look), so presentation stays MISSING and liveness PARTIAL. STILL OPEN."
+    notes: "Both cameras clamp to the rail and keep their own close-snap yaw history across region exit. FREEAIM unprojects the player's cursor before the rail's fixed render FOV. The follower renders the avatar and rail camera without a cursor."

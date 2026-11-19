@@ -1,0 +1,92 @@
+Native map visual suggestions over a dedicated ENet connection
+Godot Mono 4.6.3, native wire protocol v28, Deathmatch on loopback.
+Paired Xonotic data and QuakeC pin: 863cd3e8456e18f577f7fe5fef857ff55ae62cc0
+Reproduce with ../probe.sh. Welcome and rotation/reconnect use Godot under Xvfb.
+
+--- remote-server.log ---
+[NetTransport.Server] listening on UDP 29430 (max 32).
+[LoadTimeline] host darkzone — load begin → ready, 725 ms total
+[NetTransport.Server] listening on UDP 29430 (max 32).
+[LoadTimeline] host stormkeep — load begin → ready, 316 ms total
+
+--- remote-default.log ---
+[NetGame] client loaded map 'darkzone' (dm) for render + prediction collision.
+[MapLoader] fog: density 0.31 alpha 0.79 start 32 -> maxFog 0.78 @ 4096u, godotDensity 0.000375 color (0.27 0.41 0.63)
+PASS opt-out used mounted sky, bloom and depth-fog defaults with the server's fog parameters
+
+--- remote-off.log ---
+[shell] --cvar cl_accept_server_map_visuals = "0"
+PASS opt-out used mounted sky, bloom and depth-fog defaults with the server's fog parameters
+
+--- remote-on.log ---
+[shell] --cvar cl_accept_server_map_visuals = "1"
+[shell] --cvar cl_welcome = "1"
+[ClientNet] handshake accepted by 'Map Visual Fixture': netId 3, tickrate 64 Hz.
+PASS opt-in used dedicated sky, bloom and depth-fog suggestions and opened the server Welcome
+
+--- remote-pins.log ---
+[shell] --cvar cl_accept_server_map_visuals = "1"
+[shell] --cvar r_sky = "1"
+[shell] --cvar r_bloom = "0"
+[shell] --cvar r_drawfog = "1"
+PASS explicit sky, bloom and depth-fog preferences overrode all three dedicated suggestions
+
+--- remote-acl.log ---
+]set g_mapinfo_settemp_acl "-r_sky -r_drawfog +*"
+PASS local ACL withdrew sky and depth-fog suggestions and retained bloom
+]set g_mapinfo_settemp_acl "+*"
+PASS loosening the ACL restored both suggestions in the same session
+
+--- remote-hold.log ---
+PASS concurrent opt-out peer used mounted defaults
+
+--- peer-wire.log ---
+peer 1 ClientInit tail=absent
+peer 2 ClientInit tail=absent
+peer 2 subscription 01
+peer 2 ClientInit tail=16
+peer 2 subscription 00
+peer 2 ClientInit tail=absent
+
+--- remote-toggle.log ---
+PASS native Effects checkbox enabled suggestions in the current session
+PASS clearing the Effects checkbox restored mounted defaults in the current session
+
+--- missing-wire.log ---
+peer 1 ClientInit tail=absent
+peer 1 subscription 01
+peer 1 subscription 01
+peer 1 ClientInit tail=16
+peer 1 forwarded tail=absent
+
+--- remote-missing.log ---
+PASS opted-in client kept mounted defaults with no valid suggestion tail
+
+--- malformed-wire.log ---
+peer 1 ClientInit tail=absent
+peer 1 subscription 01
+peer 1 subscription 01
+peer 1 ClientInit tail=16
+peer 1 forwarded tail=ff
+
+--- remote-malformed.log ---
+PASS opted-in client kept mounted defaults with no valid suggestion tail
+
+--- v27-wire.log ---
+peer 1 sent v27 parity 95115044
+peer 1 HandshakeReject: build mismatch (server 0x55C3CBEF, client 0x95115044)
+
+--- v27-client.log ---
+[ClientNet] handshake REJECTED: build mismatch (server 0x55C3CBEF, client 0x95115044)
+[NetGame] connection failed: build mismatch (server 0x55C3CBEF, client 0x95115044)
+
+--- remote-rotation.log ---
+[ClientNet] handshake accepted by 'Map Visual Fixture': netId 10, tickrate 64 Hz.
+[NetGame] client loaded map 'darkzone' (dm) for render + prediction collision.
+[MapLoader] fog: density 0.31 alpha 0.79 start 32 -> maxFog 0.78 @ 4096u, godotDensity 0.000375 color (0.27 0.41 0.63)
+PASS remote received darkzone suggestions before rotation
+[NetGame] connection failed: Lost connection to the server.
+[ClientNet] handshake accepted by 'Map Visual Fixture': netId 1, tickrate 64 Hz.
+[MapLoader] fog: density 0.41 alpha 0.74 start 0 -> maxFog 0.74 @ 4096u, godotDensity 0.000328 color (0.61 0.39 0.13)
+[NetGame] client loaded map 'stormkeep' (dm) for render + prediction collision.
+PASS reconnect after dedicated rotation discarded darkzone suggestions, used mounted bloom and honored server fog none

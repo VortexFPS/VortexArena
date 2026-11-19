@@ -178,6 +178,7 @@ features:
       - { name: "lip default", base: "8", port: "8", match: true }
       - { name: "speed default", base: "100", port: "100", match: true }
       - { name: "pos2", base: "pos1 + movedir*(|movedir.size| - lip)", port: "same", match: true }
+      - { name: "start-open order", base: "FINDTARGET (10) → SETLOCATION (90) → LINKDOORS (91)", port: "GameWorld map lump queues start-open placement between target lookup and door linking", match: true }
       - { name: "link slop", base: "4u", port: "4f", match: true }
       - { name: "door_spawnfield extent", base: "mins-'60 60 8' .. maxs+'60 60 8'", port: "same", match: true }
       - { name: "door_finished throttle (s)", base: "2", port: "2", match: true }
@@ -200,6 +201,7 @@ features:
     verification:
       - { kind: code_read, ref: "RE-VERIFIED 2026-06-27 post-Wave-16: door.qc:313 vs Doors.cs DoorTouch (Doors.cs:453) calls MapMover.Centerprint(other, door.Message) + MapMover.Play2(other, door.Noise); Centerprint (MapObjectsCommon.cs:910) routes to NotificationSystem.SendCenterRaw OneOnly (:919, CenterRaw channel) — LIVE on the match path, so the .message text shows; Play2 (MapObjectsCommon.cs:845) -> SoundSystem.Play2Raw (SoundSystem.cs:255) emits CH_INFO/VOL_BASE 0.7/ATTEN_NONE 0, matching QC play2 byte-for-byte (was the spatialized MapMover.Sound this wave). NOSPLASH early-out present in OnDeath; ApplyDoorSounds gated on Sounds (sounds key promoted); EF_LOWPRECISION set; LinkDoors/door_use/TOGGLE/auto-close/blocked-reverse reproduced", result: pass }
       - { kind: liveness, ref: "SpawnFuncs.Register(func_door) (MapObjectsRegistry.cs); MapObjectFieldsExtra.Apply runs before SpawnFuncs.TrySpawn so .sounds is set before ApplyDoorSounds reads it; centerprint reaches the client via the live NotificationSystem.Sink seam (SendCenterRaw, NotificationSystem.cs:267) -> host net sink -> HudNotifications (the old game/net/ServerNet.cs:300/NotificationNetSink path string is stale — symbol/path no longer exists; seam itself is live)", result: pass }
+      - { kind: test, ref: "SharedConstantsGameplayTests.MapBootAimsAtTheClosedDoorBeforePlacingAndLinkingIt", result: pass }
     confidence: high
     notes: "WAVE-5 FIX: door .message centerprint is now shown — MapObjectsCommon.Centerprint was rewired from the dead CenterprintHandler delegate to a direct NotificationSystem.SendCenterRaw(CenterRaw) call (live channel), closing the last real presentation gap (presentation partial->faithful). Only the CSQC draw remains, which is latent/commented-out in Base too. NOSPLASH + sounds-key + EF_LOWPRECISION from prior waves still hold. No dedicated unit test (code-read)."
 

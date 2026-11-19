@@ -1,14 +1,13 @@
 unit: warpzones
 category: mapobject
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
-last_audited: "2026-06-28"
+last_audited: "2026-11-19"
 summary:
   feature_count: 18
   worst_gaps:
-    - "Client portal render IMPLEMENTED but UNVERIFIED (Wave-18): MapLoader.BuildPortalSurfaces + PortalRenderer (SubViewport camera = warp(main camera) of the linked OUT plane) replace the dark-mirror placeholder — but LISTEN-HOST ONLY (reads WarpzoneTrace.AmbientManager; a remote/dedicated client keeps the placeholder until the zone transforms are networked) and presentation:unknown (the rendered handedness/near-clip needs an in-game eyeball; cl_portal_render 0 reverts). Math unit-tested (WarpzonePortalTests 5/5)."
-    - "No client view rotate across the seam (WarpZone_FixView / ENT_CLIENT_WARPZONE_TELEPORTED unported) — even though the ORIGIN is now predicted, the camera still snaps/rotates jarringly at the seam."
-    - "No near-clip fix / roll-kill at the seam (WarpZone_FixNearClip / cl_rollkillspeed unported)."
-    - "func_camera / func_warpzone_camera (fixed dpcamera view) not implemented."
+    - "Remote views resolve authored static portal pairs and fixed monitor targets from the mounted BSP. Moving or rewired transit portals still require server-side transforms."
+    - "Stormkeep validates the rendered seam transform, expanded near-plane corner shift and close-range view; brush-shape precision, persistent view roll and explicit exterior-model transitions remain partial."
+    - "Courtfun validates fixed target feeds on both authored func_camera brushes. Camera fades and moving or scaled monitor geometry remain open."
     - "WarpZone_TraceToss (grenade/toss aim) + WarpZone_TrailParticles do not bend through portals — bot toss aim + trail visuals are wrong across a seam. Minor."
     - "FIXED 2026-06-26: runtime/moving-warpzone re-link (WarpZone_Think + trigger_warpzone_reconnect) and the per-frame observer/SOLID_NOT warp (WarpZone_StartFrame) are now implemented and live; EF_TELEPORT_BIT now toggled on a crossing; misc_warpzone_position spawnfunc now registered."
 features:
@@ -310,7 +309,8 @@ features:
     port_refs:
       - "game/MapLoader.cs:BuildPortalSurfaces (warpzone faces -> per-plane MeshInstance3D 'window' meshes, tagged with the Quake plane)"
       - "game/client/PortalRenderer.cs (SubViewport per portal sharing the live World3D + a camera at the warp-transformed main-camera pose + a screen-UV ShaderMaterial)"
-      - "game/net/NetGame.cs:1657ff (PortalRenderer.Setup wired after the map + camera)"
+      - "game/net/NetGame.cs:LoadClientMapFromServer"
+      - "src/VortexArena.Engine/Collision/BspWarpzoneViews.cs:StaticZones"
     constants:
       - { name: "r_water / resolutionmultiplier HACK", base: "cvar_settemp 1 / 1 when zones exist", port: "cl_portal_render (default 1); SubViewport shares main MSAA", match: partial }
       - { name: "fade by distance", base: "warpzone_fadestart/_fadeend", port: "none (no PVS/distance fade yet)", match: false }
@@ -318,49 +318,60 @@ features:
       logic: faithful
       values: partial
       timing: faithful
-      presentation: unknown
+      presentation: partial
       audio: na
       liveness: partial
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "FIX (2026-06-27, Wave-18 portal render): the see-through render is now IMPLEMENTED. MapLoader.BuildPortalSurfaces pulls warpzone-shader faces into their own per-plane MeshInstance3D 'window' meshes; PortalRenderer matches each to a linked WarpzoneTrace.AmbientManager zone (by plane), spins up a SubViewport sharing the live World3D with a Camera3D placed each frame at zone.Transform applied to the main camera (full basis via Rotate, so roll is carried), and a screen-UV ShaderMaterial samples that view onto the surface. Transform math unit-tested (WarpzonePortalTests: handedness Rotate(inFwd)==-outFwd, TransformOrigin, inverse round-trip, in-front->behind-out camera placement)."
-      - "STILL OPEN / caveats: (1) LISTEN-HOST ONLY — reads WarpzoneTrace.AmbientManager; a pure remote/dedicated client has no zone transforms (networking them is the follow-up), so it keeps the placeholder there. (2) presentation:unknown — the RENDERED result (handedness through the Quake<->Godot conversion, near-clip, recursion) is NOT in-game-verified; needs an eyeball (cl_portal_render 0 reverts to the dark mirror). (3) No oblique near-clip at the exit plane (geometry behind the exit can show), no PVS/distance fade, recursion is 1-frame-delayed, portal count capped at 6."
+      - "Remote rendering reconstructs static, uniquely linked BSP portal pairs. Runtime moving, rewired, and Porto portal transforms remain outside this path."
+      - "No oblique near-clip at the exit plane or distance fade. The subview count remains capped at six."
     verification:
       - { kind: code, ref: "MapLoader.BuildPortalSurfaces + IsWarpzoneShader (faces->window meshes); PortalRenderer.Setup/_Process (SubViewport+camera+screen-UV material, TryMatchZone by plane); NetGame wiring @1618; build green; WarpzonePortalTests 5/5 + full suite 2862/0.", result: pass }
-      - { kind: ingame, ref: "NOT YET RUN — load a warpzone map on a listen host and confirm the surface shows the linked exit aligned/correct (handedness, near-clip). cl_portal_render toggles it.", result: unknown }
+      - { kind: ingame, ref: "planning/parity/warpzones/README.md — Stormkeep pinned and native dedicated-client movement samples", result: pass }
       - { kind: code, ref: "RE-AUDIT 2026-06-28 (branch claude/parity-port-waves, OPUS re-verify of the portal-render wave): re-read PortalRenderer.cs end-to-end — Setup matches each 'Portals' window mesh (MapLoader.BuildPortalSurfaces, MapLoader.cs:365; tagged wz_origin/wz_normal in raw QUAKE, :421-422) to a linked zone via TryMatchZone (nearest InOrigin within 96u + |dot(normal,InForward)|>=0.7, PortalRenderer.cs:180) reading WarpzoneTrace.AmbientManager (WarpzoneRadiusQuery.cs:136); _Process re-derives the portal camera each frame from the main camera through WarpzoneTransform.Rotate (full basis) + TransformOrigin (PortalRenderer.cs:161-174). Live wiring confirmed: NetGame creates+Setups PortalRenderer after map+camera (NetGame.cs:1657-1659). All referenced port symbols (wz.Zones/Linked/Transform.Valid/InForward/InOrigin, Rotate, TransformOrigin) exist. Build green; WarpzonePortalTests 5/5 (whole Warpzone filter 32/32, this run). NO status change — presentation stays unknown (ingame result still unknown, SCHEMA rule 5), liveness stays partial (listen-host only). Not inflated.", result: pass }
       - { kind: code, ref: "RE-AUDIT 2026-06-28 (SECOND independent OPUS re-verify, this wave): PortalRenderer.cs/Setup+_Process/TryMatchZone re-read against current src and all port symbols re-confirmed present (Transform.Valid Warpzone.cs:26, Linked Warpzone.cs:184, Rotate/TransformOrigin/InForward/InOrigin Warpzone.cs:30/47/55, AmbientManager WarpzoneRadiusQuery.cs:136). Listen-host-only early-out on AmbientManager==null still present (PortalRenderer.cs:74-76). NetGame wiring line ref refreshed 1649-1651/1618 -> 1657-1659 (NetGame.cs:1657 new PortalRenderer + :1659 Setup; only drift found, fixed in port_refs/notes). Whole Warpzone filter 32/32 green this run; build compiles. Statuses HELD: presentation unknown (no in-game eyeball run), liveness partial (no networked zone transforms for remote clients). Nothing closed.", result: pass }
     confidence: medium
-    notes: "Wave-18 portal render landed (listen-host, cl_portal_render default on). logic/timing faithful (SubViewport camera = warp(main camera), updated each frame); presentation:unknown pending the in-game eyeball (SCHEMA rule 5: unverified visible fidelity is unknown, not faithful); liveness:partial (live on a listen host, dead on a pure remote client). The crossing PREDICTION (EntityMovementStep) is separate + already live. RE-AUDIT 2026-06-28 (OPUS re-verify): code path re-read + line refs re-confirmed against current src; build+tests re-run green (32/32 warpzone); cl_portal_render is read via Api.Cvars default-on (not a registered Cvars.cs default), functional. Statuses held — no inflation: presentation stays unknown until an in-game eyeball, liveness stays partial until the zone transforms are networked to remote clients."
+    notes: "The same renderer uses the authoritative listen-host manager or a view-only manager built from the mounted BSP on a remote client. Stormkeep links a named zone to a second, unnamed zone."
   - id: warpzones.client.fixview
     name: "Seamless view across the seam (FixView / FixNearClip / View_Inside / FixPMove)"
     layer: [presentation]
     base_refs:
-      - "lib/warpzone/client.qc:WarpZone_FixView"
-      - "lib/warpzone/client.qc:WarpZone_FixNearClip"
+      - "client/view.qc:CSQC_UpdateView"
       - "lib/warpzone/client.qc:WarpZone_View_Inside"
+      - "lib/warpzone/client.qc:WarpZone_FixNearClip"
       - "lib/warpzone/client.qc:WarpZone_FixPMove"
-    port_refs: []
+      - "lib/warpzone/client.qc:WarpZone_FixView"
+      - "lib/warpzone/common.qc:WarpZone_Find"
+    port_refs:
+      - "game/client/FirstPersonView.cs:UpdateCamera"
+      - "game/client/PortalRenderer.cs:MainViewCone"
+      - "game/client/WarpzoneFixView.cs:TransformView"
+      - "game/client/WarpzoneFixView.cs:FixNearClip"
+      - "src/VortexArena.Common/Gameplay/Warpzone/WarpzoneView.cs:FindCrossedZone"
+      - "src/VortexArena.Common/Gameplay/Warpzone/WarpzoneView.cs:NearClipShift"
     constants:
-      - { name: "cl_rollkillspeed", base: "10", port: "none", match: false }
-      - { name: "r_nearclip multiplier", base: "1.125", port: "none", match: false }
-      - { name: "r_drawexteriormodel inside", base: "0", port: "none", match: false }
+      - { name: "cl_rollkillspeed", base: "10", port: "10 during a living seam frame", match: true }
+      - { name: "near-clip corner depth multiplier", base: "1.125", port: "1.125 at Camera3D.Near", match: true }
+      - { name: "r_drawexteriormodel inside", base: "0 (except classic chase)", port: "normal local first-person body exclusion", match: false }
     status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
+      logic: partial
+      values: partial
+      timing: partial
+      presentation: partial
       audio: na
-      liveness: na
+      liveness: partial
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No client view rotate when the camera straddles a zone, no near-clip push-out (geometry clips at the seam), no roll-kill on a roll-changing crossing, no exterior-model hide. Crossing a warpzone is visually jarring."
+      - "View overlap uses trigger AABBs. There is no explicit exterior-model save and restore, and native roll handling does not replicate the persistent engine angle and dead-view ramp."
+      - "Remote clients derive supported static pairs from the BSP. Stock and native lighting differ at the Stormkeep seam."
     verification:
-      - { kind: code, ref: "no WarpZone_FixView/FixNearClip/View_Inside symbols in src/ or game/", result: fail }
+      - { kind: code, ref: "NetGame.UpdateCamera called FirstPersonView before this pass. The predicted-angle path also pre-existed. FixPMove's only pinned caller is commented out.", result: pass }
+      - { kind: test, ref: "WarpzoneSpawnTests.ViewClip_UsesExpandedCornerPenetrationBeforeEyeCrosses", result: pass }
+      - { kind: ingame, ref: "planning/parity/warpzones/README.md — PIN DarkPlaces and native Stormkeep entry, near-plane shift to y=209.125, live subview and exit pose", result: pass }
     confidence: high
-    notes: "Primary runtime break #2."
+    notes: "The former post-crossing near-plane multiplier was replaced by a shift of the rendered eye using its four expanded near-plane corners. The close-range portal projection covers the visible cone when bounded. Native dedicated Stormkeep was also exercised using held forward input."
   - id: warpzones.client.teleported_view
     name: "Smooth view/input rotate on a server crossing (ENT_CLIENT_WARPZONE_TELEPORTED + CL_RotateMoves)"
     layer: [presentation]
@@ -415,27 +426,46 @@ features:
     name: "func_camera / func_warpzone_camera (fixed dpcamera security-camera view)"
     layer: [authority, presentation]
     base_refs:
-      - "lib/warpzone/server.qc:spawnfunc(func_camera)"
-      - "lib/warpzone/server.qc:WarpZoneCamera_InitStep_FindTarget"
-      - "lib/warpzone/common.qc:WarpZone_Camera_SetUp"
+      - "common/mapobjects/trigger/jumppads.qc:spawnfunc(target_position)"
       - "lib/warpzone/client.qc:ENT_CLIENT_WARPZONE_CAMERA"
-    port_refs: []
-    constants: []
+      - "lib/warpzone/common.qc:WarpZone_Camera_SetUp"
+      - "lib/warpzone/server.qc:WarpZone_Camera_Send"
+      - "lib/warpzone/server.qc:WarpZoneCamera_InitStep_FindTarget"
+      - "lib/warpzone/server.qc:spawnfunc(func_camera)"
+    port_refs:
+      - "game/MapLoader.cs:CameraFaceOwners"
+      - "game/client/PortalRenderer.cs:Setup"
+      - "game/client/PortalRenderer.cs:_Process"
+      - "src/VortexArena.Engine/Collision/BspWarpzoneViews.cs:StaticCameras"
+      - "game/net/ServerNet.cs:SendWarpzoneCameraPoses"
+      - "game/net/ClientNet.cs:WarpzoneCameraPoses"
+      - "src/VortexArena.Net/WarpzoneCameraWire.cs"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Jumppads.cs:TargetPositionSetup"
+      - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:RegisterAll"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneCamera"
+      - "src/VortexArena.Common/Gameplay/MapObjects/Warpzone.cs:WarpzoneSpawns.FuncCameraSetup"
+    constants:
+      - { name: "default brush solidity", base: "SOLID_BSP", port: "Solid.Bsp", match: true }
+      - { name: "spawnflag for moving target", base: "1", port: "1", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
+      logic: partial
+      values: partial
+      timing: partial
+      presentation: partial
       audio: na
-      liveness: na
+      liveness: partial
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No func_camera spawnfunc; security-camera dpcamera surfaces render as a dark mirror placeholder (HeroMaterials) rather than a fixed camera view of the target position."
+      - "Camera fade, reconnect visibility suppression, and transformed monitor brush geometry remain open. The wire addresses mounted inline monitor models."
+      - "Camera brightness and projection do not have a pixel-level stock match."
     verification:
-      - { kind: code, ref: "no func_camera/WarpZoneCamera symbols in port", result: fail }
+      - { kind: code, ref: "The pre-existing spawn handlers installed a touch FixAngle and never provided a fixed view. Courtfun *7/*19 own dp_camera faces with authored target_position angles.", result: pass }
+      - { kind: test, ref: "WarpzoneSpawnTests.FixedCamera_UsesDeferredTargetPoseWithoutTouchingPlayers", result: pass }
+      - { kind: test, ref: "WarpzoneRemoteViewsTests — raw BSP fallback, bounded atomic overlay, explicit clear and model 49", result: pass }
+      - { kind: ingame, ref: "planning/parity/warpzones/README.md — pinned and native remote Courtfun fixed poses and server-only override", result: pass }
     confidence: high
-    notes: "Camera variant shares the missing SubViewport render."
+    notes: "Named targets now provide the feed's position and angles after map spawn. The two Courtfun monitors bind to their embedded targets on a remote client. Reliable ID 35 carries only overrides and suppressions relative to that baseline."
   - id: warpzones.reconnect
     name: "trigger_warpzone_reconnect + WarpZone_Think (runtime / moving-warpzone re-link)"
     layer: [authority]
@@ -466,7 +496,7 @@ features:
     divergence_rationale: null
     gaps:
       - "The reconnect spawnflag-1 'don't reconnect a zone a client can currently see' cosmetic skip (visible_to_some_client, server.qc:790-792) is not honoured — the port reconnects every matching zone regardless. This is a seam-pop avoidance, not a correctness gate; the conservative port may briefly pop a visible seam on a runtime reconnect."
-      - "WarpZone_Camera reconnect (warpzone_camera_first loop, server.qc:791,799) is absent because the func_camera variant (warpzones.camera) is itself unported."
+      - "Camera targets now resolve on reconnect. The pinned visible-to-client suppression also applies to cameras and remains open."
     verification:
       - { kind: code, ref: "RE-AUDIT 2026-06-27 (re-verify): ThinkMovingZones (moving-warpzone per-frame re-derive, self-gated on warpzone_save_* snapshot, Warpzone.cs:830-856) + Reconnect/ReconnectByTarget/OnReconnectUse (runtime re-link, Warpzone.cs:876-913) implemented and LIVE: ThinkMovingZones called every server frame (GameWorld.cs:1807); trigger_warpzone_reconnect + target_warpzone_reconnect spawnfuncs registered (MapObjectsRegistry.cs:120-121) -> WarpzoneSpawns.TriggerWarpzoneReconnectSetup (Warpzone.cs:1032) sets e.Use -> ReconnectSink -> OnReconnectUse (GameWorld.cs:456). WarpZone_Think snapshot/re-derive matches server.qc:714-731; trigger_warpzone_reconnect_use target-matching matches server.qc:785-805. No status change.", result: pass }
     confidence: high

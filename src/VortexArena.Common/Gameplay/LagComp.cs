@@ -36,7 +36,7 @@ public static class LagComp
     /// hit-contents mask to include CORPSE, so the upcoming trace can hit gibbed/corpse bodies. Pair with
     /// <see cref="End"/>.
     /// </summary>
-    public static void Begin(Entity shooter)
+    public static void Begin(Entity shooter, bool force = false)
     {
         // [sv-antilag.solidmask.corpse] Port of tracebox_antilag_force_wz (antilag.qc:177-180) +
         // W_SetupShot (tracing.qc:44/50): Base temporarily sets the trace SOURCE's dphitcontentsmask to
@@ -53,7 +53,10 @@ public static class LagComp
             shooter.DpHitContentsMask = SuperContentsSolid | SuperContentsBody | SuperContentsCorpse;
         }
 
-        Provider?.Begin(shooter);
+        if (force)
+            Provider?.BeginForced(shooter);
+        else
+            Provider?.Begin(shooter);
     }
 
     /// <summary>Restore the rewound players to their authoritative positions and the shooter's hit mask.</summary>
@@ -75,5 +78,6 @@ public static class LagComp
 public interface ILagCompensation
 {
     void Begin(Entity shooter);
+    void BeginForced(Entity shooter) => Begin(shooter);
     void End();
 }

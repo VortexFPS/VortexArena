@@ -1,0 +1,74 @@
+[
+  {
+    "seconds": 13.131,
+    "frame": "BlueProbe/0003.webp",
+    "sample": 13.067,
+    "label": "neutral"
+  },
+  {
+    "seconds": 17.609,
+    "frame": "BlueProbe/0028.webp",
+    "sample": 17.575,
+    "label": "early-build"
+  },
+  {
+    "seconds": 18.15,
+    "frame": "BlueProbe/0031.webp",
+    "sample": 18.115,
+    "label": "build"
+  },
+  {
+    "seconds": 22.117,
+    "frame": "BlueProbe/0053.webp",
+    "sample": 22.083,
+    "label": "captured"
+  },
+  {
+    "seconds": 26.444,
+    "frame": "BlueProbe/0077.webp",
+    "sample": 26.412,
+    "label": "cracked"
+  },
+  {
+    "seconds": 34.925,
+    "frame": "BlueProbe/0124.webp",
+    "sample": 34.893,
+    "label": "repaired"
+  },
+  {
+    "seconds": 42.859,
+    "frame": "BlueProbe/0168.webp",
+    "sample": 42.827,
+    "label": "reset"
+  },
+  {
+    "seconds": 51.505,
+    "frame": "BlueProbe/0216.webp",
+    "sample": 51.473,
+    "label": "recapture"
+  },
+  {
+    "seconds": 13.129,
+    "frame": "RedProbe/0003.webp",
+    "sample": 13.065,
+    "label": "generator-shielded"
+  },
+  {
+    "seconds": 53.641,
+    "frame": "RedProbe/0228.webp",
+    "sample": 53.609,
+    "label": "generator-exposed"
+  },
+  {
+    "seconds": 54.724,
+    "frame": "RedProbe/0234.webp",
+    "sample": 54.691,
+    "label": "generator-shot"
+  },
+  {
+    "seconds": 62.111,
+    "frame": "RedProbe/0275.webp",
+    "sample": 62.076,
+    "label": "generator-after"
+  }
+]

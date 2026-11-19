@@ -27,8 +27,7 @@ public partial class DialogSettingsReset : MenuScreen, IQcDialog
             me.TD(1, 2, Qc.Label("This will create a backup config in your data directory", 0.5f));
         me.TR();
         me.TR();
-            var yes = QcLook.Button(Widgets.CommandButton("Yes", "saveconfig backup.cfg; exec default.cfg"), new Color(1, 0, 0));
-            me.TD(1, 1, yes);
+            me.TD(1, 1, Qc.Button("Yes", MenuState.FactoryReset, tint: new Color(1, 0, 0)));
             me.TD(1, 1, Qc.Button("No", GoBack, tint: new Color(0, 1, 0)));
     }
 }

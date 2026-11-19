@@ -1,0 +1,132 @@
+Stock server camera readback (origin, view offset, view angles)
+STOCK_CAMERA default 
+1216 248 -7.96875095
+0 0 35
+0 90 0
+--
+STOCK_CAMERA gentle2 
+1216 248 -7.96875
+0 0 35
+0 90 0
+--
+STOCK_CAMERA particles 
+1216 248 -7.96875
+0 0 35
+0 90 0
+--
+STOCK_CAMERA nogibs 
+1216 248 -7.96875095
+0 0 35
+0 90 0
+
+Native Forward+ perspective (registered defaults, retained clock)
+CAMERA Perspective active=True eye=<1216, 248, 27> fov=83.58166 alpha=1
+PIXELS default frame=1 time=3.740 live=296 submitted=296 inFrustum=254 vertexRgb=0.996 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=241469 maxDelta=255
+PIXELS default frame=2 time=3.790 live=253 submitted=245 inFrustum=224 vertexRgb=0.996 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=271400 maxDelta=255
+PIXELS default frame=3 time=3.840 live=225 submitted=216 inFrustum=204 vertexRgb=0.996 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=272031 maxDelta=255
+PIXELS default frame=4 time=3.890 live=206 submitted=198 inFrustum=187 vertexRgb=0.996 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=272945 maxDelta=255
+PIXELS default frame=5 time=3.940 live=167 submitted=162 inFrustum=154 vertexRgb=0.996 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=272133 maxDelta=255
+PASS default changes 272945 pixels with the Original batch visible
+CAMERA Perspective active=True eye=<1216, 248, 27> fov=83.58166 alpha=1
+PIXELS gentle2 frame=1 time=9.985 live=645 submitted=645 inFrustum=642 vertexRgb=0.971 vertexAlpha=0.975 atlasCenterAlpha=0.918 pixels=88073 maxDelta=254
+PIXELS gentle2 frame=2 time=10.035 live=645 submitted=645 inFrustum=635 vertexRgb=0.946 vertexAlpha=0.950 atlasCenterAlpha=0.918 pixels=173437 maxDelta=254
+PIXELS gentle2 frame=3 time=10.085 live=645 submitted=645 inFrustum=631 vertexRgb=0.921 vertexAlpha=0.925 atlasCenterAlpha=0.918 pixels=245095 maxDelta=242
+PIXELS gentle2 frame=4 time=10.135 live=645 submitted=645 inFrustum=629 vertexRgb=0.896 vertexAlpha=0.900 atlasCenterAlpha=0.918 pixels=246501 maxDelta=249
+PIXELS gentle2 frame=5 time=10.185 live=645 submitted=642 inFrustum=627 vertexRgb=0.872 vertexAlpha=0.875 atlasCenterAlpha=0.918 pixels=280138 maxDelta=239
+PASS gentle2 changes 280138 pixels with the Original batch visible
+CAMERA Perspective active=True eye=<1216, 248, 27> fov=83.58166 alpha=1
+PIXELS particles frame=1 time=14.983 live=457 submitted=457 inFrustum=426 vertexRgb=0.932 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=97351 maxDelta=229
+PIXELS particles frame=2 time=15.033 live=439 submitted=435 inFrustum=403 vertexRgb=0.868 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=127647 maxDelta=222
+PIXELS particles frame=3 time=15.083 live=421 submitted=413 inFrustum=365 vertexRgb=0.805 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=140549 maxDelta=220
+PIXELS particles frame=4 time=15.133 live=401 submitted=390 inFrustum=305 vertexRgb=0.741 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=149654 maxDelta=219
+PIXELS particles frame=5 time=15.183 live=381 submitted=369 inFrustum=252 vertexRgb=0.677 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=149462 maxDelta=219
+PASS particles changes 149654 pixels with the Original batch visible
+CAMERA Perspective active=True eye=<1216, 248, 27> fov=83.58166 alpha=1
+PIXELS nogibs frame=1 time=19.694 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=2 time=19.744 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=3 time=19.794 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=4 time=19.844 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=5 time=19.894 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PASS nogibs changes 0 pixels with the Original batch visible
+
+Native Forward+ orthographic (registered defaults, retained clock)
+CAMERA Orthogonal active=True eye=<1216, 248, 27> fov=83.58166 alpha=1
+PIXELS default frame=1 time=2.479 live=296 submitted=296 inFrustum=296 vertexRgb=0.996 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=71437 maxDelta=251
+PIXELS default frame=2 time=2.529 live=253 submitted=245 inFrustum=245 vertexRgb=0.996 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=91880 maxDelta=190
+PIXELS default frame=3 time=2.579 live=225 submitted=216 inFrustum=216 vertexRgb=0.996 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=92768 maxDelta=182
+PIXELS default frame=4 time=2.629 live=206 submitted=198 inFrustum=195 vertexRgb=0.996 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=87895 maxDelta=219
+PIXELS default frame=5 time=2.679 live=167 submitted=162 inFrustum=156 vertexRgb=0.996 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=90411 maxDelta=175
+PASS default changes 92768 pixels with the Original batch visible
+CAMERA Orthogonal active=True eye=<1216, 248, 27> fov=83.58166 alpha=1
+PIXELS gentle2 frame=1 time=6.756 live=645 submitted=645 inFrustum=645 vertexRgb=0.971 vertexAlpha=0.975 atlasCenterAlpha=0.918 pixels=29035 maxDelta=227
+PIXELS gentle2 frame=2 time=6.806 live=645 submitted=645 inFrustum=645 vertexRgb=0.946 vertexAlpha=0.950 atlasCenterAlpha=0.918 pixels=53378 maxDelta=227
+PIXELS gentle2 frame=3 time=6.856 live=645 submitted=645 inFrustum=645 vertexRgb=0.921 vertexAlpha=0.925 atlasCenterAlpha=0.918 pixels=75958 maxDelta=226
+PIXELS gentle2 frame=4 time=6.906 live=645 submitted=645 inFrustum=645 vertexRgb=0.896 vertexAlpha=0.900 atlasCenterAlpha=0.918 pixels=94172 maxDelta=228
+PIXELS gentle2 frame=5 time=6.956 live=645 submitted=642 inFrustum=642 vertexRgb=0.872 vertexAlpha=0.875 atlasCenterAlpha=0.918 pixels=106038 maxDelta=222
+PASS gentle2 changes 106038 pixels with the Original batch visible
+CAMERA Orthogonal active=True eye=<1216, 248, 27> fov=83.58166 alpha=1
+PIXELS particles frame=1 time=11.549 live=457 submitted=457 inFrustum=457 vertexRgb=0.932 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=39297 maxDelta=183
+PIXELS particles frame=2 time=11.599 live=439 submitted=435 inFrustum=435 vertexRgb=0.868 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=47545 maxDelta=183
+PIXELS particles frame=3 time=11.649 live=421 submitted=413 inFrustum=413 vertexRgb=0.805 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=52509 maxDelta=174
+PIXELS particles frame=4 time=11.699 live=401 submitted=390 inFrustum=389 vertexRgb=0.741 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=50673 maxDelta=176
+PIXELS particles frame=5 time=11.749 live=381 submitted=369 inFrustum=367 vertexRgb=0.677 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=43858 maxDelta=173
+PASS particles changes 52509 pixels with the Original batch visible
+CAMERA Orthogonal active=True eye=<1216, 248, 27> fov=83.58166 alpha=1
+PIXELS nogibs frame=1 time=16.442 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=2 time=16.492 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=3 time=16.542 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=4 time=16.592 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=5 time=16.642 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PASS nogibs changes 0 pixels with the Original batch visible
+
+Native Forward+ perspective (defaults deliberately omitted, retained clock)
+CAMERA Perspective active=True eye=<1216, 248, 27> fov=83.58166 alpha=
+PIXELS default frame=1 time=2.402 live=2 submitted=2 inFrustum=2 vertexRgb=0.000 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=0 maxDelta=0
+PIXELS default frame=2 time=2.452 live=2 submitted=2 inFrustum=2 vertexRgb=0.000 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=0 maxDelta=0
+PIXELS default frame=3 time=2.502 live=2 submitted=2 inFrustum=2 vertexRgb=0.000 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=0 maxDelta=0
+PIXELS default frame=4 time=2.552 live=2 submitted=2 inFrustum=2 vertexRgb=0.000 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=0 maxDelta=0
+PIXELS default frame=5 time=2.602 live=2 submitted=2 inFrustum=2 vertexRgb=0.000 vertexAlpha=1.000 atlasCenterAlpha=1.000 pixels=0 maxDelta=0
+CAMERA Perspective active=True eye=<1216, 248, 27> fov=83.58166 alpha=
+PIXELS gentle2 frame=1 time=6.847 live=645 submitted=645 inFrustum=639 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.918 pixels=0 maxDelta=0
+PIXELS gentle2 frame=2 time=6.897 live=645 submitted=645 inFrustum=631 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.918 pixels=0 maxDelta=0
+PIXELS gentle2 frame=3 time=6.947 live=645 submitted=645 inFrustum=628 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.918 pixels=0 maxDelta=0
+PIXELS gentle2 frame=4 time=6.997 live=645 submitted=643 inFrustum=625 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.918 pixels=0 maxDelta=0
+PIXELS gentle2 frame=5 time=7.047 live=645 submitted=642 inFrustum=616 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.918 pixels=0 maxDelta=0
+CAMERA Perspective active=True eye=<1216, 248, 27> fov=83.58166 alpha=
+PIXELS particles frame=1 time=11.641 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS particles frame=2 time=11.691 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS particles frame=3 time=11.741 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS particles frame=4 time=11.791 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS particles frame=5 time=11.841 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+CAMERA Perspective active=True eye=<1216, 248, 27> fov=83.58166 alpha=
+PIXELS nogibs frame=1 time=16.368 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=2 time=16.418 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=3 time=16.468 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=4 time=16.518 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=5 time=16.568 live=0 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+
+Earlier Forward+ perspective (registered defaults, old clear behavior)
+CAMERA Perspective active=True eye=<1216, 248, 27> fov=83.58166 alpha=1
+PIXELS default frame=1 time=10.050 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS default frame=2 time=10.100 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS default frame=3 time=10.150 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS default frame=4 time=10.200 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS default frame=5 time=10.250 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+CAMERA Perspective active=True eye=<1216, 248, 27> fov=83.58166 alpha=1
+PIXELS gentle2 frame=1 time=15.950 submitted=45 inFrustum=45 vertexRgb=0.498 vertexAlpha=0.500 atlasCenterAlpha=0.918 pixels=8376 maxDelta=242
+PIXELS gentle2 frame=2 time=16.000 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS gentle2 frame=3 time=16.050 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS gentle2 frame=4 time=16.100 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS gentle2 frame=5 time=16.150 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+CAMERA Perspective active=True eye=<1216, 248, 27> fov=83.58166 alpha=1
+PIXELS particles frame=1 time=21.800 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS particles frame=2 time=21.850 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS particles frame=3 time=21.900 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS particles frame=4 time=21.950 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS particles frame=5 time=22.000 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+CAMERA Perspective active=True eye=<1216, 248, 27> fov=83.58166 alpha=1
+PIXELS nogibs frame=1 time=27.650 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=2 time=27.700 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=3 time=27.750 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=4 time=27.800 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0
+PIXELS nogibs frame=5 time=27.850 submitted=0 inFrustum=0 vertexRgb=0.000 vertexAlpha=0.000 atlasCenterAlpha=0.000 pixels=0 maxDelta=0

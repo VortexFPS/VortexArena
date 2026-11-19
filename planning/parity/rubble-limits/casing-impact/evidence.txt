@@ -1,0 +1,129 @@
+Stock Stormkeep brass edict excerpt
+model models/casing_bronze.iqm
+origin 1302.79504 225.59845 -31.3238487
+creationtime 43.1523819
+cnt 48.1523819
+alpha 0.470001221
+
+Maximum normalized first-difference correlation to the six pinned Ogg samples
+Recorded PCM was downmixed and resampled to 11,025 Hz for the comparison.
+stock.0QShYE/brass-off.pcm
+  brass1     0.163 at 1.351s
+  brass2     0.209 at 2.849s
+  brass3     0.189 at 0.737s
+  casings1   0.433 at 3.242s
+  casings2   0.414 at 3.242s
+  casings3   0.282 at 2.404s
+stock.0QShYE/brass-on.pcm
+  brass1     0.671 at 3.322s
+  brass2     0.741 at 3.650s
+  brass3     0.708 at 4.327s
+  casings1   0.309 at 1.785s
+  casings2   0.297 at 1.784s
+  casings3   0.282 at 4.453s
+stock.0QShYE/shell-off.pcm
+  brass1     0.209 at 1.065s
+  brass2     0.219 at 2.681s
+  brass3     0.171 at 0.723s
+  casings1   0.235 at 1.638s
+  casings2   0.223 at 2.690s
+  casings3   0.252 at 1.820s
+stock.0QShYE/shell-on.pcm
+  brass1     0.209 at 0.911s
+  brass2     0.203 at 2.527s
+  brass3     0.171 at 0.569s
+  casings1   0.730 at 1.055s
+  casings2   0.672 at 1.055s
+  casings3   0.562 at 1.506s
+native-run.DJL5RN/native.wav
+  brass1     0.665 at 3.050s
+  brass2     0.270 at 1.300s
+  brass3     0.165 at 3.074s
+  casings1   0.371 at 1.139s
+  casings2   0.469 at 1.139s
+  casings3   0.517 at 1.139s
+native-run.bOlsRG/native.wav
+  brass1     0.441 at 3.730s
+  brass2     0.681 at 4.367s
+  brass3     0.903 at 3.370s
+  casings1   0.455 at 1.929s
+  casings2   0.497 at 1.928s
+  casings3   0.970 at 1.929s
+
+Native baseline
+
+IMPACT weapons/casings3.wav origin=<-5.2387877, 0.07956159, 0.03125> mixed=True
+IMPACT weapons/brass3.wav origin=<5.1286783, -0.14928646, 0.03125> mixed=True
+IMPACT weapons/brass1.wav origin=<5.3805547, -0.44150135, 0.03125> mixed=True
+VIEW opaque shell_casings visible=1 material=ShaderMaterial pose=(-5.2387877, 0.03125, -0.07956159) alpha=-
+VIEW opaque bullet_casings visible=1 material=ShaderMaterial pose=(5.3805547, 0.03125, 0.44150135) alpha=-
+VIEW shell-fade shell_casings visible=1 material=ShaderMaterial pose=(-5.2387877, 0.03125, -0.07956159) alpha=-
+VIEW shell-fade bullet_casings visible=1 material=ShaderMaterial pose=(5.3805547, 0.03125, 0.44150135) alpha=-
+VIEW brass-fade shell_casings visible=1 material=ShaderMaterial pose=(-5.2387877, 0.03125, -0.07956159) alpha=-
+VIEW brass-fade bullet_casings visible=1 material=ShaderMaterial pose=(5.3805547, 0.03125, 0.44150135) alpha=-
+VIEW expired shell_casings visible=1 material=ShaderMaterial pose=(-5.2387877, 0.03125, -0.07956159) alpha=-
+VIEW expired bullet_casings visible=1 material=ShaderMaterial pose=(5.3805547, 0.03125, 0.44150135) alpha=-
+
+Native Original
+
+IMPACT weapons/casings3.wav origin=<-5.16349, -0.16935402, 0.03125> mixed=True
+IMPACT weapons/brass1.wav origin=<5.1753416, -0.08793323, 0.03125> mixed=True
+IMPACT weapons/brass1.wav origin=<5.524502, -0.26303563, 0.03125> mixed=True
+IMPACT weapons/brass1.wav origin=<5.7452545, -0.37374222, 0.03125> mixed=True
+VIEW opaque shell_casings visible=1 material=ShaderMaterial pose=(-5.16349, 0.03125, 0.16935402) alpha=-
+VIEW opaque shell_casings_fade visible=0 material=ShaderMaterial pose=- alpha=-
+VIEW opaque bullet_casings visible=1 material=ShaderMaterial pose=(5.7452545, 0.03125, 0.37374222) alpha=-
+VIEW opaque bullet_casings_fade visible=0 material=ShaderMaterial pose=- alpha=-
+VIEW shell-fade shell_casings visible=0 material=ShaderMaterial pose=- alpha=-
+VIEW shell-fade shell_casings_fade visible=1 material=ShaderMaterial pose=(-5.16349, 0.03125, 0.16935402) alpha=0.5
+VIEW shell-fade bullet_casings visible=1 material=ShaderMaterial pose=(5.7452545, 0.03125, 0.37374222) alpha=-
+VIEW shell-fade bullet_casings_fade visible=0 material=ShaderMaterial pose=- alpha=-
+VIEW brass-fade shell_casings visible=0 material=ShaderMaterial pose=- alpha=-
+VIEW brass-fade shell_casings_fade visible=0 material=ShaderMaterial pose=- alpha=-
+VIEW brass-fade bullet_casings visible=0 material=ShaderMaterial pose=- alpha=-
+VIEW brass-fade bullet_casings_fade visible=1 material=ShaderMaterial pose=(5.7452545, 0.03125, 0.37374222) alpha=0.5
+VIEW expired shell_casings visible=0 material=ShaderMaterial pose=- alpha=-
+VIEW expired shell_casings_fade visible=0 material=ShaderMaterial pose=- alpha=-
+VIEW expired bullet_casings visible=0 material=ShaderMaterial pose=- alpha=-
+VIEW expired bullet_casings_fade visible=0 material=ShaderMaterial pose=- alpha=-
+PASS shell rendered partial opacity, background delta full=1253.5 fade=629.3
+PASS brass rendered partial opacity, background delta full=953.3 fade=473.3
+PASS both impact families reached the mixer in particle mode 0
+PASS casing retains the lifetime set at spawn
+PASS casing retires below the stock 0.003 alpha threshold
+PASS catch-up casing throttled within one draw (22 sweeps, 1 sound)
+
+Native Modern
+
+IMPACT weapons/casings3.wav origin=<-4.7425, -0.1956518, 0.03125> mixed=True
+IMPACT weapons/brass3.wav origin=<4.748557, 0.120367974, 0.03124997> mixed=True
+IMPACT weapons/brass2.wav origin=<4.2491803, 0.35942388, 0.03125> mixed=True
+IMPACT weapons/brass2.wav origin=<3.931607, 0.5114487, 0.03125> mixed=True
+VIEW opaque shell_casings visible=1 material=StandardMaterial3D pose=(-4.7425, 0.03125, 0.1956518) alpha=-
+VIEW opaque shell_casings_fade visible=0 material=StandardMaterial3D pose=- alpha=-
+VIEW opaque bullet_casings visible=1 material=StandardMaterial3D pose=(3.931607, 0.03125, -0.5114487) alpha=-
+VIEW opaque bullet_casings_fade visible=0 material=StandardMaterial3D pose=- alpha=-
+VIEW shell-fade shell_casings visible=0 material=StandardMaterial3D pose=- alpha=-
+VIEW shell-fade shell_casings_fade visible=1 material=StandardMaterial3D pose=(-4.7425, 0.03125, 0.1956518) alpha=0.5
+VIEW shell-fade bullet_casings visible=1 material=StandardMaterial3D pose=(3.931607, 0.03125, -0.5114487) alpha=-
+VIEW shell-fade bullet_casings_fade visible=0 material=StandardMaterial3D pose=- alpha=-
+VIEW brass-fade shell_casings visible=0 material=StandardMaterial3D pose=- alpha=-
+VIEW brass-fade shell_casings_fade visible=0 material=StandardMaterial3D pose=- alpha=-
+VIEW brass-fade bullet_casings visible=0 material=StandardMaterial3D pose=- alpha=-
+VIEW brass-fade bullet_casings_fade visible=1 material=StandardMaterial3D pose=(3.931607, 0.03125, -0.5114487) alpha=0.5
+VIEW expired shell_casings visible=0 material=StandardMaterial3D pose=- alpha=-
+VIEW expired shell_casings_fade visible=0 material=StandardMaterial3D pose=- alpha=-
+VIEW expired bullet_casings visible=0 material=StandardMaterial3D pose=- alpha=-
+VIEW expired bullet_casings_fade visible=0 material=StandardMaterial3D pose=- alpha=-
+PASS shell rendered partial opacity, background delta full=558.7 fade=280.0
+PASS brass rendered partial opacity, background delta full=433.5 fade=218.4
+PASS both impact families reached the mixer in particle mode 2
+PASS casing retains the lifetime set at spawn
+PASS casing retires below the stock 0.003 alpha threshold
+PASS catch-up casing throttled within one draw (22 sweeps, 1 sound)
+
+Old throttle restored in a disposable build
+ERROR: catch-up reached both contacts, one sound expected, got 22 sweeps and 2 sounds
+
+Existing motion, cap and viewport fixture
+42 PASS, including the live cap change and 1,024-slot ceiling checks

@@ -1,15 +1,15 @@
 unit: freezetag
 category: gametype
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
-last_audited: "2026-06-28"  # OPUS re-audit (parity-port-waves): registry-drift corrections — frozen_anim (PlayerModel.FrozenHold), bots (BotObjectiveRoles.RoleFreezeTag), frozen.no_pickup BuffTouch guard (BuffsMutator.cs:402), and the waypoints Frozen→Reviving swap (st.HasReviver) all flipped to faithful/live. Also: freezetag.frags.center_message CLOSED this wave — FreezeTag.Activate now subscribes OnFragCenterMessage (FreezeTag.cs:298-299,934-948), swapping the personal frag centerprint to FRAG_FREEZE/FRAGGED_FREEZE and suppressing on an already-frozen re-kill; the producer was the sole missing piece, the rest of the chain (hook MutatorHooks.cs:616, live call Scores.cs:809 + consumer :810-814, choices NotificationsList.cs:1292-1293) was already in place. missing/dead → faithful/live. Common builds clean.
+last_audited: "2026-11-18"
 summary:
   feature_count: 30
   worst_gaps:
     - "FIXED 2026-06-27: GiveFragsForKill→0 is now subscribed (FreezeTag.OnGiveFragsForKill, FreezeTag.cs:876) and live (Scores.cs:548) — the engine-frag double-count on an enemy freeze is closed. See freezetag.scoring.no_kill_frags."
     - "FIXED 2026-06-27: g_freezetag_weaponarena 'most_available' is now applied (FreezeTag.OnSetWeaponArena, FreezeTag.cs:887) and live (SpawnSystem.cs:999/1223). FT players get the full arsenal arena over the start loadout. See freezetag.weaponarena."
     - "FIXED 2026-06-27: frozen-player regen gate (FreezeTag.OnPlayerRegen, live PlayerFrameLogic.cs:56) and frozen-pickup gate (FreezeTag.OnItemTouch, live ItemPickupRules.cs:378) are both implemented. See freezetag.frozen.no_regen / freezetag.frozen.no_pickup."
-    - "STILL OPEN: no ice (MDL_ICE) entity model — only the icy player-model colormod tint (ClientWorld.FrozenColormod). The signature ice cube is absent. (The ANIMSTATE_FROZEN frozen pose is now LIVE via PlayerModel.FrozenHold — see freezetag.presentation.frozen_anim — registry drift corrected this wave.)"
-    - "STILL OPEN: void/lava NEEDKILL soft-kill relocate (g_frozen_damage_trigger 0) is still missing (FT OnDamageCalculate leaves NEEDKILL deathtypes alone; the relocate-to-spawn needs the server spawn selector and is not done). Default cvar 1 = die, so dormant at stock anyway."
+    - "Ice attaches live. Match the Base glowmod and additive cubemap appearance, and verify in game."
+    - "Follow spectators do not inherit the viewed player's frozen overlay and progress."
     - "FIXED this wave: the per-freeze CHOICE centerprint (FragCenterMessage 'You froze X'/'You were frozen by Y') now has its FT producer (freezetag.frags.center_message) — FreezeTag.Activate subscribes OnFragCenterMessage (FreezeTag.cs:298-299) which sets FRAG_FREEZE/FRAGGED_FREEZE and suppresses both on an already-frozen re-kill; FragCenterMessage.Call (Scores.cs:809) consumes the result (Scores.cs:810-814). missing/dead → faithful/live."
     - "FIXED since the 06-27 row was written: the CENTER_ALONE 'you are now alone' last-survivor notification (freezetag.notif.alone) IS now sent — FreezeTag.NotifyLastPlayerForTeam (FreezeTag.cs:1063) is called from OnDeath (FreezeTag.cs:339, live via Combat.Death) and center-prints ALONE to a team's lone unfrozen survivor."
 features:
@@ -70,12 +70,12 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "No distinct ice block entity fires (covered by freezetag.presentation.ice_model). State transition + score + the freeze/self notifications are faithful."
+    gaps: []
     verification:
-      - { kind: code-read, ref: "OnDeath wired via Combat.Death.Add in Activate; Freeze applies Frozen status effect + arms auto-thaw timer (gated on ReviveAuto && maxtime>0) + score matrix + sends INFO/CENTER_FREEZETAG_SELF or INFO_FREEZETAG_FREEZE (live NotificationNetSink)", result: pass }
+      - { kind: code-read, ref: "FreezeTag.OnDeath preserves the Frozen status through DamageSystem.Killed cleanup; the freeze persists until explicitly cleared.", result: pass }
+      - { kind: headless, ref: "FreezeTagScoreTests.LethalHit_PreservesFrozenStatusUntilThaw", result: pass }
     confidence: high
-    notes: "Applies StatusEffectsCatalog.Frozen (the shared status effect the weapon/movement/damage locks read). The freeze/self notifications are live. The ice cube itself remains its own row."
+    notes: "The live death path keeps the Frozen effect active for movement, weapons, replication and the ice model."
 
   - id: freezetag.freeze.weaponlock
     name: "Frozen player cannot fire weapons"
@@ -111,7 +111,7 @@ features:
     port_refs:
       - "src/VortexArena.Common/Physics/PlayerPhysics.cs:IsFrozen"
     constants:
-      - { name: "frozen move", base: "movement = '0 0 0' (dodging-frozen sub-case allows ±2)", port: "move = Vector3.Zero (dodging-frozen omitted)", match: false }
+      - { name: "frozen move", base: "movement = '0 0 0' (dodging-frozen sub-case allows ±2)", port: "PlayerPhysics zeros movement or clamps it to ±2 with sv_dodging_frozen enabled", match: true }
     status:
       logic: faithful
       values: faithful
@@ -121,12 +121,11 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "sv_dodging_frozen sub-case (±2 movement for dodge direction) not modeled — only matters with the dodging mutator + sv_dodging_frozen 1 (both default off)."
+    gaps: []
     verification:
       - { kind: code-read, ref: "PlayerPhysics zeros move when IsFrozen; blocks jump", result: pass }
     confidence: high
-    notes: "Core 'encased in ice can't move' behavior is faithful at stock defaults. Unchanged from baseline."
+    notes: "PlayerPhysics passes raw movement to the dodge hook and applies the configured movement clamp."
 
   - id: freezetag.unfreeze
     name: "Unfreeze: clear ice state, restore health, re-enable"
@@ -143,17 +142,16 @@ features:
       logic: faithful
       values: faithful
       timing: faithful
-      presentation: partial
+      presentation: faithful
       audio: na
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Does not delete an ice entity (not spawned in the first place); the waypoint sprite IS cleared (it stops being collected once IsFrozen flips false)."
+    gaps: []
     verification:
-      - { kind: code-read, ref: "Unfreeze clears status effect + restores StartHealth + sets SpawnShieldExpire when spawnShieldSeconds>0 + sets PauseRegenFinished = max(cur, now + g_balance_pause_health_regen); CollectWaypoints stops emitting the Frozen sprite once unfrozen", result: pass }
+      - { kind: code-read, ref: "Unfreeze clears the Frozen status, which removes the client ice attachment; it also clears revive progress and restores health/shield.", result: pass }
     confidence: high
-    notes: "FIX since last audit: Unfreeze now sets PauseRegenFinished (FreezeTag.cs:366-368), closing the pauseregen gap the baseline flagged. Spawn-shield-on-revive remains faithful."
+    notes: "Ice and the waypoint clear when the frozen state ends."
 
   - id: freezetag.revive.manual
     name: "Manual revive by nearby teammate (range geometry + progress)"
@@ -335,27 +333,25 @@ features:
       - "src/VortexArena.Common/Gameplay/GameTypes/FreezeTag.cs:OnDamageCalculate"
       - "src/VortexArena.Common/Gameplay/Nades/NadesMutator.cs:OnDamageCalculate"
     constants:
-      - { name: "g_frozen_damage_trigger", base: "1 (frozen die in void/lava)", port: "none (no relocate path)", match: false }
+      - { name: "g_frozen_damage_trigger", base: "1 (lethal soft-kill), 0 (pre-damage teleport)", port: "1 (lethal soft-kill), 0 (pre-damage teleport)", match: true }
       - { name: "g_frozen_revive_falldamage", base: "0 (off)", port: "g_frozen_revive_falldamage cvar, fallback 0", match: true }
       - { name: "g_frozen_revive_falldamage_health", base: "40", port: "g_frozen_revive_falldamage_health cvar, fallback 40", match: true }
       - { name: "g_freezetag_revive_nade / _nade_health", base: "1 / 40", port: "FreezeTag.OnDamageCalculate (FreezeTag.cs:485-499): a frozen player's own DEATH_NADE within 0.1s of toss → Unfreeze + restore g_freezetag_revive_nade_health (40) + suppress hit + INFO_REVIVED_NADE/CENTER_REVIVE_SELF; live=1 via gametypes-server.cfg", match: true }
     status:
-      logic: partial
+      logic: faithful
       values: faithful
       timing: na
       presentation: faithful
       audio: faithful
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "STILL OPEN — no soft-kill relocate path (g_frozen_damage_trigger 0): the NEEDKILL soft-kill (restore HP=1+armor, teleport to a spawn point, no weapon reset) in PlayerDies / the Damage_Calculate relocate branch is absent — FT.OnDamageCalculate leaves NEEDKILL deathtypes alone (frozen player dies in void/lava), and the relocate needs the server spawn selector (intentionally NOT done in the gametype layer). Base default cvar is 1 = die, so this branch is dormant at stock cvars regardless."
-      - "Fall-damage revive (g_frozen_revive_falldamage) is implemented and live (FreezeTag.cs:507-515): a hard enough DEATH_FALL hit thaws the player to falldamage_health (40) and sends FREEZETAG_REVIVED_FALL/_REVIVE_SELF. Default off, so dormant at stock cvars but correct when enabled."
-      - "Nade self-revive is now FULLY implemented (FIX since baseline): FreezeTag.OnDamageCalculate (FreezeTag.cs:485-499) Unfreezes the player, restores g_freezetag_revive_nade_health (40), suppresses damage/force, and sends INFO_FREEZETAG_REVIVED_NADE + CENTER_FREEZETAG_REVIVE_SELF. g_freezetag_revive_nade ships 1 so it is live. (NadesMutator still also zeroes the same hit, but the actual unfreeze now lives in FT, hook-order-independent.)"
+    gaps: []
     verification:
-      - { kind: code-read, ref: "FreezeTag.OnDamageCalculate implements fall-damage revive AND nade self-revive (both live via MutatorHooks.DamageCalculate, DamageSystem.cs:264) but NOT the NEEDKILL void/lava relocate. No g_frozen_damage_trigger relocate reference in src/game.", result: partial }
+      - { kind: code-read, ref: "The live OnDamageCalculate hook warps frozen players when g_frozen_damage_trigger = 0; OnDeath handles the lethal hazard branch, restoring health and armor before corpse handling.", result: pass }
+      - { kind: headless, ref: "FreezeTagScoreTests.FrozenHazard_RelocatesWithoutChangingResources (both cvar settings)", result: pass }
     confidence: high
-    notes: "FIX since last audit: nade self-revive is now a REAL revive (Unfreeze + health + notifications), not a suppression stub — logic/values/presentation/audio for that branch are now faithful. Only the void/lava NEEDKILL soft-kill relocate remains open (and it is default-dormant). Liveness stays partial (relocate absent)."
+    notes: "Both hazard paths use SpawnSystem.SelectSpawnPoint and preserve the player's loadout when a destination exists."
 
   - id: freezetag.revive.spawnshield
     name: "Post-revive spawn shield (g_freezetag_revive_spawnshield)"
@@ -505,31 +501,33 @@ features:
     notes: "FT reuses the CA mod-icon drawer with its own layout cvar, matching HUD_Mod_FreezeTag. Unchanged (faithful)."
 
   - id: freezetag.presentation.ice_model
-    name: "Ice entity model over frozen players (MDL_ICE, 20 frames, team color)"
+    name: "Ice entity model over frozen players (MDL_ICE, frames 0–20, team color)"
     layer: [presentation]
     base_refs:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_Freeze (ice entity)"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:freezetag_Ice_Think"
     port_refs:
-      - "game/client/ClientWorld.cs:FrozenColormod"
+      - "game/client/CosmeticModelLayer.cs:DriveIce"
+      - "game/client/ClientWorld.cs:DriveEntityNodes"
     constants:
-      - { name: "ice model", base: "MDL_ICE, frame = floor(random()*21)", port: "none (only a blue model tint)", match: false }
-      - { name: "ice tint", base: "colormod/glowmod = Team_ColorRGB(team)", port: "FrozenColormod on player model", match: false }
+      - { name: "ice model", base: "MDL_ICE, frame = floor(random()*21)", port: "models/ice/ice.md3, random frame 0..20 held while frozen; follows origin-16 without rotation", match: true }
+      - { name: "ice tint", base: "colormod/glowmod = Team_ColorRGB(team)", port: "team colormod through AttachedCosmeticModel", match: false }
     status:
-      logic: missing
-      values: missing
+      logic: faithful
+      values: partial
       timing: na
       presentation: partial
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "No distinct ice block entity (random 1-of-20 frame, team-colored, following the player at origin-16) — frozen players only get an icy-blue colormod on their normal model."
+      - "Clients select their own frame when they first observe a freeze. Base broadcasts the server-selected frame."
+      - "The ice model uses a team colormod. Matching Base glowmod and the additive cubemap material needs an in-match visual check."
     verification:
-      - { kind: code-read, ref: "ClientWorld applies FrozenColormod when HasStatusEffect(Frozen); no MDL_ICE entity spawn (grep MDL_ICE in src/game → no matches)", result: pass }
+      - { kind: code-read, ref: "ClientWorld drives CosmeticModelLayer for skeletal and static models. The MD3 header lists 21 frames. The attachment follows the render root position and clears when the decoded Frozen status is removed.", result: pass }
     confidence: high
-    notes: "STILL OPEN — unchanged. Tint conveys frozen-ness but the signature ice cube is absent."
+    notes: "The ice keeps world orientation while following the player's position and scale."
 
   - id: freezetag.presentation.waypoints
     name: "Frozen / Reviving waypoint sprites over frozen players"
@@ -610,7 +608,7 @@ features:
     constants:
       - { name: "overlay color", base: "'0.25 0.90 1' warming with REVIVE_PROGRESS", port: "(0.25+colFade, 0.90-colFade, 1-colFade), colFade=max(0,p*2-1)", match: true }
       - { name: "overlay alpha", base: "0.3 + 0.7*(1 - max(0, REVIVE_PROGRESS*4-3))", port: "0.3f + 0.7f*(1 - max(0, p*4-3))", match: true }
-      - { name: "crosshair revive ring", base: "REVIVE_PROGRESS ring", port: "CrosshairPanel.ReviveProgress fed from LocalServerPlayer.ReviveProgress each frame", match: true }
+      - { name: "crosshair revive ring", base: "REVIVE_PROGRESS ring", port: "NetGame.UpdateCrosshairFeedback reads the live player or the networked owner progress", match: true }
       - { name: "cl_eventchase_frozen", base: "third-person cam while frozen", port: "FirstPersonView.WantEventChase frozenChase (cl_eventchase_frozen != 0), fed by NetGame ViewState.IsFrozen", match: true }
     status:
       logic: faithful
@@ -622,11 +620,11 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Overlay + crosshair ring + eventchase cam are all driven on the host/listen-server path (LocalServerPlayer / its Frozen status effect); a pure remote client with no LocalServerPlayer shows none of them (the cross-client wepent/stat follow-up)."
+      - "Free-fly and follow spectators exclude the frozen tint. Base SpectateCopy mirrors frozen stats from a followed player."
     verification:
-      - { kind: code-read, ref: "ViewEffects.UpdateFrozenOverlay implements the exact QC col_fade/alpha_fade formula + '0.25 0.90 1' base, called from NetGame with isFrozen + LocalServerPlayer.ReviveProgress; NetGame feeds Crosshair.ReviveProgress = LocalServerPlayer.ReviveProgress so the thaw ring draws; NetGame ~4293 sets ViewState.IsFrozen from LocalServerPlayer's Frozen status effect and FirstPersonView.WantEventChase engages the cl_eventchase_frozen pull-back cam. ReviveTick mirrors FrozenState.ReviveProgress onto Player.ReviveProgress.", result: pass }
+      - { kind: code-read, ref: "NetGame.IsLocalFrozen uses the authoritative player on a host or the decoded status effects on the HUD mirror for a remote client. Both overlay and event chase use this predicate. The overlay and crosshair ring read networked progress on remote clients.", result: pass }
     confidence: high
-    notes: "FIX since last audit: cl_eventchase_frozen is now implemented and live (FirstPersonView.WantEventChase frozenChase + NetGame ViewState.IsFrozen feed) — the baseline listed it as a missing gap. The full-screen overlay + crosshair thaw ring remain live on the listen-server path. Only pure-remote-client coverage remains open (presentation: partial)."
+    notes: "Active players use host or remote inputs for the screen tint, revive ring, and optional chase camera. ViewEffects suppresses its separate damage flash during the freeze."
 
   - id: freezetag.bots
     name: "Bot freeing / offense roles + frozen-target gating"
@@ -636,29 +634,27 @@ features:
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:havocbot_role_ft_freeing"
       - "common/gametypes/gametype/freezetag/sv_freezetag.qc:MUTATOR_HOOKFUNCTION(ft, HavocBot_ChooseRole/Bot_ForbidAttack)"
     port_refs:
-      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleFreezeTag (664-689)"
+      - "src/VortexArena.Server/Bot/BotObjectiveRoles.cs:RoleFreezeTag"
       - "src/VortexArena.Server/Bot/BotRoles.cs:128 (ChooseRole \"freezetag\"/\"ft\" → RoleFreezeTag)"
       - "src/VortexArena.Server/Bot/BotPopulation.cs:550 (RegisterBot → Role = ChooseRole)"
       - "src/VortexArena.Server/Bot/BotBrain.cs:1093 (ShouldAttack frozen-target skip)"
     constants:
-      - { name: "role timeout", base: "time + 10..20 s (random)", port: "none (RoleFreezeTag assigned once at AddBot, no re-roll)", match: false }
-      - { name: "free-player rating", base: "freeing 20000 / offense items+enemies", port: "RatingFrozenTeammate 20000 (frozen same-team), items 10000, enemies 7000, roam 3000", match: true }
+      - { name: "role timeout", base: "10–20 s initial, 20–30 s after each role switch", port: "10–20 s initial, 20–30 s after each role switch", match: true }
+      - { name: "frozen teammate rating", base: "9000 offense, 20000 freeing", port: "9000 offense, 20000 freeing", match: true }
     status:
       logic: faithful
-      values: partial
-      timing: na
+      values: faithful
+      timing: faithful
       presentation: na
       audio: na
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Role-timeout re-pick (10-20 s random) not implemented: Base periodically re-evaluates the role; the port assigns RoleFreezeTag once at spawn. Cosmetic for FT because freeing+offense is always the right combined role. Only values: partial for this."
-      - "BotBrain.FtRoleTimeout field absent — does not affect observable FT behaviour at stock settings."
+    gaps: []
     verification:
-      - { kind: code-read, ref: "BotObjectiveRoles.RoleFreezeTag (BotObjectiveRoles.cs:664-689) rates frozen same-team players at RatingFrozenTeammate=20000 (BotObjectiveRoles.cs:655) plus offense goals (items 10000, enemies 7000, roam 3000); BotRoles.ChooseRole (BotRoles.cs:128) maps \"freezetag\"/\"ft\" → RoleFreezeTag, assigned at BotPopulation.RegisterBot (BotPopulation.cs:550). BotBrain.ShouldAttack returns false for a Frozen-status target (BotBrain.cs:1093). Only the 10-20 s role-timeout re-roll is absent.", result: pass }
+      - { kind: code-read, ref: "RoleFreezeTag implements the randomized initial selection, both goal rating profiles, and later role timeouts. BotBrain.ShouldAttack skips frozen targets.", result: pass }
     confidence: high
-    notes: "FIX (registry drift): BotObjectiveRoles.RoleFreezeTag (BotObjectiveRoles.cs:664-689) implements both the freeing role (rates frozen same-team players at 20000 — dominant over items/enemies) and the offense goals (items 10000, enemies 7000, roam 3000). BotRoles.ChooseRole (BotRoles.cs:128) dispatches \"freezetag\" or \"ft\" → RoleFreezeTag, wired in BotPopulation.RegisterBot (BotPopulation.cs:550). The frozen-target attack gate (ShouldAttack BotBrain.cs:1093) is also live. The prior 'logic: partial/values: missing' entry was written before RoleFreezeTag landed. Role-timeout randomisation (10-20 s) is absent (Base re-rolls the role; port uses a static per-session assignment) — cosmetic for FT since the combined freeing+offense role is always appropriate."
+    notes: "The role timers and distinct offense and freeing goals are live."
 
   - id: freezetag.spawn.late
     name: "Mid-round joiner spawns AS FROZEN (PlayerSpawn → SPAWN_LATE)"
@@ -838,7 +834,7 @@ features:
     verification:
       - { kind: code-read, ref: "ClientWorld.cs:1092 sets pm.FrozenHold = HasStatusEffect(e, StatusEffectsCatalog.Frozen) every frame before pm.Pose(); PlayerModel.Pose (PlayerModel.cs:220-226) when FrozenHold: forces loco=Idle, does NOT advance _legsTime (pins the frame), skips the upper-body action overlay (FrozenHold guard at :242). The live Frozen status effect is applied by FreezeTag.Freeze and cleared by Unfreeze via StatusEffectsCatalog.", result: pass }
     confidence: high
-    notes: "FIX (registry drift): the frozen-pose animation IS implemented and live — ClientWorld sets PlayerModel.FrozenHold every frame from the networked Frozen status effect, and PlayerModel.Pose pins the idle locomotion frame + skips upper-body overlays when FrozenHold. The prior 'logic: missing' entry was written before this feature landed. Pairs with the still-open MDL_ICE ice-cube entity (freezetag.presentation.ice_model)."
+    notes: "FIX (registry drift): the frozen-pose animation IS implemented and live — ClientWorld sets PlayerModel.FrozenHold every frame from the networked Frozen status effect, and PlayerModel.Pose pins the idle locomotion frame + skips upper-body overlays when FrozenHold. The prior 'logic: missing' entry was written before this feature landed. Pairs with the client ice-cube attachment (freezetag.presentation.ice_model)."
 
   - id: freezetag.notif.alone
     name: "Last-survivor 'You are now alone!' centerprint (LastPlayerForTeam → CENTER_ALONE)"

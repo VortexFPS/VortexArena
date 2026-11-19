@@ -37,8 +37,10 @@ public sealed class DpClientConfig
     public double NetFps { get; set; } = 72;
     /// <summary>cl_netimmediatebuttons: a change of buttons sends a packet at once, whatever the pacing says.</summary>
     public bool NetImmediateButtons { get; set; } = true;
-    /// <summary>Seconds of silence after which a connected server is considered gone (cl_timeout).</summary>
-    public double Timeout { get; set; } = 30;
+    /// <summary>net_connecttimeout, sampled when the server accepts the connection.</summary>
+    public double ConnectTimeout { get; set; } = 15;
+    /// <summary>net_messagetimeout, sampled when the client receives fresh in-band traffic.</summary>
+    public double Timeout { get; set; } = 300;
     /// <summary>Seconds between clc_nop keepalives while signing on and otherwise idle (CL_KeepaliveMessage sends one every 5).</summary>
     public double KeepAliveInterval { get; set; } = 5;
 }
@@ -200,14 +202,14 @@ public sealed class DpClient
 
         if (State != DpClientState.Connected)
             return;
-        if (Channel.Receive(datagram, now, _outgoing, out byte[]? message) == DpChannelReceive.Message)
+        if (Channel.Receive(datagram, now, _outgoing, out byte[]? message, _config.Timeout) == DpChannelReceive.Message)
             ProcessMessage(message!);
     }
 
     // NetConn_ConnectionEstablished
     private void ConnectionEstablished(double now)
     {
-        Channel = new DpNetChannel(now);
+        Channel = new DpNetChannel(now, _config.ConnectTimeout);
         Signon.Reset();
         Parser.Entities.Clear();
         _stuffText.Clear();
@@ -392,7 +394,7 @@ public sealed class DpClient
         else if (State == DpClientState.Connected && !DemoPlayback)
         {
             SendMove(now);
-            if (State == DpClientState.Connected && now - Channel.LastMessageTime > _config.Timeout)
+            if (State == DpClientState.Connected && now > Channel.TimeoutAt)
                 End(DpClientState.TimedOut, "server stopped responding");
         }
 

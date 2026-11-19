@@ -33,7 +33,9 @@ public static class DpSurfaceShader
     /// </summary>
     /// <param name="forModel">The surface belongs to an entity's model (lit from the light grid, tinted by
     /// colormod) rather than to the level (lit by its vertex colours).</param>
-    public static Material? Compile(ShaderDef def, AssetSystem ctx, bool forModel) => Compile(def, ctx, forModel, null);
+    /// <param name="entityAdditive">Apply the entity's EF_ADDITIVE as DarkPlaces' R_GetCurrentTexture does.</param>
+    public static Material? Compile(ShaderDef def, AssetSystem ctx, bool forModel, bool entityAdditive = false) =>
+        Compile(def, ctx, forModel, null, entityAdditive);
 
     /// <summary>
     /// The material for a face of the level that has a lightmap page: null when the plain lightmap shader
@@ -52,9 +54,11 @@ public static class DpSurfaceShader
         return Compile(def, ctx, forModel: false, lightmap);
     }
 
-    private static Material? Compile(ShaderDef def, AssetSystem ctx, bool forModel, Texture2D? lightmap)
+    private static Material? Compile(ShaderDef def, AssetSystem ctx, bool forModel, Texture2D? lightmap, bool entityAdditive = false)
     {
         DpMaterialPlan plan = DpMaterialRules.Plan(def);
+        if (entityAdditive && plan.Blend != DpBlend.Custom)
+            plan = plan with { Blend = DpBlend.Add };
         if (plan.Sky || plan.NoDraw || plan.MaterialStage < 0) return null;
         ShaderStage stage = def.Stages[plan.MaterialStage];
         if (stage.IsLightmap) return null;

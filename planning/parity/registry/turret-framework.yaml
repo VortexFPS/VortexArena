@@ -6,8 +6,8 @@ summary:
   feature_count: 15
   worst_gaps:
     - "Turret networking PARTIAL: the turret HEAD aim (pitch/yaw 8-bit), head avel yaw, and active/dead status ARE now networked (folded into the generic NetEntity delta, EntityField.TurretHead) — producer+codec+consumer live + round-trip-tested. Still no dedicated ENT_CLIENT_TURRET edict / turret_send / turret_construct (no distinct TNSF_SETUP/ANIM group), and the decoded head block is DECODE-ONLY (no client node renders the rotating head MODEL from it yet — deferred Phase-3). Other visible/audible turret feedback remains server-side temp-entity/point-particle emit."
-    - "Client presentation PARTIAL: muzzle flashes/tracers/beams/projectile trails/head-frame anims + death FX (Wave-8e/Wave-7) AND the framework-wide low-HP spark + SMOKE_LARGE/SMOKE_SMALL tiers (TurretAI.DrawFx) are emitted server-side; still missing the tur_head MODEL rotation render, the draw2d waypoint sprite/healthbar, the changeteam team recolor, and the client gib toss (all need a CSQC turret edict)."
-    - "Per-unit cvar table unported (load_unit_settings / TR_PROPS_COMMON / turret_scale_* / turret_initparams clamping / dumpturrets / turrets_manager_think reloadcvars) — per-unit balance is hardcoded C# const, mappers can't retune. (Framework-level g_turrets_* cvars ARE read live; per-unit g_turrets_unit_<name>_<field> are not.)"
+    - "Server-side effects cover combat, damage and death cues, and turret debris renders through snapshots. Separate head-model rotation, the draw2d waypoint sprite and health bar, and team recolor remain open."
+    - "Per-unit cvar table unported (load_unit_settings / TR_PROPS_COMMON / turret_scale_* / turret_initparams clamping / turrets_manager_think reloadcvars) — per-unit balance is hardcoded C# const, mappers can't retune. (Framework-level g_turrets_* cvars ARE read live; per-unit g_turrets_unit_<name>_<field> are not.)"
     - "Per-shot firecheck LOS + TEAMCHECK branches not modeled — but Base itself marks TFL_FIRECHECK_LOS/TEAMCECK as un-implemented (the '-' rows in the firecheck legend), so the port matches Base; acquisition-time LOS/team gating is the only LOS/team test in both."
     - "tur_head model render absent: the steady-state head MODEL rotation (turret_draw avelocity integrate) and per-shot head-frame anim ride the turret body's own Entity.Frame (no separate head bone / CSQC turret edict). (turret_heal repairable turrets, the death two-step, the round-restart .reset hook, and the turret_targettrigger external-target map entity are all now ported + live — FIXED 06-27.)"
 features:
@@ -34,7 +34,7 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Per-unit cvar table unported (load_unit_settings / TR_PROPS_COMMON / turret_scale_* / turret_initparams clamping / dumpturrets) — per-unit balance is hardcoded C# const, mappers can't retune. (Framework-level g_turrets_* delays/nofire ARE cvar-backed; per-unit fields are not.)"
+      - "Per-unit cvar table unported (load_unit_settings / TR_PROPS_COMMON / turret_scale_* / turret_initparams clamping) — per-unit balance is hardcoded C# const, mappers can't retune. (Framework-level g_turrets_* delays/nofire ARE cvar-backed; per-unit fields are not.)"
     verification:
       - { kind: code_read, ref: "turret.qh/all.qh Turret class vs EntityClasses.cs Turret + TurretAttribute", result: pass }
     confidence: high
@@ -70,7 +70,7 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Per-unit cvar table unported (load_unit_settings / TR_PROPS_COMMON / turret_scale_* / turret_initparams clamping / dumpturrets) — per-unit balance is hardcoded C# const."
+      - "Per-unit cvar table unported (load_unit_settings / TR_PROPS_COMMON / turret_scale_* / turret_initparams clamping) — per-unit balance is hardcoded C# const."
       - "No tur_head child entity / tag_head attachment (head bone is a TurretState.HeadAngles vector, not an edict)."
       - "turret_initparams clamping/derivation absent: per-turret consts are used raw with no bound/default fill."
     verification:
@@ -450,10 +450,14 @@ features:
       - "common/turrets/cl_turrets.qc:turret_draw"
       - "common/turrets/cl_turrets.qc:turret_draw2d"
       - "common/turrets/cl_turrets.qc:turret_die"
+      - "common/turrets/cl_turrets.qc:turret_gib_draw"
       - "common/turrets/cl_turrets.qc:turret_changeteam"
     port_refs:
       - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:DrawFx"
       - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:Die"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:TossDeathGibs"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:GibBoom"
+      - "game/net/ClientEntityView.cs:_Process"
       - "src/VortexArena.Common/Gameplay/Turrets/TurretCombat.cs:FireBullet"
       - "src/VortexArena.Common/Gameplay/Turrets/PlasmaTurret.cs:Attack"
       - "src/VortexArena.Common/Gameplay/Turrets/PhaserTurret.cs:TrThinkHeadAnim"
@@ -464,7 +468,7 @@ features:
       - { name: "death FX (rocket explode + sound)", base: "EFFECT_ROCKET_EXPLODE + SND_ROCKET_IMPACT (cl_turrets.qc:turret_die, every death)", port: "Die emits ROCKET_EXPLODE + weapons/rocket_impact.wav server-side on every death (Wave-7)", match: true }
       - { name: "muzzle flash / tracer / beam FX", base: "Send_Effect EFFECT_*_MUZZLEFLASH, EFFECT_BULLET tracer, EFFECT_VAPORIZER_BEAM (per weapon, outside isPlayer gate)", port: "server-side EffectEmitter: BLASTER/MACHINEGUN/VORTEX muzzleflash, BULLET tracer, VAPORIZER_BEAM team beam, te_explosion launch flashes (NEW Wave-8e)", match: true }
       - { name: "head-frame fire anim", base: "tur_head.frame cycle (plasma 1-5, flac 0-3, phaser fireflag 1-10/15 charge/discharge)", port: "runs on the turret edict's own networked Entity.Frame: plasma kick frame=1, flac 0-3 cycle, phaser fireflag charge/discharge (PhaserTurret.TrThinkHeadAnim) — no separate head bone (NEW Wave-8e)", match: false }
-      - { name: "gib toss / gib boom", base: "turret_gibtoss / turret_gibboom (per-type client gib entities)", port: "none (needs a CSQC turret edict to spawn client gibs)", match: false }
+      - { name: "gib toss / gib boom", base: "turret_gibtoss / turret_gibboom (per-type client gib entities)", port: "TurretAI.TossDeathGibs and GibBoom spawn generic-branch server bounce entities rendered from snapshots", match: false }
       - { name: "waypoint sprite + healthbar", base: "turret_draw2d g_waypointsprite_turrets + drawhealthbar", port: "none", match: false }
       - { name: "team recolor", base: "turret_changeteam colormap/glowmod (Team_ColorRGB)", port: "none", match: false }
     status:
@@ -474,17 +478,20 @@ features:
       presentation: partial
       audio: partial
       liveness: partial
-    intended_divergence: false
-    divergence_rationale: null
+    intended_divergence: true
+    divergence_rationale: "Turret debris is spawned and moved on the server and rendered as ordinary snapshot entities."
     gaps:
       - "No tur_head MODEL render: the head aim/avel IS now networked + decoded onto the proxy (Entity.TurHeadPitch/Yaw/AVelYaw, see net.sync), but NO client node yet reads it to rotate a head model/bone (turret_draw tur_head.angles += avelocity*dt) — the render is deferred to 'Phase-3'. The per-shot head-frame anim still rides the turret body's own Entity.Frame instead of a separate head bone."
       - "No turret_draw2d radar layer: no waypoint sprite and no over-turret healthbar."
       - "No turret_changeteam team recolor (colormap/glowmod)."
-      - "No client gib toss (turret_gibtoss/turret_gibboom) — needs a CSQC turret edict."
+      - "Native turret gibs follow the server tick and a hardcoded lifetime, with immediate removal. Base uses local cl_gibs_ticrate/sloppy and cl_gibs_lifetime, whose shipped default is 2.5 s."
+      - "The generic native toss skips eWheel, Walker and Tesla. No replacement producer for their QC whole-model toss was found."
     verification:
-      - { kind: code_read, ref: "Wave-8e: muzzle flashes/tracers/beams/projectile trails/te_explosion launch flashes + head-frame anims + phaser discharge anim emitted server-side from the per-turret Attack paths and TurretCombat.FireBullet; Die emits ROCKET_EXPLODE+rocket_impact; TurretAI.DrawFx (called every think from RunCombat) emits the framework-wide <127 te_spark + <85 SMOKE_LARGE + <32 SMOKE_SMALL tiers from one shared Prandom roll (cl_turrets.qc:36-53). Still absent: tur_head model rotation, draw2d waypoint/healthbar, changeteam recolor, gib toss", result: pass }
+      - { kind: code_read, ref: "Wave-8e: muzzle flashes/tracers/beams/projectile trails/te_explosion launch flashes + head-frame anims + phaser discharge anim emitted server-side from the per-turret Attack paths and TurretCombat.FireBullet; Die emits ROCKET_EXPLODE+rocket_impact; TurretAI.DrawFx (called every think from RunCombat) emits the framework-wide <127 te_spark + <85 SMOKE_LARGE + <32 SMOKE_SMALL tiers from one shared Prandom roll (cl_turrets.qc:36-53). Still absent: tur_head model rotation, draw2d waypoint/healthbar, changeteam recolor", result: pass }
+      - { kind: code, ref: "TurretAI.Die calls TossDeathGibs. TossGib sets Bounce and a think callback, with GibBoom spawning four further chunks. ServerNet carries these model entities and ClientEntityView samples their snapshot poses.", result: pass }
     confidence: high
-    notes: "FIX vs baseline (framework low-HP sparks/smoke now ported): TurretAI.DrawFx (06-25) ports the all-turret turret_draw damage-feedback — the <127 te_spark and the <85 SMOKE_LARGE / <32 SMOKE_SMALL smoke tiers, from one shared random roll, emitted server-side for every combat turret (ewheel/walker keep their own draw). This plus the Wave-8e combat FX (muzzle flashes, bullet tracers, instagib team beam, projectile trails via NetName->ProjectileCatalog, launch-flash te_explosions, plasma/flac/phaser head-frame fire anims) and the Wave-7 death rocket-explode FX/sound make presentation/audio/liveness partial. Still genuinely absent (all need a CSQC turret edict): the tur_head MODEL render (no head bone), the draw2d waypoint sprite/healthbar, the changeteam team recolor, and the client gib toss."
+    notes: "The turret-gib presentation was verified by source tracing. A paired run of turret death, flame, gib detonation and fade remains unverified."
+
   - id: turret-framework.mapents.path_trigger
     name: "Waypoint path + receive-target entities (turret_checkpoint / targettrigger / manager)"
     layer: [authority]

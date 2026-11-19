@@ -1,0 +1,95 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: The separate rendering thread feature is experimental. Feel free to try it since it will eventually become a stable feature.
+However, bear in mind that at the moment it can lead to project crashes or instability.
+So, unless you want to test the engine, set the "rendering/driver/threads/thread_model" project setting to 'Safe'.
+     at: setup2 (main/main.cpp:3415)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Enabled maxfps=0 refresh=-1Hz cpu=6c gpu=[0m
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag][0m
+=== VortexArena boot ===[0m
+Weapons:   27[0m
+Items:     21[0m
+Mutators:  46[0m
+GameTypes: 21[0m
+Sounds:    223[0m
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).[0m
+[lb]MenuState] user gamedir mounted: /tmp/va-sandbox-native-keys3/session-native/server-user/data (drop .pk3 packs in its maps/ subfolder).[0m
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"[0m
+"maxplayers" set to "32"[0m
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).[0m
+[lb]MenuState] cvar help: 1386 engine descriptions.[0m
+[lb]shell] --cvar sv_public = "0"[0m
+[lb]shell] --cvar sv_eventlog = "1"[0m
+[lb]shell] --cvar g_warmup = "0"[0m
+[lb]shell] --cvar skill = "5"[0m
+[lb]shell] --cvar sv_cheats = "2"[0m
+[lb]shell] --cvar g_spawnshieldtime = "0"[0m
+[lb]shell] --cvar g_buffs_random_location = "0"[0m
+[lb]shell] --cvar g_buffs_randomize = "0"[0m
+[lb]shell] --cvar g_start_delay = "0"[0m
+[lb]shell] --cvar g_buffs = "1"[0m
+[lb]shell] --cvar g_buffs_replace_powerups = "0"[0m
+[lb]shell] --cvar g_buffs_spawn_count = "0"[0m
+[lb]shell] --cvar g_sandbox = "1"[0m
+[lb]shell] --cvar g_sandbox_info = "2"[0m
+[lb]shell] --cvar g_sandbox_editor_free = "1"[0m
+[lb]shell] --cvar g_sandbox_editor_distance_spawn = "88"[0m
+[lb]shell] --cvar g_sandbox_storage_autoload = "0"[0m
+[lb]shell] --cvar g_sandbox_storage_autosave = "0.2"[0m
+[lb]shell] --cvar g_grab_range = "200"[0m
+[lb]shell] --cvar timelimit = "0"[0m
+[lb]shell] --cvar g_buffs_cooldown_activate = "1"[0m
+[lb]video] vid_vsync 0 → requested Disabled, actual Enabled (off — uncapped, may tear)[0m
+[lb]video] cl_maxfps 256 -> Engine.MaxFps 144 (auto: nothing set a cap, using max(144, refresh); refresh -1Hz)[0m
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)[0m
+[lb]video] process priority boost unavailable: Permission denied[0m
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] hosting listen server: gametype=dm map=stormkeep bots=0 skill=-1 timelimit=0 fraglimit=0[0m
+[NetGame] dedicated slim: headless host — client render/audio asset loads are skipped (server keeps collision, entities, muzzle tags, waypoints). `sv_dedicated_slim 0` restores the full load.
+[NetGame] DEDICATED: no local client — no loopback connection, carrier, camera, HUD or prediction. All player slots are available to real clients.
+[lb]GameWorld] tick rate: sys_ticrate=0.015625 -> 64 Hz [lb]sharedStore=True, cfgLoaded=False][0m
+[NetGame] dedicated loop cap: Engine.MaxFps 64 (sim tickrate 64 Hz).
+[NetTransport.Server] listening on UDP 26717 (max 32).
+[ServerNet] LAN discovery: answering getinfo on UDP 26718 (game port 26717).
+[ServerConsole] reading commands from stdin (type 'status', 'help', 'quit'; --no-console to disable).
+[NetGame] precached 0 weapon models, skipped 24 (lazy), 24 muzzle tags.
+[NetGame] listen server on 127.0.0.1:26717 (map 'stormkeep', dm, 0 bots) — self-connecting.
+[LoadTimeline] host stormkeep — load begin → ready, 481 ms total
+    textures.compress: nothing compressed (gl_texturecompression 1, no eligible textures)
+    bsp.parse             25.1 ms    5.2 %
+    collision.build      127.8 ms   26.6 %
+    world.boot           118.6 ms   24.7 %
+  server.start           300.0 ms   62.4 %
+  precache.weapons       136.6 ms   28.4 %
+  (unaccounted: yields, present, unmeasured)       44.6 ms
+[ServerNet] peer 95600022 connected (awaiting handshake).
+:connect:1:-1:
+:join:1:-1::ParityOwner
+[ServerNet] peer 95600022 accepted as 'ParityOwner' (netId 95600022, id 92c034f5).
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — ng.process 30.9ms (typ 2.1ms, 15× over) | proc 31.4 rcpu 0.0 gpu 0.0 rest 0.0 | alloc 109KB | ticks 1 | watchdog: 8/23 samples in 'net.poll' | DEBUG-BUILD[0m
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6[0m
+[ServerNet] peer 1434310784 connected (awaiting handshake).
+:connect:2:-2:
+:join:2:-2::ParityGuest
+[ServerNet] peer 1434310784 accepted as 'ParityGuest' (netId 1434310784, id a020527e).
+[lb]hitch CPU-LOGIC] 31.3ms (1 dropped @60Hz) (med 15.6, ×2.0) — net.poll 20.3ms (typ 1.0ms, 19× over) | proc 42.4 rcpu 0.0 gpu 0.0 rest 0.0 late 6.2 | alloc 69KB | ticks 1 | watchdog: 12/34 samples in 'net.poll' | DEBUG-BUILD[0m
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6[0m
+gametype: dm  time: 29.9
+players: 2 (0 bots)
+  ParityOwner      score    0  k/d 0/0
+  ParityGuest      score    0  k/d 0/0
+^3SANDBOX - SERVER: ^7ParityOwner spawned an object at origin ^31696 -534.077 8.73502
+[lb]hitch MIXED] 78.1ms (4 dropped @60Hz) (med 15.6, ×5.0) — 47.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 30.7 rcpu 0.0 gpu 0.0 rest 47.4 late 56.6 | alloc 8KB | ticks 1 | watchdog: 49/75 samples in '(post-process)' | DEBUG-BUILD[0m
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6[0m
+[lb]hitch CPU-LOGIC] 874.2ms (51 dropped @60Hz) (med 15.6, ×55.9) — ng.process 6.0ms (typ 1.7ms, 3× over) | proc 2092.8 rcpu 0.0 gpu 0.0 rest 0.0 late 1715.2 | alloc 8KB | ticks 5 | watchdog: 384/669 samples in '(unscoped)' | DEBUG-BUILD[0m
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 78.1[0m
+[lb]hitch MIXED] 46.9ms (2 dropped @60Hz) (med 15.6, ×3.0) — 26.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 20.3 rcpu 0.0 gpu 0.0 rest 26.5 late 10.9 | alloc 104KB | ticks 6 | watchdog: 10/23 samples in '(post-process)' | DEBUG-BUILD[0m
+[lb]hitch MIXED ×19…] ongoing 31.7–235.0ms over 3.1s — 26.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch MIXED ×47…] ongoing 31.7–268.6ms over 6.3s — 26.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch MIXED ×49] 31.7–563.4ms over 7.5s (med 15.6) — 26.5ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it)[0m
+[lb]hitch MIXED] 775.5ms (46 dropped @60Hz) (med 15.6, ×49.6) — 484.4ms outside _Process, render/present split unmeasured (set cl_frameprofiler_rendertime 1 and re-run to attribute it) | proc 291.1 rcpu 0.0 gpu 0.0 rest 484.4 late 1053.6 | alloc 16KB | ticks 6 | watchdog: 901/1158 samples in '(post-process)' | DEBUG-BUILD[0m
+[lb]hitch]   prev: 50.6 63.1 149.9 95.3 77.4 268.6 263.8 563.4[0m
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+[Main] received SIGTERM again; letting the runtime terminate.

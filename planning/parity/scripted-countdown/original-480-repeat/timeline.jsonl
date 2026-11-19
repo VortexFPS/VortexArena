@@ -1,0 +1,106 @@
+{"seconds": 0.0, "event": "both graphical clients connected", "port": 26909}
+{"seconds": 2.0, "client": "BlueProbe", "command": "cmd join"}
+{"seconds": 2.984, "client": "RedProbe", "command": "cmd spectate"}
+{"seconds": 3.967, "server": "prvm_edictset server 1 origin \"-288 -208 112\"; prvm_edictset server 1 angles \"11 0 0\"; prvm_edictset server 1 fixangle 1"}
+{"seconds": 3.967, "server": "status; g_balance_kill_delay; g_balance_kill_antispam; sv_clones"}
+{"seconds": 3.967, "client": "BlueProbe", "command": "cmd teleporttotarget probe_clone"}
+{"seconds": 4.999, "server": "echo BlueProbe at probe_clone; prvm_edictget server 2 origin; prvm_edictget server 2 v_angle"}
+{"seconds": 4.999, "phase": "spawn standing body"}
+{"seconds": 4.999, "client": "BlueProbe", "command": "impulse 142"}
+{"seconds": 5.982, "client": "BlueProbe", "command": "cmd teleporttotarget probe_player"}
+{"seconds": 6.982, "server": "echo BlueProbe at probe_player; prvm_edictget server 2 origin; prvm_edictget server 2 v_angle"}
+{"seconds": 6.982, "client": "BlueProbe", "command": "bind F8 \"kill\""}
+{"seconds": 11.001, "frame": "RedProbe/0000.webp", "sample": 10.966}
+{"seconds": 11.001, "frame": "BlueProbe/0000.webp", "sample": 10.966}
+{"seconds": 11.123, "frame": "RedProbe/0001.webp", "sample": 11.091}
+{"seconds": 11.25, "frame": "RedProbe/0002.webp", "sample": 11.216}
+{"seconds": 11.25, "frame": "BlueProbe/0001.webp", "sample": 11.216}
+{"seconds": 11.373, "frame": "RedProbe/0003.webp", "sample": 11.341}
+{"seconds": 11.499, "frame": "BlueProbe/0002.webp", "sample": 11.467}
+{"seconds": 11.499, "frame": "RedProbe/0004.webp", "sample": 11.466}
+{"seconds": 11.623, "frame": "RedProbe/0005.webp", "sample": 11.592}
+{"seconds": 11.749, "frame": "RedProbe/0006.webp", "sample": 11.717}
+{"seconds": 11.749, "frame": "BlueProbe/0003.webp", "sample": 11.717}
+{"seconds": 11.874, "frame": "RedProbe/0007.webp", "sample": 11.842}
+{"seconds": 11.967, "phase": "press kill"}
+{"seconds": 11.999, "frame": "RedProbe/0008.webp", "sample": 11.967}
+{"seconds": 12.0, "frame": "BlueProbe/0004.webp", "sample": 11.967}
+{"seconds": 12.124, "frame": "RedProbe/0009.webp", "sample": 12.092}
+{"seconds": 12.249, "frame": "RedProbe/0010.webp", "sample": 12.217}
+{"seconds": 12.249, "frame": "BlueProbe/0005.webp", "sample": 12.217}
+{"seconds": 12.374, "frame": "RedProbe/0011.webp", "sample": 12.342}
+{"seconds": 12.502, "frame": "BlueProbe/0006.webp", "sample": 12.467}
+{"seconds": 12.502, "frame": "RedProbe/0012.webp", "sample": 12.467}
+{"seconds": 12.624, "frame": "RedProbe/0013.webp", "sample": 12.592}
+{"seconds": 12.751, "frame": "BlueProbe/0007.webp", "sample": 12.717}
+{"seconds": 12.752, "frame": "RedProbe/0014.webp", "sample": 12.718}
+{"seconds": 12.875, "frame": "RedProbe/0015.webp", "sample": 12.843}
+{"seconds": 12.999, "frame": "BlueProbe/0008.webp", "sample": 12.967}
+{"seconds": 13.0, "frame": "RedProbe/0016.webp", "sample": 12.968}
+{"seconds": 13.125, "frame": "RedProbe/0017.webp", "sample": 13.093}
+{"seconds": 13.249, "frame": "BlueProbe/0009.webp", "sample": 13.217}
+{"seconds": 13.252, "frame": "RedProbe/0018.webp", "sample": 13.218}
+{"seconds": 13.375, "frame": "RedProbe/0019.webp", "sample": 13.343}
+{"seconds": 13.5, "frame": "BlueProbe/0010.webp", "sample": 13.467}
+{"seconds": 13.5, "frame": "RedProbe/0020.webp", "sample": 13.468}
+{"seconds": 13.625, "frame": "RedProbe/0021.webp", "sample": 13.593}
+{"seconds": 13.75, "frame": "BlueProbe/0011.webp", "sample": 13.717}
+{"seconds": 13.753, "frame": "RedProbe/0022.webp", "sample": 13.718}
+{"seconds": 13.876, "frame": "RedProbe/0023.webp", "sample": 13.843}
+{"seconds": 14.0, "frame": "BlueProbe/0012.webp", "sample": 13.968}
+{"seconds": 14.003, "frame": "RedProbe/0024.webp", "sample": 13.969}
+{"seconds": 14.126, "frame": "RedProbe/0025.webp", "sample": 14.094}
+{"seconds": 14.251, "frame": "RedProbe/0026.webp", "sample": 14.219}
+{"seconds": 14.251, "frame": "BlueProbe/0013.webp", "sample": 14.218}
+{"seconds": 14.376, "frame": "RedProbe/0027.webp", "sample": 14.344}
+{"seconds": 14.5, "frame": "BlueProbe/0014.webp", "sample": 14.468}
+{"seconds": 14.501, "frame": "RedProbe/0028.webp", "sample": 14.469}
+{"seconds": 14.626, "frame": "RedProbe/0029.webp", "sample": 14.594}
+{"seconds": 14.752, "frame": "BlueProbe/0015.webp", "sample": 14.718}
+{"seconds": 14.754, "frame": "RedProbe/0030.webp", "sample": 14.719}
+{"seconds": 14.876, "frame": "RedProbe/0031.webp", "sample": 14.844}
+{"seconds": 15.001, "frame": "BlueProbe/0016.webp", "sample": 14.968}
+{"seconds": 15.001, "frame": "RedProbe/0032.webp", "sample": 14.969}
+{"seconds": 15.126, "frame": "RedProbe/0033.webp", "sample": 15.094}
+{"seconds": 15.25, "frame": "BlueProbe/0017.webp", "sample": 15.218}
+{"seconds": 15.252, "frame": "RedProbe/0034.webp", "sample": 15.219}
+{"seconds": 15.379, "frame": "RedProbe/0035.webp", "sample": 15.345}
+{"seconds": 15.503, "frame": "BlueProbe/0018.webp", "sample": 15.468}
+{"seconds": 15.503, "frame": "RedProbe/0036.webp", "sample": 15.47}
+{"seconds": 15.629, "frame": "RedProbe/0037.webp", "sample": 15.595}
+{"seconds": 15.752, "frame": "BlueProbe/0019.webp", "sample": 15.718}
+{"seconds": 15.753, "frame": "RedProbe/0038.webp", "sample": 15.72}
+{"seconds": 15.877, "frame": "RedProbe/0039.webp", "sample": 15.845}
+{"seconds": 16.001, "frame": "BlueProbe/0020.webp", "sample": 15.968}
+{"seconds": 16.004, "frame": "RedProbe/0040.webp", "sample": 15.97}
+{"seconds": 16.13, "frame": "RedProbe/0041.webp", "sample": 16.095}
+{"seconds": 16.169, "phase": "server recorded suicide"}
+{"seconds": 16.251, "frame": "BlueProbe/0021.webp", "sample": 16.218}
+{"seconds": 16.255, "frame": "RedProbe/0042.webp", "sample": 16.22}
+{"seconds": 16.379, "frame": "RedProbe/0043.webp", "sample": 16.345}
+{"seconds": 16.501, "frame": "BlueProbe/0022.webp", "sample": 16.469}
+{"seconds": 16.502, "frame": "RedProbe/0044.webp", "sample": 16.47}
+{"seconds": 16.627, "frame": "RedProbe/0045.webp", "sample": 16.595}
+{"seconds": 16.752, "frame": "BlueProbe/0023.webp", "sample": 16.719}
+{"seconds": 16.753, "frame": "RedProbe/0046.webp", "sample": 16.721}
+{"seconds": 16.88, "frame": "RedProbe/0047.webp", "sample": 16.846}
+{"seconds": 17.001, "frame": "BlueProbe/0024.webp", "sample": 16.969}
+{"seconds": 17.003, "frame": "RedProbe/0048.webp", "sample": 16.971}
+{"seconds": 17.128, "frame": "RedProbe/0049.webp", "sample": 17.096}
+{"seconds": 17.253, "frame": "BlueProbe/0025.webp", "sample": 17.219}
+{"seconds": 17.253, "frame": "RedProbe/0050.webp", "sample": 17.221}
+{"seconds": 17.378, "frame": "RedProbe/0051.webp", "sample": 17.346}
+{"seconds": 17.503, "frame": "BlueProbe/0026.webp", "sample": 17.469}
+{"seconds": 17.503, "frame": "RedProbe/0052.webp", "sample": 17.471}
+{"seconds": 17.629, "frame": "RedProbe/0053.webp", "sample": 17.596}
+{"seconds": 17.753, "frame": "BlueProbe/0027.webp", "sample": 17.719}
+{"seconds": 17.753, "frame": "RedProbe/0054.webp", "sample": 17.721}
+{"seconds": 17.878, "frame": "RedProbe/0055.webp", "sample": 17.846}
+{"seconds": 18.001, "frame": "BlueProbe/0028.webp", "sample": 17.969}
+{"seconds": 18.005, "frame": "RedProbe/0056.webp", "sample": 17.971}
+{"seconds": 18.129, "frame": "RedProbe/0057.webp", "sample": 18.097}
+{"seconds": 18.17, "phase": "after countdown"}
+{"seconds": 18.17, "server": "status"}
+{"seconds": 18.251, "frame": "BlueProbe/0029.webp", "sample": 18.219}
+{"seconds": 18.253, "frame": "RedProbe/0058.webp", "sample": 18.222}
+{"seconds": 18.379, "frame": "RedProbe/0059.webp", "sample": 18.347}

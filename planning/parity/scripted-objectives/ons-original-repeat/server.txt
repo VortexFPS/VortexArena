@@ -1,0 +1,230 @@
+DarkPlaces Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+Game is Xonotic using gamedir data
+gamename for server filtering: Xonotic
+Package /tmp/va-script-ons-original5/original/data/shared.pk3 contains the file models/xonotic_jumppad01/xonotic_jumppads01_readme.txt several times
+Package /tmp/va-script-ons-original5/original/data/shared.pk3 contains the file textures/phillipk1x/_GPL.txt several times
+Package /tmp/va-script-ons-original5/original/data/shared.pk3 contains the file textures/phillipk1x/_readme.txt several times
+Package /tmp/va-script-ons-original5/original/data/shared.pk3 contains the file textures/phillipk2x/_GPL.txt several times
+Package /tmp/va-script-ons-original5/original/data/shared.pk3 contains the file textures/phillipk2x/_readme.txt several times
+Current nice level is below the soft limit - cannot use niceness
+-ip option used, setting net_address to "127.0.0.1"
+-port option used, setting port cvar to 26812
+Loaded library "libcurl.so.4"
+Skeletal animation uses SSE code path
+execing quake.rc
+execing default.cfg
+execing xonotic-common.cfg
+Unknown command "r_textbrightness"
+Unknown command "r_textcontrast"
+execing commands.cfg
+execing help.cfg
+execing xonotic-server.cfg
+"maxplayers" set to "16"
+execing testing.cfg
+execing balance-xonotic.cfg
+execing bal-wep-xonotic.cfg
+execing physicsX.cfg
+execing turrets.cfg
+execing vehicles.cfg
+execing gametypes-server.cfg
+execing ctfscoring-samual.cfg
+execing mutators.cfg
+execing randomitems-xonotic.cfg
+execing monsters.cfg
+execing minigames.cfg
+execing physics.cfg
+execing help-xonotic.cfg
+couldn't exec cdtracks.cfg
+execing notifications.cfg
+execing data/campaign.cfg
+execing autoexec/empty.cfg
+execing autoexec.cfg
+SpawnServer: runningmanctf
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Mod_LoadQ3Shaders:1881: src string unterminated or truncated to 63 bytes: "We're intentionally using an alpha'd texture without using the "
+Server listening on address 127.0.0.1:26812
+Server listening on address [0:0:0:0:0:0:0:0]:26812
+server: program loaded (crc 51381, size 6720K)
+[::SVQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+:gamestart:ons_runningmanctf:0.1795054880.841474
+:gameinfo:mutators:LIST:vortex arena:norecoil
+:gameinfo:end
+Server spawned.
+Unknown command "crypto_keygen"
+execing post-config.cfg
+RedProbe is connecting...
+RedProbe connected
+:join:1:1:127.0.0.1:RedProbe
+RedProbe connected
+:team:1:-1:4
+BlueProbe is connecting...
+BlueProbe connected
+:join:2:2:127.0.0.1:BlueProbe
+BlueProbe connected
+:team:2:-1:4
+:team:1:5:3
+RedProbe is now playing on the RED team
+:team:2:14:3
+BlueProbe is now playing on the BLUE team
+host:     Xonotic git Server
+version:  Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+protocol: 3504 (DP7)
+map:      runningmanctf
+timing:   8.1% CPU, 0.00% lost, offset avg 2.6ms, max 13.5ms, sdev 2.4ms
+players:  2 active (16 max)
+
+#1   RedProbe            0   0:00:25
+   127.0.0.1:42448
+#2   BlueProbe           0   0:00:12
+   127.0.0.1:34254
+g_weaponarena is "vortex" ["0"] put in a list of weapons to enable a weapon arena mode, or try "all", "most", "all_available", or "most_available" (available only gives the weapon if the map normally has it as a pickup item)
+g_balance_vortex_charge is "0" ["1"] custom cvar
+g_balance_vortex_primary_damage is "62" ["80"] custom cvar
+g_balance_vortex_primary_refire is "0.55" ["1.5"] custom cvar
+g_balance_vortex_primary_force is "0" ["200"] custom cvar
+g_onslaught_warmup is "0" ["5"] time players have to wait before the round starts
+g_onslaught_round_timelimit is "1800" ["500"] round time limit in seconds
+g_onslaught_cp_buildtime is "4" ["5"] custom cvar
+g_onslaught_cp_health is "200" ["1000"] custom cvar
+g_onslaught_cp_buildhealth is "80" ["100"] custom cvar
+g_onslaught_cp_regen is "90" ["20"] custom cvar
+g_onslaught_gen_health is "180" ["2500"] custom cvar
+BlueProbe at probe_blueview 
+-222 -208 24.03125
+-19.0008545 0 0
+RedProbe at probe_bluegen 
+-215 -350 24.03125
+0 0 0
+RedProbe at probe_point 
+-178 -208 24.03125
+0 0 0
+RedProbe at probe_redview 
+-222 -156 24.03125
+-18.0010986 -20.0994873 0
+RedProbe captured Big Blue room control point
+RED team Big Blue room control point has been destroyed by BlueProbe
+RedProbe at probe_point 
+-178 -208 24.03125
+-18.0010986 -20.0994873 0
+Server lag report: 47.4% CPU, 0.65% lost, offset avg 9.5ms, max 106.4ms, sdev 13.9ms
+Server lag report: 100.0% CPU, 39.62% lost, offset avg 65.9ms, max 126.1ms, sdev 34.8ms
+RedProbe captured Big Blue room control point
+Server lag report: 99.0% CPU, 13.15% lost, offset avg 51.5ms, max 109.9ms, sdev 34.2ms
+Server lag report: 100.0% CPU, 79.10% lost, offset avg 108.4ms, max 136.7ms, sdev 7.8ms
+Server lag report: 100.0% CPU, 68.06% lost, offset avg 98.6ms, max 125.1ms, sdev 27.2ms
+RedProbe at probe_bluegen 
+-215 -350 24.03125
+0 0 0
+Server lag report: 59.7% CPU, 47.47% lost, offset avg 14.2ms, max 130.0ms, sdev 28.1ms
+BLUE generator has been destroyed
+RED team wins the round
+:scores:ons_runningmanctf:77
+:labels:player:score!!,caps!,,,,,,,,,,,,,,,,,,,,,,,,,,,takes,,,,,,kills,deaths<,teamkills<,suicides<,dmg,dmgtaken<,rounds_pl,,,,,,,,,,
+:player:see-labels:120,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-2,0,0,0,0,0,0,0,0,0:71:5:1:RedProbe
+:player:see-labels:10,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,-2,0,0,0,0,0,0,0,0,0:63:14:2:BlueProbe
+:labels:teamscores:generators!!,score
+:teamscores:see-labels::1
+:teamscores:see-labels::2
+:teamscores:see-labels::3
+:teamscores:see-labels::4
+:teamscores:see-labels:1,20:5
+:teamscores:see-labels::6
+:teamscores:see-labels::7
+:teamscores:see-labels::8
+:teamscores:see-labels::9
+:teamscores:see-labels::10
+:teamscores:see-labels::11
+:teamscores:see-labels::12
+:teamscores:see-labels::13
+:teamscores:see-labels:0,0:14
+:teamscores:see-labels::15
+:end
+:gameover
+RED team wins the match
+RedProbe wins
+Player stats writing failed: -400
+host:     Xonotic git Server
+version:  Xonotic Linux dedicated d93f9c4 Nov 19 2026 release GCC 
+protocol: 3504 (DP7)
+map:      runningmanctf
+timing:   94.9% CPU, 21.58% lost, offset avg 39.0ms, max 112.2ms, sdev 39.0ms
+players:  2 active (16 max)
+
+#1   RedProbe          120   0:01:40
+   127.0.0.1:42448
+#2   BlueProbe          10   0:01:28
+   127.0.0.1:34254
+Client "BlueProbe" dropped (Disconnect by user)
+:part:2
+BlueProbe disconnected
+:anticheat:_time:2:85.731354
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+BlueProbe left the game (Disconnect by user)
+Client "RedProbe" dropped (Disconnect by user)
+:part:1
+RedProbe disconnected
+:anticheat:_time:1:89.668854
+:anticheat:speedhack:0:-
+:anticheat:speedhack_m1:0:-
+:anticheat:speedhack_m2:0:-
+:anticheat:speedhack_m3:0:-
+:anticheat:speedhack_m4:0:-
+:anticheat:speedhack_m5:0:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:0:-
+:anticheat:idle_snapaim_signal:0:-
+:anticheat:idle_snapaim_noise:0:-
+:anticheat:idle_snapaim_m2:0:-
+:anticheat:idle_snapaim_m3:0:-
+:anticheat:idle_snapaim_m4:0:-
+:anticheat:idle_snapaim_m7:0:-
+:anticheat:idle_snapaim_m10:0:-
+:anticheat:div0_snapback:0:-
+RedProbe left the game (Disconnect by user)
+Maplist contains no usable maps!  Resetting it to default map list.
+Switching to map runningmanctf
+SpawnServer: runningmanctf
+server: program loaded (crc 51381, size 6720K)
+[::SVQC::WARNING] Engine lacks DP_CRYPTO, Player IDs (required for XonStat, CTS/CTF records and pubkey authentication) are unavailable.
+
+Received Termination signal, exiting...
+:gamestart:ons_runningmanctf:0.1795054892.666356
+:gameinfo:mutators:LIST:vortex arena:norecoil
+:gameinfo:end
+Server spawned.

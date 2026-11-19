@@ -62,12 +62,14 @@ public sealed class OnslaughtControlPoint
     // The server assigns these so the objective bodies actually RENDER on the client via the entity feed (the same
     // path the CTF flag / Domination point use — Entity.Model networks + renders). Progressive damage-model swaps
     // are server-authoritative (we pick the bucket model in GeneratorDamage/IconDamage), reproducing in effect what
-    // CSQC generator_damage/cpicon_damage would derive from the networked hp fraction. The bob/spin/punch ANIMATION,
-    // radar links, death-cam and explosion/particle FX remain genuinely client-side (see the spec's deferred note).
+    // CSQC generator_damage/cpicon_damage would derive from the networked hp fraction. The client applies icon
+    // motion and build opacity to these models using the existing objective snapshot.
     private const string MdlGen        = "models/onslaught/generator.md3";       // QC MDL_ONS_GEN (full health)
     private const string MdlGenDead    = "models/onslaught/generator_dead.md3";  // QC MDL_ONS_GEN_DEAD (destroyed)
     private const string MdlCpPad1     = "models/onslaught/controlpoint_pad.md3";  // QC MDL_ONS_CP_PAD1 (neutral pad)
     private const string MdlCpPad2     = "models/onslaught/controlpoint_pad2.md3"; // QC MDL_ONS_CP_PAD2 (captured pad)
+    public const string IconClassName = "onslaught_controlpoint_icon";
+    public const string ShieldClassName = "ons_captureshield";
     private const string MdlCpIcon     = "models/onslaught/controlpoint_icon.md3"; // QC MDL_ONS_CP (icon, full health)
 
     /// <summary>
@@ -89,9 +91,9 @@ public sealed class OnslaughtControlPoint
     /// </summary>
     private static string IconModelForFraction(float frac)
     {
-        if (frac > 0.75f) return MdlCpIcon;                              // QC MDL_ONS_CP
-        if (frac > 0.50f) return "models/onslaught/controlpoint_icon_dmg1.md3"; // QC MDL_ONS_CP1
-        if (frac > 0.25f) return "models/onslaught/controlpoint_icon_dmg2.md3"; // QC MDL_ONS_CP2
+        if (frac >= 0.75f) return MdlCpIcon;                              // QC MDL_ONS_CP
+        if (frac >= 0.50f) return "models/onslaught/controlpoint_icon_dmg1.md3"; // QC MDL_ONS_CP1
+        if (frac >= 0.25f) return "models/onslaught/controlpoint_icon_dmg2.md3"; // QC MDL_ONS_CP2
         return "models/onslaught/controlpoint_icon_dmg3.md3";                   // QC MDL_ONS_CP3
     }
 
@@ -129,9 +131,14 @@ public sealed class OnslaughtControlPoint
     {
         _icons.Clear();
         _generators.Clear();
+        ClearGeneratorDestruction();
         _cpNotifyTime.Clear();
         OvertimeAnnounced = false;
     }
+
+    public OnslaughtDestruction? GeneratorDestruction { get; private set; }
+
+    public void ClearGeneratorDestruction() => GeneratorDestruction = null;
 
     private static float Now => Api.Services is null ? 0f : Api.Clock.Time;
 
@@ -172,9 +179,11 @@ public sealed class OnslaughtControlPoint
         if (node.Gen is not null) { node.Gen.Health = h; node.Gen.MaxHealth = h; }
 
         Entity? e = GametypeEntities.SpawnObjective("onslaught_generator", origin, team,
-            new Vector3(-52f, -52f, -14f), new Vector3(52f, 52f, 75f)); // QC generator bbox (approx)
+            new Vector3(-52f, -52f, -14f), new Vector3(52f, 52f, 75f)); // GENERATOR_MIN/MAX
         if (e is not null)
         {
+            e.Solid = Solid.BBox; // QC: weapon traces hit the generator body.
+            GametypeEntities.SetOrigin(e, e.Origin);
             e.GtObjHealth = h;
             e.GtObjMaxHealth = h;
             e.GtHomeTeam = team;
@@ -341,6 +350,16 @@ public sealed class OnslaughtControlPoint
 
         if (destroyed)
         {
+            float yaw = OnslaughtDestruction.ChooseYaw(angle =>
+            {
+                if (Api.Services is null)
+                    return 1f;
+                VortexArena.Common.Math.QMath.AngleVectors(new Vector3(0, angle, 0), out Vector3 forward, out _, out _);
+                return Api.Trace.Trace(self.Origin, Vector3.Zero, Vector3.Zero, self.Origin - 500f * forward,
+                    MoveFilter.WorldOnly, self).Fraction;
+            });
+            GeneratorDestruction = new OnslaughtDestruction(self.Origin, yaw, Now);
+
             // QC ons_GeneratorDamage (sv_onslaught.qc:958-962): the generator-destroyed info notify, overtime
             // (self-damage) vs normal kill. The SCORE +100 attacker credit is handled in DamageGenerator.
             string suffix = Onslaught.TeamSuffix(team);
@@ -412,8 +431,9 @@ public sealed class OnslaughtControlPoint
         if (_ons.ControlPointNode(controlPointId) is null)
             _ons.AddControlPoint(controlPointId, name);
 
+        // Both stock pad meshes share these bounds. The floating icon has its own hitbox.
         Entity? e = GametypeEntities.SpawnObjective("onslaught_controlpoint", origin, Teams.None,
-            new Vector3(-32f, -32f, 0f), new Vector3(32f, 32f, 128f), touch: ControlPointTouchEntity);
+            new Vector3(-63.319f, -63.934f, -9.291f), new Vector3(65.128f, 63.211f, 26.335f), touch: ControlPointTouchEntity);
         if (e is not null)
         {
             e.GtPointId = controlPointId;
@@ -421,10 +441,9 @@ public sealed class OnslaughtControlPoint
             // captured CP's map .target — a server-side map-logic hook (e.g. a captured point opens a door). Carry
             // the map .target onto the CP entity so IconBuildThink can fire it on completion.
             e.Target = target ?? "";
-            e.Solid = Solid.BBox; // QC SOLID_BBOX (the pad), the touch trigger volume is the bbox here
-            // QC ons_ControlPoint_Setup: setmodel(this, MDL_ONS_CP_PAD1) — the neutral control-point pad. Assign the
-            // world model (+ EF_LOWPRECISION) so the pad renders on the client (was an invisible point); it swaps to
-            // MDL_ONS_CP_PAD2 on capture (see IconBuildThink), reproducing the QC pad-model swap the spec lists as missing.
+            e.Solid = Solid.BBox;
+            GametypeEntities.SetOrigin(e, e.Origin);
+            // QC ons_ControlPoint_Setup uses the neutral pad until the first powered build tick.
             e.Model = MdlCpPad1;
             e.Effects |= EfLowPrecision;
             // QC ons_ControlPoint_Setup (sv_onslaught.qc:787): ons_CaptureShield_Spawn(this, MDL_ONS_CP_SHIELD) —
@@ -467,7 +486,7 @@ public sealed class OnslaughtControlPoint
             return;
         if (node.Shielded || node.Team == team || team == Teams.None)
             return;
-        if (!_ons.IsAttackable(node, team))
+        if (!_ons.IsAttackable(node, team) || !CanBeLinked(node, team))
             return;
 
         SpawnIcon(cpEnt, toucher);
@@ -488,9 +507,9 @@ public sealed class OnslaughtControlPoint
         // QC: e.count = (max_health - health) * ONS_CP_THINKRATE / buildtime — health gained per think tick.
         float perTick = (maxH - buildH) * CpThinkRate / CpBuildTime;
 
-        Entity? icon = GametypeEntities.SpawnObjective("onslaught_controlpoint_icon",
+        Entity? icon = GametypeEntities.SpawnObjective(IconClassName,
             cpEnt.Origin + new Vector3(0f, 0f, 96f), team,
-            new Vector3(-16f, -16f, -8f), new Vector3(16f, 16f, 8f), think: IconBuildThink);
+            new Vector3(-32f, -32f, -9f), new Vector3(32f, 32f, 25f), think: IconBuildThink);
         if (icon is not null)
         {
             icon.GtObjHealth = buildH;
@@ -546,14 +565,20 @@ public sealed class OnslaughtControlPoint
             return;
 
         self.GtObjHealth += self.GtBuildRate;
+        Entity? cpEnt = ControlPointEntity(cpId);
+        // QC changes the pad on the first powered build tick.
+        if (cpEnt is not null)
+            cpEnt.Model = MdlCpPad2;
 
         if (self.GtObjHealth >= self.GtObjMaxHealth)
         {
             self.GtObjHealth = self.GtObjMaxHealth;
+            self.Model = MdlCpIcon;
             // QC: count = regen * ONS_CP_THINKRATE — slow repair from now on; switch to the steady-state Think.
             self.GtBuildRate = CpRegen * CpThinkRate;
             self.GtIconBuilt = true;
             self.Solid = Solid.BBox;           // QC SOLID_BBOX once built
+            GametypeEntities.SetOrigin(self, self.Origin);
             self.Think = IconThink;
 
             // QC ons_ControlPoint_Icon_BuildThink (sv_onslaught.qc:574): the "control point built" sound.
@@ -561,7 +586,6 @@ public sealed class OnslaughtControlPoint
                 SoundSystem.PlayOn(self, Sounds.ByName("ONS_CONTROLPOINT_BUILT"));
 
             // QC: cp.iscaptured = true; capture credit to ons_toucher (SCORE +10 + ONS_CAPS); onslaught_updatelinks.
-            Entity? cpEnt = ControlPointEntity(cpId);
             Player? toucher = cpEnt?.GtCapturer as Player;
             _ons.CaptureControlPoint(cpId, self.GtHomeTeam, toucher);
 
@@ -645,11 +669,7 @@ public sealed class OnslaughtControlPoint
 
         // QC: if (time > pain_finished + 5) regenerate up to max at the slow rate.
         if (Now > self.GtPainFinished + 5f && self.GtObjHealth < self.GtObjMaxHealth)
-        {
-            self.GtObjHealth += self.GtBuildRate;
-            if (self.GtObjHealth > self.GtObjMaxHealth)
-                self.GtObjHealth = self.GtObjMaxHealth;
-        }
+            IconHeal(self, self.GtBuildRate);
 
         // QC ons_ControlPoint_Icon_Think (sv_onslaught.qc:527-540): when the point's powered (.islinked) state
         // flips, re-fire its map .target (SUB_UseTargets) so linked spawnpoints re-team — with the CP's team
@@ -720,9 +740,9 @@ public sealed class OnslaughtControlPoint
         self.GtPainFinished = Now + 1f;
 
         // QC cl_controlpoint.qc cpicon_damage: the icon's visible model cracks with its health fraction (QC swaps
-        // MDL_ONS_CP → CP1/CP2/CP3 by 75/50/25%). Resolve it server-side so a damaged capture icon shows the wear
-        // (one of the '4 CP icon models' the spec lists as missing). The build-bar alpha + punch-on-hit stay client-side.
-        if (self.GtObjMaxHealth > 0f && self.GtObjHealth > 0f)
+        // MDL_ONS_CP → CP1/CP2/CP3 by 75/50/25%). During construction Base shows only the undamaged mesh,
+        // with the current health fraction driving its opacity.
+        if (self.GtIconBuilt && self.GtObjMaxHealth > 0f && self.GtObjHealth > 0f)
             self.Model = IconModelForFraction(self.GtObjHealth / self.GtObjMaxHealth);
 
         // QC ons_ControlPoint_Icon_Damage (sv_onslaught.qc:383-388): notify the owning team that their CP is
@@ -808,8 +828,14 @@ public sealed class OnslaughtControlPoint
             // QC ons_ControlPoint_Icon_Damage (sv_onslaught.qc:447): SUB_UseTargets(this.owner, this, NULL) —
             // fire the reverted control point's map .target (server-side map logic) when the icon is destroyed.
             Entity? cpEnt = ControlPointEntity(cpId);
-            if (cpEnt is not null && cpEnt.Target.Length > 0)
-                MapMover.UseTargets(cpEnt, self, null);
+            if (cpEnt is not null)
+            {
+                cpEnt.Model = MdlCpPad1;
+                cpEnt.GtCapturer = null;
+                cpEnt.GtPointTeam = Teams.None;
+                if (cpEnt.Target.Length > 0)
+                    MapMover.UseTargets(cpEnt, self, null);
+            }
 
             // delete(this): retire the icon entity.
             self.Think = null;
@@ -831,6 +857,8 @@ public sealed class OnslaughtControlPoint
         if (icon.GtObjHealth <= 0f || icon.GtObjHealth >= trueLimit)
             return false;
         icon.GtObjHealth = MathF.Min(icon.GtObjHealth + amount, trueLimit);
+        if (icon.GtIconBuilt && icon.GtObjMaxHealth > 0f)
+            icon.Model = IconModelForFraction(icon.GtObjHealth / icon.GtObjMaxHealth);
         return true;
     }
 
@@ -917,15 +945,14 @@ public sealed class OnslaughtControlPoint
     /// entity at the node's origin that pushes away any enemy player who touches it WHILE the node is shielded.
     /// The shield is a spinning (avelocity '7 0 11') additive-blend model whose hitbox is 20 % larger than the
     /// node (<see cref="ShieldHitboxScale"/>). It stores a back-link to the node world entity in GtShieldFlag
-    /// (QC shield.enemy = this) so the touch handler can read the live shielded state + team. Its visibility
-    /// (QC ons_CaptureShield_Customize) is a client concern; the server-side push + center-print are reproduced.
+    /// (QC shield.enemy = this) so touch rules and per-viewer snapshot filtering share the current node state.
     /// </summary>
     private void SpawnCaptureShield(Entity nodeEnt, string shieldModel)
     {
         if (Api.Services is null)
             return;
         Entity s = Api.Entities.Spawn();
-        s.ClassName = "ons_captureshield";
+        s.ClassName = ShieldClassName;
         s.Team = nodeEnt.Team;             // QC shield.team = this.team
         s.GtHomeTeam = nodeEnt.GtHomeTeam;
         s.GtShieldFlag = nodeEnt;          // QC shield.enemy = this (the guarded generator/control point)
@@ -951,28 +978,10 @@ public sealed class OnslaughtControlPoint
     {
         if (other is not Player toucher || toucher.IsDead)
             return;
-        Entity? nodeEnt = self.GtShieldFlag;
-        if (nodeEnt is null)
+        if (!CaptureShieldVisibleTo(self, (int)toucher.Team))
             return;
 
-        bool isGenerator = nodeEnt.ClassName == "onslaught_generator";
-        Onslaught.OnsNode? node = isGenerator
-            ? _ons.GeneratorNode(nodeEnt.GtHomeTeam)
-            : _ons.ControlPointNode(nodeEnt.GtPointId);
-        if (node is null)
-            return;
-
-        // QC: if(!this.enemy.isshielded && (ons_ControlPoint_Attackable(this.enemy, toucher.team) > 0 ||
-        //         this.enemy.classname != "onslaught_controlpoint")) return; — an attackable (capturable) point
-        // or an un-shielded generator lets the player through (they can build/attack it).
-        int toucherTeam = (int)toucher.Team;
-        bool attackable = !isGenerator && _ons.IsAttackable(node, toucherTeam);
-        if (!node.Shielded && (attackable || isGenerator))
-            return;
-        // QC: if(SAME_TEAM(toucher, this)) return; — same-team players are never pushed.
-        if (toucherTeam == self.Team)
-            return;
-
+        bool isGenerator = self.GtShieldFlag?.ClassName == "onslaught_generator";
         // QC: mymid = (absmin+absmax)*0.5; theirmid = (toucher.absmin+toucher.absmax)*0.5;
         //     Damage(toucher, this, this, 0, DEATH_HURTTRIGGER, DMG_NOWEP, mymid,
         //            normalize(theirmid - mymid) * ons_captureshield_force);
@@ -988,6 +997,32 @@ public sealed class OnslaughtControlPoint
             NotificationSystem.Send(NotifBroadcast.One, toucher, MsgType.Center,
                 isGenerator ? "ONS_GENERATOR_SHIELDED" : "ONS_CONTROLPOINT_SHIELDED");
         }
+    }
+
+    /// <summary>QC ons_CaptureShield_Customize, also used for shield contact.</summary>
+    public bool CaptureShieldVisibleTo(Entity shield, int viewerTeam)
+    {
+        Entity? owner = shield.GtShieldFlag;
+        if (owner is null)
+            return false;
+
+        if (owner.ClassName == "onslaught_generator")
+        {
+            Onslaught.OnsNode? generator = _ons.GeneratorNode(owner.GtHomeTeam);
+            return generator is { Shielded: true } && viewerTeam != owner.GtHomeTeam;
+        }
+
+        int pointId = owner.GtPointId;
+        Onslaught.OnsNode? point = _ons.ControlPointNode(pointId);
+        if (point is null)
+            return false;
+
+        Entity? icon = IconFor(pointId);
+        int ownerTeam = icon?.GtHomeTeam ?? Teams.None;
+        if (ownerTeam != Teams.None && ownerTeam == viewerTeam)
+            return false;
+
+        return point.Shielded || (icon is null && !CanBeLinked(point, viewerTeam));
     }
 
     private static Vector3 QNormalize(Vector3 v) { float l = v.Length(); return l > 0f ? v / l : Vector3.Zero; }

@@ -1,0 +1,5 @@
+/tmp/va-scripted-native-build.nj13cS/game/client/DpmFrameDriver.cs(82,26): warning XG0002: Implicit string -> StringName conversion inside _Process allocates per frame (godot#105750). Cache the name as a 'static readonly StringName' and reference that instead. (https://github.com/godotengine/godot/issues/105750) [/tmp/va-scripted-native-build.nj13cS/VortexArena.csproj]
+    41 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:51.27

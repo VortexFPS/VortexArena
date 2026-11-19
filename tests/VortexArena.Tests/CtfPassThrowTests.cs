@@ -1,6 +1,7 @@
 using System.Numerics;
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;
+using VortexArena.Common.Gameplay.Damage;
 using VortexArena.Common.Services;
 using VortexArena.Engine.Collision;
 using VortexArena.Engine.Simulation;
@@ -36,6 +37,139 @@ public class CtfPassThrowTests
         blue = ctf.SpawnFlag(Teams.Blue, new Vector3(-100, 0, 0));
         ctf.Activate();
         return ctf;
+    }
+
+    [Theory]
+    [InlineData("0", FlagStatus.Dropped)]
+    [InlineData("1", FlagStatus.Carried)]
+    public void PortalTeleport_DropsOnlyWhenConfigured(string setting, FlagStatus expected)
+    {
+        Facade();
+        Api.Cvars.Set("g_ctf_portalteleport", setting);
+        Ctf ctf = TwoBase(out _, out FlagState blue);
+        try
+        {
+            var carrier = NewPlayer(Teams.Red);
+            Assert.True(ctf.Pickup(carrier, blue));
+
+            typeof(WarpzoneManager).GetMethod("NotifyPortalTeleport",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(null, new object[] { carrier });
+
+            Assert.Equal(expected, blue.Status);
+        }
+        finally
+        {
+            ctf.Deactivate();
+        }
+    }
+
+    [Theory]
+    [InlineData("0", 200f, 0f)]
+    [InlineData("1", 240f, 150f)]
+    [InlineData("2", 172.28757f, 0f)]
+    public void FlagLaunch_UsesConfiguredProjectileStyleAndSpeed(string style, float x, float y)
+    {
+        Facade();
+        Api.Cvars.Set("g_projectiles_newton_style", style);
+        Api.Cvars.Set("g_weaponspeedfactor", "2");
+        Api.Cvars.Set("g_ctf_throw_velocity_forward", "100");
+        Api.Cvars.Set("g_ctf_throw_velocity_up", "0");
+        Ctf ctf = TwoBase(out _, out FlagState blue);
+        try
+        {
+            var carrier = NewPlayer(Teams.Red);
+            carrier.Velocity = new Vector3(40f, 150f, 0f);
+            Assert.True(ctf.Pickup(carrier, blue));
+            Assert.True(ctf.ThrowFlag(carrier));
+            Assert.True(Vector3.Distance(new Vector3(x, y, 0f), blue.Entity!.Velocity) < 0.001f);
+        }
+        finally { ctf.Deactivate(); }
+    }
+
+    [Fact]
+    public void CarrierDrop_UsesAbsoluteVelocityAtStockSettings()
+    {
+        Facade();
+        Api.Cvars.Set("g_ctf_drop_velocity_side", "0");
+        Api.Cvars.Set("g_ctf_drop_velocity_up", "200");
+        Ctf ctf = TwoBase(out _, out FlagState blue);
+        try
+        {
+            var carrier = NewPlayer(Teams.Red);
+            carrier.Velocity = new Vector3(350f, 100f, 50f);
+            Assert.True(ctf.Pickup(carrier, blue));
+            ctf.DropFlag(carrier);
+            Assert.Equal(new Vector3(0f, 0f, 200f), blue.Entity!.Velocity);
+        }
+        finally { ctf.Deactivate(); }
+    }
+
+    [Fact]
+    public void DropSpecialItems_ThrowsEvenWhenManualThrowsAreDisabled()
+    {
+        Facade();
+        Api.Cvars.Set("g_ctf_throw", "0");
+        Ctf ctf = TwoBase(out _, out FlagState blue);
+        try
+        {
+            var carrier = NewPlayer(Teams.Red);
+            Assert.True(ctf.Pickup(carrier, blue));
+            Assert.False(ctf.ThrowFlag(carrier));
+
+            MutatorHooks.FireDropSpecialItems(carrier);
+
+            Assert.Equal(FlagStatus.Dropped, blue.Status);
+            Assert.True(blue.Entity!.Velocity.X > 0f);
+        }
+        finally
+        {
+            ctf.Deactivate();
+        }
+    }
+
+    [Theory]
+    [InlineData("1", DeathTypes.Generic, "0", 0, FlagStatus.AtBase)]
+    [InlineData("0", DeathTypes.Generic, "0", 0, FlagStatus.Dropped)]
+    [InlineData("0", DeathTypes.Lava, "0", 0, FlagStatus.AtBase)]
+    [InlineData("0", DeathTypes.Void, "0.4", 1, FlagStatus.Dropped)]
+    [InlineData("0", DeathTypes.Slime, "0.4", 2, FlagStatus.AtBase)]
+    public void DroppedFlag_ReturnsOnConfiguredDamage(string returnDamage, string deathType,
+        string delay, int thinkCount, FlagStatus expected)
+    {
+        var engine = Facade();
+        Api.Cvars.Set("g_ctf_flag_return_damage", returnDamage);
+        Api.Cvars.Set("g_ctf_flag_health", "10");
+        Api.Cvars.Set("g_ctf_flag_return_damage_delay", delay);
+        Api.Cvars.Set("g_ctf_flag_return_dropped", "0");
+        Ctf ctf = TwoBase(out _, out FlagState blue);
+        try
+        {
+            var carrier = NewPlayer(Teams.Red);
+            Assert.True(ctf.Pickup(carrier, blue));
+            ctf.DropFlag(carrier);
+            Entity entity = blue.Entity!;
+            Assert.Equal(returnDamage == "1" ? 10f : 100f, entity.Health);
+
+            new DamageSystem().Apply(new DamageInfo
+            {
+                Target = entity,
+                Amount = 10f,
+                DeathType = deathType,
+                HitLocation = entity.Origin,
+            });
+            for (int i = 0; i < thinkCount; i++)
+            {
+                SetTime(engine, (i + 1) * 0.2f);
+                entity.Think!(entity);
+            }
+
+            Assert.Equal(expected, blue.Status);
+        }
+        finally
+        {
+            ctf.Deactivate();
+        }
     }
 
     /// <summary>

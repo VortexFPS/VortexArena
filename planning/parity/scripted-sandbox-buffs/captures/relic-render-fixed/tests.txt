@@ -1,0 +1,6 @@
+/tmp/va-scripted-native-build.nj13cS/tests/VortexArena.Tests/ServerClientCommandsTests.cs(554,9): warning xUnit2029: Do not use Assert.Empty to check if a value does not exist in a collection. Use Assert.DoesNotContain instead. (https://xunit.net/xunit.analyzers/rules/xUnit2029) [/tmp/va-scripted-native-build.nj13cS/tests/VortexArena.Tests/VortexArena.Tests.csproj]
+  VortexArena.Tests -> /tmp/va-scripted-native-build.nj13cS/tests/VortexArena.Tests/bin/Debug/net8.0/VortexArena.Tests.dll
+Test run for /tmp/va-scripted-native-build.nj13cS/tests/VortexArena.Tests/bin/Debug/net8.0/VortexArena.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    30, Skipped:     0, Total:    30, Duration: 165 ms - VortexArena.Tests.dll (net8.0)

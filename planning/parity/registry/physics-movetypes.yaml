@@ -3,9 +3,9 @@ category: physics
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
 last_audited: "2026-06-27"
 summary:
-  feature_count: 13
+  feature_count: 14
   worst_gaps:
-    - "Movetype_Physics_MatchTicrate (sub-tick interpolation: tic_* snapshots, floor(dt/tr) whole frames clamped to 32, residual-dt trace continuation + gravity half-step, sloppy straight-line interp) is STILL entirely missing — no between-tick interpolation in this layer for client-side moveables (gibs/casings/projectiles/trains). Re-grep 2026-06-27 (post-W16/17 re-audit): zero hits for MatchTicrate/tic_origin/tic_velocity/tic_flags in src/. This is the ONLY genuinely-open gap in the unit."
+    - "Local casings, model gibs and Raptor fragments now use fixed tics and residual presentation. Model-derived casing and fragment hulls, dynamic contacts, projectile gravity continuation and client train movement remain open."
     - "(CLOSED by Wave 16, commit b3a9c06) The sv_gameplayfix_unstickplayers _Movetype_CheckStuck call at the top of _Movetype_Physics_Walk (walk.qc:9-10) is now ported: WalkMove calls CheckStuck (MoveTypePhysics.cs:376-377), a self-trace + TryNudgeOutOfSolid extrication (MoveTypePhysics.cs:521-532). The prior 2026-06-27 row that logged this as a NEW open gap was stale — it cited Wave 16 for other edits but missed that the SAME commit added CheckStuck (verified: git diff 5427e74..b3a9c06 adds +31 lines incl. UnstickPlayers + CheckStuck). walk.stepmove + step.physics refreshed; only the player-centric WALLCLIP pm_time restore remains (low impact, no pm_time field)."
     - "(stable) toss.ballistic replicates both the bmodelstartsolid unstick-retry-give-up sequence (MoveTypePhysics.cs:170-182 == toss.qc:60-82) and the move_suspendedinair SOLID_BSP gate (MoveTypePhysics.cs:233-234 == toss.qc:130-131). Fully faithful, no residual gaps."
     - "(stable) push.pushmove MOVETYPE_PHYSICS-rider fast-path (push.qc:123-129 -> FlyMove.cs:409-414) and corpse/zero-thickness squash (push.qc:166-173 -> FlyMove.cs:444-453) both implemented (verified 2026-06-27). Only residual is the non-behavioral findradius-vs-flat-scan broadphase style."
@@ -305,33 +305,51 @@ features:
     notes: "Port folds Base's separate .v_angle into Entity.Angles; equivalent IF callers store the follow offset angle in Angles. Liveness CONFIRMED: MoveType.Follow is set by DynamicLight, the map Follow mapobject, stuck minelayer mines, the physical-items mutator, and the sandbox mutator."
 
   - id: physics-movetypes.matchticrate.interp
-    name: "MatchTicrate sub-tick interpolation (sloppy, tic_* snapshots)"
-    layer: [shared, presentation]
+    name: "MatchTicrate fixed state and residual client presentation"
+    layer: [presentation]
     base_refs:
       - "common/physics/movetypes/movetypes.qc:Movetype_Physics_MatchTicrate"
-      - "common/effects/qc/gibs.qc:142"
-      - "common/effects/qc/casings.qc:86"
-      - "client/weapons/projectile.qc:104"
-    port_refs: []
+      - "common/effects/qc/casings.qc:Casing_Draw"
+      - "common/effects/qc/gibs.qc:Gib_Draw"
+      - "common/turrets/cl_turrets.qc:turret_gib_draw"
+      - "common/vehicles/vehicle/raptor_weapons.qc:RaptorCBShellfragDraw"
+      - "client/weapons/projectile.qc:Projectile_Draw"
+      - "common/mapobjects/func/train.qc:train_draw"
+    port_refs:
+      - "game/client/DebrisMotion.cs:Schedule"
+      - "game/client/DebrisMotion.cs:Draw"
+      - "game/client/ShellCasings.cs:_Process"
+      - "game/client/ModelGibs.cs:PackGibs"
+      - "game/client/EffectSystem.cs:SetCollisionWorld"
+      - "src/VortexArena.Common/Gameplay/Turrets/TurretAI.cs:TossGib"
+      - "game/net/ClientEntityView.cs:_Process"
+      - "src/VortexArena.Net/ProjectilePredictor.cs:Step"
     constants:
-      - { name: "frame clamp n", base: "bound(0, floor(dt/tr), 32) (movetypes.qc:870)", port: "none", match: false }
-      - { name: "residual-dt trace continuation", base: "_Movetype_PushEntityTrace + gravity half-step (movetypes.qc:900-931)", port: "none", match: false }
-      - { name: "sloppy straight-line interp", base: "origin += dt*velocity (sloppy/NOCLIP, movetypes.qc:915-918)", port: "none", match: false }
+      - { name: "catch-up cap", base: "32 committed tics per draw, then retain remaining time", port: "32 committed tics per draw, retain unpaid time", match: true }
+      - { name: "toss bump cap", base: "MAX_CLIP_PLANES 5, continue unused tic at shipped slidemoveprojectiles 1", port: "five sweeps per committed tic with unused time continuation", match: true }
+      - { name: "casing settings", base: "cl_casings_ticrate 0.03125, cl_casings_sloppy 1", port: "same defaults and live reads", match: true }
+      - { name: "gib settings", base: "cl_gibs_ticrate 0.1, cl_gibs_sloppy 1", port: "same for ordinary model gibs and Raptor fragments", match: true }
+      - { name: "nonpositive ticrate", base: "NoMatchServer consumes all pending time", port: "one variable-length committed step", match: true }
+      - { name: "residual continuation", base: "gravity-adjusted extrapolation with angle continuation, optional trace, held onground pose", port: "gravity half-step at shipped settings, sloppy ballistic continuation or strict static BSP clip, and held resting pose", match: true }
     status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
+      logic: partial
+      values: partial
+      timing: partial
+      presentation: partial
       audio: na
-      liveness: na
-    intended_divergence: false
-    divergence_rationale: null
+      liveness: live
+    intended_divergence: true
+    divergence_rationale: "Native turret gibs are server-side bounce entities rendered through snapshot interpolation. Native projectile rendering normally uses ProjectilePredictor to snap to authoritative samples and extrapolate between them. Local debris keeps dedicated committed state in the client pools."
     gaps:
-      - "STILL OPEN: No Movetype_Physics_MatchTicrate equivalent and no tic_* snapshot fields on Entity (grep: zero hits in src/ for MatchTicrate/tic_origin/tic_velocity/tic_flags/sloppy). Entities advance only on the fixed server tick, with no between-tick interpolation in this layer. In Base this smooths CSQC gibs/casings/projectiles/trains at render rate; whether visible in the port depends on its separate render-side interpolation (PredictionBuffer/ClientNet — out of this unit's scope)."
+      - "The local debris tracer covers static BSP. Model gibs use the explicit ±8 hull. Casings and Raptor fragments use point sweeps; the stock CSQC setmodel builtin supplies alias-model bounds. Moving brushes, other entity contacts and solid recovery for gibs and fragments are outside this port. Native bounce uses the shipped split-gravity, slope-stop and remaining-tic slide behavior. Alternate server gameplay-fix flags are outside the debris implementation."
+      - "The projectile predictor has no cl_projectiles_sloppy control or gravity continuation. See net-entity-state.projectile.clientanimate_prediction."
+      - "Base ENT_CLIENT_TRAIN registers train_draw for MatchServer. Native inline brush models are excluded from the generic entity snapshot feed. Train presentation is tracked in mapobject-func.train and was not exercised here."
     verification:
-      - { kind: code, ref: "no MatchTicrate/tic_origin/tic_velocity/tic_flags/sloppy symbols anywhere in src/ (re-grepped 2026-06-27, zero hits); Entity.cs has no tic_* snapshot fields", result: fail }
+      - { kind: code, ref: "Pinned QC 863cd3e: the casing and model-gib net handlers register their drawable callbacks, turret death status reaches turret_die and assigns turret_gib_draw, Raptor burst tosses fragments into g_drawables, Projectile_Draw selects MatchServer for client-animated nontrivial movetypes, and ENT_CLIENT_TRAIN assigns train_draw", result: pass }
+      - { kind: code, ref: "Native TurretAI.Die -> TossDeathGibs -> TossGib/GibBoom and ServerNet entity snapshots -> ClientEntityView.SampleRemote; projectile path uses the raw sample and ProjectilePredictor", result: pass }
+      - { kind: test, ref: "planning/parity/rubble-limits/RubbleLimitProbe.cs, Godot Compatibility: BSP contacts, tic/work cap, strict/sloppy residual modes and seeded poses at 30/60/144 FPS", result: pass }
     confidence: high
-    notes: "Unchanged since baseline (re-confirmed 2026-06-27). Equivalent for server-authoritative entities (fixed-tick only); a smoothness gap for client-side moveables unless masked by a separate render interp layer (PredictionBuffer/ClientNet — out of this unit's scope)."
+    notes: "This row covers movement presentation. MultiMesh sink versus alpha fade, launch effects and spawn budgets belong to the narrower casing and gib rows. Turret gibs, projectiles and train rendering were verified by code read only."
 
   - id: physics-movetypes.checkwater
     name: "CheckWater / CheckWaterTransition (waterlevel + transition cue)"
@@ -394,3 +412,31 @@ features:
       - { kind: code, ref: "PushEntity/Impact/TryNudgeOutOfSolid (FlyMove.cs:101-263) vs movetypes.qc:401-696: dual-dispatch, setorigin-teleport abort, worldstartsolid retry, 6-axis nudge all match. Re-verified 2026-06-27.", result: pass }
     confidence: high
     notes: "Impact dual-dispatch, setorigin-teleport abort, 6-axis nudge match. WorldSentinel + FLY-skip-nudge are the intentional structural differences."
+
+  - id: physics-movetypes.player.corpse_hull
+    name: "Shrink the authoritative player corpse hull at the end of the death tick"
+    layer: [authority]
+    base_refs:
+      - "common/constants.qh:PL_CORPSE_SCALE"
+      - "server/world.qc:EndFrame"
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/Player/PlayerBody.cs:FinishDeathFrame"
+      - "src/VortexArena.Server/GameWorld.cs:OnEndFrame"
+    constants:
+      - { name: "PL_CORPSE_SCALE", base: "0.235", port: "0.235", match: true }
+      - { name: "maxs.z", base: "max(ceil((mins.z + maxs.z) * 0.235 * 10) / 10, mins.z + 1)", port: "same", match: true }
+    status:
+      logic: faithful
+      values: faithful
+      timing: faithful
+      presentation: na
+      audio: na
+      liveness: live
+    intended_divergence: false
+    divergence_rationale: null
+    gaps: []
+    verification:
+      - { kind: test, ref: "SharedConstantsGameplayTests.DeathTickRelinksTheCorpseHullAndRespawnRestoresTheStandingHull", result: pass }
+      - { kind: test, ref: "planning/parity/unmapped-audit/shared-constants/evidence.txt, stock Stormkeep edict before and after kill", result: pass }
+    confidence: high
+    notes: "This row covers authoritative player hulls. The original client independently reconstructs a standing dead hull in CSQCPlayer_SetMinsMaxs. Native dead movement prediction returns early."

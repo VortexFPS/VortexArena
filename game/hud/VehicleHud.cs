@@ -13,8 +13,8 @@ namespace VortexArena.Game.Hud;
 /// tinted by ammo, the health/shield/ammo bars, and the health/shield icons that blink + alarm when low.
 ///
 /// It also draws the <b>auxiliary lock-on crosshairs</b> (<c>AuxiliaryXhair</c>): small images projected from
-/// 3D lock positions (the Racer rocket lock, the Bumblebee gunner targets), tinted by lock strength and faded
-/// out shortly after their last update — fed by <see cref="SetAuxiliaryXhair"/>.
+/// 3D lock positions (the Racer rocket lock, the Bumblebee gunner targets), tinted by lock state and removed
+/// shortly after their last update — fed by <see cref="SetAuxiliaryXhair"/>.
 ///
 /// <see cref="ConfigureForVehicle"/> is the <c>TE_CSQC_VEHICLESETUP</c> entry: it selects the vehicle art set
 /// (and shows the panel); <see cref="Exit"/> is the <c>hud_id == HUD_NORMAL</c> case that hides it. The actual
@@ -50,7 +50,7 @@ public partial class VehicleHud : HudPanel
     /// The centered crosshair art for the active vehicle/fire-mode (QC <c>Vehicles_drawCrosshair</c>: the
     /// per-mode reticle each <c>vr_crosshair</c> selects — e.g. the raptor's <c>vCROSS_BURST</c> bomb /
     /// <c>vCROSS_RAIN</c> flare reticle). Empty = no centered reticle (on-foot / not fed). Drawn at
-    /// screen-center, tinted by health when <c>cl_vehicles_crosshair_colorize</c> is set.
+    /// screen-center, colorized through the crosshair settings when <c>cl_vehicles_crosshair_colorize</c> is set.
     /// </summary>
     public string MainReticle { get; set; } = "";
 
@@ -85,6 +85,28 @@ public partial class VehicleHud : HudPanel
     private string? _weapon2Pic;
 
     private double _time;
+    private double _dropmarkExpiresAt;
+    private VehicleHudKind _kind;
+    private object? _vehicleIdentity;
+    private Control? _dropmarkAdditive;
+
+    internal bool ScoreboardActive { get; set; }
+    internal CrosshairPanel? CrosshairColors { get; set; }
+
+    public override void _Ready()
+    {
+        _dropmarkAdditive = new Control
+        {
+            MouseFilter = MouseFilterEnum.Ignore,
+            ShowBehindParent = true,
+            Material = new CanvasItemMaterial { BlendMode = CanvasItemMaterial.BlendModeEnum.Add },
+        };
+        Control layer = _dropmarkAdditive;
+        layer.Draw += () => DrawBombDropmark(layer, 0.9f);
+        AddChild(layer);
+    }
+
+    public override bool DrawsWithOwnAlpha => true;
 
     public override bool IsDynamic => InVehicle || _aux.Count > 0 || MainReticle.Length > 0 || DropmarkActive;
 
@@ -110,8 +132,15 @@ public partial class VehicleHud : HudPanel
     /// Select the vehicle art set and show the HUD (the <c>TE_CSQC_VEHICLESETUP</c> non-zero hud_id case).
     /// Mirrors <c>info.vr_setup</c> picking <c>vehicle_&lt;name&gt;</c> + its weapon overlays.
     /// </summary>
-    public void ConfigureForVehicle(VehicleHudKind kind)
+    public void ConfigureForVehicle(VehicleHudKind kind, object? vehicleIdentity = null)
     {
+        if (!InVehicle || _kind != kind || !ReferenceEquals(_vehicleIdentity, vehicleIdentity))
+        {
+            ClearReticles();
+            StopAlarms();
+            _kind = kind;
+            _vehicleIdentity = vehicleIdentity;
+        }
         (_vehiclePic, _weapon1Pic, _weapon2Pic) = kind switch
         {
             VehicleHudKind.Racer => ("vehicle_racer", "vehicle_racer_weapon1", "vehicle_racer_weapon2"),
@@ -134,13 +163,33 @@ public partial class VehicleHud : HudPanel
     {
         InVehicle = false;
         Visible = false;
+        _vehicleIdentity = null;
+        ClearReticles();
+        StopAlarms();
+        QueueRedraw();
+    }
+
+    private void ClearReticles()
+    {
         _aux.Clear();
         MainReticle = "";
         DropmarkActive = false;
+        DropmarkLive = false;
+        _dropmarkExpiresAt = double.NegativeInfinity;
         ShowNoRightGunner = false;
         ShowNoLeftGunner = false;
-        StopAlarms(); // QC: the alarm channels stop when the vehicle HUD is dismissed
-        QueueRedraw();
+    }
+
+    /// <summary>Refresh the live prediction or show its last point until the five-second deadline.</summary>
+    internal void FeedBombDropmark(Vector3? prediction, double simulationTime)
+    {
+        DropmarkLive = prediction.HasValue;
+        if (prediction is { } point)
+        {
+            DropmarkWorld = point;
+            _dropmarkExpiresAt = simulationTime + 5.0;
+        }
+        DropmarkActive = simulationTime < _dropmarkExpiresAt;
     }
 
     // =====================================================================================
@@ -151,25 +200,25 @@ public partial class VehicleHud : HudPanel
     {
         public Vector3 World;     // 3D lock position (Godot space)
         public Color Color = Colors.White;
-        public string Image = "";  // art base name (e.g. "gfx/vehicles/axh-target")
-        public double LastUpdate;  // for the fade-out (QC axh_fadetime)
+        public string Image = "";  // art base name (e.g. "gfx/vehicles/crosshair_lock")
+        public double LastUpdate;  // for the expiry deadline (QC axh_fadetime)
     }
 
     private readonly Dictionary<int, AuxXhair> _aux = new();
 
-    /// <summary>How long after its last update an aux crosshair fades out (QC <c>axh_fadetime</c>, ~0.1s).</summary>
+    /// <summary>Simulation seconds after the last update before the marker expires (QC <c>axh_fadetime</c>).</summary>
     public float AuxFadeTime { get; set; } = 0.1f;
 
-    /// <summary>Crosshair size scale (QC <c>cl_vehicles_crosshair_size</c>).</summary>
-    public float AuxSize { get; set; } = 24f;
+    private static float ReticleScale => GlobalF("cl_vehicles_crosshair_size", 0.5f);
 
     /// <summary>
     /// Set/refresh an auxiliary lock-on crosshair (QC <c>UpdateAuxiliaryXhair</c> / the ENT_CLIENT_AUXILIARYXHAIR
     /// update): a 2D marker projected from a 3D world position (Godot space), tinted by lock strength. Keyed by
-    /// slot id; re-set each frame the lock holds, then auto-fades when updates stop.
+    /// slot id; refreshing a marker resets its deadline. It keeps its alpha until expiry.
     /// </summary>
-    public void SetAuxiliaryXhair(int slot, Vector3 worldGodot, Color color, string image = "gfx/vehicles/axh-ring")
+    public void SetAuxiliaryXhair(int slot, Vector3 worldGodot, Color color, string image = "gfx/vehicles/crosshair_hint")
     {
+        if ((uint)slot >= 4) return; // QC MAX_AXH
         if (!_aux.TryGetValue(slot, out AuxXhair? x))
         {
             x = new AuxXhair();
@@ -179,27 +228,30 @@ public partial class VehicleHud : HudPanel
         x.Color = color;
         x.Image = image;
         x.LastUpdate = _time;
+        QueueRedraw();
     }
 
-    /// <summary>
-    /// Set/refresh a lock-on aux crosshair colored by lock strength (QC racer <c>UpdateAuxiliaryXhair</c>):
-    /// the marker shifts red→yellow while the lock builds (0..1) and snaps to green once locked (≥1). The
-    /// host feeds the 3D target position + the server's lock-progress value.
-    /// </summary>
+    /// <summary>Refresh a Racer lock marker for the current lock threshold.</summary>
     public void SetAuxiliaryXhairLock(int slot, Vector3 worldGodot, float lockStrength,
-        string image = "gfx/vehicles/axh-target")
-        => SetAuxiliaryXhair(slot, worldGodot, AuxLockColor(lockStrength), image);
-
-    /// <summary>Lock-strength → color (QC racer lock coloring): red building → yellow → green locked.</summary>
-    public static Color AuxLockColor(float lockStrength)
+        string image = "gfx/vehicles/crosshair_lock")
     {
-        float s = Mathf.Clamp(lockStrength, 0f, 1f);
-        if (s >= 1f) return new Color(0.3f, 1f, 0.3f);              // locked = green
-        return new Color(1f, Mathf.Lerp(0.2f, 1f, s), 0.2f);       // building = red → yellow
+        // Racer skips an update at exactly half charge.
+        if (lockStrength != 0.5f)
+            SetAuxiliaryXhair(slot, worldGodot, AuxLockColor(lockStrength), image);
     }
+
+    /// <summary>Racer colors unlocked, acquiring, and locked targets blue, green, and red.</summary>
+    public static Color AuxLockColor(float lockStrength)
+        => lockStrength >= 1f ? Colors.Red : lockStrength > 0.5f ? Colors.Lime : Colors.Blue;
+
+    internal bool HasAuxiliaryXhair(int slot) => _aux.ContainsKey(slot);
 
     /// <summary>Clear an aux crosshair slot (the lock released).</summary>
-    public void ClearAuxiliaryXhair(int slot) => _aux.Remove(slot);
+    public void ClearAuxiliaryXhair(int slot)
+    {
+        if (_aux.Remove(slot))
+            QueueRedraw();
+    }
 
     // =====================================================================================
     //  Draw
@@ -207,7 +259,7 @@ public partial class VehicleHud : HudPanel
 
     public override void _Process(double delta)
     {
-        _time += delta;
+        _time += Client.ClientRenderTime.ScaleDelta((float)delta);
 
         // Low-health / low-shield alarm (QC Vehicles_drawHUD low-health blocks, cl_vehicles.qc:228-267). Runs
         // every frame while piloting; the SND_VEH_ALARM (health, +2s re-arm) / SND_VEH_ALARM_SHIELD (shield,
@@ -217,15 +269,15 @@ public partial class VehicleHud : HudPanel
         else
             StopAlarms();
 
-        // Drop aux crosshairs that stopped updating (faded out).
-        if (_aux.Count > 0)
-        {
-            var stale = new List<int>();
-            foreach (var kv in _aux)
-                if (_time - kv.Value.LastUpdate > AuxFadeTime * 4)
-                    stale.Add(kv.Key);
-            foreach (int k in stale) _aux.Remove(k);
-        }
+        // QC clears the draw callback once the most recent update expires.
+        for (int slot = 0; slot < 4; slot++)
+            if (_aux.TryGetValue(slot, out var marker) && _time - marker.LastUpdate > AuxFadeTime)
+            {
+                _aux.Remove(slot);
+                QueueRedraw();
+            }
+        if (InVehicle)
+            _dropmarkAdditive?.QueueRedraw();
     }
 
     /// <summary>
@@ -324,12 +376,15 @@ public partial class VehicleHud : HudPanel
 
     protected override void DrawPanel()
     {
-        DrawAuxiliaryXhairs();
-        DrawBombDropmark();   // raptor vr_crosshair: the predicted bomb-impact marker (under the centered reticle)
-        DrawMainReticle();    // Vehicles_drawCrosshair: the centered per-mode reticle
-
         if (!InVehicle)
             return;
+
+        if (!ScoreboardActive)
+        {
+            DrawAuxiliaryXhairs();
+            DrawBombDropmark(this, 0.6f);
+            DrawMainReticle();
+        }
 
         float w = Size2.X, h = Size2.Y;
         float blink = 0.55f + Mathf.Sin((float)_time * 7f) * 0.45f;
@@ -421,8 +476,8 @@ public partial class VehicleHud : HudPanel
 
     /// <summary>
     /// Port of <c>Vehicles_drawCrosshair</c> (cl_vehicles.qc:293): draw the centered per-mode reticle at
-    /// screen-center, scaled by <c>cl_vehicles_crosshair_size</c> and faded by <c>crosshair_alpha</c>, tinted
-    /// by vehicle health when <c>cl_vehicles_crosshair_colorize</c> is set (else white). The reticle image is
+    /// screen-center, scaled by <c>cl_vehicles_crosshair_size</c> and drawn with <c>crosshair_alpha</c>, colorized
+    /// through the ordinary crosshair color settings when <c>cl_vehicles_crosshair_colorize</c> is set (else white). The reticle image is
     /// chosen by the per-vehicle <c>vr_crosshair</c> (e.g. raptor bomb = vCROSS_BURST, flare = vCROSS_RAIN).
     /// </summary>
     private void DrawMainReticle()
@@ -431,18 +486,16 @@ public partial class VehicleHud : HudPanel
         Texture2D? tex = TextureCache.Get(MainReticle);
         if (tex is null) return;
 
-        float size = GlobalF("cl_vehicles_crosshair_size", 1f);
-        if (size <= 0f) size = 1f;
+        float size = ReticleScale;
+        if (size <= 0f) return;
         float alpha = GlobalF("crosshair_alpha", 0.8f);
 
         Vector2 ts = tex.GetSize() * size;
         // QC centers on vid_conwidth/conheight: screen center → panel-local.
         Vector2 center = ScreenCenter() - PanelRect.Position;
-        // QC cl_vehicles_crosshair_colorize → crosshair_getcolor by VEHICLESTAT_HEALTH; else '1 1 1'.
-        Color tint = GlobalF("cl_vehicles_crosshair_colorize", 1f) != 0f
-            ? CrosshairHealthColor(Health)
-            : Colors.White;
-        tint.A *= alpha;
+        Color tint = GlobalF("cl_vehicles_crosshair_colorize", 1f) != 0f && CrosshairColors is { } colors
+            ? colors.VehicleColor(Health * 100f, alpha)
+            : new Color(1f, 1f, 1f, alpha);
         DrawTextureRect(tex, new Rect2(center - ts * 0.5f, ts), tile: false, tint);
     }
 
@@ -453,9 +506,9 @@ public partial class VehicleHud : HudPanel
     /// the last impact, drawn RED at 1.25× size until it expires. Each is drawn twice (additive + normal) so it
     /// stays visible against a bright sky, exactly like QC.
     /// </summary>
-    private void DrawBombDropmark()
+    private void DrawBombDropmark(CanvasItem canvas, float opacity)
     {
-        if (!DropmarkActive) return;
+        if (!InVehicle || ScoreboardActive || !DropmarkActive) return;
         Camera3D? cam = GetViewport()?.GetCamera3D();
         if (cam is null) return;
         Vector3 world = DropmarkWorld; // already Godot space (converted at the NetGame feed boundary)
@@ -464,8 +517,8 @@ public partial class VehicleHud : HudPanel
         Texture2D? tex = TextureCache.Get(DropmarkImage);
         if (tex is null) return;
 
-        float size = GlobalF("cl_vehicles_crosshair_size", 1f);
-        if (size <= 0f) size = 1f;
+        float size = ReticleScale;
+        if (size <= 0f) return;
         float alpha = GlobalF("crosshair_alpha", 0.8f);
         // QC: green '0 1 0' while live at base size; red '1 0 0' at 1.25× after release.
         Color c = DropmarkLive ? new Color(0f, 1f, 0f) : new Color(1f, 0f, 0f);
@@ -473,19 +526,10 @@ public partial class VehicleHud : HudPanel
         Vector2 ts = tex.GetSize() * scale;
 
         Vector2 screen = cam.UnprojectPosition(world);
+        if (!GetViewportRect().HasPoint(screen)) return;
         Vector2 local = screen - PanelRect.Position - ts * 0.5f;
-        var dst = new Rect2(local, ts);
-        // QC draws the dropmark twice: additive at 0.9*alpha then normal at 0.6*alpha for visibility.
-        DrawTextureRect(tex, dst, tile: false, new Color(c.R, c.G, c.B, alpha * 0.9f));
-        DrawTextureRect(tex, dst, tile: false, new Color(c.R, c.G, c.B, alpha * 0.6f));
-    }
-
-    /// <summary>QC <c>crosshair_getcolor</c> by health: green when healthy, fading to red when critical. Mirrors
-    /// the simple health→color used for the colorized vehicle reticle (cl_vehicles_crosshair_colorize).</summary>
-    private static Color CrosshairHealthColor(float health01)
-    {
-        float h = Mathf.Clamp(health01, 0f, 1f);
-        return new Color(Mathf.Lerp(1f, 0.3f, h), Mathf.Lerp(0.2f, 1f, h), 0.2f);
+        c.A = alpha * opacity;
+        canvas.DrawTextureRect(tex, new Rect2(local, ts), tile: false, c);
     }
 
     /// <summary>The screen-space center (QC <c>vid_conwidth/conheight * 0.5</c>).</summary>
@@ -501,21 +545,22 @@ public partial class VehicleHud : HudPanel
         Camera3D? cam = GetViewport()?.GetCamera3D();
         if (cam is null) return;
 
+        float scale = ReticleScale;
+        if (scale <= 0f) return;
+        float alpha = GlobalF("crosshair_alpha", 0.8f);
         foreach (AuxXhair x in _aux.Values)
         {
             if (cam.IsPositionBehind(x.World)) continue;
             Vector2 screen = cam.UnprojectPosition(x.World);
+            if (!GetViewportRect().HasPoint(screen)) continue;
             // The panel is laid out at a fixed rect; aux crosshairs are screen-space, so convert to panel-local.
             Vector2 local = screen - PanelRect.Position;
-            float fade = 1f - Mathf.Clamp((float)(_time - x.LastUpdate) / Mathf.Max(0.001f, AuxFadeTime * 4), 0f, 1f);
-            Color c = x.Color; c.A *= fade;
-
-            Texture2D? tex = TextureCache.Get(x.Image);
-            var half = new Vector2(AuxSize, AuxSize) * 0.5f;
-            if (tex is not null)
-                DrawTextureRect(tex, new Rect2(local - half, new Vector2(AuxSize, AuxSize)), tile: false, c);
-            else
-                DrawRect(new Rect2(local - half, new Vector2(AuxSize, AuxSize)), c, filled: false, width: 2f);
+            Color color = x.Color;
+            color.A *= alpha;
+            Texture2D? texture = TextureCache.Get(x.Image);
+            if (texture is null) continue;
+            Vector2 size = texture.GetSize() * scale;
+            DrawTextureRect(texture, new Rect2(local - size * 0.5f, size), tile: false, color);
         }
     }
 

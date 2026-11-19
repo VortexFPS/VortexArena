@@ -1,0 +1,47 @@
+Stock pinned SVQC and both SDL clients
+unlimited server=0 Alpha=0 Beta=0
+  #3846 entity 1 origin='-1083.21631 -448 2.5024035' created=unlisted deadline=103.950104 movetype=0
+old_stuck server=0 Alpha=0 Beta=0
+  #3846 entity 1 origin='-1083.21631 -448 2.5024035' created=unlisted deadline=103.950104 movetype=0
+  #3850 entity 1 origin='1216 306.370758 -27.96875' created=35.1063499 deadline=110.465729 movetype=0
+other_owner server=0 Alpha=0 Beta=0
+  #3846 entity 1 origin='-1083.21631 -448 2.5024035' created=unlisted deadline=103.950104 movetype=0
+  #3850 entity 1 origin='1216 306.370758 -27.96875' created=35.1063499 deadline=110.465729 movetype=0
+  #3852 entity 2 origin='1216 506.385406 -32.4089165' created=41.4032249 deadline=76.7782288 movetype=0
+at_limit server=0 Alpha=0 Beta=0
+  #3846 entity 1 origin='-1083.21631 -448 2.5024035' created=unlisted deadline=103.950104 movetype=0
+  #3850 entity 1 origin='1216 306.370758 -27.96875' created=35.1063499 deadline=110.465729 movetype=0
+  #3852 entity 2 origin='1216 506.385406 -32.4089165' created=41.4032249 deadline=76.7782288 movetype=0
+  #3855 entity 1 origin='1216 386.370758 -27.96875' created=47.2469749 deadline=82.6063538 movetype=0
+evict_oldest server=1 Alpha=1 Beta=1
+  #3846 entity 1 origin='-1083.21631 -448 2.5024035' created=unlisted deadline=103.950104 movetype=0
+  #3852 entity 2 origin='1216 506.385406 -32.4089165' created=41.4032249 deadline=76.7782288 movetype=0
+  #3855 entity 1 origin='1216 386.370758 -27.96875' created=47.2469749 deadline=82.6063538 movetype=0
+  #3859 entity 1 origin='1216 306.370758 -27.96875' created=53.2157249 deadline=88.5751038 movetype=0
+collateral server=3 Alpha=3 Beta=3
+  #3846 entity 1 origin='-1083.21631 -448 2.5024035' created=unlisted deadline=103.950104 movetype=0
+  #3852 entity 2 origin='1216 506.385406 -32.4089165' created=41.4032249 deadline=76.7782288 movetype=0
+
+Native normal fire gate and both negotiated ENet receivers
+unlimited Alpha=0 Beta=0 origins=[]
+  slot=2 owner=Alpha order=0 move=None origin=<-1040, -435.65747, -27.96875> deadline=80.333 health=5.0
+old_stuck Alpha=0 Beta=0 origins=[]
+  slot=2 owner=Alpha order=0 move=None origin=<-1040, -435.65747, -27.96875> deadline=80.333 health=5.0
+  slot=3 owner=Alpha order=1 move=None origin=<1216, 260.34253, -27.96875> deadline=81.667 health=5.0
+other_owner Alpha=0 Beta=0 origins=[]
+  slot=2 owner=Alpha order=0 move=None origin=<-1040, -435.65747, -27.96875> deadline=80.333 health=5.0
+  slot=3 owner=Alpha order=1 move=None origin=<1216, 260.34253, -27.96875> deadline=81.667 health=5.0
+  slot=4 owner=Beta order=2 move=None origin=<1216, 460.34253, -27.96875> deadline=43.000 health=5.0
+at_limit Alpha=0 Beta=0 origins=[]
+  slot=2 owner=Alpha order=0 move=None origin=<-1040, -435.65747, -27.96875> deadline=80.333 health=5.0
+  slot=3 owner=Alpha order=1 move=None origin=<1216, 260.34253, -27.96875> deadline=81.667 health=5.0
+  slot=4 owner=Beta order=2 move=None origin=<1216, 460.34253, -27.96875> deadline=43.000 health=5.0
+  slot=5 owner=Alpha order=3 move=None origin=<1216, 340.34253, -27.96875> deadline=44.333 health=5.0
+evict_oldest Alpha=1 Beta=1 origins=['<1216, 260.34253, -27.96875>']
+  slot=2 owner=Alpha order=0 move=None origin=<-1040, -435.65747, -27.96875> deadline=80.333 health=5.0
+  slot=4 owner=Beta order=2 move=None origin=<1216, 460.34253, -27.96875> deadline=43.000 health=5.0
+  slot=5 owner=Alpha order=3 move=None origin=<1216, 340.34253, -27.96875> deadline=44.333 health=5.0
+  slot=6 owner=Alpha order=4 move=None origin=<1216, 260.34253, -27.96875> deadline=45.667 health=5.0
+collateral Alpha=3 Beta=3 origins=['<1216, 340.34253, -27.96875>', '<1216, 260.34253, -27.96875>', '<1216, 340, 19>']
+  slot=2 owner=Alpha order=0 move=None origin=<-1040, -435.65747, -27.96875> deadline=80.333 health=5.0
+  slot=4 owner=Beta order=2 move=None origin=<1216, 460.34253, -27.96875> deadline=43.000 health=5.0

@@ -1,0 +1,4 @@
+title Stale local authored fog
+gametype dm
+fog .41 .61 .39 .13 .74 0 4096
+clientsettemp_for_type all r_bloom 1

@@ -5,8 +5,7 @@ last_audited: "2026-06-28"
 summary:
   feature_count: 24
   worst_gaps:
-    - "NEW (2026-07-02 coverage fold): the map-superweapon tail of weapon_defaultspawnfunc is unported — a map-spawned superweapon never gets superweapons_finished seeded (g_balance_superweapons_time, spawning.qc:104-106) so its pickup applies a 0s superweapon timer, and the +/-10s superweapon respawn jitter (g_pickup_respawntimejitter_superweapon) is never set on weapon items."
-    - "NEW (2026-07-02 coverage fold): give/target_give POSTGIVE feedback is silent (GiveSound/GiveRot not ported); the menu Guide's Items topic lists no entries (health/armor/ammo describe() text unported); dumpitems command missing."
+    - "NEW (2026-07-02 coverage fold): give/target_give POSTGIVE feedback is silent (GiveSound/GiveRot not ported); dumpitems command missing."
     - "simple items (sv_simple_items, Base default 1) STILL not ported: always renders the 3D model, never the flat _simple sprite (no _simple model resolver, no bob suppression). The only remaining ITS_* bit Item_Show doesn't honor."
     - "2026-07-05 (playtest #29): ghost + stay-weapon COLORMOD now APPLIED — ApplyItemTint (ClientWorld; renamed from SetTreeColormod 2026-07-11) tints items via cached per-surface override variants of the shared materials (never mutates AssetSystem's cached materials); DriveItemGhostFx pushes cl_ghost_items_color, DriveItemStayFx pushes cl_weapon_stay_color. NB earlier rows misread the default: '-1 -1 -1' is a REAL negative colormod (clamps to BLACK — the dark ghost silhouette); '0 0 0' is Base's leave-unchanged sentinel (cfg description + DP only copies a non-zero colormod). Remaining: vehicle-hud item tint (cl_items_vehicle_*) — no vehicle-hud item pass exists; ShaderMaterial item surfaces stay untinted (alpha-only)."
     - "q3compat item-origin offset (z += -15 - mins.z) + item_armor1->ArmorSmall(shard) on Q3 maps remain DEAD: code present (StartItem) but gated on Q3CompatProvider, never wired."
@@ -421,8 +420,8 @@ features:
       - "src/VortexArena.Common/Gameplay/MapObjects/MapObjectsRegistry.cs:RegisterAll"
       - "src/VortexArena.Server/GameWorld.cs:SpawnMapEntities"
     constants:
-      - { name: "g_pickup_items", base: "-1 (gametype dflt)", port: "Cvars seed 1; unset treated as -1", match: partial }
-      - { name: "have_pickup_item gate", base: "MUTATORBLOCKED / ==0 none / weaponarena weapons+ammo", port: "same", match: true }
+      - { name: "g_pickup_items", base: "-1 (gametype default)", port: "-1 (gametype default)", match: true }
+      - { name: "have_pickup_item gate", base: "MUTATORBLOCKED / >0 forces / ==0 none / weapon arena suppresses weapons and ammo", port: "same, using the same arena resolution as spawn loadouts", match: true }
       - { name: "FilterItem hook (delete on true)", base: "MUTATOR_CALLHOOK(FilterItem)", port: "MutatorHooks.FilterItemDefinition + FireFilterItem", match: true }
       - { name: "animation class (ANIMATE1/2, spawnflag 1024)", base: "powerup/weapon=1, health/armor=2, 1024 suppresses", port: "same", match: true }
       - { name: "###item### findnearest target", base: "powerup/weapon/non-small health+armor/keys", port: "same", match: true }
@@ -439,10 +438,11 @@ features:
     gaps:
       - "q3compat item origin offset (z += -15 - mins.z): code ADDED (StartItem.cs:249-256) but gated on Q3CompatProvider, declared at StartItem.cs:50 and NEVER assigned — so it no-ops. Items on pure Quake3/QL maps still sit ~15qu low. Faithful the moment a host wires Q3CompatProvider to real .arena/.defi detection."
       - "item_armor1 always maps to ArmorMedium; Base spawns ArmorSmall (shard) on a Q3 map (autocvar_sv_mapformat_is_quake3) — same unwired Q3CompatProvider story."
-      - "g_pickup_items shipped default is 1 in the port's Cvars seed vs Base -1; live DM behavior matches (the -1/unset path proceeds), but a gametype relying on the -1 gametype-default branch differs from the seeded value."
     verification:
       - { kind: code_read, ref: "GameWorld.SpawnMapEntities -> SpawnFuncs.TrySpawn; MapObjectsRegistry.RegisterAll -> ItemSpawnFuncs.Register (booted by GameInit)", result: pass }
       - { kind: unit_test, ref: "ItemSpawnTouchTests.SpawnFunc_RegistersAllItemClassnames + StartItem_TagsAnimationClass + Spawnflag1024_SuppressesAnimation + Powerup_Blocked_WhenDisabled_IsDeleted", result: pass }
+      - { kind: unit_test, ref: "FilterItemHookTests.WeaponArena_MapPickupsFollowTheResolvedArenaAndForceSpawnSetting", result: pass }
+      - { kind: unit_test, ref: "FilterItemHookTests.WeaponArena_MapPickupsHonorGametypeArenaOverride", result: pass }
     confidence: high
     notes: "Items are confirmed LIVE: spawned from the BSP entity lump on the real match path. The team-item branch (Item_FindTeam) is now wired (StartItem.cs:168-172) — see items-pickups.team.finditem (now faithful/live). q3compat origin/shard offsets remain dead (Q3CompatProvider unwired)."
 
@@ -550,25 +550,28 @@ features:
       - "common/items/item/health.qc:METHOD(HealthSmall/Medium/Big/Mega, describe)"
       - "common/items/item/armor.qc:METHOD(ArmorSmall/Medium/Big/Mega, describe)"
       - "common/items/item/ammo.qc:METHOD(Ammo, describe) / METHOD(Fuel, describe)"
+      - "common/mutators/mutator/instagib/items.qc:METHOD(VaporizerCells, describe)"
+      - "menu/xonotic/guide/guide.qh:ItemSource"
     port_refs:
-      - "game/menu/dialogs/DialogMediaGuide.cs:OnTopicSelected (Items topic stub, ll.128-169)"
+      - "game/menu/dialogs/DialogMediaGuide.cs:ItemEntries"
+      - "game/menu/dialogs/GuideCatalogText.cs:DescribeItem"
     constants:
-      - { name: "amount/cap text from cvar_defstring(g_pickup_<item>[_max])", base: "generated per item (ammo uses netname, bullets->nails)", port: "none", match: false }
+      - { name: "amount/cap text from cvar_defstring(g_pickup_<item>[_max])", base: "generated per item (ammo uses netname, bullets->nails)", port: "MenuState.Cvars.GetDefault with matching pickup cvar names", match: true }
     status:
-      logic: stub
-      values: missing
+      logic: faithful
+      values: faithful
       timing: na
-      presentation: missing
+      presentation: faithful
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "The Guide dialog's Items (and Powerups) topic lists NO entries: DialogMediaGuide only enumerates Weapons + some Mutators; selecting Items shows '(entry list / descriptions for this topic — guide registry enumeration pending)'. The Base per-item describe() prose (incl. the g_pickup_* default amounts pulled via cvar_defstring and the Ammo 'used by the:' weapon cross-reference) is unported."
+    gaps: []
     verification:
-      - { kind: code_read, ref: "DialogMediaGuide.cs:116-169 — Items topic falls to the 'enumeration pending' branch; no item describe() text anywhere in game/menu", result: fail }
+      - { kind: code_read, ref: "ItemEntries and DescribeItem wire the native pickup registry to the Items topic, read locked defaults, and cross-reference weapons by ResourceType.", result: pass }
+      - { kind: manual, ref: "planning/parity/review/guide-catalog.webp shows the native Bullets entry with pinned weapon order and 80 / 320 locked defaults while the active pickup amount is overridden to 7.", result: pass }
     confidence: high
-    notes: "added 2026-07-02 (coverage fold). Menu-only prose; zero gameplay impact. The dialog scaffold (three-pane Guide) is live, so liveness=partial rather than na."
+    notes: "The Items topic groups ammo, health, and armor in that order. Fuel references the Jetpack and Vaporizer ammo has its own InstaGib description."
 
   - id: items-pickups.registry.items_contract
     name: "Items registry contract — REGISTRY(Items,32), m_id assignment, sort order (CSQC default_order_items), dumpitems command"
@@ -669,11 +672,11 @@ features:
       - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:WeaponSpawn (ll.360-368)"
       - "src/VortexArena.Common/Gameplay/Items/ItemSpawnFuncs.cs:WeaponPickup.ItemInit (ll.435-457)"
     constants:
-      - { name: "g_pickup_respawntime_weapon / _superweapon", base: "10 / 120", port: "10 / 120 (Cvars.cs:567-568 + CvarOr fallback 10)", match: true }
-      - { name: "g_pickup_respawntimejitter_weapon / _superweapon", base: "0 / 10 (balance-xonotic.cfg:144-145; stamped on the item, spawning.qc:95,101)", port: "never set — weapon items keep jitter 0 (WeaponSpawn sets only ItemRespawnTime; WeaponPickup def has no RespawnTimeJitter)", match: false }
+      - { name: "g_pickup_respawntime_weapon / _superweapon", base: "10 / 120", port: "10 / 120", match: true }
+      - { name: "g_pickup_respawntimejitter_weapon / _superweapon", base: "0 / 10 (balance-xonotic.cfg:144-145; stamped on the item, spawning.qc:95,101)", port: "0 / 10 defaults applied with the respawn delay, preserving explicit respawn overrides", match: true }
       - { name: "g_pickup_weapons_anyway", base: "1 (balance-xonotic.cfg:94)", port: "live path faithful (cfg tree loaded, GameWorld.cs:470-474); headless seed 0 (Cvars.cs:523) + CvarBoolOr fallback false diverge", match: true }
-      - { name: "superweapons_finished default", base: "g_balance_superweapons_time (30) stamped on a map superweapon (spawning.qc:104-106)", port: "not seeded anywhere on the map-spawn path (only WeaponThrowing loot + target_give set it)", match: false }
-      - { name: ".count-scaled pickup ammo", base: "count>0 ? rint(count*GetAmmoConsumption) : WEP_CVAR pickup_ammo", port: "WEP pickup_ammo cvar else flat g_pickup_<res> fallback; no .count scaling", match: false }
+      - { name: "superweapons_finished default", base: "g_balance_superweapons_time (30) stamped on a map superweapon (spawning.qc:104-106)", port: "g_balance_superweapons_time (30), preserving explicit durations", match: true }
+      - { name: ".count-scaled pickup ammo", base: "count>0 ? rint(count*GetAmmoConsumption) : WEP_CVAR pickup_ammo", port: "MathF.Round(Count * GetAmmoConsumption) for positive count; otherwise the weapon pickup-ammo cvar", match: true }
     status:
       logic: faithful
       values: partial
@@ -684,14 +687,12 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "Map-spawned SUPERWEAPON items never get superweapons_finished seeded (QC spawning.qc:104-106 stamps g_balance_superweapons_time=30) — ApplyPowerupTimers then adds item.SuperweaponsFinished=0, so picking up a map fireball/minstanex-style superweapon applies a 0s superweapon timer. (Thrown superweapon loot IS seeded, WeaponThrowing.cs:66.)"
-      - "Superweapon respawn jitter (g_pickup_respawntimejitter_superweapon 10) never applied: WeaponSpawn sets only ItemRespawnTime, so superweapon respawns are deterministic vs Base's +/-10s spread. (Regular weapons: Base jitter 0, so they match by accident.)"
-      - "Base's q3-style .count pickup-ammo scaling (rint(count * GetAmmoConsumption)) unported — an edict-set count is ignored for weapon ammo."
+      - "Unconfigured headless fallback for g_pickup_weapons_anyway remains 0. The normal stock config loads 1."
     verification:
-      - { kind: code_read, ref: "WeaponSpawn (ItemSpawnFuncs.cs:360-368) vs spawning.qc:90-113: respawntime + weapons_anyway ported; jitter + superweapons_finished + count-scaling absent. grep 'SuperweaponsFinished =' src: only ItemTouch relativize, TargetUtilities:497, WeaponThrowing:66-89 — no map-spawn seed", result: fail }
-      - { kind: value_diff, ref: "balance-xonotic.cfg:94,131-132,144-145 vs Cvars.cs:523,567-568 + live cfg-tree load (GameWorld.cs:470-474)", result: pass }
-    confidence: medium
-    notes: "added 2026-07-02 (coverage fold). Confidence medium on the superweapon-timer gap: no compensating seed found under Gameplay/, but the superweapons status-effect application path is audited in the powerups/status-effects units and could mask it. The weaponreplace/SetWeaponreplace half of this function is already audited in items-pickups.spawn.driver + mutator-new_toys."
+      - { kind: test, ref: "ItemSpawnTouchTests.SuperweaponMapPickup_ArmsOrdinaryItemBitAndExpires tests registered weapon_fireball, initial respawn, ItemTouch, ordinary item flag, duration, and losing the weapon at expiry.", result: pass }
+      - { kind: test, ref: "ItemSpawnTouchTests.WeaponMapPickup_CountSeedsAmmoButPreservesExplicitResourceAndTiming checks weapon and superweapon jitter, shot-count rounding, and explicit ammo, respawn and timer values.", result: pass }
+    confidence: high
+    notes: "Weapon replacement is covered by items-pickups.spawn.driver and mutator-new_toys."
 
   - id: items-pickups.give.give_grammar
     name: "GiveItems op-aware give grammar (cheat give / target_items / target_give) + POSTGIVE GiveSound/GiveRot feedback"

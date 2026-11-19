@@ -124,11 +124,10 @@ public partial class ShowNamesLayer : Control
         public float FadeDelay;      // QC .fadedelay — absolute time the enemy fade-in may begin
         public float PointTime;      // QC .pointtime — last time the crosshair pointed at this player
         public bool HadFadeDelay;    // QC `if (!this.fadedelay)` seed guard (a real 0 is a valid value)
-        // The screen-space anti-overlap box for THIS frame (QC .box_org / .box_ofs), and whether it's valid.
+        // Last drawn screen-space box (QC .box_org / .box_ofs).
         public Vector2 BoxOrg;
         public Vector2 BoxOfs;
         public bool BoxValid;
-        public NVec3 Origin;         // this frame's world origin (for the distance compare in anti-overlap)
         public int Touched;          // generation stamp so stale ids can be pruned
 
         // Draw params resolved in pass 1 and consumed in pass 2 (so the geometry is computed once).
@@ -142,11 +141,17 @@ public partial class ShowNamesLayer : Control
         public int TeamId;           // entcs team (s.Colormap & 0xFF) — drives the QC playername() team tint
     }
 
+    private readonly record struct ProjectedTag(int Id, NetEntityState State, NVec3 Origin,
+        Vector2 Anchor, bool Projected, bool OffScreen, float DistanceSquared, Rect2? PreviousBox);
+
     private readonly Dictionary<int, TagState> _tags = new();
     private int _generation;
 
     // Scratch reused each frame to avoid per-frame allocs in the draw loop.
     private readonly List<int> _drawIds = new();
+    private readonly List<ProjectedTag> _projectedTags = new();
+
+    internal RemoteShowNamesCollision? RemoteCollision { get; set; }
 
     public override void _Ready() => MouseFilter = MouseFilterEnum.Ignore; // QC hud_cursormode off
 
@@ -161,7 +166,8 @@ public partial class ShowNamesLayer : Control
         Vector2 vp = GetViewportRect().Size;
         _pixelsPerUnit = PixelsPerVirtualUnit(vp.Y, CvarF("vid_conheight", 600f));
         float frametime = (float)GetProcessDeltaTime();
-        float now = NowSec();
+        // The client-only trace facade has no simulation loop to advance its clock.
+        float now = Net.RenderNow;
         NVec3 viewOrigin = Coords.ToQuake(Camera.GlobalPosition);
 
         float offset = CvarF("hud_shownames_offset", 52f);
@@ -170,13 +176,16 @@ public partial class ShowNamesLayer : Control
         // my profile colors is a teammate" (no LOS trace, tags always on). The #27 rule: gate on real teamplay.
         bool teamplay = Teamplay;
 
-        // ---- pass 1: compute each visible player's fade alpha + screen box (QC Draw_ShowNames_All loop) ----
+        // Collect positions and old boxes before updating any tag. The closest box can belong to a
+        // player whose snapshot arrived after the farther player's.
         _drawIds.Clear();
+        _projectedTags.Clear();
         _generation++;
 
         // Snapshot the remote-id set (RemoteIds is a live view over the net dict; a snapshot arriving mid-draw
         // would otherwise throw out of this every-frame path). Same defensive copy the radar takes.
         int[] ids = System.Linq.Enumerable.ToArray(Net.RemoteIds);
+        ITraceService? trace = RemoteCollision?.Sync(Net.BrushColliders) ?? Api.Services?.Trace;
 
         foreach (int netId in ids)
         {
@@ -190,6 +199,18 @@ public partial class ShowNamesLayer : Control
             if (!float.IsFinite(origin.X) || !float.IsFinite(origin.Y) || !float.IsFinite(origin.Z))
                 continue;
 
+            TagState tag = GetTag(netId);
+            tag.Touched = _generation;
+            bool projected = Project(origin + new NVec3(0f, 0f, offset), out Vector2 anchor, out _);
+            bool offScreen = !projected || anchor.X < 0f || anchor.Y < 0f || anchor.X > vp.X || anchor.Y > vp.Y;
+            Rect2? previousBox = tag.BoxValid ? new Rect2(tag.BoxOrg - tag.BoxOfs, tag.BoxOfs * 2f) : null;
+            _projectedTags.Add(new(netId, s, origin, anchor, projected, offScreen,
+                Vlen2(origin - viewOrigin), previousBox));
+        }
+
+        foreach (ProjectedTag player in _projectedTags)
+        {
+            var (netId, s, origin, o, onScreen, offScreen, distanceSquared, previousBox) = player;
             bool isSelf = netId == LocalNetId;
             // QC self branch (Draw_ShowNames:42 `if (this.sv_entnum == current_player + 1)` — "self or spectatee"):
             // the tag of the player you are VIEWING. When following a spectatee, current_player is that followed
@@ -229,9 +250,7 @@ public partial class ShowNamesLayer : Control
             if (!sameteam && !isViewed && !CvarBool("hud_shownames_enemies"))
                 continue;
 
-            TagState tag = GetTag(netId);
-            tag.Touched = _generation;
-            tag.Origin = origin;
+            TagState tag = _tags[netId];
 
             // ---- line of sight (QC traceline(view_origin, this.origin, MOVE_NOMONSTERS, this)) ----
             float crossDist = VirtualF("hud_shownames_crosshairdistance", 0f);
@@ -242,15 +261,8 @@ public partial class ShowNamesLayer : Control
             }
             else
             {
-                hit = TraceVisible(viewOrigin, origin);
+                hit = TraceVisible(trace, viewOrigin, origin);
             }
-
-            // ---- project the tag origin (QC project_3d_to_2d(this.origin + eZ * offset)) ----
-            NVec3 tagWorld = origin + new NVec3(0f, 0f, offset);
-            bool onScreen = Project(tagWorld, out Vector2 o, out bool behind);
-            // QC OFF_SCREEN(o): behind, or outside the viewport rect.
-            bool offScreen = behind || !onScreen
-                             || o.X < 0f || o.Y < 0f || o.X > vp.X || o.Y > vp.Y;
 
             // ---- crosshair-distance gate + overlap pre-state (QC the autocvar_hud_shownames_crosshairdistance block) ----
             int overlap = -1;
@@ -266,21 +278,13 @@ public partial class ShowNamesLayer : Control
                     overlap = 0;
             }
 
-            // ---- anti-overlap (QC: a closer overlapping tag fades this one out) ----
-            // QC reads each tag's PREVIOUS-frame box (this.box_org/it.box_org set the last time it was drawn) — so
-            // we test the current tag's last-frame box (tag.BoxValid here is from the prior frame; it's recomputed
-            // at the end of this iteration). Already-processed others in _drawIds carry this frame's box, which only
-            // tightens the test by a frame; the fade converges within a frame either way (a visual refinement).
-            if (overlap == -1 && CvarBool("hud_shownames_antioverlap") && tag.BoxValid)
+            // A closer on-screen player can overlap even if its own tag is gated this frame.
+            if (overlap == -1 && CvarBool("hud_shownames_antioverlap") && previousBox is { } box)
             {
-                foreach (int otherId in _drawIds)
+                foreach (ProjectedTag other in _projectedTags)
                 {
-                    if (otherId == netId) continue;
-                    TagState ot = _tags[otherId];
-                    if (!ot.BoxValid) continue;
-                    if (BoxesOverlap(tag.BoxOrg - tag.BoxOfs, tag.BoxOrg + tag.BoxOfs,
-                                     ot.BoxOrg - ot.BoxOfs, ot.BoxOrg + ot.BoxOfs)
-                        && Vlen2(ot.Origin - viewOrigin) < Vlen2(origin - viewOrigin))
+                    if (!other.OffScreen && other.DistanceSquared < distanceSquared
+                        && other.PreviousBox is { } otherBox && BoxesOverlap(box, otherBox))
                     {
                         overlap = 1;
                         break;
@@ -326,18 +330,12 @@ public partial class ShowNamesLayer : Control
             float a = CvarF("hud_shownames_alpha", 0.7f) * tag.Alpha;
             if (!sameteam || netId == LocalNetId)
             {
-                // QC entcs_GetAlpha: model alpha; `if (f == 0) f = 1; if (f < 0) f = 0;`. NetEntityState.Alpha 0
-                // means opaque (never networked) → f = 1; otherwise f = Alpha/255 (clamped 0..1).
-                float f = s.Alpha == 0 ? 1f : s.Alpha / 255f;
-                if (f < 0f) f = 0f;
-                if (f > 1f) f = 1f;
-                a *= f;
+                // Match the model alpha envelope: the wire reserves 0 for opaque and 255
+                // for the negative alpha that suppresses the body and the enemy name.
+                a *= TagModelAlpha(s.Alpha);
             }
             if (a < AlphaMinVisible)
-            {
-                tag.BoxValid = false;
                 continue;
-            }
 
             // ---- distance fade + cull (QC the maxdistance/mindistance block) ----
             float dist = Vlen(origin - viewOrigin);
@@ -346,7 +344,7 @@ public partial class ShowNamesLayer : Control
             if (maxDistCvar != 0f)
             {
                 float maxDist = MathF.Min(maxDistCvar, MaxShotDistance);
-                if (dist >= maxDist) { tag.BoxValid = false; continue; }
+                if (dist >= maxDist) continue;
                 if (dist >= minDist)
                 {
                     float f = maxDistCvar - minDist;
@@ -355,15 +353,9 @@ public partial class ShowNamesLayer : Control
                 }
             }
             else if (dist >= MaxShotDistance)
-            {
-                tag.BoxValid = false;
                 continue;
-            }
-            if (a <= 0f || behind || !onScreen)
-            {
-                tag.BoxValid = false;
+            if (a <= 0f || !onScreen)
                 continue;
-            }
 
             // ---- resize (QC autocvar_hud_shownames_resize) ----
             float resize = 1f;
@@ -650,7 +642,6 @@ public partial class ShowNamesLayer : Control
                         || (SpectateeStatus != 0 && SpectateeStatus == LocalNetId);
         TagState selfTag = GetTag(LocalNetId);
         selfTag.Touched = _generation;
-        selfTag.Origin = selfOrigin;
 
         // Projection
         NVec3 selfTagWorld = selfOrigin + new NVec3(0f, 0f, offset);
@@ -667,10 +658,8 @@ public partial class ShowNamesLayer : Control
         else
             selfTag.Alpha = MathF.Min(1f, selfTag.Alpha + SHOWNAMES_FADESPEED * frametime);
 
-        // QC `a = alpha * this.alpha`; for the self case entcs_GetAlpha is also applied (the
-        // `this.sv_entnum == player_localentnum` arm), but the local player's model alpha is 1 (no networked
-        // fade for the predicted self), so it is a no-op here.
-        float selfA = CvarF("hud_shownames_alpha", 0.7f) * selfTag.Alpha;
+        // QC applies the model alpha to the viewed client's own tag even with the private slice.
+        float selfA = CvarF("hud_shownames_alpha", 0.7f) * selfTag.Alpha * TagModelAlpha(Net.LocalState?.Alpha ?? 0);
         if (selfA < AlphaMinVisible) { selfTag.BoxValid = false; return; }
 
         float selfDist = Vlen(selfOrigin - viewOrigin);
@@ -750,15 +739,11 @@ public partial class ShowNamesLayer : Control
         return float.IsFinite(screen.X) && float.IsFinite(screen.Y);
     }
 
-    /// <summary>QC traceline(view_origin, target, MOVE_NOMONSTERS) line-of-sight: true when world geometry does
-    /// not block the segment. On a listen server <see cref="Api.Trace"/> is the shared collision world; if no
-    /// trace service is available (a pure client before its facade is up) we fall back to "visible" so tags don't
-    /// vanish — matching the radar's degrade-to-shown behaviour.</summary>
-    private static bool TraceVisible(NVec3 from, NVec3 to)
+    /// <summary>QC traceline(view_origin, target, MOVE_NOMONSTERS) over the presentation collision world.</summary>
+    private static bool TraceVisible(ITraceService? trace, NVec3 from, NVec3 to)
     {
-        if (Api.Services is null)
+        if (trace is null)
             return true;
-        ITraceService trace = Api.Trace;
         TraceResult tr = trace.Trace(from, NVec3.Zero, NVec3.Zero, to, MoveFilter.NoMonsters, null);
         // QC shownames.qc:62-63 — `hit = !(trace_fraction < 1 && <the blocker isn't the target player>)`: ANY
         // shortfall blocks. The target-player escape hatch Base needs does not apply here: MOVE_NOMONSTERS skips
@@ -771,12 +756,13 @@ public partial class ShowNamesLayer : Control
         return tr.Fraction >= 1f;
     }
 
+    private static float TagModelAlpha(int alpha) => alpha switch { 0 => 1f, 255 => 0f, _ => alpha / 255f };
+
     private static float Vlen(NVec3 v) => v.Length();
     private static float Vlen2(NVec3 v) => v.LengthSquared();
 
     /// <summary>QC boxesoverlap(min1,max1,min2,max2) in 2D screen space.</summary>
-    private static bool BoxesOverlap(Vector2 min1, Vector2 max1, Vector2 min2, Vector2 max2)
-        => min1.X <= max2.X && min2.X <= max1.X && min1.Y <= max2.Y && min2.Y <= max1.Y;
+    private static bool BoxesOverlap(Rect2 a, Rect2 b) => a.Intersects(b, includeBorders: true);
 
     private TagState GetTag(int netId)
     {
@@ -829,7 +815,4 @@ public partial class ShowNamesLayer : Control
     }
 
     private float VirtualF(string name, float fallback) => CvarF(name, fallback) * _pixelsPerUnit;
-
-    private static float NowSec()
-        => Api.Services is not null ? Api.Clock.Time : Time.GetTicksMsec() / 1000f;
 }

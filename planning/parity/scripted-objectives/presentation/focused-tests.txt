@@ -1,0 +1,4 @@
+Test run for /tmp/va-obj-host.RpTHow/tests/VortexArena.Tests/bin/Debug/net8.0/VortexArena.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    41, Skipped:     0, Total:    41, Duration: 201 ms - VortexArena.Tests.dll (net8.0)

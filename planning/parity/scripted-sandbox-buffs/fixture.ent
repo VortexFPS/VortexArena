@@ -1,0 +1,39 @@
+{
+"classname" "info_teleport_destination"
+"targetname" "parity_owner"
+"origin" "1696 -448 -8"
+"angles" "12 270 0"
+"speed" "1"
+}
+{
+"classname" "info_teleport_destination"
+"targetname" "parity_guest"
+"origin" "1696 -624 -8"
+"angles" "12 90 0"
+"speed" "1"
+}
+{
+"classname" "info_teleport_destination"
+"targetname" "parity_buff_start"
+"origin" "1696 -448 -8"
+"angles" "12 90 0"
+"speed" "1"
+}
+{
+"classname" "info_teleport_destination"
+"targetname" "parity_buff_touch"
+"origin" "1696 -320 -8"
+"angles" "12 90 0"
+"speed" "1"
+}
+{
+"classname" "info_teleport_destination"
+"targetname" "parity_buff_view"
+"origin" "1696 -240 -8"
+"angles" "12 270 0"
+"speed" "1"
+}
+{
+"classname" "item_buff_vampire"
+"origin" "1696 -320 4"
+}

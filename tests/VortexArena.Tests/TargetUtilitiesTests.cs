@@ -42,6 +42,7 @@ public sealed class TargetUtilitiesTests
         Api.Services = _f;
         MapMover.ClearIndex();
         MapObjectsState.Reset();
+        MapObjectsRegistry.RegisterAll();
         // clear the host seams so a prior test's wiring doesn't leak.
         TargetUtilities.NextLevelHandler = null;
         TargetUtilities.ChangeLevelHandler = null;
@@ -85,6 +86,125 @@ public sealed class TargetUtilitiesTests
 
         tk.Use!(tk, victim);
         Assert.True(victim.GetResource(ResourceType.Health) < 1f, "target_kill should drive the victim's health below 1");
+    }
+
+    [Fact]
+    public void HurtAndKill_RequireExplicitNonCreatureEligibility_AndAttributeDamage()
+    {
+        Boot();
+        IDamageSystem previous = Combat.System;
+        var damage = new DamageRecorder();
+        Combat.System = damage;
+        try
+        {
+            Entity hurt = Spawn("trigger_hurt", e => e.Dmg = 23f);
+            Entity kill = Spawn("target_kill", e => e.TargetName = "hazard");
+            Entity sender = Spawn("trigger_relay", e => e.Target = "hazard");
+            Entity owner = new() { Flags = EntFlags.Client, ClassName = "player", TakeDamage = DamageMode.Yes };
+            Entity pushable = new() { ClassName = "projectile", PushableFlag = true, TakeDamage = DamageMode.Yes };
+
+            hurt.Use!(hurt, owner);
+            hurt.Touch!(hurt, pushable);
+            kill.Use!(kill, pushable);
+            Assert.Empty(damage.Hits);
+            Assert.True(MapMover.IsPushable(pushable));
+
+            // A creature without the opt-in still has the ordinary cooldown and receives owner credit.
+            hurt.Touch!(hurt, owner);
+            hurt.Touch!(hurt, owner);
+            DamageInfo playerHit = Assert.Single(damage.Hits);
+            Assert.Same(owner, playerHit.Target);
+            Assert.Same(owner, playerHit.Attacker);
+            Assert.Equal(DeathTypes.Void, playerHit.DeathType);
+            damage.Hits.Clear();
+
+            Entity optedIn = new() { ClassName = "objective", DamagedByTriggers = true, TakeDamage = DamageMode.Yes };
+            Assert.False(MapMover.IsPushable(optedIn));
+            hurt.Touch!(hurt, optedIn);
+            MapMover.UseTargets(sender, optedIn, trigger: null);
+
+            Assert.Collection(damage.Hits, hurtHit =>
+            {
+                Assert.Same(optedIn, hurtHit.Target);
+                Assert.Same(hurt, hurtHit.Inflictor);
+                Assert.Same(hurt, hurtHit.Attacker);
+                Assert.Equal(DeathTypes.Void, hurtHit.DeathType);
+                Assert.Equal(23f, hurtHit.Amount);
+            }, killHit =>
+            {
+                Assert.Same(optedIn, killHit.Target);
+                Assert.Same(kill, killHit.Inflictor);
+                Assert.Same(sender, killHit.Attacker);
+                Assert.Equal(DeathTypes.Void, killHit.DeathType);
+                Assert.Equal(1000f, killHit.Amount);
+            });
+        }
+        finally { Combat.System = previous; }
+    }
+
+    [Theory]
+    [InlineData("0", false)]
+    [InlineData("1", true)]
+    public void ObjectiveSpawn_OptsIntoTriggerDamageOnlyWhenConfigured(string value, bool enabled)
+    {
+        Boot();
+        Api.Cvars.Set("g_ctf_flag_return_when_unreachable", value);
+        Api.Cvars.Set("g_balance_keyhunt_return_when_unreachable", value);
+        Api.Cvars.Set("g_ctf_flag_return_damage_delay", "0");
+        Api.Cvars.Set("g_balance_keyhunt_delay_return", "30");
+        Api.Cvars.Set("g_balance_keyhunt_delay_damage_return", "2");
+        Api.Cvars.Set("g_balance_keyhunt_delay_collect", "4");
+        IDamageSystem previous = Combat.System;
+        Combat.System = new DamageSystem();
+        try
+        {
+            Entity hurt = Spawn("trigger_hurt");
+            var ctf = new Ctf();
+            var carrier = new Player { Team = Teams.Red, Flags = EntFlags.Client };
+            FlagState flag = ctf.SpawnFlag(Teams.Blue, new Vector3(100, 0, 0));
+            Assert.Equal(enabled, flag.Entity!.DamagedByTriggers);
+            Assert.False(flag.Entity.DamagedByContents);
+            Assert.True(ctf.Pickup(carrier, flag));
+            ctf.DropFlag(carrier);
+            Assert.True(MapMover.IsPushable(flag.Entity));
+            hurt.Touch!(hurt, flag.Entity);
+            Assert.Equal(enabled ? FlagStatus.AtBase : FlagStatus.Dropped, flag.Status);
+
+            var kh = new KeyHunt();
+            KeyState key = kh.SpawnKey(Teams.Red, carrier);
+            _f.GameClock.Time = 1f;
+            kh.AssignKeyNoScore(carrier, key);
+            Assert.True(kh.DropOneKey(carrier));
+            Assert.Equal(enabled, key.Entity!.DamagedByTriggers);
+            Assert.Equal(enabled, key.Entity.DamagedByContents);
+            Assert.True(MapMover.IsPushable(key.Entity));
+            hurt.Touch!(hurt, key.Entity);
+            Assert.Equal(1f, key.DropTime);
+            Assert.Equal(enabled ? 3f : 31f, key.ReturnDeadline);
+
+            _f.GameClock.Time = 2f;
+            kh.CollectKey(carrier, key);
+            Assert.Null(key.Carrier);
+
+            _f.GameClock.Time = 3.1f;
+            key.Entity.Think!(key.Entity);
+            if (enabled)
+                Assert.Null(key.Entity);
+            else
+                Assert.NotNull(key.Entity);
+        }
+        finally { Combat.System = previous; }
+    }
+
+    private sealed class DamageRecorder : IDamageSystem
+    {
+        public List<DamageInfo> Hits { get; } = new();
+
+        public float Apply(in DamageInfo info)
+        {
+            Hits.Add(info);
+            return info.Amount;
+        }
     }
 
     [Fact]

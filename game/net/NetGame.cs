@@ -7,6 +7,7 @@ using VortexArena.Common;            // GameInit
 using VortexArena.Common.Framework;
 using VortexArena.Common.Gameplay;   // Player (LocalServerPlayer)
 using VortexArena.Common.Math;
+using VortexArena.Common.Menu;
 using VortexArena.Common.Physics;
 using VortexArena.Common.Services;
 using VortexArena.Engine.Collision;
@@ -71,6 +72,7 @@ public sealed partial class NetGame : Node3D
     private string _gametype = "dm";
     private int _botCount;
     private int _botSkill = -1;                 // -1 = unspecified: never write the `skill` cvar (MatchConfig.BotSkill)
+    private IReadOnlyDictionary<string, string>? _matchLimitOverrides;
     private string _campaignName = "";          // non-empty → host this listen server as a campaign level
     private int _campaignIndex;
     private string _serverName = "Vortex Arena Listen Server";
@@ -99,6 +101,8 @@ public sealed partial class NetGame : Node3D
     public const int ExitPortBindFailed = 2;   // the game UDP port was already in use
     public const int ExitMapNotFound = 3;       // --host <map> named a map the VFS doesn't contain
     private ClientNet? _client;
+    private JoinNoticeOverlay? _joinNoticeOverlay;
+    private TimedJoinNotice? _pendingJoinNotice;
     private ClientWorld _render = null!;
     private DevHarness? _devHarness;            // dev capture (--fx-demo), inert unless a dev flag was passed
     // The background parse/build queue (S1): the idle player-model warm AND the live on-demand player-model
@@ -155,6 +159,7 @@ public sealed partial class NetGame : Node3D
         return string.IsNullOrEmpty(v) ? fallback : cvars.GetFloat(name);
     }
     private RadarPanel _radar = null!;
+    private bool _radarBindHeld;
     private NetHud _hud = null!;                 // crosshair + health/armor readout (the always-on lightweight HUD)
     // The full CSQC HUD panel set (weapon bar / ammo / kill-feed / centerprint / timer) on the net play path —
     // the same Hud GameDemo uses (T34 SEAM). It hosts the networked panels fed from the net stream; its own
@@ -166,6 +171,8 @@ public sealed partial class NetGame : Node3D
     private VortexArena.Game.Client.WaypointSpriteLayer? _waypointLayer; // 3D in-world waypoint/objective markers
     private Node3D? _mapRoot;                                              // the built map scene (holds the "Portals" child)
     private Godot.Environment? _worldEnv;                                  // the WorldEnvironment's env — kept so a pure client can swap in the real map sky/fog/tint once its BSP loads
+    private string? _lastServerFog;
+    private MapClientVisualSettings _lastServerMapVisualSuggestions;
     private bool _clientMapLoaded;                                         // a pure --connect client has loaded the server's map (render + prediction collision) — one-shot
     private VortexArena.Game.Client.PortalRenderer? _portalRenderer;      // see-through warpzone portal render (listen host)
     private VortexArena.Game.Client.PortalDiscRenderer? _portalDiscRenderer; // warpzone portal DISC (skinned model) — listen host, reads the same AmbientManager zones
@@ -221,12 +228,14 @@ public sealed partial class NetGame : Node3D
     /// <summary>Sub-stages of the post-_Ready handshake/spawn phase, used by <see cref="_Process"/> to drive
     /// the loading bar to BeginStage on each transition (not every frame).</summary>
     private enum HandshakeStage { None, Connecting, WaitingForServer, Joining, Spawned }
+    private MapBgmModels? _bgmModels;
     private MusicPlayer? _musicPlayer;          // client-side map music (cdtrack / target_music / trigger_music)
 
     // The SHARED first-person view subsystem (zoom + FOV + chase/death cam + eye-contents) — the SAME component
     // PlayerController uses, ported once from qcsrc/client/view.qc (T34 SEAM). Fed a ClientNet-predicted
     // ViewState each frame; we read back EyeContents / ZoomFraction / SensitivityScale / ChaseActive.
     private readonly Client.FirstPersonView _view = new();
+    private ICvarService ClientViewCvars => _sharedCvars ?? Api.Cvars;
 
     // The FAITHFUL Base view smoothing (CSQCPlayer_ApplySmoothing: stairsmoothz glide + viewheightavg eye-height
     // blend), used by UpdateCamera when cl_movement_smoothing_faithful is on (the default) so the rendered eye
@@ -308,27 +317,11 @@ public sealed partial class NetGame : Node3D
     public GameWorld? ServerWorld => _serverWorld;
 
     /// <summary>The local human <see cref="Player"/> on the listen-server world (the <c>caller</c> for console
-    /// client-commands), resolved from the client's assigned net id with a single-human fallback. Null on a pure client.</summary>
-    public Player? LocalServerPlayer
-    {
-        get
-        {
-            if (_serverWorld is null)
-                return null;
-            if (_server is not null && _client is not null)
-            {
-                Player? byId = _server.PlayerByNetId(_client.LocalNetId);
-                if (byId is not null)
-                    return byId;
-            }
-            // WS1 stage 3: enumerate the COW roster snapshot — this property is read from the render thread
-            // (HUD mirrors, feeds) while the sim worker may be mutating the live List on a join/leave.
-            foreach (Player p in _serverWorld.Clients.PlayersSnapshot)
-                if (!p.IsBot)
-                    return p;
-            return null;
-        }
-    }
+    /// client-commands), resolved from the local client's current sign-on. While disconnected or signing on
+    /// there is no local caller, even if remote players already occupy slots.</summary>
+    public Player? LocalServerPlayer => _client is { Accepted: true, ConnectionLost: false } client
+        ? _server?.PlayerByNetId(client.LocalNetId)
+        : null;
 
     /// <summary>Send a console command line to the connected server (DP <c>clc_stringcmd</c>) — used by the
     /// console on a pure client where there is no in-process world. No-op if not connected.</summary>
@@ -355,6 +348,9 @@ public sealed partial class NetGame : Node3D
             return world.Commands.Execute(line, isServerConsole: true, caller: LocalServerPlayer).Output;
     }
 
+    public System.Collections.Generic.IEnumerable<Entity> ConsoleClientEntities =>
+        _entityView?.VisibleEntities ?? System.Array.Empty<Entity>();
+
     /// <summary>The loading screen (DP <c>SCR_DrawLoadingScreen</c>) shown during map load + handshake,
     /// set by <see cref="Shell"/> before the node enters the tree. Null when no loading screen is active
     /// (e.g. a bare CLI host).</summary>
@@ -364,9 +360,8 @@ public sealed partial class NetGame : Node3D
     /// the player spawns (camera ready + health &gt; 0).</summary>
     public Action? DismissLoadingScreen { get; set; }
 
-    /// <summary>Callback (owned by <see cref="Shell"/>) invoked ONCE when a connection can't be completed —
-    /// the server rejected us, the link dropped before we spawned, or <see cref="ConnectTimeoutSeconds"/>
-    /// elapsed with no accept/first-snapshot. The string is a short, player-facing reason.
+    /// <summary>Callback (owned by <see cref="Shell"/>) invoked once on rejection, link loss or timeout before
+    /// accept. The string is a short, player-facing reason.
     ///
     /// <para>Shell wires this on every match it starts, headless included, and decides there what a failure
     /// means: an interactive session goes back to the menu with the reason, while an unattended one (dedicated
@@ -374,6 +369,7 @@ public sealed partial class NetGame : Node3D
     /// null only by callers that construct a NetGame outside Shell, where the watchdog stays disarmed and
     /// <c>--quit-after-seconds</c> owns the timeout instead.</para></summary>
     public Action<string>? OnConnectionFailed { get; set; }
+    internal Action<Menu.WelcomeDialogData, bool>? OnMatchWelcome { get; set; }
 
     // Connection-failure watchdog, armed once OnConnectionFailed is wired. The deadline is stamped the first
     // _Process frame we are live-but-not-yet-accepted and CLEARED again on accept, so it always measures the
@@ -565,7 +561,8 @@ public sealed partial class NetGame : Node3D
     public void ConfigureListenServer(string map, string gametype = "dm", int botCount = 0, int botSkill = -1,
         int port = DefaultPort, string playerName = "player", string serverName = "Vortex Arena Listen Server",
         VirtualFileSystem? vfs = null, VortexArena.Engine.Simulation.CvarService? cvars = null,
-        string campaignName = "", int campaignIndex = 0, AssetLoader? sharedAssets = null)
+        string campaignName = "", int campaignIndex = 0, AssetLoader? sharedAssets = null,
+        IReadOnlyDictionary<string, string>? matchLimitOverrides = null)
     {
         _isListenServer = true;
         _host = "127.0.0.1";
@@ -574,6 +571,7 @@ public sealed partial class NetGame : Node3D
         _gametype = string.IsNullOrWhiteSpace(gametype) ? "dm" : gametype;
         _botCount = Math.Max(0, botCount);
         _botSkill = botSkill;
+        _matchLimitOverrides = matchLimitOverrides;
         _campaignName = campaignName ?? "";
         _campaignIndex = campaignIndex;
         _serverName = string.IsNullOrWhiteSpace(serverName) ? "Vortex Arena Listen Server" : serverName;
@@ -759,9 +757,15 @@ public sealed partial class NetGame : Node3D
         // load screen so you can mouse out of the window).
         MouseCapture.SetWantCapture(false);
 
-        GD.Print(_isListenServer
-            ? $"[NetGame] listen server on 127.0.0.1:{_port} (map '{_map}', {_gametype}, {_botCount} bots) — self-connecting."
-            : $"[NetGame] connecting to {_host}:{_port}.");
+        if (!_isListenServer)
+            GD.Print($"[NetGame] connecting to {_host}:{_port}.");
+        else if (_server is not null)
+        {
+            string match = $"(map '{_map}', {_gametype}, {_botCount} bots)";
+            GD.Print(_dedicatedNoClient
+                ? $"[NetGame] dedicated server listening on UDP {_port} {match}."
+                : $"[NetGame] listen server on 127.0.0.1:{_port} {match} — self-connecting.");
+        }
 
         // _Process can safely run its full body now (camera/HUD/render/client all built above).
         _readyComplete = true;
@@ -772,10 +776,9 @@ public sealed partial class NetGame : Node3D
     }
 
     /// <summary>
-    /// The connect watchdog budget (seconds): how long we'll sit on the loading screen with no accept + no first
-    /// snapshot before giving up. Reuses DP's <c>net_connecttimeout</c> (default 30) from the shared store when
-    /// present; floored at 10s (DP's documented minimum) so a mistyped value can't make the game bail mid-handshake.
-    /// A reject or a dropped link fails immediately and never consults this.
+    /// Seconds the native client waits for its handshake acceptance after loading, with a ten-second minimum.
+    /// Native reuses Xonotic's configured <c>net_connecttimeout</c> value. DarkPlaces uses its own retry
+    /// counter before acceptance and applies the cvar to a newly opened connection.
     /// </summary>
     private float ConnectTimeoutSeconds
     {
@@ -789,9 +792,9 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>
     /// Detect a connection that will never complete and hand it to <see cref="OnConnectionFailed"/> exactly once.
-    /// Called each frame (interactive path) while the client is live but not yet spawned. Three failure modes:
+    /// Called each frame while the client is live. Three failure modes:
     /// an explicit server reject (<see cref="ClientNet.RejectReason"/>), a link that dropped after connecting
-    /// (<see cref="ClientNet.ConnectionLost"/>), and a silent stall — no accept and no first snapshot within
+    /// (<see cref="ClientNet.ConnectionLost"/>), and a silent stall — no accept within
     /// <see cref="ConnectTimeoutSeconds"/> (a dead host, a wrong/occupied port, a one-way link). The deadline is
     /// armed lazily on the first call so it measures the handshake wait, not the preceding synchronous map load.
     /// </summary>
@@ -805,7 +808,7 @@ public sealed partial class NetGame : Node3D
             FailConnection(reject);
             return;
         }
-        // The link came up and then dropped before we spawned (server quit, kicked us, or the peer timed out).
+        // The link came up and then dropped (server quit, kicked us, or the peer timed out).
         // ConnectionLost only latches after a successful connect, so this can't fire during the initial handshake.
         if (_client.ConnectionLost)
         {
@@ -865,8 +868,9 @@ public sealed partial class NetGame : Node3D
         // --- collision: load the map's BSP collision if we can resolve it, else a flat test floor. ---
         CollisionWorld collision;
         VortexArena.Formats.Bsp.BspData? bsp;
+        string? bspPath;
         using (LoadTimeline.Phase("bsp.parse"))
-            bsp = TryLoadMapBsp(_map);
+            bsp = TryLoadMapBsp(_map, out bspPath);
         BspCollisionBuilder.Result? built = null;
         if (bsp is not null)
         {
@@ -968,7 +972,7 @@ public sealed partial class NetGame : Node3D
         bool unifyStore = _sharedCvars is not null && !wantThreaded;
 
         _serverWorld = new GameWorld(collision, mapEntities,
-            sharedCvars: unifyStore ? _sharedCvars : null) { MapName = _map };
+            sharedCvars: unifyStore ? _sharedCvars : null) { MapName = _map, MatchLimitOverrides = _matchLimitOverrides };
         // B3: on the interactive client-hosted path (a windowed listen server), clamp the per-render-frame
         // catch-up so a hitch isn't followed by a frame running 16× the sim — that second spike would miss
         // another vblank. The small backlog drains over the next few frames instead. A headless dedicated host
@@ -990,7 +994,11 @@ public sealed partial class NetGame : Node3D
             _serverWorld.Pvs = new VortexArena.Formats.Bsp.BspPvs(bsp); // checkpvs culling (bot LOS / sound / net)
         }
         if (_vfs is not null)
+        {
             _serverWorld.ConfigReader = path => _vfs.Exists(path) ? _vfs.ReadText(path) : null;
+            if (bspPath is not null)
+                _serverWorld.HasQ3MapCompanion = VortexArena.Formats.Bsp.MapInfoCatalog.HasQ3Companion(_vfs, bspPath);
+        }
 
         // Campaign: the menu picked a campaign level. Hand the id + index to the world BEFORE Boot so its
         // CampaignPreInit (run inside Boot) resolves this level's gametype/bots/skill/limits/mutators from the
@@ -1002,10 +1010,26 @@ public sealed partial class NetGame : Node3D
             _serverWorld.CampaignIndex = _campaignIndex;
         }
 
-        // Boot the world: publishes Api.Services, activates the gametype, loads the cfg tree, spawns the map's
-        // entities (spawn points + jump-pads/items/doors), registers brush models + surfaces + PVS.
+        System.Collections.Generic.HashSet<string>? startupCvarNames = null;
+        Action<VortexArena.Engine.Simulation.CvarService>? applyStartupOverrides = null;
+        if (!unifyStore && _sharedCvars is { } source && string.IsNullOrEmpty(_campaignName))
+        {
+            applyStartupOverrides = store =>
+            {
+                startupCvarNames = new(store.Names, StringComparer.Ordinal);
+                startupCvarNames.UnionWith(BootAuthoredCvars);
+                VortexArena.Engine.Simulation.CvarService.BackfillModified(source, store, BootAuthoredCvars);
+            };
+        }
+
+        // The private store must see launch overrides before the gametype and mutators initialize or items spawn.
         using (LoadTimeline.Phase("world.boot"))
-            _serverWorld.Boot(_gametype);
+            _serverWorld.Boot(_gametype, applyStartupOverrides: applyStartupOverrides);
+
+        var requiredFeatures = Common.Menu.MapInfo.RequiredFeatures(_serverWorld.GameType?.NetName, _serverWorld.Services.Cvars);
+        if (requiredFeatures != MapFeatures.None &&
+            (Menu.MapInfoCache.Get(_map).Features & requiredFeatures) != requiredFeatures)
+            Common.Diagnostics.Log.Warn("The selected map lacks features required by current settings; playing anyway.");
 
         // DS-8: on a dedicated/headless host, back the ban list with a file so bans survive a restart (g_banned_list
         // has no Save flag and a dedicated host doesn't reliably write config.cfg). Seeds the cvar from the file
@@ -1025,6 +1049,14 @@ public sealed partial class NetGame : Node3D
         // pure-client map-name handshake (follow-up) have the real value; GameWorld.MapName is set, but the cvar
         // is independent (DP keeps mapname as an engine cvar available to serverinfo).
         _serverWorld.Services.Cvars.Set("mapname", _map);
+
+        _raceRecordFile = RaceRecordFile.Open(UserPaths.Resolve(
+            RaceRecordFile.ProfileFileName(_serverWorld.Services.Cvars.GetString("sessionid"))));
+        var recordCommands = _serverWorld.Commands;
+        if (_serverWorld.GameType is Cts ctsRecords)
+            ctsRecords.UidConsentProvider = recordCommands.RankingIdentityAllowed;
+        else if (_serverWorld.GameType is Ctf ctfRecords)
+            ctfRecords.UidConsentProvider = recordCommands.RankingIdentityAllowed;
 
         // S5: register sv_threaded (default 0) on the server store and resolve the host-side threading decision
         // ONCE, here at boot (changing it mid-match is out of scope — a rehost/map-change re-reads it). The actual
@@ -1099,17 +1131,17 @@ public sealed partial class NetGame : Node3D
             }
         }
 
-        // Carry the chosen match limits onto the hosted world's own cvar store. ONLY needed on the threaded
-        // (private-store) path: there GameWorld keeps a separate store, so the values the menu wrote into
-        // MenuState.Cvars don't reach it automatically. When unified the world IS running on the shared store the
-        // menu populated (Shell already wrote timelimit/fraglimit there), so there's nothing to copy. In campaign
-        // mode the limits are authored by the file (CampaignPostInit set them during Boot), so the menu's leftover
-        // timelimit/fraglimit must NOT clobber them.
+        // Keep the prior shared-store fallback for untouched limits on a private-store match.
         if (_sharedCvars is not null && !unifyStore && string.IsNullOrEmpty(_campaignName))
         {
-            CopyCvarIfSet(_sharedCvars, _serverWorld.Services.Cvars, "timelimit");
-            CopyCvarIfSet(_sharedCvars, _serverWorld.Services.Cvars, "fraglimit");
+            if (!_serverWorld.HasMapMatchSetting("timelimit"))
+                CopyCvarIfSet(_sharedCvars, _serverWorld.Services.Cvars, "timelimit");
+            if (!_serverWorld.HasMapMatchSetting("fraglimit"))
+                CopyCvarIfSet(_sharedCvars, _serverWorld.Services.Cvars, "fraglimit");
         }
+
+        if (_dedicatedNoClient)
+            _serverWorld.Commands.EnableDedicatedMatrix();
 
         // THREADED PATH ONLY: bridge runtime cvar changes from the shared (console/menu) store into the listen
         // server's PRIVATE store. Under sv_threaded the world keeps its own store (isolated from the main thread),
@@ -1119,15 +1151,13 @@ public sealed partial class NetGame : Node3D
         // server already knows (Has); one-way + idempotent so the campaign progress mirror above can't loop.
         if (_sharedCvars is not null && !unifyStore)
         {
-            // INITIAL BACKFILL (private-store only): a new map boots a fresh GameWorld whose private store reloads
-            // from the cfg tree, so a sv_*/g_* the user changed in the console (shared store) would revert to its
-            // cfg default. Re-apply the user's CURRENT overrides now (the bridge only forwards FUTURE changes).
-            // Skip in campaign mode (the level file authors the cvars). BackfillModified only touches cvars the
-            // user actually changed AND the server Has, so it never clobbers a map/ruleset value they didn't set.
-            // (The unified path needs none of this — its store is never reloaded out from under the user.)
-            if (string.IsNullOrEmpty(_campaignName))
+            // Some controls, such as rcon, were registered after Boot. Copy their overrides too without
+            // reapplying the startup values over settings the world has already initialized.
+            if (startupCvarNames is not null)
                 VortexArena.Engine.Simulation.CvarService.BackfillModified(
-                    _sharedCvars, _serverWorld.Services.CvarsImpl, BootAuthoredCvars);
+                    _sharedCvars, _serverWorld.Services.CvarsImpl, startupCvarNames);
+            else if (!string.IsNullOrEmpty(_campaignName))
+                CopyCvarIfSet(_sharedCvars, _serverWorld.Services.Cvars, "sv_weaponstats_file");
 
             _sharedCvarBridge = name =>
             {
@@ -1145,8 +1175,9 @@ public sealed partial class NetGame : Node3D
         // at its first recount, so host-added bots must raise the floor, not bypass it (QC bot.qc:682-683).
         if (_botCount > 0)
         {
-            _serverWorld.Services.Cvars.Set("bot_number",
-                _botCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (!_serverWorld.HasMapMatchSetting("bot_number"))
+                _serverWorld.Services.Cvars.Set("bot_number",
+                    _botCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
             // Seed `skill` only when the caller actually chose one (menu slider / campaign level). A bare CLI
             // `--host --bots N` leaves it -1 = unspecified — writing the old implicit default here silently
             // stomped the user's/stock skill (a perf run left every bot at skill 0). Both cvars are plain-`set`
@@ -1169,7 +1200,8 @@ public sealed partial class NetGame : Node3D
         ServerNet? server = ServerNet.Start(_serverWorld, _port, maxClients: slots, serverName: _serverName);
         if (server is null)
         {
-            GD.PrintErr($"[NetGame] could not start the listen server on UDP {_port} (port in use?).");
+            string hostType = _dedicatedNoClient ? "dedicated" : "listen";
+            GD.PrintErr($"[NetGame] could not start the {hostType} server on UDP {_port} (port in use?).");
             // DS-4: a dedicated/headless host that can't bind its port is DEAD — there is no operator to notice
             // the error and no client to fall back to. Exit with a distinct code so a supervisor restarts/alerts
             // instead of leaving a zombie. A windowed listen server keeps the old soft return (the menu is still up).
@@ -1178,6 +1210,17 @@ public sealed partial class NetGame : Node3D
             return;
         }
         _server = server;
+        server.ContentVfs = _vfs;
+        if (bsp is not null)
+        {
+            string advertisedGametype = _serverWorld.GameType?.RegistryName ?? "dm";
+            server.BakedWarpzoneCameras = BspWarpzoneViews.StaticCameras(bsp,
+                GameMapView.GametypeContext(bsp, advertisedGametype, embedded: true));
+        }
+        _serverWorld.JoinWelcomeInSignon = true;
+        _serverWorld.Commands.OpenCommandExport = UserPaths.OpenGameExport;
+        _serverWorld.StartHitPlots(name => UserPaths.Resolve($"{UserPaths.GameDirFolderName}/{name}"));
+        _serverWorld.StartWeaponStats(UserPaths.Resolve);
         // Client mods: this server's offer, built from the sv_mod_* cvars (planning/specs/modding.md, section
         // 9.6). TryCreate returns null - and nothing is attached - unless the operator set sv_mod_module or
         // sv_mod_packs, which is the default; such a server sends no mod frame at all. The cvars live on the
@@ -1297,32 +1340,26 @@ public sealed partial class NetGame : Node3D
         // operator just dropped into the gamedir is usable — the pack, then `gotomap <newmap>`, with no
         // restart. Wired outside the threaded/non-threaded split because it needs neither wrapper:
         // MenuState.RescanContent is safe to call from the sim thread (the VFS and asset caches are
-        // internally synchronized, and it posts the main-thread-only menu caches through CallDeferred).
+        // internally synchronized, and the menu image cache is invalidated through CallDeferred).
         cmd.ContentRescanHandler = Menu.MenuState.RescanContent;
 
-        // `lsmaps` — the real installed-map catalog, gametype-filtered, instead of the g_maplist words this
-        // seam could reach on its own (which are empty on a default config, so a server with 32 maps answered
-        // "Maps available (0):"). Same formatter the client console uses when no server is running, so the
-        // answer does not change shape depending on who is asking. Pure read over already-built VFS indexes,
-        // so it is safe on whichever thread the command was dispatched on.
-        cmd.Replies.MapCatalogReply = Menu.MapList.LsmapsReply;
+        // Resolve map commands and rotation against the host's mounted content and cvars.
+        GameWorld world = _serverWorld;
+        var localCatalog = new VortexArena.Formats.Bsp.MapInfoCatalog(_vfs);
+        VortexArena.Formats.Bsp.MapInfoCatalog Catalog() =>
+            ReferenceEquals(_vfs, Menu.MenuState.Vfs) ? Menu.MapInfoCache.Catalog : localCatalog;
 
-        // The rotation's own catalog seams (QC fexists / MapInfo_CheckMap / MapInfo_ListAllowedMaps). Nothing
-        // wired these before, so the server took every g_maplist word on faith and an empty g_maplist — the
-        // default — produced an EMPTY rotation instead of "cycle everything installed". Same reads as the
-        // lsmaps reply above: VFS index lookups and the parsed-.mapinfo cache, safe on either thread.
-        // AllowedMaps is what Base's Maplist_Init regenerates when the list is empty or unusable; it stays a
-        // list here and is never flattened into the cvar, which is what overflowed upstream (xonotic-data#3002).
-        _serverWorld.Rotation.MapExists = m => _vfs is null || _vfs.Exists($"maps/{m}.bsp");
-        _serverWorld.Rotation.MapSupportsGametype = m =>
-        {
-            string gt = _serverWorld?.GameType?.NetName ?? "";
-            if (string.IsNullOrEmpty(gt))
-                return true;
-            var info = Menu.MapInfoCache.Get(m);
-            return info.Gametypes.Count == 0 || info.Gametypes.Contains(gt);
-        };
-        _serverWorld.Rotation.AllowedMaps = () => Menu.MapList.ForGametype(_serverWorld?.GameType?.NetName ?? "");
+        IReadOnlyList<string> MapsForMode(string mode) =>
+            Catalog().ForGametype(Menu.MapList.Installed(_vfs), mode, world.Services.Cvars);
+
+        cmd.Replies.RecordMapCatalog = MapsForMode;
+        world.HasMapsForGametype = mode => MapsForMode(mode).Count > 0;
+        world.Rotation.MapExists = m => _vfs?.Exists($"maps/{m}.bsp") == true;
+        world.Rotation.MapSupportsGametype = m =>
+            Menu.MapInfoCache.Supports(Catalog().Get(m), world.CatalogGametype, world.Services.Cvars);
+        world.Rotation.CanListMap = m => Catalog().Get(m).CanList(world.Services.Cvars, inMenu: false);
+        world.Rotation.AvoidInRotation = m => Catalog().Get(m).AvoidInRotation(world.Services.Cvars);
+        world.Rotation.AllowedMaps = () => MapsForMode(world.CatalogGametype);
 
         // The map list file tier (QC common/maplist.qc MAPLIST_FILE): a selection too long for the cvar
         // lives here instead. In the user gamedir, beside the configs, so an admin can edit it by hand.
@@ -1331,19 +1368,19 @@ public sealed partial class NetGame : Node3D
         VortexArena.Server.MapListStore.FilePath =
             System.IO.Path.Combine(UserPaths.GameDir, VortexArena.Server.MapListStore.FileName);
 
-        // QC localcmd("\nsv_vote_gametype_hook_all\n") + localcmd("\nsv_vote_gametype_hook_", name, "\n") from
-        // GameTypeVote_SetGametype: fires on the sim thread (ApplyGametypeSwitch → DriveEndOfMatchMapFlow), so the
-        // handler runs synchronously on that thread — no RunOnSimThread wrapper needed on either path.
-        // These hooks are ALIASES (gametypes-server.cfg defines `sv_vote_gametype_hook_<name>` for every gametype,
-        // empty by default), NOT registered server commands — so they live in the ConfigInterpreter's alias table
-        // (GameWorld.LoadedConfig), not in Commands' verb dictionary. Routing through Commands.Execute would just
-        // print "Unknown command" and never run the alias body; we must dispatch through LoadedConfig.ExecuteLine,
-        // which resolves the alias (DP localcmd → engine console → alias expansion). Stock empty aliases are a
-        // no-op (matching Base); a server.cfg that redefines one (e.g. `alias sv_vote_gametype_hook_dm
-        // "g_maxplayers 8"`) now runs against the server's cvar store. LoadedConfig is null only on a bare
-        // unit-test world (no cfg load) — the `?.` then makes this a harmless no-op, same as no alias defined.
-        cmd.GameTypeVoteHookHandler = name =>
-            _serverWorld?.LoadedConfig?.ExecuteLine($"sv_vote_gametype_hook_{name}");
+        // Use the interpreter that owns the world's cvars. A private world keeps a startup snapshot of the
+        // operator's vote-hook aliases so the sim thread never reads the menu's mutable alias table.
+        var voteConfig = unifyStore ? Menu.MenuState.Interp : world.LoadedConfig;
+        if (!unifyStore && voteConfig is not null && Menu.MenuState.Interp is { } bootConfig)
+        {
+            foreach (var (name, body) in bootConfig.Aliases)
+                if (name.StartsWith("sv_vote_gametype_hook_", StringComparison.OrdinalIgnoreCase))
+                    voteConfig.DefineAlias(name, body);
+            voteConfig.RegisterCommand("maplist", args =>
+                VortexArena.Engine.Console.ConsoleCommands.EditMaplist(args, world.Services.Cvars,
+                    text => GD.Print(text), world.Rotation.MapExists, world.Rotation.MapSupportsGametype, Random.Shared));
+        }
+        cmd.GameTypeVoteHookHandler = name => voteConfig?.ExecuteLine($"sv_vote_gametype_hook_{name}");
 
         // QC localcmd("\nsv_hook_gameend\n") (NextLevel): the once-per-match end-of-match admin-script alias. Same
         // alias-resolution path as the gametype hooks above — dispatch through LoadedConfig.ExecuteLine so the
@@ -1401,6 +1438,7 @@ public sealed partial class NetGame : Node3D
             // on the main thread — hand it the SAME gate so that scan can't race the worker's spawn/relink. Stays
             // null on the non-threaded default path, so its scan remains lock-free.
             if (_musicPlayer is not null) _musicPlayer.SimGate = _simGate;
+            if (_bgmModels is not null) _bgmModels.SimGate = _simGate;
             // The trace service keeps shared mutable scratch and reads the live areagrid — MAIN-thread traces
             // (faithful-particle bounces, crosshair true-aim, projectile prediction; none run inside this
             // class's gated _Process span) raced the worker's sim ticks and corrupted both ends (the first
@@ -1625,6 +1663,7 @@ public sealed partial class NetGame : Node3D
         ITraceService trace = _serverWorld.Services.TraceImpl;
 
         // QC print_to(player, msg) → sprint(player, ..): one console line to the issuing player.
+        sandbox.LogInfo = msg => GD.Print(msg);
         sandbox.PrintTo = (e, msg) => { if (e is Player p) _server?.SendChatToPlayer(p, msg); };
 
         // QC .crypto_idfp / .netname / view yaw. PersistentId is the port's crypto_idfp (RaceRecords/SuperSpec
@@ -1639,7 +1678,7 @@ public sealed partial class NetGame : Node3D
         {
             var list = new List<Entity>();
             foreach (Player p in _serverWorld.Clients.Players)
-                if (!p.IsBot) list.Add(p);
+                if (!p.IsBot && !p.IsObserver) list.Add(p);
             return list;
         };
 
@@ -1660,6 +1699,8 @@ public sealed partial class NetGame : Node3D
         // makes object_spawn reject a model path that doesn't resolve in any mount, exactly like Base.
         if (_vfs is not null)
             sandbox.ModelExistsProvider = path => _vfs.Exists(path);
+        if (_assets is not null)
+            sandbox.ModelBoundsProvider = _assets.LoadSandboxModelBounds;
 
         // QC FOR_EACH_TAG(e) for `object_info mesh`: enumerate the object model's tag (bone) names from the
         // engine model-tag table (ModelService.ModelDef.Tags). Empty list when the model has no registered tags.
@@ -1773,9 +1814,21 @@ public sealed partial class NetGame : Node3D
             TraceResult tr = _trace.Trace(eye, NVec3.Zero, NVec3.Zero, end, MoveFilter.Normal, player);
             endpos = tr.EndPos;
             hit = null;
-            if (tr.Ent is not null)
-                foreach (var o in _sandbox.Objects)
-                    if (ReferenceEquals(o.Edict, tr.Ent)) { hit = o; break; }
+            float best = tr.Fraction;
+            foreach (var obj in _sandbox.Objects)
+            {
+                if (obj.Edict is not { IsFreed: false } body)
+                    continue;
+                if (ReferenceEquals(body, tr.Ent))
+                    hit ??= obj;
+                if (body.Solid != Solid.Trigger || obj.Alpha <= 0f
+                    || !WeaponFiring.TraceHitsBox(eye, end, body.Origin + body.Mins, body.Origin + body.Maxs,
+                        out float fraction) || fraction >= best)
+                    continue;
+                best = fraction;
+                endpos = NVec3.Lerp(eye, end, fraction);
+                hit = obj;
+            }
         }
     }
 
@@ -1859,8 +1912,23 @@ public sealed partial class NetGame : Node3D
         }
         _client = client;
         _client.LocalPlayerName = _playerName;
+        if (_sharedCvars is { } clientCvars)
+            _client.ReplicatedCvarSource = clientCvars.GetString;
         // Relay server console output (clc_stringcmd replies / notices) to the in-game console via the Shell.
         _client.PrintReceived += s => ConsolePrint?.Invoke(s);
+        if (!_dedicatedSlim)
+        {
+            var noticeLayer = new CanvasLayer { Name = "JoinNotices", Layer = 5 };
+            _joinNoticeOverlay = new JoinNoticeOverlay
+            {
+                Visible = false,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+                ServerTime = () => client.LatestServerTime,
+            };
+            AddChild(noticeLayer);
+            noticeLayer.AddChild(_joinNoticeOverlay);
+            _client.JoinNoticeReceived += notice => _pendingJoinNotice = new TimedJoinNotice(notice).WithClock(client.LatestServerTime);
+        }
         // On a listen server this client is the host's own: tell the server which identity that is, so a
         // required mod is never enforced against the operator (ServerNet.SetLocalClient has the reasons).
         _server?.SetLocalClient(_client.Identity.Fingerprint);
@@ -2112,6 +2180,7 @@ public sealed partial class NetGame : Node3D
             // (items/gibs/monsters/props) render their real model by name — MD3 via the frame-driven
             // ModelResolver, any other format (IQM/DPM) via the EntityModelFactory fallback.
             _render.PlayerModelResolver = ResolvePlayerModel;
+            _render.DamageModelSpecies = (model, skin) => _assets.LoadModelInfo(model, skin)?.Species;
             _render.ModelResolver = ResolveEntityModel;
             _render.EntityModelFactory = BuildEntityModel;
             // FORCEMODEL: resolve a forced player-model name+skin to a render node (the cl_forcemyplayermodel /
@@ -2142,6 +2211,7 @@ public sealed partial class NetGame : Node3D
             // dead. The GpuWarmPass below warms these models' pipelines, so the restored MD3s cost no mid-match
             // SURFACE compile. (EffectSystem.ModelLoader propagates to its Gibs/Casings, both live post-AddChild.)
             _render.Effects.ModelLoader = m => _assets.LoadModel(m);
+            _render.Effects.Gibs!.SkinnedModelLoader = _assets.LoadModel;
 
             // The cosmetic add-on layer (freezetag ice block / buff-carrier glow) reads its model files through
             // the same AssetLoader (cached): LoadMd3 for the .md3 morph path, LoadModel for IQM/DPM.
@@ -2192,17 +2262,28 @@ public sealed partial class NetGame : Node3D
         // broadcast effect/sound costs the dedicated host nothing beyond the packet decode.
         if (_client is not null && !_dedicatedSlim)
         {
-            _entityView = new ClientEntityView(_client, _render);
+            _entityView = new ClientEntityView(_client, _render)
+            {
+                LocalViewLocationAim = () => _viewAngles,
+            };
             // Third-person carried weapons: build each remote player's held weapon from the asset pipeline
             // (RC6) instead of the gray placeholder box — same v_ model the first-person viewmodel uses.
             _entityView.WeaponModelFactory = BuildWeaponWorldModel;
+            _entityView.LocalBgmModel = _bgmModels is { } bgmModels ? bgmModels.RendersAlias : null;
             AddChild(_entityView);
 
             // Surface decoded effects/sounds to the renderer as packets arrive: effects → particles, sounds →
             // spatial AudioStreamPlayer3D (DP SV_StartSound). Announcer voices are wired separately in
             // SetupCameraAndHud (they need a HUD host); other notification text still goes to the console.
             _client.EffectReceived += OnEffectReceived;
+            _client.FireballBlastReceived += OnFireballBlastReceived;
+            _client.AttachedDamageReceived += _render.OnAttachedDamage;
+            _render.DamageSpawnParity = id => _client.TryGetViewedState(id, out NetEntityState state)
+                && state.Alpha != 255 && (state.ModelIndex != 0 || !string.IsNullOrEmpty(state.Model))
+                ? (state.Flags & NetEntityFlags.SpawnParity) != 0 : null;
+            _client.OnslaughtDestructionChanged += OnOnslaughtDestructionChanged;
             _client.SoundReceived += OnSoundReceived;
+            _client.SoundPrecacheReceived += _render.PrecacheSound;
 
             // Looping positional sounds (Arc beam, vehicle engines) follow their emitter each frame: resolve a
             // net id → its live origin (the local player from prediction, remotes from their interpolated pose).
@@ -2265,9 +2346,13 @@ public sealed partial class NetGame : Node3D
         // The client draws the worldmodel it loaded locally (DP VF_DRAWWORLD=1 + renderscene(); the server ships
         // no geometry). Reuses the SAME BSP + gametype submodel filter the collision was built from — render and
         // collision MUST agree (GameDemo.cs:134/181). The map name resolves external lm_NNNN lightmaps.
+        IReadOnlySet<int>? scriptedSubmodels = SetupMapBgm(_bsp);
         using (LoadTimeline.Phase("map.build"))
-            _mapRoot = MapLoader.BuildMap(_bsp, _assets.Assets, _map, _droppedSubmodels);
+            _mapRoot = MapLoader.BuildMap(_bsp, _assets.Assets, _map, _droppedSubmodels, scriptedSubmodels,
+                includeEmbeddedMonitors: !_isListenServer);
         AddChild(_mapRoot);
+        if (_bgmModels is not null)
+            _mapRoot.AddChild(_bgmModels);
 
         // (§12.8) The render world's PVS so it DP-faithfully culls remote entities behind walls (r_pvs_cull_entities).
         // NOTE (O5): this is the map's THIRD BspPvs construction on a listen server — StartListenServer builds one
@@ -2313,6 +2398,67 @@ public sealed partial class NetGame : Node3D
         }
     }
 
+    private IReadOnlySet<int>? SetupMapBgm(VortexArena.Formats.Bsp.BspData bsp)
+    {
+        if (_serverWorld is null || _vfs is null || _assets is null)
+            return null;
+
+        string path = $"maps/{_map}.bgs";
+        if (!_vfs.Exists(path))
+            return null;
+
+        MapBgmScript script;
+        try
+        {
+            script = MapBgmScript.Parse(_vfs.ReadText(path));
+        }
+        catch (VortexArena.Formats.AssetParseException ex)
+        {
+            GD.PrintErr($"[MapBgm] {path}: {ex.Message}");
+            return null;
+        }
+
+        _render!.MapEmitters.SetBgmScript(script);
+        var submodels = new HashSet<int>();
+        int models = 0, emitters = 0;
+        foreach (Entity entity in _serverWorld.Services.EntityTable.All)
+        {
+            if (entity.IsFreed || script.Bind(entity.BgmScript) is not { } playback)
+                continue;
+            if (entity.ClassName is "func_pointparticles" or "func_sparks")
+            {
+                emitters++;
+                continue;
+            }
+            if (string.IsNullOrEmpty(entity.Model))
+                continue;
+
+            int netId = 0;
+            Node3D? mesh;
+            if (entity.Model[0] == '*')
+            {
+                if (!int.TryParse(entity.Model.AsSpan(1), out int submodel) || submodel <= 0 || submodel >= bsp.Models.Length
+                    || _droppedSubmodels?.Contains(submodel) == true || submodels.Contains(submodel))
+                    continue;
+                mesh = MapLoader.BuildInlineMapModel(bsp, _assets.Assets, _map, submodel);
+                if (mesh is not null) submodels.Add(submodel);
+            }
+            else
+            {
+                netId = _server?.NetIdForEntity(entity) ?? 0;
+                if (netId == 0) continue;
+                mesh = BuildEntityModel(entity);
+            }
+
+            if (mesh is null) continue;
+            _bgmModels ??= new MapBgmModels { Name = "MapBgmModels", Music = _musicPlayer, SimGate = _simGate };
+            _bgmModels.AddModel(entity, mesh, playback, netId);
+            models++;
+        }
+        GD.Print($"[MapBgm] '{path}': {models} model(s), {emitters} emitter(s) bound.");
+        return submodels;
+    }
+
     /// <summary>
     /// Read the map's cdtrack from its .mapinfo file (or worldspawn fallback) and instantiate the client-side
     /// <see cref="MusicPlayer"/> that drives background music for the match. The MusicPlayer evaluates the
@@ -2353,8 +2499,9 @@ public sealed partial class NetGame : Node3D
         {
             Name = "MusicPlayer",
             CdTrack = resolvedTrack,
+            PackTrackRemap = MusicPlayer.ReadPackTrackRemap(_vfs),
             AudioLoader = _assets is not null ? _assets.LoadSound : null,
-            BgmVolume = _sharedCvars?.GetFloat("bgmvolume") is float bv and > 0f ? bv : 0.7f,
+            BgmVolume = _sharedCvars?.GetFloat("bgmvolume") ?? 0.7f,
         };
 
         // On a listen server, give the music player direct access to the entity list so it can scan
@@ -2367,6 +2514,8 @@ public sealed partial class NetGame : Node3D
         }
 
         AddChild(_musicPlayer);
+        if (_render?.MapEmitters is { } emitters) emitters.Music = _musicPlayer;
+        if (_bgmModels is not null) _bgmModels.Music = _musicPlayer;
 
         if (!string.IsNullOrEmpty(resolvedTrack))
             GD.Print($"[NetGame] map music: '{resolvedTrack}' (from {(string.IsNullOrEmpty(cdTrack) ? "none" : "mapinfo/worldspawn")})");
@@ -2403,6 +2552,7 @@ public sealed partial class NetGame : Node3D
         SeedViewCvars();
 
         // The shared first-person view (T34 SEAM): the SAME zoom/FOV/death-cam component PlayerController drives.
+        _view.ClientCvars = _sharedCvars;
         _view.EyeHeight = EyeHeight;
         _view.BaseFov = 100f; // Xonotic `fov 100`; the `fov` cvar overrides it live (FirstPersonView reads it).
 
@@ -2478,16 +2628,7 @@ public sealed partial class NetGame : Node3D
         // standalone _scoreboard owns the networked scoreboard, so we don't double it up.
         _fullHud = new VortexArena.Game.Hud.Hud { Name = "FullHud", Layer = 4 };
         AddChild(_fullHud);
-        // The full HUD's skinned Crosshair + HealthArmor panels now render on the play path (goal 1). On a listen
-        // server (--host) UpdateFullHudPlayer feeds them the local server Player so they show the skinned art and
-        // suppresses NetHud's duplicate crosshair/health (NetHud.SuppressCrosshairAndHealth). On a pure --connect
-        // client (no local Player) UpdateFullHudPlayer hides the skinned Crosshair (it would otherwise draw a
-        // reticle even without a Player) and leaves NetHud un-suppressed as the fallback — so there's never a DOUBLE
-        // crosshair/health. HealthArmorPanel self-blanks with no Player (reads its resources), so it's left visible.
-        // Crosshair visibility is driven by UpdateFullHudPlayer (shown only when a local Player resolves). Start it
-        // HIDDEN so the pure-client baseline (no Player ever resolves → UpdateFullHudPlayer's null==null early-out
-        // never runs its body) leaves NetHud's crosshair as the sole reticle. The listen-server null→Player edge
-        // then shows it.
+        // The full HUD owns the normal reticle for both listen hosts and remote players.
         _fullHud.Crosshair.Visible = false;
         //
         // The full HUD's Timer panel IS now fed: the server pushes the global match clock (NetControl.MatchState →
@@ -2537,6 +2678,9 @@ public sealed partial class NetGame : Node3D
         if (_assets is not null && !_dedicatedSlim)
             _fullHud.Vehicle.AudioLoader = _assets.LoadSound;
 
+        if (_assets is not null && _fullHud.GetPanel<StrafeHudPanel>() is { } strafeHud)
+            strafeHud.SonarAssets = _assets;
+
         // The lightweight crosshair + health/armor readout + radar + networked scoreboard, on a layer ABOVE the
         // full HUD so the crosshair sits on top.
         var hudLayer = new CanvasLayer { Name = "Hud", Layer = 5 };
@@ -2545,7 +2689,7 @@ public sealed partial class NetGame : Node3D
         // The crosshair + health/armor readout. Kept because it needs no local Player (it reads the networked
         // ClientNet stats directly), so the crosshair + health show even on a pure --connect client where the full
         // HUD's player-bound panels have no actor.
-        _hud = new NetHud { Name = "NetHud", Net = _client };
+        _hud = new NetHud { Name = "NetHud", Net = _client, ViewLocationCrosshair = _fullHud.Crosshair };
         _hud.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         hudLayer.AddChild(_hud);
 
@@ -2605,13 +2749,7 @@ public sealed partial class NetGame : Node3D
             _client.PrintReceived += OnServerPrintForChat;
         }
 
-        // QuickMenu (QC HUD panel #QUICKMENU): point its command sink at the shared interpreter (RunCommand, wired
-        // by Shell) — the analogue of QC localcmd, the SAME single channel a bound key uses (RunBoundCommand). A
-        // picked toggle row (`toggle cl_hitsound`) hits the shared cvar store; a say/say_team/vcall row is forwarded
-        // to the server by the interpreter's own forward path, exactly like typing it in the console. The panel is
-        // toggled by the `quickmenu` bind (intercepted in RunBoundCommand → Toggle()); it self-blanks until opened.
-        // It grabs keyboard focus on open so the 1-9/0/Esc number-key navigation works; mouse-click navigation
-        // needs the cursor made visible (the gameplay path keeps it captured) — see the report's goal-8 note.
+        // A QuickMenu selection uses the same console interpreter as a bound command.
         if (_fullHud.GetPanel<VortexArena.Game.Hud.QuickMenuPanel>() is { } quick)
             quick.CommandSink = line => RunCommand?.Invoke(line);
 
@@ -2622,23 +2760,11 @@ public sealed partial class NetGame : Node3D
             Size = new Vector2(256, 256),
             Position = new Vector2(24, 24),
         };
-        // Maximized-radar wiring (QC HUD_Radar / +hud_panel_radar_maximized): the click-to-spawn channel is the same
-        // clc_stringcmd path a console command takes — emit `cmd ons_spawn <x> <y> <z>` (Onslaught.HandleOnsSpawnCommand
-        // parses argv 1..3 as world x/y/z). IsOnslaught gates the clickable spawn-point picking to Onslaught; it tracks
-        // the SAME gametype string the HUD/scoreboard read (the networked ScoreInfo block sets GameScores.Gametype,
-        // "ons" for Onslaught). Refreshed per-frame in _Process so a mid-match gametype change re-gates it.
-        _radar.SendServerCommand = line => _client.SendStringCommand(line);
-        _radar.IsOnslaught = VortexArena.Common.Gameplay.Scoring.GameScores.Gametype == "ons";
-        // Feed the real minimap: the map name (resolves gfx/<map>_mini.jpg inside the map pk3 via the VFS) + the
-        // map's world XY bounds (QC mi_min/mi_max = the BSP worldspawn model mins/maxs) so the image + blips align.
-        _radar.MapName = _map;
-        if (_bsp is { Models.Length: > 0 })
-        {
-            System.Numerics.Vector3 mins = _bsp.Models[0].Mins, maxs = _bsp.Models[0].Maxs;
-            _radar.MapMinXY = new Vector2(mins.X, mins.Y);
-            _radar.MapMaxXY = new Vector2(maxs.X, maxs.Y);
-        }
+        ConfigureRadarMap(_radar, _bsp);
         hudLayer.AddChild(_radar);
+        _fullHud.ConfigEditor.HandleGameplayHudCommand = HandleGameplayHudCommand;
+        _client.OnslaughtRadarRequested += ToggleClickRadar;
+        ConsoleState.Opened += ReleaseRadarBind;
 
         // 3D in-world waypoint sprites (QC Draw_WaypointSprite): floating objective/ping markers projected through
         // the first-person camera, on their OWN layer BELOW the HUD panels (Layer 3 < the HUD's 4/5) so the
@@ -2657,11 +2783,11 @@ public sealed partial class NetGame : Node3D
         if (_client is not null)
             _waypointLayer.Source = () => _client.Waypoints;
         waypointLayer.AddChild(_waypointLayer);
+        AttachLocalDebugLabels(waypointLayer);
 
         // Warpzone PORTAL render (the C# stand-in for DP's engine r_water portal pass): turn the warpzone "window"
-        // meshes MapLoader extracted into live SubViewport renders of the linked exit. Listen-host only (reads the
-        // shared WarpzoneTrace.AmbientManager zone transforms); a pure remote client / a map with no warpzones / a
-        // surface that matches no zone all fall back to the dark-mirror placeholder. Gated by cl_portal_render.
+        // meshes MapLoader extracted into live SubViewport renders of the linked exit. A listen host uses
+        // its shared warpzone manager. Remote clients set up the renderer when their mounted map loads.
         if (_mapRoot is not null)
         {
             _portalRenderer = new VortexArena.Game.Client.PortalRenderer { Name = "PortalRenderer" };
@@ -2725,6 +2851,13 @@ public sealed partial class NetGame : Node3D
         // and marks both edges handled) — claim it from there so TAB+Escape can open the UI and Escape close it.
         VortexArena.Game.Menu.MenuCommand.ScoreboardEscape = () =>
             _scoreboard is not null && GodotObject.IsInstanceValid(_scoreboard) && _scoreboard.HandleEscape();
+        ulong scoreboardId = _scoreboard.GetInstanceId();
+        VortexArena.Game.Menu.MenuCommand.ApplyScoreboardColumns = spec =>
+        {
+            if (GodotObject.InstanceFromId(scoreboardId) is VortexArena.Game.Hud.ScoreboardPanel panel
+                && panel.IsInsideTree())
+                panel.ApplyColumnSpec(spec);
+        };
         LayoutScoreboard();
 
         // Screen-effects layer (damage red-flash + liquid tint) — the SAME reusable ViewEffects node T4 built for
@@ -2743,7 +2876,11 @@ public sealed partial class NetGame : Node3D
         _orbRenderer = new VortexArena.Game.Client.NadeOrbRenderer { Name = "NadeOrbRenderer" };
         AddChild(_orbRenderer);
         if (_assets is not null)
-            _orbRenderer.ModelFactory = m => _assets.LoadModel(m);
+        {
+            _orbRenderer.ModelFactory = m => _assets.LoadModel(m, skinIndex: 1);
+            _orbRenderer.TextureFactory = _assets.LoadTexture;
+        }
+        _orbRenderer.ServerTime = () => _client?.LatestServerTime ?? 0f;
         if (_render is not null)
             _render.NadeOrbs = _orbRenderer;
 
@@ -4012,7 +4149,8 @@ public sealed partial class NetGame : Node3D
     {
         if (_assets is null || string.IsNullOrEmpty(e.Model) || e.Model.StartsWith('*'))
             return null;
-        return _assets.LoadMd3(e.Model);
+        // The skin-aware asset builder resolves the relic's additive autosprite, which needs quad geometry.
+        return CosmeticModelLayer.IsBuffRelic(e.Model) ? null : _assets.LoadMd3(e.Model);
     }
 
     /// <summary>
@@ -4025,7 +4163,7 @@ public sealed partial class NetGame : Node3D
     {
         if (_assets is null || string.IsNullOrEmpty(e.Model) || e.Model.StartsWith('*'))
             return null;
-        return _assets.LoadModel(e.Model);
+        return _assets.LoadModel(e.Model, CosmeticModelLayer.IsBuffRelic(e.Model) ? (int)e.Skin : 0);
     }
 
     /// <summary>
@@ -4061,11 +4199,19 @@ public sealed partial class NetGame : Node3D
 
     public override void _ExitTree()
     {
+        ConsoleState.Opened -= ReleaseRadarBind;
         Vmap.EditorLightBake.Cancel();   // never tear the scene down with rays still in flight
         Shutdown();
     }
 
+    public override void _Notification(int what)
+    {
+        if (what == NotificationPaused || what == NotificationApplicationFocusOut || what == NotificationWMWindowFocusOut)
+            ReleaseRadarBind();
+    }
+
     private bool _shutDown;
+    private RaceRecordFile? _raceRecordFile;
 
     // #19 auto-pause: the `slowmo` value captured while the solo-local pause holds slowmo at 0. Null = not held.
     private string? _localPauseSlowmo;
@@ -4105,6 +4251,8 @@ public sealed partial class NetGame : Node3D
         if (_shutDown)
             return;
         _shutDown = true;
+        if (_worldEnv is not null)
+            Client.SceneLightingSettings.Detach(_worldEnv);
 
         // Free the detached per-weapon equip nodes (the installed one dies with the ViewModel tree).
         FreeViewEquipCache();
@@ -4144,7 +4292,12 @@ public sealed partial class NetGame : Node3D
         if (_client is not null)
         {
             _client.EffectReceived -= OnEffectReceived;
+            _client.FireballBlastReceived -= OnFireballBlastReceived;
+            _client.AttachedDamageReceived -= _render.OnAttachedDamage;
+            _client.OnslaughtDestructionChanged -= OnOnslaughtDestructionChanged;
+            _client.OnslaughtRadarRequested -= ToggleClickRadar;
             _client.SoundReceived -= OnSoundReceived;
+            _client.SoundPrecacheReceived -= _render.PrecacheSound;
             _client.NotificationReceived -= OnNotificationReceived;
             _client.MinigameStateReceived -= OnMinigameStateReceived;
             _client.PrintReceived -= OnServerPrintForMinigame;
@@ -4177,11 +4330,15 @@ public sealed partial class NetGame : Node3D
             _server.SimGate = null;
         if (_musicPlayer is not null && Godot.GodotObject.IsInstanceValid(_musicPlayer))
             _musicPlayer.SimGate = null;   // gate released; music scan reverts to lock-free
+        if (_bgmModels is not null) _bgmModels.SimGate = null;
         if (_serverWorld is not null)
         {
             // Detach the world's cvar hook BEFORE dropping the world. Critical on the unified path, where that hook
             // lives on the SHARED store which OUTLIVES this match (the next map builds a fresh world on it): leave
             // it attached and every retired world would keep re-deriving weapon balance on every future cvar change.
+            _raceRecordFile?.Close(_serverWorld.Cheats.CheatCountTotal != 0);
+            _raceRecordFile = null;
+            RaceRecords.Clear();
             _serverWorld.Shutdown();
             _serverWorld.Services.TraceImpl.ConcurrencyGate = null;   // traces revert to lock-free
             _serverWorld.Simulation.TickGate = null;                  // per-tick gating off with the worker gone
@@ -4254,6 +4411,7 @@ public sealed partial class NetGame : Node3D
             || name.Equals("net_input_trace", StringComparison.OrdinalIgnoreCase)
             || name.Equals("cl_movement_hitch_hold", StringComparison.OrdinalIgnoreCase)
             || name.Equals("cl_netimmediatebuttons", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("cl_nolerp", StringComparison.OrdinalIgnoreCase)
             // the DP mouse family: m_filter + the whole m_accelerate_* set, and the pitch clamp pair
             || name.StartsWith("m_", StringComparison.OrdinalIgnoreCase)
             || name.StartsWith("in_pitch_", StringComparison.OrdinalIgnoreCase))
@@ -4298,7 +4456,7 @@ public sealed partial class NetGame : Node3D
         _frameGovernorCv = (_sharedCvars?.GetString("cl_frame_governor") ?? "0") == "1"; // default OFF (r16: a workaround, not the fix — the variance program is)
         // DP cl_movement (default 1 = client prediction) / cl_nolerp (default 0 = interpolate) — r16 A/B.
         _clMovementCv = (_sharedCvars?.GetString("cl_movement") ?? "") != "0";
-        _noLerpCv = (_sharedCvars?.GetString("cl_nolerp") ?? "") == "1";
+        _noLerpCv = CvOr("cl_nolerp", 0f) > 0f;
         // cl_netimmediatebuttons defaults ON (unset → on): treat anything but "0" as enabled.
         _immediateButtonsCv = (_sharedCvars?.GetString("cl_netimmediatebuttons") ?? "") != "0";
         // The DP mouse pipeline params (cl_input.c:401-412 registration defaults for anything unset).
@@ -4471,7 +4629,10 @@ public sealed partial class NetGame : Node3D
         // no HUD, so it stops here. This is also where the per-frame CPU saving lands: the server half above
         // (transport pump + sim tick + snapshot encode) is all a dedicated process needs to do.
         if (_dedicatedNoClient)
+        {
+            DispatchPendingMapChange();
             return;
+        }
 
         // (perf 2026-08-03) Adaptive quality: measure the REAL frame interval and publish the scalar the
         // CPU-heavy subsystems scale their work by (see AdaptiveQuality — off unless cl_minfps is set).
@@ -4503,13 +4664,13 @@ public sealed partial class NetGame : Node3D
         UpdateIntermissionAutoscreenshot();
 
         // Feed the music player the current server time so trigger_music touch freshness works.
-        if (_musicPlayer is not null && _serverWorld is not null)
+        if (_musicPlayer is not null)
         {
-            _musicPlayer.ServerTime = _serverWorld.Time;
+            if (_serverWorld is not null) _musicPlayer.ServerTime = _serverWorld.Time;
             // Keep bgmvolume in sync (cached; the Changed hook refreshes it on a menu/console set). Only the
             // no-shared-store path still reads the server store live (rare: bare CLI host).
-            float bgm = _sharedCvars is not null ? _bgmVolumeCv : _serverWorld.Services.Cvars.GetFloat("bgmvolume");
-            if (bgm > 0f) _musicPlayer.BgmVolume = bgm;
+            _musicPlayer.BgmVolume = _sharedCvars is not null ? _bgmVolumeCv
+                : _serverWorld?.Services.Cvars.GetFloat("bgmvolume") ?? _musicPlayer.BgmVolume;
         }
 
         // [T51] HUD feeds produced by the server-side mutators (host path only — a pure remote client has no
@@ -4633,6 +4794,11 @@ public sealed partial class NetGame : Node3D
         using (VortexArena.Game.Client.FrameProfiler.Scope("ng.poll"))
             _client.Poll();
 
+        if (!_connectFailed && OnConnectionFailed is not null)
+            CheckConnectionFailure();
+        if (_connectFailed)
+            return; // Shell may already have torn down this match. Do not dispatch pending UI.
+
         // Advance the render clock: free-run by this frame's elapsed time with a BOUNDED RATE SLEW toward
         // server time (r16 rubberband fix). The previous design free-ran then corrected 20% of the error
         // as a STEP on each fresh snapshot — every step jolted the interpolation sampling clock, visibly
@@ -4713,6 +4879,9 @@ public sealed partial class NetGame : Node3D
                 if (!_isListenServer)
                     LoadClientMapFromServer(_client.ServerMapName, _client.ServerGametype);
             }
+
+            ApplyServerMapVisualSuggestions();
+            ApplyServerMapFog();
 
             // [#44] The listen host's "Create Game and play" join — Base's `early_join_requested` arm of the
             // PlayerPreThink autojoin (client.qc:2715): the host explicitly ASKED to start a match, so its own
@@ -4848,13 +5017,14 @@ public sealed partial class NetGame : Node3D
             }
 
 
-            // F03 (re)spawn view snap (QC PutPlayerInServer: self.fixangle = true; self.angles = spot.angles). The
-            // server latches the spawn-spot facing in the host Player's FixAngle/FixAngleAngles channel (the same
-            // QC .fixangle reused for teleporters). The client owns its view angles, so snap _viewAngles to the
-            // latched facing here — BEFORE the input loop below samples/sends the view — then clear (one-shot). A
-            // listen server reads it in-process; a pure client would need it networked (follow-up). This also
-            // snaps the view out of any server-side (multi-destination) teleport that set the host Player's flag.
+            // Apply the forced facing before the next input sample can send an old view back to the server.
+            NVec3? fixAngle = _client.ConsumeFixAngle();
             if (LocalServerPlayer is { FixAngle: true } fixSelf)
+            {
+                fixAngle = fixSelf.FixAngleAngles;
+                fixSelf.FixAngle = false;
+            }
+            if (fixAngle is { } fa)
             {
                 // Warpzone/teleporter crossings are usually snapped FIRST by the predictor
                 // (ConsumePredictedFixAngle) — the server's stamp for the SAME crossing lands here 1-3 frames
@@ -4864,7 +5034,6 @@ public sealed partial class NetGame : Node3D
                 // the predictor never saw, still apply. Base sidesteps this by NOT using fixangle for player
                 // warpzone crossings at all (server.qc:150-170 networks the transform; the client rotates its
                 // own view ONCE) — this is the listen-host equivalent of that single-apply.
-                NVec3 fa = fixSelf.FixAngleAngles;
                 // The AUTHORITATIVE stamp drives warpzone view snaps (the predicted apply is disabled on the
                 // listen host — see the wz_predict_apply block above). Skip only when a predicted path (the
                 // teleporter snap) already applied this same facing recently — the round-3 known-good rule.
@@ -4886,7 +5055,6 @@ public sealed partial class NetGame : Node3D
                 }
                 if (MenuState.Cvars.GetFloat("sv_warpzone_trace") != 0f)
                     GD.Print($"[wzview] authoritative {(predictedSame ? "skip (predicted already applied)" : "snap")} -> {fa}");
-                fixSelf.FixAngle = false;
             }
 
             // Local fire feedback runs EVERY render frame (before the input drain below), so the muzzle flash,
@@ -4985,6 +5153,10 @@ public sealed partial class NetGame : Node3D
         // would leave the loading screen up forever. A ready camera is the real readiness signal there, the
         // same reasoning as the fixed observer camera beside it.
         bool clientSpawned = _cameraReady && (_client.Health > 0 || ObserverCamera.Active || IsEditorGametype);
+        // A remote player may be a spectator until they use Welcome's Join button. Once the owner camera
+        // and match state are ready, the loading curtain must let them reach that button.
+        bool welcomeReady = _cameraReady && _client.Accepted && _client.HasMatchState
+            && _client.PendingWelcomeDetails is not null;
 
         // Capture readiness: a windowed --screenshot waits on this so it lands on the spawned world, not the
         // loading screen or a from-origin pre-spawn frame (CaptureGate). One-shot at first spawn, independent of
@@ -4995,22 +5167,14 @@ public sealed partial class NetGame : Node3D
             CaptureGate.MarkReady();
         }
 
-        // Connection-failure watchdog (interactive path only): a reject, a dropped link, or a timeout with no
-        // accept/first-snapshot hands control back to Shell (menu + reason) instead of leaving the loading screen
-        // up forever. Runs before the stage block so a failure short-circuits the "still connecting" animation.
-        if (!clientSpawned && OnConnectionFailed is not null && !_connectFailed)
-            CheckConnectionFailure();
-
         // Loading screen progress during the async handshake + spawn phase (DP's progress bar filling up
         // while connecting/joining). The loading screen is owned by Shell; we BeginStage on each transition
         // (NOT every frame — that would reset the asymptote and stall the bar) and dismiss it via
         // DismissLoadingScreen when the player spawns. Final dismiss uses UpdateProgress to snap to 1.
-        // Skipped once a failure has latched: Shell is tearing this match (and the loading layer) down, so we
-        // must not keep animating the screen it's about to free.
-        if (!_connectFailed && (LoadingScreen is not null || _fallbackOverlay is not null))
+        if (LoadingScreen is not null || _fallbackOverlay is not null)
         {
             HandshakeStage stage =
-                clientSpawned          ? HandshakeStage.Spawned
+                clientSpawned || welcomeReady ? HandshakeStage.Spawned
                 : !_client.Accepted    ? HandshakeStage.Connecting
                 : !_cameraReady        ? HandshakeStage.WaitingForServer
                 : HandshakeStage.Joining;
@@ -5040,6 +5204,45 @@ public sealed partial class NetGame : Node3D
                         _fallbackOverlay = null;
                         break;
                 }
+            }
+        }
+
+        if (welcomeReady && LoadingScreen is null && _fallbackOverlay is null)
+        {
+            string details = _client.PendingWelcomeDetails!;
+            _client.PendingWelcomeDetails = null;
+            if (OnMatchWelcome is { } present)
+            {
+                var map = Menu.MapInfoCache.Get(_client.ServerMapName);
+                string mapName = string.IsNullOrEmpty(map.Title) ? _client.ServerMapName : map.Title;
+                string mode = GameTypes.ByName(_client.ServerGametype)?.DisplayName ?? _client.ServerGametype;
+                string body = $"{Menu.Localization.Tr("Gametype:")} ^1{mode}^7\n\n{Menu.Localization.Tr("Map:")} ^2{mapName}^7";
+                if (!string.IsNullOrWhiteSpace(map.Author))
+                    body += $"\n{map.Author}";
+                if (details.Length != 0)
+                    body += "\n\n" + details;
+                bool show = !_isHeadless && !ObserverCamera.Active && !BenchSpectateActive
+                    && !IsEditorGametype && !_client.MatchIntermission
+                    && (_sharedCvars is not { } cvars || !cvars.Has("cl_welcome") || cvars.GetFloat("cl_welcome") != 0);
+                present(new(_client.ServerName, body), show);
+            }
+        }
+
+        if (!_client.Accepted)
+        {
+            _pendingJoinNotice = null;
+            _joinNoticeOverlay?.ClearNotice();
+        }
+        else if (_pendingJoinNotice is { } pending)
+        {
+            // A reliable notice can precede the first accepted snapshot. Start it at the first known clock.
+            _pendingJoinNotice = pending = pending.WithClock(_client.LatestServerTime);
+            if (pending.RemainingSeconds(_client.LatestServerTime) == 0)
+                _pendingJoinNotice = null;
+            else if (pending.ExpiresAt is not null && _cameraReady && LoadingScreen is null && _fallbackOverlay is null)
+            {
+                _pendingJoinNotice = null;
+                _joinNoticeOverlay?.ShowNotice(pending);
             }
         }
 
@@ -5075,7 +5278,7 @@ public sealed partial class NetGame : Node3D
         // An observer is never in third person: chase_active is a PLAYER preference, and while free-flying the
         // camera IS the viewpoint. Without this, returning from PLAYTEST to EDIT left the mapper looking at
         // their own back.
-        _view.CameraMode = !IsLocalObserving && CvarOr(Api.Cvars, "chase_active", 0f) != 0f
+        _view.CameraMode = !IsLocalObserving && CvarOr(ClientViewCvars, "chase_active", 0f) != 0f
             ? Client.FirstPersonView.ChaseMode.Chase
             : Client.FirstPersonView.ChaseMode.None;
 
@@ -5104,16 +5307,18 @@ public sealed partial class NetGame : Node3D
                 UpdateCamera(dt);
         }
 
+        UpdateLocalDebugLabels(_renderClock, slowmo > 0f);
+
         // Camera-trace capture (apparatus A2): once spawned, record the rendered camera origin + predicted state
         // per frame; finish + quit when the scripted input is exhausted. Inert unless --camera-trace was passed.
-        if (CameraTrace.Active && _cameraReady && _carrier is not null && _client is not null)
+        if (CameraTrace.Active && _cameraReady && _carrier is not null && _client is { Health: > 0 } && !IsLocalObserving)
         {
             CameraTrace.RecordFrame(
                 time: _renderClock, dt: dt,
                 physicsOrigin: _client.PredictedOrigin,
                 viewOriginGodot: _camera.GlobalPosition,
                 velocity: _client.PredictedVelocity,
-                onGround: _carrier.OnGround,
+                onGround: _client.PredictedOnGround,
                 viewOfsZ: _carrier.ViewOfs.Z,
                 reconcileError: _client.LastReconcileError);
             if (CameraTrace.Done)
@@ -5142,7 +5347,6 @@ public sealed partial class NetGame : Node3D
         {
             UpdateHudMirror();
             UpdateFullHudPlayer();
-            UpdateCrosshairGate();
             UpdateInfoMessages();
         }
 
@@ -5161,6 +5365,9 @@ public sealed partial class NetGame : Node3D
         // contents. Gated on Accepted so the pre-spawn default (health 0) doesn't read as death.
         if (_viewEffects is not null && _client is { Accepted: true })
         {
+            if (_cameraReady && _client.HasClientInit)
+                _viewEffects.UpdateNightVision(_renderClock, dt * slowmo, _client.ServerFlags);
+
             int health = _client.Health;
             if (_prevHealth >= 0 && health < _prevHealth)
                 _viewEffects.ReportDamage(_prevHealth - health);
@@ -5173,16 +5380,13 @@ public sealed partial class NetGame : Node3D
             // observing/spectating: mirror QC's spectatee_status guard so health 0 here doesn't ramp the death
             // fade onto the screen. _everAlive flips true on the first spawn (line ~1212), so a genuine in-match
             // death (health<=0 after spawning) still shows the death fade. Matches the IsDead gate used below.
-            _viewEffects.UpdateEffects(dt, health, SampleEyeContents(), observing);
+            bool isFrozen = !observing && IsLocalFrozen();
+            _viewEffects.UpdateEffects(dt, health, SampleEyeContents(), observing, suppressDamage: isFrozen);
 
             // Freeze-Tag icy full-screen overlay (QC cl_freezetag.qc HUD_Draw_overlay): tint the screen blue while
-            // the local player is frozen, fading out as the thaw ring fills. Driven off the host-side local Player's
-            // Frozen status effect + the mirrored revive progress (the same source as the crosshair thaw ring); a
-            // pure remote client (no LocalServerPlayer) shows no overlay (frozen reads false).
-            Player? localFrozen = LocalServerPlayer;
-            bool isFrozen = localFrozen is { } lf && StatusEffectsCatalog.Frozen is { } frozenDef
-                && StatusEffectsCatalog.Has(lf, frozenDef);
-            _viewEffects.UpdateFrozenOverlay(isFrozen, localFrozen?.ReviveProgress ?? 0f);
+            // the local player is frozen, fading out as the thaw ring fills.
+            _viewEffects.UpdateFrozenOverlay(isFrozen,
+                LocalServerPlayer?.ReviveProgress ?? _client.LocalState?.ReviveProgress ?? 0f);
 
             // Darkness-nade blind overlay (QC nade/darkness.qc → STAT(NADE_DARKNESS_TIME) → the CSQC full-screen
             // fade). The stat is the ABSOLUTE server time the blind expires; the client renders the remaining
@@ -5215,9 +5419,10 @@ public sealed partial class NetGame : Node3D
         {
             _radar.LocalYawDegrees = _viewAngles.Y;
             _radar.ZoomFraction = _view.ZoomFraction;
-            // Keep the Onslaught gate live so the maximized radar's click-to-spawn only arms in Onslaught — the same
-            // networked gametype string the HUD/scoreboard read (ScoreInfo block → GameScores.Gametype, "ons" = ONS).
-            _radar.IsOnslaught = VortexArena.Common.Gameplay.Scoring.GameScores.Gametype == "ons";
+            _radar.CenterOrigin = _view.RenderedEyeQuake;
+            if (_radar.MouseMode && (_client.MatchIntermission || _scoreboard is { UiMode: not 0 }))
+                _radar.SetMaximized(false);
+            _radar.TemporarilyHidden = _radar.MouseMode && _client.Health <= 0 && BindTable.ShowScores;
         }
 
         // [T68] Shownames overlay (QC Draw_ShowNames_All): feed the per-frame view context — the local client's
@@ -5252,6 +5457,13 @@ public sealed partial class NetGame : Node3D
         using (VortexArena.Game.Client.FrameProfiler.Scope("ng.hud"))
         {
             UpdateScoreboard();
+            if (_hud is not null)
+                _hud.ViewLocationCursor = _client is { Health: > 0, MatchIntermission: false, IsObserving: false,
+                    SpectatingNetId: 0, ActiveViewLocation: { FreeAim: true } }
+                    && !LocalDeadNow() && _scoreboard?.Active != true && !_fullHud.MinigameMenu.IsOpen
+                    && !_fullHud.Vehicle.InVehicle && !ObserverCamera.Active && CvarOr(ClientViewCvars, "cl_lockview", 0f) == 0f
+                    ? _viewLocationCursor : null;
+            UpdateCrosshairGate();
             UpdateScore();
             UpdateMatchClock();
             UpdatePickupFeed();
@@ -5259,6 +5471,10 @@ public sealed partial class NetGame : Node3D
             UpdateAccuracy();
             UpdateVotePanel();
             UpdateMapVotePanel();
+            if (QuickMenuBlocked && _fullHud?.GetPanel<QuickMenuPanel>() is { IsOpen: true } openMenu)
+                openMenu.Close();
+            if (_radar is not null)
+                _radar.Visible = _fullHud?.MapVote.Visible != true;
             UpdateRacePanels();
             UpdateHudDynamicFollow();
         }
@@ -5282,29 +5498,31 @@ public sealed partial class NetGame : Node3D
         // A changelevel was requested this frame (map / gotomap / nextmap / rotation / vote / samelevel): emit it
         // DEFERRED so the actual teardown+reboot (Shell) runs at idle, never inside this server tick. Capture the
         // live gametype + bot fill so the new map comes up in the same mode with the same bots (DP changelevel).
-        if (_pendingMap is not null)
-        {
-            string map = _pendingMap;
-            _pendingMap = null;
-            string gametype = _pendingGametype ?? CurrentGametype();
-            _pendingGametype = null;
-            int bots = _serverWorld?.Clients.BotCount ?? _botCount;
-            int skill = _botSkill;
-            // Campaign auto-advance (win → next level): the world store carries g_campaign + the NEXT
-            // _campaign_index (Campaign.Setup set them just before this transition). Pass them so the rebooted
-            // listen server stays in campaign mode at the next level. Empty for a normal map/gotomap change.
-            string campId = "";
-            int campIdx = 0;
-            if (_serverWorld is not null && _serverWorld.Services.Cvars.GetFloat("g_campaign") != 0f)
-            {
-                campId = _serverWorld.Services.Cvars.GetString("_campaign_name");
-                campIdx = (int)_serverWorld.Services.Cvars.GetFloat("_campaign_index");
-            }
-            Callable.From(() => MapChangeRequested?.Invoke(map, gametype, bots, skill, campId, campIdx)).CallDeferred();
-        }
+        DispatchPendingMapChange();
         // r16 rubberband diagnostic — last so it records this frame's FINAL camera/prediction state.
         MotionTrace(dt, rawDt, slew);
 
+    }
+
+    private void DispatchPendingMapChange()
+    {
+        if (_pendingMap is not { } map)
+            return;
+        _pendingMap = null;
+        string gametype = _pendingGametype ?? CurrentGametype();
+        _pendingGametype = null;
+        int bots = _serverWorld is { } world && !world.HasMapTempSetting("bot_number")
+            ? world.Clients.BotCount : _botCount;
+        int skill = _botSkill;
+        // The campaign has already set the next level's index when it requests a change.
+        string campId = "";
+        int campIdx = 0;
+        if (_serverWorld is not null && _serverWorld.Services.Cvars.GetFloat("g_campaign") != 0f)
+        {
+            campId = _serverWorld.Services.Cvars.GetString("_campaign_name");
+            campIdx = (int)_serverWorld.Services.Cvars.GetFloat("_campaign_index");
+        }
+        Callable.From(() => MapChangeRequested?.Invoke(map, gametype, bots, skill, campId, campIdx)).CallDeferred();
     }
 
     // ---- cl_frame_governor (r16): adaptive frame pacing — "reliable frame time while the rate varies" ---
@@ -5976,7 +6194,7 @@ public sealed partial class NetGame : Node3D
                 "spiderbot" => VortexArena.Game.Hud.VehicleHud.VehicleHudKind.Spiderbot,
                 "bumblebee" => VortexArena.Game.Hud.VehicleHud.VehicleHudKind.Bumblebee,
                 _           => VortexArena.Game.Hud.VehicleHud.VehicleHudKind.Racer,
-            });
+            }, veh);
 
         // Mirror the pilot/gunner-side 0..100 percentages to the panel's [0,1] (QC 0.01 * STAT(VEHICLESTAT_*)).
         hud.Health = Godot.Mathf.Clamp(p.VehicleHealth * 0.01f, 0f, 1f);
@@ -5996,29 +6214,26 @@ public sealed partial class NetGame : Node3D
             // GUNNER aux crosshairs (QC bumblebee_gunner_frame UpdateAuxiliaryXhair): the magenta '1 0 1' LEAD
             // marker (aux slot 1) at the predicted impact, and the reload-colored READY marker (aux slot 0) at
             // the cannon's straight hit. The gun slot carries the live world points the per-frame controller wrote.
-            // QC bumblebee vr_setup: aux slot 1 = vCROSS_BURST (gunner), slot 0 = vCROSS_LOCK (raygun-locked, reused
-            // here for the gunner's own straight-fire READY marker). Magenta '1 0 1' lead + reload-colored ready.
+            // cl_vehicles.qc assigns vCROSS_BURST to both gunner slots.
             if (veh.VehGunnerLeadValid)
                 hud.SetAuxiliaryXhair(1, Coords.ToGodot(veh.VehGunnerLeadPoint), new Godot.Color(1f, 0f, 1f),
                     "gfx/vehicles/crosshair_burst");
-            else
-                hud.ClearAuxiliaryXhair(1);
             if (veh.VehGunnerHitValid)
                 hud.SetAuxiliaryXhair(0, Coords.ToGodot(veh.VehGunnerHitPoint), ReloadColor(p.VehicleReload1),
-                    "gfx/vehicles/crosshair_lock");
-            else
-                hud.ClearAuxiliaryXhair(0);
+                    "gfx/vehicles/crosshair_burst");
             return;
         }
 
         // Auxiliary lock-on crosshair (AuxiliaryXhair): the homing-lock target the vehicle is building/holding,
-        // projected from its Quake-space origin into Godot and tinted red→yellow→green by VehLockStrength.
+        // projected from its Quake-space origin. The Bumblebee's raygun uses its own fixed green tint.
         if (veh.VehLockTarget is { } target && !target.IsFreed)
-            // QC bumblebee vr_setup: aux slot 0 = vCROSS_LOCK for the raygun heal-lock marker.
-            hud.SetAuxiliaryXhairLock(0, Coords.ToGodot(target.Origin), veh.VehLockStrength,
-                veh.VehicleDef is Bumblebee ? "gfx/vehicles/crosshair_lock" : "gfx/vehicles/axh-target");
-        else
-            hud.ClearAuxiliaryXhair(0);
+        {
+            if (veh.VehicleDef is Bumblebee)
+                hud.SetAuxiliaryXhair(0, Coords.ToGodot(target.Origin), new Godot.Color(0f, 0.75f, 0f),
+                    "gfx/vehicles/crosshair_lock");
+            else
+                hud.SetAuxiliaryXhairLock(0, Coords.ToGodot(target.Origin), veh.VehLockStrength);
+        }
 
         // PILOT mirror of the two gunners' READY aux crosshairs (QC bumblebee_gunner_frame line 186:
         // UpdateAuxiliaryXhair(vehic.owner, ..., slot 1 for gunner1 / slot 2 for gunner2)). When a side-gun is
@@ -6030,8 +6245,8 @@ public sealed partial class NetGame : Node3D
         // while a side-gun seat is unmanned (the QC test is `!AuxiliaryXhair[1/2].draw2d` — no gunner aux crosshair
         // this frame, i.e. the gun has no seated player). Only the bumblebee draws these.
         bool bumble = veh.VehicleDef is Bumblebee;
-        hud.ShowNoRightGunner = bumble && veh.VehGun1?.VehSlotPlayer is null;
-        hud.ShowNoLeftGunner  = bumble && veh.VehGun2?.VehSlotPlayer is null;
+        hud.ShowNoRightGunner = bumble && !hud.HasAuxiliaryXhair(1);
+        hud.ShowNoLeftGunner  = bumble && !hud.HasAuxiliaryXhair(2);
 
         // Centered main reticle + bomb dropmark (QC vr_crosshair). The raptor draws a per-secondary-mode reticle
         // (RSM_BOMB → vCROSS_BURST, RSM_FLARE → vCROSS_RAIN) plus, in bomb mode, a tracetoss-predicted bomb-impact
@@ -6200,50 +6415,26 @@ public sealed partial class NetGame : Node3D
 
         // QC dropmark: when reload2 == 1 (bombs ready) run the live tracetoss prediction (green); otherwise hold
         // the last predicted impact (red, larger) while dropmark.cnt > time (the 5s linger window after a drop).
-        float reload2 = Godot.Mathf.Clamp(p.VehicleReload2 * 0.01f, 0f, 1f);
-        if (reload2 >= 1f)
-        {
-            _raptorDropmarkLast = VehiclePhysics.BombDropPredict(veh); // Quake space
-            hud.DropmarkWorld = Coords.ToGodot(_raptorDropmarkLast);
-            hud.DropmarkLive = true;
-            hud.DropmarkActive = true;
-            _raptorDropmarkLinger = _renderClock + 5f; // QC dropmark.cnt = time + 5
-        }
-        else if (_renderClock < _raptorDropmarkLinger)
-        {
-            // The last live prediction lingers as the red "where the dropped bombs are headed" marker.
-            hud.DropmarkWorld = Coords.ToGodot(_raptorDropmarkLast);
-            hud.DropmarkLive = false;
-            hud.DropmarkActive = true;
-        }
-        else
-        {
-            hud.DropmarkActive = false;
-        }
+        Vector3? prediction = p.VehicleReload2 >= 100f
+            ? Coords.ToGodot(VehiclePhysics.BombDropPredict(veh))
+            : null;
+        hud.FeedBombDropmark(prediction, _renderClock);
     }
 
-    // Raptor bomb dropmark linger (QC dropmark.cnt = time + 5): the render-clock time the red post-drop marker
-    // expires, and the last live impact point it freezes on.
-    private float _raptorDropmarkLinger;
-    private System.Numerics.Vector3 _raptorDropmarkLast;
-
-    /// <summary>Project a crewed side-gun's READY aux crosshair onto the PILOT's HUD (QC bumblebee.qc:186); clears
-    /// the slot when the gun is empty/idle.</summary>
+    /// <summary>Refresh a crewed side-gun's READY marker on the pilot HUD. An idle gun stops refreshing it.</summary>
     private void FeedPilotGunnerAux(VortexArena.Game.Hud.VehicleHud hud, Entity? gun, int slot)
     {
         // QC bumblebee vr_setup: the pilot's aux slots 1/2 are vCROSS_BURST (gunner1/gunner2).
         if (gun is { VehGunnerHitValid: true, VehSlotPlayer: not null })
             hud.SetAuxiliaryXhair(slot, Coords.ToGodot(gun.VehGunnerHitPoint),
                 ReloadColor(gun.VehSlotPlayer.VehicleReload1), "gfx/vehicles/crosshair_burst");
-        else
-            hud.ClearAuxiliaryXhair(slot);
     }
 
     /// <summary>QC bumblebee_gunner_frame reload tint: <c>'1 0 0' * reload1 + '0 1 0' * (1 - reload1)</c> — red while
     /// reloading, green when ready to fire.</summary>
     private static Godot.Color ReloadColor(float reload1)
     {
-        float r = Godot.Mathf.Clamp(reload1, 0f, 1f);
+        float r = Godot.Mathf.Clamp(reload1 * 0.01f, 0f, 1f);
         return new Godot.Color(r, 1f - r, 0f);
     }
 
@@ -6309,7 +6500,13 @@ public sealed partial class NetGame : Node3D
     /// The panel self-blanks until the first MatchState arrives, so this is safe to call every frame.</summary>
     private void UpdateMatchClock()
     {
-        if (_fullHud is null || _client is null || !_client.HasMatchState)
+        if (_fullHud is null || _client is null)
+            return;
+        // Networked status effects expire on the server clock, including on pure remote clients.
+        _fullHud.Powerups.Now = _client.LatestServerTime;
+        if (_fullHud.GetPanel<StrafeHudPanel>() is { } strafe)
+            strafe.SonarSimulationTime = _renderClock;
+        if (!_client.HasMatchState)
             return;
         TimerPanel t = _fullHud.Timer;
         t.Now = _client.LatestServerTime;
@@ -6404,16 +6601,18 @@ public sealed partial class NetGame : Node3D
         // ClientNet.HandleMapVote — without this a --connect client saw no ballot at all (the panel was fed only
         // from _serverWorld.MapVote, which is null remotely).
         MapVoting? vote = _serverWorld?.MapVote;
-        NetMapVote? net = vote is null ? _client?.MapVote : null;
+        NetMapVote? net = vote is null && _client is { Accepted: true } client ? client.MapVote : null;
 
         var cands = new System.Collections.Generic.List<MvCand>();
-        bool showing, isGametypeVote, detail, abstainPresent;
-        float timeout;
+        bool showing, finished, isGametypeVote, detail, abstainPresent;
+        double now, timeout;
         int ownVote, winnerSlot;                    // winnerSlot: 1-based winning cell (abstain-stripped), 0 = none
 
         if (vote is not null)
         {
-            showing = vote.Running || (vote.Finished && !string.IsNullOrEmpty(vote.WinningMap));
+            finished = vote.Finished;
+            showing = vote.Running || (finished && !string.IsNullOrEmpty(vote.WinningMap));
+            now = _serverWorld!.Time;
             isGametypeVote = vote.IsGametypeVote;
             detail = Cvars.Bool("sv_vote_gametype_detail");
             timeout = vote.Timeout;
@@ -6423,8 +6622,7 @@ public sealed partial class NetGame : Node3D
                 if (c.IsAbstain) abstainPresent = true;
                 cands.Add(new MvCand(c.MapName, c.IsAbstain, c.Votes, c.Available, c.Suggester));
             }
-            int own = vote.SelectionOf(LocalServerPlayer);
-            ownVote = (own >= 0 && own < vote.Candidates.Count && !vote.Candidates[own].IsAbstain) ? own : -1;
+            ownVote = vote.BallotSelectionOf(LocalServerPlayer);
             winnerSlot = 0;
             if (vote.Finished && !string.IsNullOrEmpty(vote.WinningMap))
             {
@@ -6440,47 +6638,52 @@ public sealed partial class NetGame : Node3D
         else if (net is not null)
         {
             showing = net.Showing;
+            finished = net.Finished;
+            now = Math.Max(_client!.LatestServerTime, net.ServerTime);
             isGametypeVote = net.IsGametypeVote;
             detail = net.Detail;
-            timeout = net.Remaining;
+            timeout = net.Deadline;
             abstainPresent = net.AbstainPresent;
             foreach (NetMapVote.Cand c in net.Candidates)
                 cands.Add(new MvCand(c.MapName, false, c.Votes, c.Available, c.Suggester));
-            ownVote = net.Own;                       // already an abstain-stripped cell index (-1 = none/abstain)
+            ownVote = net.Own;                       // abstain follows the candidate grid, -1 = none
             winnerSlot = net.Finished ? net.Winner1Based : 0;
         }
         else
         {
-            if (mv.Visible) { mv.Visible = false; mv.Active = false; }
+            HideMapVotePanel(mv);
             return;
         }
 
         if (!showing)
         {
-            if (mv.Visible) { mv.Visible = false; mv.Active = false; }
+            HideMapVotePanel(mv);
             return;
         }
 
-        // (Re)build the candidate list only when the ballot identity changes (count / first map / running flag),
-        // then update the live counts in place each frame so SetVote's per-cell fade state isn't reset every frame.
-        string sig = $"{cands.Count}|{(cands.Count > 0 ? cands[0].MapName : "")}|{timeout:0.0}|{isGametypeVote}";
-        if (sig != _mapVoteSig)
+        // Countdown, winner, and top-two/selection fades share the clock for this ballot source.
+        mv.Now = now;
+        mv.Timeout = timeout;
+        mv.Detail = !isGametypeVote || detail;
+
+        // Counts, time, and availability can change on the same ballot. Rebuild only for a new
+        // ballot or on a change to its ordered candidates, keeping the current selection and fades otherwise.
+        if (MapVoteBallotChanged(cands, isGametypeVote, abstainPresent, finished))
         {
-            _mapVoteSig = sig;
+            _mapVoteCandidates = cands.ToArray();
+            _mapVoteIsGametype = isGametypeVote;
+            _mapVoteHasAbstain = abstainPresent;
             var list = new System.Collections.Generic.List<VortexArena.Game.Hud.MapVotePanel.Candidate>(cands.Count);
             for (int i = 0; i < cands.Count; i++)
             {
                 MvCand c = cands[i];
                 if (c.IsAbstain) continue; // abstain is rendered as its own row, not a cell
-                string pic;
-                if (isGametypeVote)
-                    // QC GameTypeVote_DrawGameTypeItem: the icon is gfx/menu/<menu_skin>/gametype_<name>. There is
-                    // no "default" skin dir in the shipped assets (skins are luma/luminos/wickedx/xaw) — using it
-                    // would always miss and fall back to the nopreview placeholder. Track the live skin (luma by
-                    // default, which carries the icons), mirroring Base's per-skin path.
-                    pic = $"gfx/menu/{VortexArena.Game.Hud.HudSkin.SkinName}/gametype_{c.MapName}";
-                else
-                    pic = string.IsNullOrEmpty(c.MapName) ? "" : $"maps/{c.MapName}";
+                bool ImageExists(string path) => _vfs?.ResolveImage(path) is not null;
+                string pic = isGametypeVote
+                    ? VortexArena.Common.Menu.MapVotePictures.Gametype(c.MapName,
+                        Cvars.String($"sv_vote_gametype_{c.MapName}_type"), MenuState.Cvars.GetString("menu_skin"), ImageExists)
+                    : VortexArena.Common.Menu.MapVotePictures.Map(c.MapName,
+                        Cvars.String("g_maplist_votable_screenshot_dir"), ImageExists);
                 // QC ReadGameTypeVote (client/mapvoting.qc:762-780): the gametype-vote title + description split
                 // on the GTV_CUSTOM flag. A REAL (built-in) gametype shows MapInfo_Type_ToText (the gametype's
                 // pretty .message, e.g. "Deathmatch") + MapInfo_Type_Description (its built-in description); only a
@@ -6497,12 +6700,9 @@ public sealed partial class NetGame : Node3D
                         VortexArena.Common.Gameplay.GameTypes.ByName(c.MapName);
                     if (gt is not null)
                     {
-                        // QC MapInfo_Type_Description (client/mapvoting.qc:767): for a real built-in gametype the
-                        // picker shows its MenuDescription prose (e.g. Deathmatch's 3-paragraph guide text from
-                        // deathmatch.qc:describe). A gametype that has not yet ported its describe() returns null,
-                        // which falls back to an empty string matching the pre-port behavior.
+                        // QC MapInfo_Type_Description uses the registration summary for the vote.
                         data = string.IsNullOrEmpty(gt.DisplayName) ? c.MapName : gt.DisplayName;
-                        desc = gt.MenuDescription ?? "";
+                        desc = gt.MenuSummary is { } summary ? Localization.Tr(summary) : gt.MenuDescription ?? "";
                     }
                     else
                     {
@@ -6521,10 +6721,8 @@ public sealed partial class NetGame : Node3D
                     c.MapName, c.Votes, pic, data, desc, c.Available, c.Suggester));
             }
             mv.SetVote(list, timeout, gametypeVote: isGametypeVote, abstain: abstainPresent);
-            // QC sv_vote_gametype_detail: honour the gametype-vote detail flag (from the wire on a remote client).
-            if (isGametypeVote)
-                mv.Detail = detail;
         }
+        _mapVoteFinished = finished;
 
         // Live counts + availability each frame (QC MapVote_UpdateVotes), excluding the abstain slot.
         // Build the availability list FIRST then call SetAvailability before SetVotes, so the panel's
@@ -6543,10 +6741,9 @@ public sealed partial class NetGame : Node3D
         mv.SetVotes(counts);
 
         // The local player's own vote (QC mv_ownvote) + the decided winner slot — both normalized above from the
-        // listen host's MapVoting or the networked ballot (abstain-stripped cell indices, so they line up 1:1 with
-        // the panel cells; -1 / 0 = none).
+        // listen host or networked ballot. The own choice can be the appended abstain row.
         mv.OwnVote = ownVote;
-        if (winnerSlot > 0 && mv.Winner != winnerSlot) mv.SetWinner(winnerSlot);
+        if (mv.Winner != winnerSlot) mv.SetWinner(winnerSlot);
 
         mv.Active = true;
         if (!mv.Visible) mv.Visible = true;
@@ -6555,7 +6752,33 @@ public sealed partial class NetGame : Node3D
     /// from either the listen host's <see cref="MapVoteCandidate"/> or a remote client's <see cref="NetMapVote.Cand"/>.
     /// Member names match <see cref="MapVoteCandidate"/> so the render body reads identically for both sources.</summary>
     private readonly record struct MvCand(string MapName, bool IsAbstain, int Votes, bool Available, string Suggester);
-    private string _mapVoteSig = "";
+    private MvCand[]? _mapVoteCandidates;
+    private bool _mapVoteIsGametype;
+    private bool _mapVoteHasAbstain;
+    private bool _mapVoteFinished;
+
+    private void HideMapVotePanel(MapVotePanel panel)
+    {
+        panel.Visible = false;
+        panel.Active = false;
+        _mapVoteCandidates = null;
+    }
+
+    private bool MapVoteBallotChanged(IReadOnlyList<MvCand> candidates, bool gametype, bool abstain, bool finished)
+    {
+        if (_mapVoteCandidates is not { } previous || previous.Length != candidates.Count
+            || gametype != _mapVoteIsGametype || abstain != _mapVoteHasAbstain || (_mapVoteFinished && !finished))
+            return true;
+
+        for (int i = 0; i < previous.Length; i++)
+        {
+            MvCand left = previous[i];
+            MvCand right = candidates[i];
+            if (left.MapName != right.MapName || left.IsAbstain != right.IsAbstain || left.Suggester != right.Suggester)
+                return true;
+        }
+        return false;
+    }
     private double _voteHideAt = -1.0;
 
     /// <summary>
@@ -6757,6 +6980,10 @@ public sealed partial class NetGame : Node3D
     /// </summary>
     private Player? _hudMirror;
 
+    private bool IsLocalFrozen() => _client?.LatestModeStatus?.Mode == VortexArena.Net.GametypeStatusBlock.Kind.FreezeTag
+        && (LocalServerPlayer ?? _hudMirror) is { } player
+        && StatusEffectsCatalog.Frozen is { } frozen && StatusEffectsCatalog.Has(player, frozen);
+
     /// <summary>
     /// Refresh <see cref="_hudMirror"/> from the networked owner stats (pure client only): health/armor + the
     /// inventory block (ammo pools, owned-weapon bitset, unlimited-ammo, STAT_ITEMS flags) + active weapon from
@@ -6807,6 +7034,7 @@ public sealed partial class NetGame : Node3D
 
         // Powerup timers (strength/shield/…): the server networks every player's status-effect bitmap in the
         // entity stream — including our own entity now (v14), whose decoded slice ClientNet keeps as LocalState.
+        m.CountdownIndicator = _client.LocalState?.CountdownIndicator ?? default;
         ClientEntityView.ApplyStatusEffects(m, _client.LocalState?.StatusEffects);
     }
 
@@ -6822,24 +7050,8 @@ public sealed partial class NetGame : Node3D
         _lastHudPlayer = p;
         _fullHud.SetPlayer(p);
 
-        // With a local Player present the skinned Crosshair + HealthArmor panels render, so suppress NetHud's
-        // duplicate vector crosshair + textual health/armor (goal 1: no double crosshair/health). On a pure client
-        // (p == null) NetHud stays the always-on fallback.
-        bool havePlayer = p is not null;
         if (_hud is not null && GodotObject.IsInstanceValid(_hud))
-            // The editor picks along the crosshair, so a free-flying mapper needs one. NetHud's lightweight
-            // vector crosshair is the right one here: the skinned HUD's is player-bound and an observer has no
-            // player, which is why aiming in the editor had nothing to aim WITH.
-            _hud.SuppressCrosshairAndHealth = havePlayer && !IsEditorFreeFly;
-
-        // HealthArmorPanel reads the Player's resources, so it self-blanks with no Player (safe to leave visible).
-        // CrosshairPanel, however, draws its reticle even without a Player (it doesn't gate on Player) — so on a
-        // pure client it would DOUBLE NetHud's crosshair. Show the skinned crosshair only when a local Player is
-        // present; otherwise NetHud (un-suppressed above) owns the reticle. No double crosshair in either case.
-        // The live per-frame suppression (dead/intermission/scoreboard/observing) is applied in UpdateCrosshairGate
-        // below — this only sets the player-presence base state on a player change.
-        if (_fullHud.Crosshair.Visible != havePlayer)
-            _fullHud.Crosshair.Visible = havePlayer;
+            _hud.SuppressCrosshairAndHealth = p is not null && !IsEditorFreeFly;
 
         // StrafeHud (goal 3): point it at the local server Player (its velocity + view angles + onground drive the
         // strafe bar). It self-blanks without a Player, so on a pure client this leaves it null = no draw. The
@@ -6873,63 +7085,67 @@ public sealed partial class NetGame : Node3D
     }
     private Player? _lastHudPlayer;
 
-    /// <summary>
-    /// Per-frame crosshair master-gating (QC client/hud/crosshair.qc HUD_Crosshair 226-241). Base skips drawing the
-    /// crosshair entirely — and resets its smoothing state — whenever the player is not in a live first-person
-    /// playing view: scoreboard active, intermission==2, GAME_STOPPED, lockview, <c>spectatee_status == -1</c>
-    /// (free-fly observer), <c>STAT(HEALTH) &lt;= 0</c> (dead), the dead-spectator CAMERA_SPECTATOR==2 mode, or a
-    /// non-FREEAIM viewloc. The previous port only gated on player-presence (havePlayer), so the skinned crosshair
-    /// kept drawing dead-centre while dead / at intermission / over the scoreboard. Reproduce the reachable subset
-    /// of the suppress set from state the port already tracks client-side (works on the host path where the skinned
-    /// panel draws; a pure remote client's reticle is owned by NetHud, gated separately). The crosshair only shows
-    /// when a local Player is present AND none of the suppress conditions hold.
-    /// </summary>
     private void UpdateCrosshairGate()
     {
         if (_fullHud is null || _client is null)
             return;
 
-        // Base: the crosshair draws only with a local first-person player (havePlayer mirrors QC's view player).
-        bool havePlayer = _lastHudPlayer is not null;
+        var cvars = ClientViewCvars;
+        bool classicChase = CvarOr(cvars, "chase_active", 0f) > 0f;
+        CrosshairPanel crosshair = _fullHud.Crosshair;
+        // The remote facade's simulation clock is not driven by the server snapshots.
+        crosshair.Now = _renderClock;
+        bool show = _lastHudPlayer is not null
+            && _client.Health > 0 && !LocalDeadNow()
+            && !_client.MatchIntermission && !_client.IsObserving
+            && _scoreboard?.Active != true && !_fullHud.MinigameMenu.IsOpen
+            && _client.ActiveViewLocation is null && !_fullHud.Vehicle.InVehicle
+            && !ObserverCamera.Active && CvarOr(cvars, "cl_lockview", 0f) == 0f
+            && !(classicChase && CvarOr(cvars, "chase_front", 0f) != 0f);
 
-        // QC HUD_Crosshair early-skips (the subset the port tracks client-side):
-        //   STAT(HEALTH) <= 0           → dead (LocalDeadNow covers host + remote)
-        //   intermission == 2 / GAME_STOPPED → MatchIntermission (the match-over scoreboard takes the screen)
-        //   scoreboard_active           → the scoreboard panel is up (+showscores / death / intermission)
-        //   spectatee_status == -1      → free-fly observer (IsObserving) — no own first-person aim to draw on
-        bool suppressed =
-            LocalDeadNow()
-            || _client.MatchIntermission
-            || (_scoreboard is not null && _scoreboard.Active)
-            || _client.IsObserving;
+        if (crosshair.Visible && !show)
+            crosshair.ResetCrosshairTransition();
+        crosshair.Visible = show;
+        crosshair.ClassicChase = classicChase;
+        crosshair.AimOrigin = _view.RenderedEyeQuake;
+        crosshair.AimForward = _view.RenderedForwardQuake;
 
-        bool show = havePlayer && !suppressed;
-        if (_fullHud.Crosshair.Visible != show)
-            _fullHud.Crosshair.Visible = show;
+        bool projectChase = show && classicChase && _view.ChaseActive && crosshair.NormalCrosshairEnabled()
+            && CvarOr(cvars, "crosshair_chase", 1f) != 0f;
+        int followId = _client.SpectatingNetId;
+        NVec3 body = _client.PredictedOrigin;
+        // A followed player owns the chase aim and fade. The predicted spectator pose can drive
+        // the camera when no followed pose is available, but cannot supply either of those effects.
+        if (!projectChase || (followId != 0
+            && !_client.TryGetFollowedPose(out body, out _)))
+        {
+            crosshair.SetChaseScreenPoint(null);
+            _render?.SetChaseBodyAlpha(0, 1f);
+            return;
+        }
 
-        // [viewprim] Feed the authoritative rendered aim ray + chase state into the crosshair so the shared
-        // CrosshairTrace primitive traces from the real render eye (closing the dead AimForward/AimOrigin feed).
-        // UpdateCamera → FirstPersonView.UpdateView has already run this frame, so RenderedEyeQuake/
-        // RenderedForwardQuake carry the final rendered eye/forward (derived from the already-predicted local pose —
-        // no new networking). This replaces CrosshairPanel's dead reconstruction fallback (TryGetAimRay was never
-        // fed) with the real eye/forward, and lights up the crosshair_chase origin trace whenever chase is active
-        // (own-player + spectate both set CameraMode=Chase, surfaced as _view.ChaseActive).
-        CrosshairPanel xh = _fullHud.Crosshair;
-        xh.AimOrigin = _view.RenderedEyeQuake;
-        xh.AimForward = _view.RenderedForwardQuake;
-        xh.ChaseActive = _view.ChaseActive;
-        xh.ChaseCamera3D = _camera;
+        int viewedId = _client.LocalNetId;
+        NVec3 mins = _carrier?.Mins ?? HullMins;
+        NVec3 maxs = _carrier?.Maxs ?? HullMaxs;
+        float viewHeight = _carrier is { IsDucked: true } ? 20f : EyeHeight;
+        if (followId != 0)
+        {
+            viewedId = followId;
+            bool crouched = _client.TryGetViewedState(followId, out var followed)
+                && followed.Flags.HasFlag(NetEntityFlags.Crouched);
+            mins = HullMins;
+            maxs = crouched ? ObserverHullMaxs : HullMaxs;
+            viewHeight = crouched ? 20f : EyeHeight;
+        }
 
-        // [viewconsumers] crosshair-chase body fade (QC crosshair_chase: when the third-person crosshair-chase camera
-        // is up, the player's OWN model is drawn at crosshair_chase_playeralpha so it doesn't block the chased aim).
-        // Only the local player's own third-person counts — when spectating someone else (SpectatingNetId != 0) the
-        // chased body is theirs, not the local model, so leave the local model alone. Drives ClientWorld's per-model
-        // alpha ease by local net id; 0 restores full opacity. Read both cvars live (CrosshairPanel registers them).
-        bool ownChase = _view.ChaseActive && (_client?.SpectatingNetId ?? 0) == 0
-            && CvarOr(Api.Cvars, "crosshair_chase", 0f) != 0f;
-        int localNet = _client?.LocalNetId ?? 0;
-        _render?.SetLocalBodyAlpha(localNet,
-            ownChase ? 1f - CvarOr(Api.Cvars, "crosshair_chase_playeralpha", 0.25f) : 0f);
+        NVec3 forward = _view.RenderedForwardQuake;
+        NVec3 impact = CrosshairTrace.ChaseImpact(body, viewHeight, forward);
+        crosshair.SetChaseScreenPoint(CrosshairTrace.ProjectToScreen(_camera, impact, out Vector2 point) ? point : null);
+
+        float alpha = Mathf.Clamp(CvarOr(cvars, "crosshair_chase_playeralpha", 0.25f), 0.001f, 1f);
+        bool obstructs = alpha < 1f && CrosshairTrace.ChaseBodyObstructs(
+            _view.RenderedEyeQuake, forward, body + mins, body + maxs, viewedId == _client.LocalNetId ? LocalServerPlayer : null);
+        _render?.SetChaseBodyAlpha(viewedId, obstructs ? alpha : 1f);
     }
 
     /// <summary>
@@ -7166,25 +7382,27 @@ public sealed partial class NetGame : Node3D
         im.NetServerTime = _client.LatestServerTime;
 
         bool spectating = _client.Accepted && _client.SpectateeStatus != 0;
+        bool clanArena = _client.LatestModeStatus?.Mode == VortexArena.Net.GametypeStatusBlock.Kind.ClanArena;
         im.IsSpectating = spectating;
         if (spectating)
         {
             int sid = _client.SpectatingNetId;
-            im.SpectatingName = sid != 0 && _server is not null
-                ? (_server.PlayerByNetId(sid)?.NetName ?? "")
-                : "";
+            im.SpectatingName = sid == 0
+                ? ""
+                : _server?.PlayerByNetId(sid)?.NetName ?? (clanArena ? ResolveScoreboardName(sid) : "");
         }
 
-        // QC MUTATOR_HOOKFUNCTION(cl_ca, DrawInfoMessages) (cl_clanarena.qc): in CA, keep the info-message panel
-        // drawing for a SPECTATOR who has the scoreboard open (ENTCS_SPEC_IN_SCOREBOARD) — otherwise the panel
-        // self-blanks behind the scoreboard. The port knows the scoreboard-open state locally (+showscores) and the
-        // spectating state from the net client, so model the CA branch directly: force the panel visible while a CA
-        // spectator views the scoreboard. (In this port the manager already keeps infomessages always-on, so this
-        // mainly documents intent; it stays a faithful, harmless assertion of the QC behaviour.)
-        if (VortexArena.Common.Gameplay.Scoring.GameScores.Gametype == "ca"
-            && _client.Accepted && _client.SpectateeStatus != 0
-            && VortexArena.Engine.Console.BindTable.ShowScores)
-            im.Visible = true;
+        // ENTCS_SPEC_IN_SCOREBOARD means the observer still has a participating score row.
+        // DrawInfoMessages uses this only to suppress the jump-to-join hint.
+        if (spectating && clanArena && _client.LatestScoreboard is { } caScores)
+        {
+            foreach (var row in caScores.Rows)
+                if (row.NetId == _client.LocalNetId)
+                {
+                    im.SuppressJoinHint = !row.IsSpectator;
+                    break;
+                }
+        }
 
         // QC cl_lms DrawInfoMessages: in LMS, the local player is "out" once they hold an LMS rank (LMS_RANK > 0,
         // set on elimination). Read it from the local scoreboard row's networked LMS_RANK column.
@@ -7225,7 +7443,9 @@ public sealed partial class NetGame : Node3D
         if (_scoreboard is null || !GodotObject.IsInstanceValid(_scoreboard) || !_scoreboard.Visible) return;
         Vector2 vp = GetViewport()?.GetVisibleRect().Size ?? new Vector2(1280, 720);
         // 1) QC HUD_Panel_LoadCvars — resolve bg/skin/alphas/padding/fontsize from hud_panel_scoreboard_*.
-        _scoreboard.LoadConfig(vp, _fullHud?.HudFadeAlpha ?? 1f, _scoreboard.FadeAlpha);
+        // ScoreboardPanel applies its own fade when drawing. LoadConfig supplies only the global HUD fade,
+        // so the first redraw can use the panel's new alpha even if a slow frame completes the whole ramp.
+        _scoreboard.LoadConfig(vp, _fullHud?.HudFadeAlpha ?? 1f, 1f);
         // 2) QC the centered-slab override Scoreboard_Draw applies right after LoadCvars (the scoreboard is
         //    PANEL_CONFIG_NO — its placement is derived, not taken from the generic pos/size cvars).
         _scoreboard.Configure(_scoreboard.BaseGeometry(vp));
@@ -7270,7 +7490,11 @@ public sealed partial class NetGame : Node3D
             && _client.LatestServerTime - _localDeathStamp >= (cv is null ? 1f : cv.GetFloat("cl_deathscoreboard_delay"));
         // QC client/view.qc:1865 — the server asks for a team pick by setting `_scoreboard_team_selection`;
         // the client opens the interactive picker and clears the flag.
-        _scoreboard.MatchIntermission = _client.MatchIntermission;
+        if (_scoreboard.MatchIntermission != _client.MatchIntermission)
+        {
+            _scoreboard.MatchIntermission = _client.MatchIntermission;
+            _scoreboard.QueueRedraw();
+        }
         if (MenuState.Cvars.GetFloat("_scoreboard_team_selection") != 0f)
         {
             _scoreboard.UiEnable(1);
@@ -7281,8 +7505,9 @@ public sealed partial class NetGame : Node3D
         // force-draws regardless of +showscores, and a closing one tears its state down once faded out.
         bool uiShow = _scoreboard.UiTick();
 
-        bool show = (uiShow || VortexArena.Engine.Console.BindTable.ShowScores || intermissionShow || deathScoreboard)
-            && !mapVoteShowing; // QC intermission==2 / clickable-radar suppression: mapvote owns the screen
+        bool show = !mapVoteShowing && (uiShow
+            || (_scoreboard.UiMode == 0 && _radar is not { Clickable: true }
+                && (BindTable.ShowScores || intermissionShow || deathScoreboard)));
         // QC scoreboard.qc:2411: drive the cross-fade via scoreboard_active (the Active setter ramps _fadeAlpha
         // in/out in _Process and hides the panel once fully faded out) rather than popping Visible — this is what
         // makes hud_panel_scoreboard_fadeinspeed/fadeoutspeed actually animate on the live path.
@@ -7299,7 +7524,10 @@ public sealed partial class NetGame : Node3D
         // for this. Set every frame BEFORE the early returns below so it also ramps back down when the board hides.
         // (_scoreboard is standalone — not _fullHud's discovered panel — so the owner has to bridge the two.)
         if (_fullHud is not null)
+        {
             _fullHud.ScoreboardFade = _scoreboard.FadeAlpha;
+            _fullHud.Vehicle.ScoreboardActive = show;
+        }
         // The radar is a STANDALONE panel (NetGame-managed pos/size, never LoadConfig'd), so the manager cross-fade
         // above never reaches it — its LiveFgAlpha is pinned. Fade it directly by the scoreboard level via Modulate
         // so the top-left minimap doesn't bleed through the scoreboard (QC: teamradar is MAINGAME-only). EXCEPT while
@@ -7325,11 +7553,24 @@ public sealed partial class NetGame : Node3D
             // "press X to respawn" line, falling back to the literal "jump" when nothing is bound.
             _scoreboard.RespawnJumpKey = VortexArena.Engine.Console.BindTable.CommandKey("jump", "+jump");
             // QC Scoreboard_AccuracyStats_WouldDraw (scoreboard.qc:1864): suppress the accuracy block during warmup.
-            _scoreboard.MatchWarmup = _client.MatchWarmup;
+            if (_scoreboard.MatchWarmup != _client.MatchWarmup)
+            {
+                _scoreboard.MatchWarmup = _client.MatchWarmup;
+                _scoreboard.QueueRedraw();
+            }
             // QC Scoreboard_MapStats_Draw reads STAT(MONSTERS_*)/STAT(SECRETS_*) every draw — they tick
             // independently of the score version, so feed the live map-stats counts every frame while shown
             // (not only inside the change-gated row feed below, which made monsters lag and never fed secrets).
             FeedMapStats();
+            if (_client.HasMatchState)
+            {
+                int minutes = (int)(_client.MatchTimeLimit / 60f);
+                if (_scoreboard.TimeLimitMinutes != minutes)
+                {
+                    _scoreboard.TimeLimitMinutes = minutes;
+                    _scoreboard.QueueRedraw();
+                }
+            }
         }
         if (!show)
             return;
@@ -7339,12 +7580,15 @@ public sealed partial class NetGame : Node3D
         // that don't bump a score version.
         VortexArena.Net.ScoreboardWire? sb = _client.LatestScoreboard;
         VortexArena.Net.GametypeStatusBlock.Decoded? ms = _client.LatestModeStatus;
-        if (sb is not null && (!ReferenceEquals(sb, _lastFedScoreboard) || !ReferenceEquals(ms, _lastFedModeStatus)))
+        var ignored = _client.ScoreboardIgnores;
+        if (sb is not null && (!ReferenceEquals(sb, _lastFedScoreboard) || !ReferenceEquals(ms, _lastFedModeStatus)
+            || !ReferenceEquals(ignored, _lastFedScoreboardIgnores)))
         {
             _lastFedScoreboard = sb;
             _lastFedModeStatus = ms;
             _scoreboard.Title = ScoreboardTitle();
-            _scoreboard.SetWireRows(sb, _client.LocalNetId, ms?.EliminatedNetIds); // grey-out (QC eliminatedPlayers)
+            _lastFedScoreboardIgnores = ignored;
+            _scoreboard.SetWireRows(sb, _client.LocalNetId, ms?.EliminatedNetIds, ignored);
             // Publish the roster for the console's nick completion (DP Nicks_CompleteBuildList reads the same
             // cl.scores[].name table this block carries). Snapshotted per update rather than read live, so a Tab
             // press never walks the wire object off the net thread.
@@ -7371,6 +7615,7 @@ public sealed partial class NetGame : Node3D
         }
     }
     private VortexArena.Net.ScoreboardWire? _lastFedScoreboard;
+    private IReadOnlySet<int>? _lastFedScoreboardIgnores;
     private VortexArena.Net.GametypeStatusBlock.Decoded? _lastFedModeStatus;
     /// <summary>QC death_time stand-in: the server time at which the local player's death was first observed
     /// (STAT(RESPAWN_TIME) first non-zero), or -1 while alive; gates the cl_deathscoreboard_delay window.</summary>
@@ -7670,6 +7915,7 @@ public sealed partial class NetGame : Node3D
     {
         if (_fullHud is null || _client is null)
             return;
+        _scoreboard.SetAvailableAccuracyWeapons(_client.LocalInventory.WeaponBits | _client.MapWeaponBits);
         if (_client.LocalAccuracyGeneration == _lastFedAccuracyGen)
             return;
         _lastFedAccuracyGen = _client.LocalAccuracyGeneration;
@@ -7688,54 +7934,16 @@ public sealed partial class NetGame : Node3D
         }
         _scoreboard.SetAccuracy(_accuracyById);
         _fullHud.Weapons.SetAccuracy(_accuracyByNetName);
-        FeedScoreboardWeaponSets();
     }
-
-    /// <summary>
-    /// QC <c>WepSet_GetFromStat()</c> / <c>WepSet_GetFromStat_InMap()</c> (scoreboard.qc:1808-1809): the two sets
-    /// that decide which never-fired weapons still earn a cell in the scoreboard's accuracy grid — the weapons
-    /// the local player carries, and the weapons that exist on the loaded map. Without them the grid would list
-    /// EVERY registered weapon (including the OK/turret/vehicle variants that never appear in a normal match).
-    ///
-    /// Owned comes from the local player's live WepSet (listen server: the server Player; remote client: the HUD
-    /// mirror the owner block feeds). In-map is a listen-server scan of the spawned weapon pickups; a pure
-    /// <c>--connect</c> client has no item list of its own, so it falls back to the owned set alone (a strictly
-    /// smaller grid, never a wrong one).
-    /// </summary>
-    private void FeedScoreboardWeaponSets()
-    {
-        Entity? local = LocalServerPlayer ?? _hudMirror;
-        if (local is not null)
-        {
-            _sbOwnedWeapons.Clear();
-            foreach (Weapon w in local.OwnedWeaponSet.Weapons()) _sbOwnedWeapons.Add(w.RegistryId);
-            _scoreboard.SetOwnedWeapons(_sbOwnedWeapons);
-        }
-
-        // The in-map set only changes on map load; scan once per map.
-        if (_serverWorld is not null && _sbWeaponsInMapMap != _map)
-        {
-            _sbWeaponsInMapMap = _map;
-            _sbWeaponsInMap.Clear();
-            foreach (Entity e in _serverWorld.Services.Entities.All)
-            {
-                if (e.IsFreed || e.Pickup is not { IsWeaponPickup: true }) continue;
-                foreach (Weapon w in e.OwnedWeaponSet.Weapons()) _sbWeaponsInMap.Add(w.RegistryId);
-            }
-            _scoreboard.SetWeaponsInMap(_sbWeaponsInMap);
-        }
-    }
-
-    private readonly System.Collections.Generic.List<int> _sbOwnedWeapons = new();
-    private readonly System.Collections.Generic.HashSet<int> _sbWeaponsInMap = new();
-    private string _sbWeaponsInMapMap = "";
 
     /// <summary>The scoreboard title: the active gametype's display name from the networked ScoreInfo (else the
     /// configured gametype). QC the scoreboard header gametype name.</summary>
     private string ScoreboardTitle()
     {
         string gt = VortexArena.Common.Gameplay.Scoring.GameScores.Gametype;
-        return string.IsNullOrEmpty(gt) ? "Scoreboard" : gt.ToUpperInvariant();
+        if (string.IsNullOrEmpty(gt)) return "Scoreboard";
+        string? displayName = VortexArena.Common.Gameplay.GameTypes.ByName(gt)?.DisplayName;
+        return string.IsNullOrEmpty(displayName) ? gt.ToUpperInvariant() : displayName;
     }
 
     /// <summary>Feed the scoreboard's fraglimit/timelimit/map-name header from the live cvar store (QC
@@ -7747,7 +7955,7 @@ public sealed partial class NetGame : Node3D
         var cvars = Api.Services?.Cvars;
         if (cvars is null) return;
         _scoreboard.FragLimit = (int)cvars.GetFloat("fraglimit");
-        _scoreboard.TimeLimitMinutes = (int)cvars.GetFloat("timelimit");
+        if (!_client.HasMatchState) _scoreboard.TimeLimitMinutes = (int)cvars.GetFloat("timelimit");
         // QC scoreboard.qc:2546-2547 STAT(LEADLIMIT)/STAT(LEADLIMIT_AND_FRAGLIMIT): the "^2+N" lead-limit header
         // term and the "& "-vs-"/ " delimiter (both-limits-required). Only DM-family modes set a leadlimit; for
         // the rest the cvar is 0 and BuildLimitsHeader's (ll < fl || fl <= 0) guard drops the term.
@@ -7758,7 +7966,6 @@ public sealed partial class NetGame : Node3D
         _scoreboard.HideLimits = VortexArena.Common.Gameplay.Scoring.GameScores.Gametype == "lms";
         // QC global `campaign` (scoreboard.qc:2574): a single-player campaign suppresses the "N/M players" line.
         _scoreboard.Campaign = !string.IsNullOrEmpty(_campaignName);
-        FeedMapStats();
     }
 
     /// <summary>QC <c>Scoreboard_MapStats_Draw</c> feed (STAT(MONSTERS_*) / STAT(SECRETS_*)): the live map-stats
@@ -7766,29 +7973,13 @@ public sealed partial class NetGame : Node3D
     /// every frame while the scoreboard is shown — not only when the row data changes.</summary>
     private void FeedMapStats()
     {
-        // [T43] Feed the scoreboard map-stats row (QC monsters_setstatus → STAT(MONSTERS_TOTAL/KILLED)).
-        // -1 hides the row when there are no monsters (DrawMapStats gates on MonstersTotal > 0).
-        // QC sv_invasion.qc MUTATOR_HOOKFUNCTION(inv, SV_StartFrame): for INV_TYPE_ROUND the wave progress is
-        // monsters_total=inv_maxspawned / monsters_killed=inv_numkilled — the per-round SPAWNED wave counters, NOT
-        // the NATURAL map-placed totals (which MonsterAI tracks and which exclude the spawned wave monsters). So in
-        // ROUND Invasion publish the live wave counts; every other mode keeps the natural map-monster totals.
-        if (_serverWorld?.GameType is VortexArena.Common.Gameplay.Invasion inv
-            && inv.Type == VortexArena.Common.Gameplay.Invasion.InvasionType.Round)
-        {
-            _scoreboard.MonstersTotal  = inv.Wave.MaxSpawned > 0 ? inv.Wave.MaxSpawned : -1;
-            _scoreboard.MonstersKilled = inv.Wave.Killed;
-        }
-        else
-        {
-            _scoreboard.MonstersTotal  = VortexArena.Common.Gameplay.MonsterAI.MonstersTotal > 0 ? VortexArena.Common.Gameplay.MonsterAI.MonstersTotal : -1;
-            _scoreboard.MonstersKilled = VortexArena.Common.Gameplay.MonsterAI.MonstersKilled;
-        }
+        var stats = _client.MapStats;
+        if (stats == (_scoreboard.MonstersTotal, _scoreboard.MonstersKilled,
+            _scoreboard.SecretsTotal, _scoreboard.SecretsFound)) return;
 
-        // QC trigger_secret: STAT(SECRETS_TOTAL)/STAT(SECRETS_FOUND), accumulated by trigger_secret spawn/touch
-        // (Triggers.SecretSetup/SecretTouch → MapObjectsState). -1 hides the row when the map has no secrets.
-        int secretsTotal = VortexArena.Common.Gameplay.MapObjectsState.SecretsTotal;
-        _scoreboard.SecretsTotal = secretsTotal > 0 ? secretsTotal : -1;
-        _scoreboard.SecretsFound = VortexArena.Common.Gameplay.MapObjectsState.SecretsFound;
+        (_scoreboard.MonstersTotal, _scoreboard.MonstersKilled,
+            _scoreboard.SecretsTotal, _scoreboard.SecretsFound) = stats;
+        _scoreboard.QueueRedraw();
     }
 
     /// <summary>
@@ -7830,48 +8021,42 @@ public sealed partial class NetGame : Node3D
             return;
         }
 
-        // Minigame menu toggle (QC the +minigamemenu bind — no default key in Base; we bind 'M'). Opens/closes
-        // the in-game Create/Join/Current-Game menu. Active even during play (so you can start a game), but not
-        // while the console is open. When the menu is open it captures the cursor so the player can click it.
-        if (!ConsoleState.IsOpen && _minigame is not null
-            && @event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.M })
+        // Let the stock minigame bind close its own menu. All other gameplay binds remain suppressed there.
+        if (!ConsoleState.IsOpen && MinigameMenuOpen
+            && string.Equals(BindInput.ResolvePress(@event), "cl_cmd hud minigame", StringComparison.OrdinalIgnoreCase))
         {
-            _minigame.ToggleMenu();
-            // The cursor show/recapture is driven each frame in _Process from MinigameMenuOpen (which now reflects
-            // the new menu state), so it stays correct even when a board is still active under a closed menu.
+            RunBoundCommand("cl_cmd hud minigame");
             GetViewport().SetInputAsHandled();
             return;
         }
 
-        // Interactive scoreboard (QC HUD_Scoreboard_InputEvent, main.qc:500). Two entry points:
-        //   * TAB held + Escape opens the navigation UI (QC main.qc:545-551 — the ESC branch checks S_TAB);
-        //   * while it is up it owns the keyboard: arrows/TAB/Enter/Ctrl-chords all go to the panel.
-        // Placed before the radar/mapvote handlers and the gameplay binds so an arrow key navigates instead of
-        // switching weapons. Console-open still wins (handled above).
-        if (!ConsoleState.IsOpen && _scoreboard is not null && GodotObject.IsInstanceValid(_scoreboard)
-            && @event is InputEventKey { Echo: false } sbKey)
+        // QC main.qc gives the interactive scoreboard first refusal, including buttons with gameplay binds.
+        // Escape is routed by Shell; console and Pause still reach their normal input paths.
+        if (!ConsoleState.IsOpen && !ChatPrompt.IsOpen && !GetTree().Paused
+            && _scoreboard is { UiInputActive: true } scoreboard)
         {
-            bool shift = sbKey.ShiftPressed, ctrl = sbKey.CtrlPressed;
-            // (Escape — open and close — is claimed by Shell's Escape chain via MenuCommand.ScoreboardEscape.)
-
-            if (_scoreboard.UiMode != 0)
+            if (@event is InputEventKey key && key.Keycode != Key.Pause
+                && !string.Equals(BindTable.Get(BindInput.EventKey(key) ?? ""), "toggleconsole",
+                    StringComparison.OrdinalIgnoreCase))
             {
-                // QC acts on the PRESS and swallows the matching release, so the key never reaches gameplay.
-                if (sbKey.Pressed ? _scoreboard.UiHandleKey(sbKey.Keycode, shift, ctrl)
-                                  : _scoreboard.UiConsumesRelease(sbKey.Keycode, ctrl))
-                {
-                    GetViewport().SetInputAsHandled();
-                    return;
-                }
+                if (key.Pressed && !key.Echo)
+                    scoreboard.UiHandleKey(key.Keycode, key.ShiftPressed, key.CtrlPressed);
+                else if (!key.Pressed)
+                    BindInput.HandleEvent(key, RunBoundCommand);
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+            if (@event is InputEventMouseButton button)
+            {
+                if (!button.Pressed)
+                    BindInput.HandleEvent(button, RunBoundCommand);
+                GetViewport().SetInputAsHandled();
+                return;
             }
         }
 
-        // Maximized radar mouse input (QC HUD_Radar_Mouse / hud_panel_radar_maximized): while the radar is maximized
-        // it owns the mouse — cursor motion tracks the panel, a left click on a control point in Onslaught issues
-        // `cmd ons_spawn <x> <y> <z>` (the server's spawn-point pick), and right-click / Esc closes it. Mirrors the
-        // minigame/quickmenu pattern: active only while maximized and the console is closed, and it swallows the
-        // events so they never fall through to mouse-look / weapon binds. The cursor is freed in _Process.
-        if (_radar is { Maximized: true } && !ConsoleState.IsOpen)
+        if (_radar is { MouseMode: true } && !ConsoleState.IsOpen && !ChatPrompt.IsOpen
+            && _fullHud?.MapVote.Visible != true && _fullHud?.ConfigEditor.Configuring != true)
         {
             switch (@event)
             {
@@ -7879,20 +8064,24 @@ public sealed partial class NetGame : Node3D
                     _radar.SetMousePosition(_radar.GetLocalMousePosition());
                     GetViewport().SetInputAsHandled();
                     return;
-                case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }:
-                    if (_radar.Clickable
-                        && _radar.HandleClick(_radar.GetLocalMousePosition(), out System.Numerics.Vector3 wp))
-                        _client?.SendStringCommand($"cmd ons_spawn {wp.X} {wp.Y} {wp.Z}");
+                case InputEventMouseButton { ButtonIndex: MouseButton.Left or MouseButton.Right } click:
+                    if (click.Pressed && _radar.Clickable)
+                    {
+                        Vector2 local = _radar.GetGlobalTransformWithCanvas().AffineInverse() * click.Position;
+                        if (click.ButtonIndex == MouseButton.Left && _radar.HandleClick(local, out NVec3 wp))
+                            SendStringCommand(FormattableString.Invariant($"ons_spawn {wp.X:F6} {wp.Y:F6} {wp.Z:F6}"));
+                        _radar.SetMaximized(false);
+                    }
                     GetViewport().SetInputAsHandled();
                     return;
-                case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right }:
+            }
+            if (_client.Health > 0
+                && @event is (InputEventKey { Pressed: true, Echo: false } or InputEventMouseButton { Pressed: true }))
+            {
+                string? radarBind = BindInput.ResolvePress(@event);
+                if (!string.Equals(radarBind, "+use", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(radarBind, "toggleconsole", StringComparison.OrdinalIgnoreCase))
                     _radar.SetMaximized(false);
-                    GetViewport().SetInputAsHandled();
-                    return;
-                case InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape }:
-                    _radar.SetMaximized(false);
-                    GetViewport().SetInputAsHandled();
-                    return;
             }
         }
 
@@ -7934,7 +8123,27 @@ public sealed partial class NetGame : Node3D
         if (!ConsoleState.IsOpen && !GetTree().Paused && !MinigameMenuOpen
             && !VortexArena.Game.Hud.ChatPrompt.IsOpen
             && @event is InputEventKey or InputEventMouseButton)
+        {
+            if (_fullHud?.GetPanel<QuickMenuPanel>() is { IsOpen: true } quickMenu)
+            {
+                if (@event is InputEventMouseButton button && quickMenu.HandleMouseButton(button, quickMenu.GetLocalMousePosition()))
+                {
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+                if (@event is InputEventKey { Pressed: true, Echo: false } menuKey
+                    && menuKey.Keycode is not (Key.Shift or Key.Ctrl or Key.Alt)
+                    && !IsQuickMenuBind(BindInput.ResolvePress(@event)))
+                    quickMenu.Close();
+            }
+            if (string.Equals(BindInput.ResolvePress(@event), "+show_info", StringComparison.OrdinalIgnoreCase))
+            {
+                MenuCommand.Run("menu_showwelcomedialog");
+                GetViewport().SetInputAsHandled();
+                return;
+            }
             BindInput.HandleEvent(@event, RunBoundCommand);
+        }
 
         // Accumulate mouse-look while the cursor is captured (the Shell owns Escape + the mouse around the
         // in-game menu) — DP's IN_Move: raw deltas sum into in_mouse_x/y over the frame; the application (the
@@ -7973,6 +8182,8 @@ public sealed partial class NetGame : Node3D
     // ≤±50% of one frame's counts. The ledger drains fast (50%/frame) when input stops so a swipe's tail
     // completes within ~25 ms and there is no post-stop drift. m_smoothdt 0 = legacy raw application.
     private float _mouseCarryX, _mouseCarryY;
+    private float _viewLocationYaw;
+    private Vector2 _viewLocationCursor = new(0.5f, 0.5f);
 
     private void FlushMouseLook(float realFrameTime, float displayDt)
     {
@@ -7980,6 +8191,23 @@ public sealed partial class NetGame : Node3D
         _mouseDx = 0f;
         _mouseDy = 0f;
         (float mx, float my) = _mouseAccel.Apply(dx, dy, realFrameTime, in _mouseAccelCv, LookSensitivity());
+        if (_client is { IsObserving: false, SpectatingNetId: 0, ActiveViewLocation: { } region }
+            && !ObserverCamera.Active)
+        {
+            if (region.FreeAim)
+            {
+                Vector2 viewport = GetViewport().GetVisibleRect().Size;
+                float speed = CvarOr(ClientViewCvars, "menu_mouse_speed", 1f);
+                if (viewport.X > 0f && viewport.Y > 0f)
+                    _viewLocationCursor = (_viewLocationCursor + new Vector2(dx, dy) * speed / viewport)
+                        .Clamp(Vector2.Zero, Vector2.One);
+            }
+            if (region.SideScroll)
+            {
+                _mouseCarryX = _mouseCarryY = 0f;
+                return;
+            }
+        }
         if (_mouseSmoothDtCv && realFrameTime > 0f && displayDt > 0f)
         {
             float scale = Math.Clamp(displayDt / realFrameTime, 0.5f, 2f);
@@ -8029,23 +8257,16 @@ public sealed partial class NetGame : Node3D
     }
 
     /// <summary>
-    /// QC client <c>MapVote_SendChoice(index)</c> → <c>localcmd("impulse ", index+1)</c>: cast the local player's
-    /// vote for the 0-based ballot option. On a listen server this routes through the in-process server's impulse
-    /// command (the same path a console <c>impulse N</c> takes — <see cref="Commands.DispatchImpulse"/> →
-    /// <see cref="MapVoting.CastVote"/>). On a pure remote client there is no server-side MapVoting object, so the
-    /// cast rides the existing C2S impulse byte instead — <see cref="_pendingImpulse"/> is stamped and the next
-    /// <see cref="InputCommand"/> carries impulse <c>N</c> to the server's gated impulse path, which forwards it to
-    /// <see cref="MapVoting.CastVote"/> while the vote runs (the same call the listen path makes directly).
+    /// QC client <c>MapVote_SendChoice(index)</c>: cast a 0-based ballot option through the server's
+    /// <c>impulse N</c> command, which shares the authoritative map-vote eligibility and availability checks.
     /// </summary>
     private void CastMapVote(int index)
     {
-        // On a pure remote (--connect) client there is no in-process server: cast the vote by stamping the C2S
-        // impulse byte (QC MapVote_SendChoice → localcmd("impulse N")). The next InputCommand carries it to the
-        // server, whose gated impulse path (Commands.DispatchImpulse) routes impulse 1..N to MapVoting.CastVote
-        // while the vote runs — the same in-process call the listen path makes directly.
+        // Send as a client command so observers can vote too. An observer's movement impulse is
+        // reserved for spectator controls and never dispatched to the weapon/map-vote command.
         if (_serverWorld is null)
         {
-            _pendingImpulse = index + 1; // edge-triggered: SampleInput stamps it onto the next command, then clears it
+            _client?.SendStringCommand($"impulse {index + 1}");
             return;
         }
         Player? me = LocalServerPlayer;
@@ -8073,29 +8294,14 @@ public sealed partial class NetGame : Node3D
         if (string.IsNullOrEmpty(command))
             return;
 
-        // QuickMenu (goal 8): the `quickmenu` bind (BindInput maps a key to "quickmenu") toggles the panel — the
-        // proper bind-driven hook (QC the quickmenu command). A bare `quickmenu` opens/closes; `quickmenu default
-        // <submenu>` would descend (left to the panel's Open overload). The panel grabs cursor/focus while open.
-        if (command.Equals("quickmenu", StringComparison.OrdinalIgnoreCase)
-            || command.StartsWith("quickmenu ", StringComparison.OrdinalIgnoreCase))
-        {
-            _fullHud?.GetPanel<VortexArena.Game.Hud.QuickMenuPanel>()?.Toggle();
+        if (command.Equals("+show_info", StringComparison.OrdinalIgnoreCase))
             return;
-        }
 
-        // Maximized radar (QC the `m` bind → +hud_panel_radar_maximized → cl_cmd hud radar 1): a toggle, like the
-        // quickmenu. BindInput emits the press form `+hud_panel_radar_maximized` (and `hud radar 1` if bound directly);
-        // both flip the maximized state. The release form (`-hud_panel_radar_maximized`) is a no-op — this is a press-
-        // toggle, not a held button, so we swallow it without un-maximizing. The cursor is freed/recaptured in _Process
-        // off _radar.Maximized (see the UiOwnsCursor block); _UnhandledInput drives the mouse-move / click-to-spawn.
-        if (command.Equals("+hud_panel_radar_maximized", StringComparison.OrdinalIgnoreCase)
-            || command.Equals("hud radar 1", StringComparison.OrdinalIgnoreCase))
-        {
-            _radar?.SetMaximized(!(_radar?.Maximized ?? false));
-            return;
-        }
-        if (command.Equals("-hud_panel_radar_maximized", StringComparison.OrdinalIgnoreCase))
-            return; // release of a press-toggle bind — ignored (matches the quickmenu toggle semantics)
+        // Remember the held alias so input owners that swallow releases can unmaximize it.
+        if (command.Equals("+hud_panel_radar_maximized", StringComparison.OrdinalIgnoreCase))
+            _radarBindHeld = true;
+        else if (command.Equals("-hud_panel_radar_maximized", StringComparison.OrdinalIgnoreCase))
+            _radarBindHeld = false;
 
         // (E2) The editor state toggle rides F9, which Base binds to the minigame HUD. Deliberately handled
         // BEFORE the free-fly gate below and NOT restricted to EDIT: the weapon binds cannot serve this, because
@@ -8127,6 +8333,161 @@ public sealed partial class NetGame : Node3D
         // Not a weapon command — forward to the shared interpreter (kill/say/team/…). Unknown commands there are
         // just counted (DP Cmd_ForwardToServer is not wired for the net path), so this is a no-op for them.
         RunCommand?.Invoke(command);
+    }
+
+    private bool HandleGameplayHudCommand(IReadOnlyList<string> args)
+    {
+        string Arg(int i) => i < args.Count ? args[i] : "";
+        switch (Arg(1))
+        {
+            case "quickmenu":
+                ToggleQuickMenu(Arg(2), Arg(3), Arg(4));
+                return true;
+            case "radar":
+                string value = Arg(2).ToLowerInvariant();
+                _radar.SetMaximized(value switch
+                {
+                    "" => !_radar.Maximized,
+                    "on" or "true" or "yes" => true,
+                    _ => float.TryParse(value, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float number)
+                        && float.IsFinite(number) && number != 0,
+                });
+                return true;
+            case "clickradar":
+                ToggleClickRadar();
+                return true;
+            case "minigame" when _minigame is not null:
+                ReleaseRadarBind();
+                _minigame.ToggleMenu();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void ToggleClickRadar()
+    {
+        bool show = !_radar.MouseMode;
+        if (show) BindTable.ReleaseAll();
+        _radar.SetMaximized(show, clickable: show);
+    }
+
+    private bool QuickMenuBlocked => MinigameMenuOpen || _fullHud?.MapVote.Visible == true
+        || _fullHud?.ConfigEditor.Configuring == true || _scoreboard is { UiMode: > 0 };
+
+    private static bool IsQuickMenuBind(string? command)
+    {
+        if (command is null) return false;
+        var tokens = Common.Config.ConfigInterpreter.Tokenize(command);
+        if (tokens.Count > 0 && tokens[0].Equals("cl_cmd", StringComparison.OrdinalIgnoreCase))
+            tokens.RemoveAt(0);
+        if (tokens.Count > 0 && tokens[0].Equals("hud", StringComparison.OrdinalIgnoreCase))
+            tokens.RemoveAt(0);
+        return tokens.Count > 0 && tokens[0].Equals("quickmenu", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ToggleQuickMenu(string mode, string submenu, string file)
+    {
+        if (mode == "help")
+        {
+            Common.Diagnostics.Log.Help("quickmenu [[default | file | \"\"] <submenu> <filename>]");
+            Common.Diagnostics.Log.Help("Omit mode to use hud_panel_quickmenu_file when set, or open the default menu. Use an empty submenu to open the root of an explicit file.");
+            return;
+        }
+        if (_fullHud.GetPanel<QuickMenuPanel>() is not { } menu) return;
+        if (menu.IsOpen)
+        {
+            menu.Close();
+            return;
+        }
+        if (QuickMenuBlocked) return;
+
+        OpenQuickMenu(menu, mode, submenu, file);
+    }
+
+    private void OpenQuickMenu(QuickMenuPanel menu, string mode, string submenu, string file, bool preferServer = true)
+    {
+        if (file.Length == 0) file = MenuState.Cvars.GetString("hud_panel_quickmenu_file");
+        bool hasFile = file.Length != 0 && file != "0";
+        if (mode.Length == 0) mode = hasFile ? "file" : "default";
+
+        string serverFile = _client.QuickMenuFile;
+        bool serverDefault = serverFile.Length > 0
+            && MenuState.Cvars.GetFloat("hud_panel_quickmenu_server_is_default") != 0f;
+        if (mode == "default" && preferServer && serverDefault)
+        {
+            mode = "file";
+            file = serverFile;
+            hasFile = true;
+        }
+
+        menu.OpenServerMenu = serverFile.Length == 0 ? null : () =>
+        {
+            menu.Close();
+            OpenQuickMenu(menu, "file", "", serverFile);
+        };
+
+        menu.Teamplay = Common.Gameplay.Scoring.GameScores.Teamplay;
+        menu.SpectateeStatus = _client.SpectateeStatus;
+        menu.HasTimeLimit = _client.MatchTimeLimit > 0;
+        menu.LocalPlayerId = _client.LocalNetId;
+        if (_client.LatestScoreboard is { } scores)
+        {
+            menu.Players = scores.Rows;
+            menu.LocalTeam = scores.Rows.Find(row => row.NetId == menu.LocalPlayerId).Team;
+        }
+
+        if (mode == "file")
+        {
+            string? text = null;
+            if (hasFile && _vfs is not null && VortexArena.Legacy.Csqc.LegacyQcHost.IsSafePath(file))
+            {
+                try { text = _vfs.ReadText(file); }
+                catch (Formats.AssetParseException) { }
+            }
+            if (text is not null)
+            {
+                Action? openStandardMenu = !serverDefault || !preferServer ? null : () =>
+                {
+                    menu.Close();
+                    OpenQuickMenu(menu, "", "", "", preferServer: false);
+                };
+                if (menu.OpenFile(text, submenu, openStandardMenu)) BindTable.ReleaseAll();
+                return;
+            }
+            Common.Diagnostics.Log.Info(hasFile
+                ? $"Couldn't open file \"{file}\", loading default quickmenu"
+                : "No file name is set in hud_panel_quickmenu_file, loading default quickmenu");
+        }
+        else if (mode != "default")
+        {
+            Common.Diagnostics.Log.Warn($"Unrecognized mode {mode}");
+            return;
+        }
+
+        if (menu.Open(submenu)) BindTable.ReleaseAll();
+    }
+
+    private void ReleaseRadarBind()
+    {
+        if (!_radarBindHeld) return;
+        _radarBindHeld = false;
+        _radar?.SetMaximized(false);
+    }
+
+    public bool HandleHudOverlayEscape()
+    {
+        if (_scoreboard is { UiInputActive: true } scoreboard)
+            return scoreboard.HandleEscape();
+        if (_fullHud?.GetPanel<QuickMenuPanel>() is { IsOpen: true } menu)
+        {
+            menu.Close();
+            return true;
+        }
+        if (_radar is not { MouseMode: true }) return false;
+        _radar.SetMaximized(false);
+        return true;
     }
 
     // =============================================================================================
@@ -11877,10 +12238,8 @@ public sealed partial class NetGame : Node3D
     private bool QuickMenuOpen
         => _fullHud?.GetPanel<VortexArena.Game.Hud.QuickMenuPanel>() is { IsOpen: true };
 
-    /// <summary>Any in-world HUD UI that should free the mouse cursor + suspend look/fire (minigame board/menu, the
-    /// quick-chat menu, or the maximized radar). The bind channel stays live so the toggling bind can still close the
-    /// panel — the maximized radar's `m` toggle + Esc/right-click close all route through it.</summary>
-    private bool UiOwnsCursor => MinigameMenuOpen || QuickMenuOpen || (_radar?.Maximized ?? false)
+    /// <summary>Whether an in-world HUD UI owns the cursor.</summary>
+    private bool UiOwnsCursor => MinigameMenuOpen || QuickMenuOpen || _radar is { Clickable: true }
                                  || (_editorOrtho?.IsOpen ?? false) || EditorMenuOpen || EditorDialogOpen;
 
     /// <summary>True while the editor's context menu is up, so it takes the cursor like any other modal HUD UI.</summary>
@@ -11896,7 +12255,8 @@ public sealed partial class NetGame : Node3D
     /// movement/fire suspended while typing), or a cursor-owning HUD UI (minigame/quickmenu/maximized radar). The
     /// single source of truth for the input-active gate (SampleInput + the fire-feedback edge).</summary>
     private bool GameplayInputActive =>
-        !GetTree().Paused && !ConsoleState.IsOpen && !VortexArena.Game.Hud.ChatPrompt.IsOpen && !UiOwnsCursor;
+        !GetTree().Paused && !ConsoleState.IsOpen && !VortexArena.Game.Hud.ChatPrompt.IsOpen && !UiOwnsCursor
+        && _scoreboard is not { UiInputActive: true };
 
     /// <summary>
     /// Teleporter view-snap (QC player.fixangle): after a prediction tick re-derives the carrier's .fixangle —
@@ -12314,7 +12674,8 @@ public sealed partial class NetGame : Node3D
         // Camera-trace (apparatus A2): once spawned, feed the deterministic scripted input instead of the live
         // keyboard/mouse, and slave the view angles to it so the captured camera is reproducible. Inert unless
         // --camera-trace was passed; falls through to real input once the script is exhausted.
-        if (CameraTrace.Active && _carrier is not null && CameraTrace.TryNextInput(out CameraTrace.InputSpec spec))
+        if (CameraTrace.Active && _cameraReady && _carrier is not null && _client is { Health: > 0 } && !IsLocalObserving
+            && CameraTrace.TryNextInput(out CameraTrace.InputSpec spec))
         {
             _viewAngles = spec.ViewAngles;
             return new InputCommand
@@ -12363,6 +12724,7 @@ public sealed partial class NetGame : Node3D
             if (BindTable.UseHeld) buttons |= InputButtons.Use;
             // PHYS_INPUT_BUTTON_HOOK (+hook): the offhand-fire button — grapple hook / offhand blaster / nade.
             if (BindTable.HookHeld) buttons |= InputButtons.Hook;
+            if (BindTable.DragHeld) buttons |= InputButtons.Drag;
 
             // Sub-tick fire latch (set per render frame in UpdateLocalFireFeedback): OR a press that landed since
             // the last sampled command into THIS command — so a tap shorter than one input tick still fires —
@@ -12410,6 +12772,10 @@ public sealed partial class NetGame : Node3D
         // on the cached command so the starve-repeat can't re-fire it. Suppressed while input is inactive.
         int impulse = active ? _pendingImpulse : 0;
         _pendingImpulse = 0;
+
+        if (_client is { IsObserving: false, SpectatingNetId: 0,
+            ActiveViewLocation: { SideScroll: true, FreeAim: false } region } && !ObserverCamera.Active)
+            _viewAngles = region.AvatarAngles(_viewAngles, forward, side);
 
         // Seq is stamped by the prediction ring buffer (PredictionBuffer.Push), so we leave it 0 here.
         return new InputCommand
@@ -12487,6 +12853,9 @@ public sealed partial class NetGame : Node3D
     /// eye contents at the FINAL render origin — exactly as on the local path. <paramref name="dt"/> 0 = a
     /// placement-only call (the first-snapshot seed); the per-frame call in <see cref="_Process"/> passes real dt.
     /// </summary>
+    private (NVec3 Origin, NVec3 Angles)? MapCamera(NVec3 origin)
+        => _client?.ActiveViewLocation?.ResolveCamera(origin, ref _viewLocationYaw);
+
     private void UpdateCamera(float dt = 0f)
     {
         if (_client is null || _camera is null)
@@ -12515,14 +12884,23 @@ public sealed partial class NetGame : Node3D
             return;
         }
 
+        if (_client.OnslaughtCamera is { } generator && CvarOr(ClientViewCvars, "chase_active", 0f) <= 0f)
+        {
+            _render?.SetViewedFirstPerson(0);
+            _view.Spectating = false;
+            _view.CameraMode = Client.FirstPersonView.ChaseMode.None;
+            var state = new Client.FirstPersonView.ViewState { GeneratorCamera = generator };
+            _view.UpdateView(_camera, state, dt);
+            return;
+        }
+
         // Follow-cam: while spectating a specific player (spectatee_status > 0), render from THAT player's
-        // interpolated pose + view angles, not the local predicted origin. The server glues us to the spectatee
+        // pose and view angles from the remote snapshots. The server glues us to the spectatee
         // (MOVETYPE_NONE + SpectateCopy) so the owner-state origin already tracks them, but the local predictor
         // would still replay our inputs and walk the camera off them; sourcing the followed entity's snapshot pose
         // directly (and slaving the view angles, QC SpectateCopy fixangle) is the robust fix. Falls through to the
-        // predicted path if the entity isn't known yet (then the zeroed spectate input keeps it at the glued origin).
-        if (_client.SpectatingNetId != 0
-            && _client.SampleRemote(_client.SpectatingNetId, _client.LatestServerTime, out NVec3 specOrg, out NVec3 specAng))
+        // predicted path if neither an interpolated nor a raw pose is available.
+        if (_client.TryGetFollowedPose(out NVec3 specOrg, out NVec3 specAng))
         {
             // QC View_SpectatorCamera (view.qc:655): while following a player (spectatee_status > 0), the user
             // chase_active cvar drives a THIRD-PERSON spectator camera that pulls back from the spectated player
@@ -12531,20 +12909,24 @@ public sealed partial class NetGame : Node3D
             // mode from chase_active just like the own-player path below — but anchored to the spectatee's pose.
             // chase_active == 0 keeps the faithful first-person follow (see what the spectated player sees).
             _view.Spectating = true;
-            _view.CameraMode = CvarOr(Api.Cvars, "chase_active", 0f) != 0f
+            _view.CameraMode = CvarOr(ClientViewCvars, "chase_active", 0f) != 0f
                 ? Client.FirstPersonView.ChaseMode.Chase
                 : Client.FirstPersonView.ChaseMode.None;
             // The camera sits inside the followed player in first person — hide that body exactly like one's
             // own (which never even reaches the client's entity stream; the spectatee does). Chase shows it.
             _render?.SetViewedFirstPerson(
-                _view.CameraMode == Client.FirstPersonView.ChaseMode.None ? _client.SpectatingNetId : 0);
+                _client.ActiveViewLocation is null && _view.CameraMode == Client.FirstPersonView.ChaseMode.None
+                    ? _client.SpectatingNetId : 0);
+            if (_client.NoLerp)
+                _specAngForId = 0; // Re-seed the angle smoother when interpolation is re-enabled.
             var sst = new Client.FirstPersonView.ViewState
             {
                 OriginQuake = specOrg,
+                MapCamera = MapCamera(specOrg),
                 VelocityQuake = NVec3.Zero,
                 // See what the spectated player sees — through a smoother: a bot only re-aims every AI think
                 // and a human's angles arrive at the tick rate, so the raw follow angles pan in visible steps.
-                ViewAnglesQuake = SmoothSpectateAngles(specAng, dt),
+                ViewAnglesQuake = _client.NoLerp ? specAng : SmoothSpectateAngles(specAng, dt),
                 IsDead = false,              // following a live player — no death-cam pullback
                 EyeHeightZ = EyeHeight,
             };
@@ -12552,7 +12934,6 @@ public sealed partial class NetGame : Node3D
             return;
         }
         _view.Spectating = false;
-        _render?.SetViewedFirstPerson(0);   // not following → every body draws again
         _specAngForId = 0;                  // and the spectate-angle smoother re-seeds on the next follow
 
         float now = _renderClock; // the clock the reconciler armed the prediction-error decay with (see _Process)
@@ -12668,10 +13049,8 @@ public sealed partial class NetGame : Node3D
             // An observer has zero health, which LocalDeadNow reads as dead — that engaged the death-chase
             // camera every time the mapper dropped out of PLAYTEST. Observing is not dying.
             IsDead = localDead && !IsLocalObserving,
-            // QC STAT(FROZEN) → cl_ft WantEventchase: engage the third-person cam while Freeze-Tag frozen (host
-            // path; the local Player carries the Frozen status effect). A pure remote client reads false here.
-            IsFrozen = LocalServerPlayer is { } frozenSelf && StatusEffectsCatalog.Frozen is { } frozenDef2
-                && StatusEffectsCatalog.Has(frozenSelf, frozenDef2),
+            // QC STAT(FROZEN) → cl_ft WantEventchase: engage the third-person cam while Freeze-Tag frozen.
+            IsFrozen = !IsLocalObserving && IsLocalFrozen(),
             // QC cl_nexball.qc WantEventchase: cl_eventchase_nexball=1 pulls the cam to third person whenever the
             // local player is a nexball participant but is NOT the ball carrier. The NexBall status block (decoded
             // above in UpdateModIcons) already holds the resolved carrying flag; we need the INVERSE of it, gated
@@ -12692,7 +13071,34 @@ public sealed partial class NetGame : Node3D
         // host or remote), so reuse it as the camera's gate. The chase pivot is the seated origin — st.OriginQuake
         // is already glued to the vehicle origin + '0 0 32' for the seated carrier, so no extra origin plumbing.
         _view.InVehicle = _fullHud.Vehicle.InVehicle;
+        st.MapCamera = MapCamera(predicted);
         _view.UpdateView(_camera, st, dt);
+        if (_client is { IsObserving: false, SpectatingNetId: 0,
+            ActiveViewLocation: { SideScroll: true, FreeAim: true } }
+            && st.MapCamera is { } mapCamera && Api.Services is not null)
+        {
+            // CSQCPlayer_SetCamera unprojects with the engine frustum. View_UpdateFov later
+            // installs the fixed 110-degree rail FOV for rendering.
+            Vector2 viewport = GetViewport().GetVisibleRect().Size;
+            if (viewport.Y > 0f)
+            {
+                float fov = CvarOr(ClientViewCvars, "fov", _view.BaseFov);
+                if (fov < 1f) fov = _view.BaseFov;
+                float pixelHeight = CvarOr(ClientViewCvars, "vid_pixelheight", 1f);
+                float frustumY = Mathf.Tan(Mathf.DegToRad(fov) * 0.5f) * 0.75f;
+                var frustum = new System.Numerics.Vector2(
+                    frustumY * viewport.X / viewport.Y / (pixelHeight > 0f ? pixelHeight : 1f), frustumY);
+                var cursor = new System.Numerics.Vector2(_viewLocationCursor.X, _viewLocationCursor.Y);
+                NVec3 far = ViewLocationState.FreeAimRayEnd(mapCamera.Origin, mapCamera.Angles, cursor, frustum,
+                    WeaponFiring.MaxShotDistance);
+                NVec3 hit = Api.Trace.Trace(mapCamera.Origin, NVec3.Zero, NVec3.Zero, far, MoveFilter.NoMonsters, null).EndPos;
+                _viewAngles = ViewLocationState.FreeAimAngles(predicted, _carrier?.ViewOfs ?? new NVec3(0, 0, EyeHeight), hit);
+            }
+        }
+        bool showLocalBody = !IsLocalObserving && (_view.ChaseActive || _client.ActiveViewLocation is not null);
+        if (_entityView is not null)
+            _entityView.ShowLocalBody = showLocalBody;
+        _render?.SetViewedFirstPerson(!IsLocalObserving && !showLocalBody ? _client.LocalNetId : 0);
     }
 
     /// <summary>Read a float cvar, falling back to <paramref name="fallback"/> only when it is UNSET (empty string),
@@ -12718,6 +13124,18 @@ public sealed partial class NetGame : Node3D
     //  Effect rendering (decoded EFF_NET_* → particles)
     // =====================================================================================
 
+    private void OnOnslaughtDestructionChanged(OnslaughtDestruction? destruction)
+    {
+        if (_render is not null && GodotObject.IsInstanceValid(_render))
+            _render.SetOnslaughtDestruction(destruction, _client?.LatestServerTime ?? 0f);
+    }
+
+    private void OnFireballBlastReceived(FireballBlastEffect effect)
+    {
+        if (_render is not null && GodotObject.IsInstanceValid(_render))
+            _render.Effects.Spawn(effect);
+    }
+
     private void OnEffectReceived(ClientNet.EffectEvent e)
     {
         if (_render is null || !GodotObject.IsInstanceValid(_render))
@@ -12730,7 +13148,15 @@ public sealed partial class NetGame : Node3D
         Color? tint = (e.ColorMin != default || e.ColorMax != default)
             ? new Color((e.ColorMin.X + e.ColorMax.X) * 0.5f, (e.ColorMin.Y + e.ColorMax.Y) * 0.5f, (e.ColorMin.Z + e.ColorMax.Z) * 0.5f)
             : (Color?)null;
-        _render.OnEffect(name, e.Origin, e.Velocity, Math.Max(1, e.Count), tint);
+        NVec3 origin = e.Origin;
+        if (e.FirstPersonCasing && _camera is not null && _viewModel is not null
+            && CvarOr(Menu.MenuState.Cvars, "chase_active", 0f) == 0f)
+        {
+            Vector3 offset = _viewModel.GunOffset;
+            Basis basis = _camera.GlobalBasis;
+            origin += Coords.ToQuake(-basis.Z * offset.X - basis.X * offset.Y + basis.Y * offset.Z);
+        }
+        _render.OnEffect(name, origin, e.Velocity, Math.Max(1, e.Count), tint);
     }
 
     /// <summary>A decoded positional sound (DP SV_StartSound) → play it on the renderer. Routes by the wire flags:
@@ -13163,8 +13589,9 @@ public sealed partial class NetGame : Node3D
     //  Map / world helpers
     // =====================================================================================
 
-    private VortexArena.Formats.Bsp.BspData? TryLoadMapBsp(string map)
+    private VortexArena.Formats.Bsp.BspData? TryLoadMapBsp(string map, out string? resolvedPath)
     {
+        resolvedPath = null;
         if (_assets is null || string.IsNullOrWhiteSpace(map))
             return null;
         foreach (string vpath in MapVPathCandidates(map))
@@ -13173,7 +13600,10 @@ public sealed partial class NetGame : Node3D
                 continue;
             VortexArena.Formats.Bsp.BspData? bsp = _assets.ReadBsp(vpath);
             if (bsp is not null)
+            {
+                resolvedPath = vpath;
                 return bsp;
+            }
         }
         return null;
     }
@@ -13334,15 +13764,17 @@ public sealed partial class NetGame : Node3D
             GlowBlendMode = Godot.Environment.GlowBlendModeEnum.Screen,
         };
 
-        // Map-declared fog (worldspawn "fog"), restoring the mapper's intended atmosphere + depth cue.
-        VortexArena.Game.MapLoader.ApplyFog(env, _bsp);
+        // The listen world has already applied mapinfo precedence to its effective entity lump.
+        if (_serverWorld is not null && MapFogSettings.TryParse(_serverWorld.MapFog, out var fog))
+            VortexArena.Game.MapLoader.ApplyMapFog(env, fog);
 
         // Map-declared colour tint baseline (worldspawn "_map_tint"/"_scene_tint"); identity if unset. Live cvars
         // and the C# API can override it at runtime (VortexArena.Game.WorldTint).
         VortexArena.Game.WorldTint.ApplyWorldspawn(_bsp);
 
         // (N3/N9) Volumetric fog + SDFGI ride the same Environment; both default off and are polled live.
-        Client.SceneLightingSettings.Attach(env);
+        Client.SceneLightingSettings.Attach(env, ResolveClientMapSettings(_serverWorld?.AuthoredMapInfo,
+            _serverWorld?.GameType?.NetName ?? _gametype));
 
         _worldEnv = env; // kept so a pure client can swap in the real map's sky/fog/tint once its BSP loads (ApplyMapSky)
         AddChild(new WorldEnvironment { Name = "WorldEnvironment", Environment = env });
@@ -13354,7 +13786,7 @@ public sealed partial class NetGame : Node3D
     /// <see cref="LoadClientMapFromServer"/> once a pure <c>--connect</c> client has loaded the server's BSP.
     /// No-op when the environment or BSP isn't available.
     /// </summary>
-    private void ApplyMapSky()
+    private void ApplyMapSky(VortexArena.Common.Menu.MapInfo? info)
     {
         if (_worldEnv is null || _bsp is null)
             return;
@@ -13364,11 +13796,103 @@ public sealed partial class NetGame : Node3D
         // r_sky: the late sky swap must re-register with the poller, or an active r_sky 0 would be undone
         // here (and a later r_sky 1 would restore the boot-time procedural sky instead of the map one).
         Client.SceneLightingSettings.NoteSkyChanged(_worldEnv.Sky);
-        VortexArena.Game.MapLoader.ApplyFog(_worldEnv, _bsp);
+        Client.SceneLightingSettings.NoteMapSettingsChanged(ResolveClientMapSettings(info, _gametype));
+        VortexArena.Game.MapLoader.ApplyMountedMapFog(_worldEnv, _bsp, info?.Fog);
+        Client.SceneLightingSettings.NoteMapFogChanged();
         VortexArena.Game.WorldTint.ApplyWorldspawn(_bsp);
         // F1-B: a pure --connect client only learns the map here, so this is where its lightgrid binds. The
         // listen-server path binds in AddLight; both funnel through ModelLighting so there is one owner.
         Client.ModelLighting.ApplyMap(_bsp.LightGrid);
+    }
+
+    private void ApplyServerMapVisualSuggestions()
+    {
+        if (!_clientMapLoaded || _client is not { } client)
+            return;
+
+        client.UpdateMapVisualSubscription(Client.SceneLightingSettings.AcceptServerMapSuggestions());
+        if (client.ServerMapVisualSuggestions == _lastServerMapVisualSuggestions)
+            return;
+
+        _lastServerMapVisualSuggestions = client.ServerMapVisualSuggestions;
+        Client.SceneLightingSettings.NoteServerMapSuggestionsChanged(_lastServerMapVisualSuggestions);
+    }
+
+    private void ApplyServerMapFog()
+    {
+        if (!_clientMapLoaded || _worldEnv is null || _client is not { HasClientInit: true } client
+            || client.ServerFog == _lastServerFog)
+            return;
+        _lastServerFog = client.ServerFog;
+        if (!MapFogSettings.TryParse(client.ServerFog, out var fog))
+            return;
+        VortexArena.Game.MapLoader.ApplyMapFog(_worldEnv, fog);
+        Client.SceneLightingSettings.NoteMapFogChanged();
+    }
+
+    private void ConfigureRadarMap(RadarPanel radar, VortexArena.Formats.Bsp.BspData? bsp)
+    {
+        radar.MapName = _map;
+        if (bsp is not { Models.Length: > 0 })
+            return;
+
+        NVec3 mins = bsp.Models[0].Mins, maxs = bsp.Models[0].Maxs;
+        var info = VortexArena.Formats.Vmap.MapInfo.Parse(ReadMountedMapText($"maps/{_map}.mapinfo") ?? "");
+        if (info.HasBounds &&
+            info.BoundsMin.X < info.BoundsMax.X && info.BoundsMin.Y < info.BoundsMax.Y &&
+            info.BoundsMin.Z < info.BoundsMax.Z &&
+            float.IsFinite(info.BoundsMin.LengthSquared()) && float.IsFinite(info.BoundsMax.LengthSquared()))
+        {
+            mins = info.BoundsMin;
+            maxs = info.BoundsMax;
+        }
+        else if (TextureCache.Get($"gfx/{_map}_radar") is not null)
+        {
+            // The pin sweeps the entire world cross-section along each axis from both sides.
+            // Radar uses XY only. Both sweeps use the original BSP bounds, including the full Z span.
+            ITraceService trace = _serverWorld?.Services.Trace ?? Api.Trace;
+            TightenRadarAxis(trace, NVec3.UnitX, ref mins.X, ref maxs.X,
+                new NVec3(0, mins.Y, mins.Z), new NVec3(0, maxs.Y, maxs.Z));
+            TightenRadarAxis(trace, NVec3.UnitY, ref mins.Y, ref maxs.Y,
+                new NVec3(bsp.Models[0].Mins.X, 0, mins.Z), new NVec3(bsp.Models[0].Maxs.X, 0, maxs.Z));
+        }
+        radar.MapMinXY = new Vector2(mins.X, mins.Y);
+        radar.MapMaxXY = new Vector2(maxs.X, maxs.Y);
+    }
+
+    private static void TightenRadarAxis(ITraceService trace, NVec3 axis, ref float low, ref float high,
+        NVec3 sweepMins, NVec3 sweepMaxs)
+    {
+        NVec3 lowPoint = axis * low, highPoint = axis * high;
+        TraceResult forward = trace.Trace(lowPoint, sweepMins, sweepMaxs, highPoint, MoveFilter.WorldOnly, null);
+        TraceResult reverse = trace.Trace(highPoint, sweepMins, sweepMaxs, lowPoint, MoveFilter.WorldOnly, null);
+        float near = forward.StartSolid ? low : NVec3.Dot(forward.EndPos, axis);
+        float far = reverse.StartSolid ? high : NVec3.Dot(reverse.EndPos, axis);
+        if (near < far)
+        {
+            low = near;
+            high = far;
+        }
+    }
+
+    private string? ReadMountedMapText(string path)
+    {
+        try { return _vfs?.Exists(path) == true ? _vfs.ReadText(path) : null; }
+        catch (VortexArena.Formats.AssetParseException) { return null; }
+    }
+
+    private MapClientVisualSettings ResolveClientMapSettings(VortexArena.Common.Menu.MapInfo? info, string mode)
+    {
+        if (info is null)
+            return default;
+        return MapClientVisualSettings.Resolve(info, mode, ClientMapSettingsAcl(), ReadMountedMapText);
+    }
+
+    private string ClientMapSettingsAcl()
+    {
+        const string name = MapClientVisualSettings.AclCvar;
+        ICvarService? cvars = _serverWorld?.Services.Cvars ?? _sharedCvars;
+        return cvars?.Has(name) == true ? cvars.GetString(name) : "+*";
     }
 
     /// <summary>
@@ -13389,7 +13913,7 @@ public sealed partial class NetGame : Node3D
         if (_clientMapLoaded || _isListenServer || string.IsNullOrWhiteSpace(mapName))
             return;
 
-        VortexArena.Formats.Bsp.BspData? bsp = TryLoadMapBsp(mapName);
+        VortexArena.Formats.Bsp.BspData? bsp = TryLoadMapBsp(mapName, out string? bspPath);
         if (bsp is null)
         {
             GD.PrintErr($"[NetGame] client: server map '{mapName}' not found in the VFS — staying on the flat " +
@@ -13413,12 +13937,9 @@ public sealed partial class NetGame : Node3D
         {
             es.SetCollisionWorld(built.World);
             es.Pvs = new VortexArena.Formats.Bsp.BspPvs(bsp);
-            // Register the inline "*N" brush models into the client model catalog. NOTE: this is FORWARD-LOOKING —
-            // no client code currently mirrors snapshot entities into the ambient facade table or calls SetModel
-            // on it (the only facade entity is the prediction carrier), so predicted movement still doesn't clip
-            // networked doors/plats today (the server reconcile corrects it). The registration is cheap + idempotent
-            // and is here so that when a snapshot→facade mover mirror lands, a "*N" setmodel resolves its clip brushes.
             BspCollisionBuilder.RegisterSubmodels(built.Submodels, es.ModelsImpl);
+            if (_shownamesLayer is not null)
+                _shownamesLayer.RemoteCollision = new(built.World, es.ModelsImpl);
         }
 
         // (2) Render the worldmodel + PVS entity-cull + particle/decal collision (the same path the listen server
@@ -13427,20 +13948,15 @@ public sealed partial class NetGame : Node3D
         AttachWorldRender(built.World);
 
         // (3) The map's real skybox / fog / colour tint, replacing the procedural sky AddLight put up pre-map.
-        ApplyMapSky();
+        string bspName = System.IO.Path.GetFileNameWithoutExtension(bspPath!);
+        string mapInfoPath = $"maps/{bspName}.mapinfo";
+        var mapInfo = new MapInfoBackend(path => path == mapInfoPath ? ReadMountedMapText(path) : null, _ => false);
+        ApplyMapSky(mapInfo.Parse(bspName));
 
         // (4) The map-dependent HUD/ambience feeds SetupCameraAndHud/SetupMusic couldn't wire in _Ready (the map
         // name wasn't known yet on a pure client):
-        // — radar minimap image + world bounds (QC mi_min/mi_max), so the image and the blips align;
         if (_radar is not null)
-        {
-            _radar.MapName = _map;
-            if (bsp.Models.Length > 0)
-            {
-                _radar.MapMinXY = new Vector2(bsp.Models[0].Mins.X, bsp.Models[0].Mins.Y);
-                _radar.MapMaxXY = new Vector2(bsp.Models[0].Maxs.X, bsp.Models[0].Maxs.Y);
-            }
-        }
+            ConfigureRadarMap(_radar, bsp);
         // — waypoint-sprite distance-fade ramp (QC waypointsprite_fadedistance = vlen(mi_scale));
         if (_waypointLayer is not null && bsp.Models.Length > 0)
         {
@@ -13477,19 +13993,28 @@ public sealed partial class NetGame : Node3D
                 GD.Print($"[NetGame] map music: '{resolvedTrack}' (from mapinfo, client map load)");
             }
         }
-        // — warpzone portal window/disc renderers (SetupCameraAndHud skipped them — no _mapRoot yet). The zone
-        //   transforms aren't networked, so on a pure client these degrade to the dark-mirror placeholder rather
-        //   than the live see-through render — but the portal FRAMES render instead of nothing. _camera is live
-        //   (SetupCameraAndHud ran in _Ready; this fires from _Process on the first accept).
+        // Remote views use the mounted BSP and keep their portal pairs out of the gameplay trace manager.
         if (_mapRoot is not null && _camera is not null && _portalRenderer is null)
         {
+            var context = GameMapView.GametypeContext(bsp, _gametype);
+            var bakedCameras = BspWarpzoneViews.StaticCameras(bsp, GameMapView.GametypeContext(bsp, _gametype, embedded: true));
+            if (Api.Services is VortexArena.Engine.Simulation.EngineServices clientServices
+                && bsp.Entities.Any(entity => entity.TryGetValue("classname", out string? classname)
+                    && classname == "trigger_warpzone"))
+            {
+                BspSurfaceBuilder.BuildAndAttach(bsp, clientServices.ModelsImpl);
+                _view.MapWarpzones = BspWarpzoneViews.StaticZones(bsp, context, clientServices.Surfaces);
+            }
+
+            WarpzoneCamera.Pose? MonitorPose(int model)
+            {
+                return _client?.WarpzoneCameraPoses.TryGetValue(model, out var pose) == true
+                    ? pose : bakedCameras.GetValueOrDefault(model);
+            }
+
             _portalRenderer = new VortexArena.Game.Client.PortalRenderer { Name = "PortalRenderer" };
             AddChild(_portalRenderer);
-            _portalRenderer.Setup(_mapRoot, _camera);
-
-            _portalDiscRenderer = new VortexArena.Game.Client.PortalDiscRenderer { Name = "PortalDiscRenderer" };
-            AddChild(_portalDiscRenderer);
-            _portalDiscRenderer.Setup(_camera, (path, skin) => _assets?.LoadModel(path, skin));
+            _portalRenderer.Setup(_mapRoot, _camera, _view.MapWarpzones, MonitorPose);
         }
 
         GD.Print($"[NetGame] client loaded map '{_map}' ({_gametype}) for render + prediction collision.");

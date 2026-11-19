@@ -311,6 +311,7 @@ public static class EffectsList
         Effects.Register("IMPACT_STONE", "impact_stone");
         Effects.Register("IMPACT_WOOD", "impact_wood");
         Effects.Register("IMPACT_FLESH", "impact_flesh");
+        Effects.Register("MODEL_GIB_SPLASH", "model_gib_splash");
 
         // Deterministic CL/SV ordering + ids (mirrors QC Registry sort at boot).
         Effects.Sort();

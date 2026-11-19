@@ -585,6 +585,19 @@ public sealed class VirtualFileSystem : IDisposable
         }
     }
 
+    /// <summary>Find candidates in the archive that supplies an asset, following normal mount precedence.</summary>
+    internal IEnumerable<string> FindInAssetPack(string assetPath, string prefix, string extension)
+    {
+        string key = AssetPaths.Normalize(assetPath);
+        string normalizedPrefix = NormalizePrefix(prefix);
+        string? normalizedExtension = NormalizeExtFilter(extension);
+        IMount? mount = _mounts.FirstOrDefault(m => m.Contains(key));
+        return mount is Pk3Mount
+            ? mount.Keys.Where(path => path.StartsWith(normalizedPrefix, StringComparison.Ordinal)
+                && KeyHasExtension(path, normalizedExtension!)).OrderBy(path => path, StringComparer.Ordinal)
+            : Array.Empty<string>();
+    }
+
     /// <summary>
     /// Resolves an extension-agnostic texture base name to a concrete virtual path, reproducing the
     /// Darkplaces image extension-search precedence (<c>loadimagepixelsbgra</c> /

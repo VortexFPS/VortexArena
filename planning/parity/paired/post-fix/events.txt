@@ -1,0 +1,54 @@
+FREEZE · /tmp/va-paired-20261119/postfix-xPfcuM/recordings/freeze-native
+server.log (selected lines, original line numbers)
+63: [NetGame] listen server on 127.0.0.1:28132 (map 'stormkeep', freezetag, 3 bots) — self-connecting.
+79: :join:1:-1::player
+84: :join:2:-2:bot:[BOT]Toxic
+87: :join:3:-3:bot:[BOT]Discovery
+89: :join:4:-4:bot:[BOT]Lion
+94: :join:5:-5::ParityProbe
+96: gametype: freezetag  time: 23.9
+97: players: 5 (3 bots)
+110: "g_freezetag_weaponarena" is "vortex"
+113: "g_weaponarena" is "vortex"
+118: [lb]wf] first attack this session: vortex
+119: :kill:suicide:5:5:type=kill:items=26
+120: gametype: freezetag  time: 37.0
+121: players: 5 (3 bots)
+134: "g_freezetag_weaponarena" is "vortex"
+137: "g_weaponarena" is "vortex"
+142: :kill:frag:3:2:type=weapon/vortex:items=26:victimitems=26
+146: :kill:frag:3:2:type=weapon/vortex:items=26:victimitems=26
+147: gametype: freezetag  time: 56.0
+148: players: 5 (3 bots)
+161: "g_freezetag_weaponarena" is "vortex"
+164: "g_weaponarena" is "vortex"
+
+client.log (selected lines, original line numbers)
+68: [NetGame] client loaded map 'stormkeep' (freezetag) for render + prediction collision.
+73: ]cmd join
+74: joined the game
+85: ]cmd kill
+
+CRYLINK · /tmp/va-paired-20261119/postfix-xPfcuM/recordings/crylink-native
+server.log (selected lines, original line numbers)
+65: [NetGame] listen server on 127.0.0.1:28136 (map 'stormkeep', dm, 1 bots) — self-connecting.
+81: :join:1:-1::player
+86: :join:2:-2:bot:[BOT]Toxic
+92: :join:3:-3::ParityProbe
+94: gametype: dm  time: 23.1
+95: players: 3 (1 bots)
+99: "g_balance_crylink_primary_middle_fadetime" is "1.5"
+100: "g_balance_crylink_primary_middle_lifetime" is "2"
+101: "g_balance_crylink_primary_other_fadetime" is "1.5"
+102: "g_balance_crylink_primary_other_lifetime" is "2"
+104: "g_balance_crylink_primary_speed" is "100"
+111: "g_weaponarena" is "crylink"
+120: [lb]wf] first attack this session: crylink
+127: :kill:suicide:3:3:type=weapon/crylink|bounce|splash:items=3
+
+client.log (selected lines, original line numbers)
+68: [NetGame] client loaded map 'stormkeep' (dm) for render + prediction collision.
+72: ]cmd join
+73: joined the game
+84: ]cmd teleporttotarget misc_teleporter_dest1
+

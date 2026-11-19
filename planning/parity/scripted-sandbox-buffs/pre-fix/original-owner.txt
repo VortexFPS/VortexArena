@@ -1,0 +1,12 @@
+]cmd teleporttotarget parity_owner
+]cmd g_sandbox object_spawn models/items/g_h100.md3
+]cmd g_sandbox object_info object
+SANDBOX - WARNING: No information could be found. Make sure you are facing an object
+]cmd teleporttotarget parity_owner
+Player ParityOwner tried to use cheat 'teleporttotarget'
+Player ParityGuest tried to use cheat 'teleporttotarget'
+]cmd g_sandbox object_edit skin 0
+SANDBOX - INFO: Sandbox mode is active, but in read-only mode. Sandbox commands cannot be used
+]cmd teleporttotarget parity_buff_start
+]cmd teleporttotarget parity_buff_touch
+You got the Vampire buff!

@@ -50,6 +50,48 @@ public static class WaypointEditor
         return best;
     }
 
+    /// <summary>Pick the first waypoint volume along the unobstructed part of the editor ray.</summary>
+    public static Waypoint? PickAimed(WaypointNetwork net, Vector3 origin, Vector3 direction, float reach)
+    {
+        Waypoint? best = null;
+        foreach (Waypoint wp in net.Nodes)
+        {
+            Vector3 min = wp.IsBox ? wp.AbsMin : wp.Origin - new Vector3(16f);
+            Vector3 max = wp.IsBox ? wp.AbsMax : wp.Origin + new Vector3(16f);
+            if (TryEnterBox(origin, direction, min, max, reach, out float distance)
+                && distance < reach)
+            {
+                best = wp;
+                reach = distance;
+            }
+        }
+        return best;
+    }
+
+    private static bool TryEnterBox(Vector3 origin, Vector3 direction, Vector3 min, Vector3 max,
+        float reach, out float entry)
+    {
+        entry = 0f;
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            float start = origin[axis];
+            float step = direction[axis];
+            if (step == 0f)
+            {
+                if (start < min[axis] || start > max[axis])
+                    return false;
+                continue;
+            }
+            float a = (min[axis] - start) / step;
+            float b = (max[axis] - start) / step;
+            entry = MathF.Max(entry, MathF.Min(a, b));
+            reach = MathF.Min(reach, MathF.Max(a, b));
+            if (entry > reach)
+                return false;
+        }
+        return true;
+    }
+
     /// <summary>
     /// Place a waypoint (QC <c>waypoint_spawn_fromeditor</c>). <paramref name="flags"/> selects the kind:
     /// none for an ordinary node, <see cref="WaypointFlags.Jump"/> / <see cref="WaypointFlags.Crouch"/> /

@@ -1,0 +1,45 @@
+unit: sv-weaponstats
+category: server
+base_ref_rev: "v0.8.6-1779-g863cd3e84"
+last_audited: "2026-11-19"
+summary:
+  feature_count: 1
+  worst_gaps:
+    - "HTTP delivery remains outside the native local exporter."
+features:
+  - id: sv-weaponstats.local-report
+    name: "Optional local weapon matchup stats file"
+    layer: [authority]
+    base_refs:
+      - "server/weapons/weaponstats.qc"
+      - "server/weapons/weaponstats.qh"
+      - "server/player.qc:PlayerDamage"
+      - "server/world.qc:NextLevel"
+      - "server/world.qc:Shutdown"
+    port_refs:
+      - "src/VortexArena.Common/Gameplay/Damage/DamageSystem.cs:PlayerDamage"
+      - "src/VortexArena.Common/Gameplay/Weapons/WeaponOrder.cs:ToXonoticRegistryId"
+      - "src/VortexArena.Server/WeaponStats.cs"
+      - "src/VortexArena.Server/GameWorld.cs:StartWeaponStats"
+      - "game/net/NetGame.cs"
+      - "game/UserPaths.cs:Resolve"
+    constants:
+      - { name: "sv_weaponstats_file", base: "empty (disabled)", port: "empty (disabled)", match: true }
+      - { name: "bot flags", base: "0 human, 1 bot", port: "0 human, 1 bot", match: true }
+      - { name: "weapon indices", base: "1..43 at the audit pin", port: "pinned Xonotic registry numbers", match: true }
+    status:
+      logic: partial
+      values: faithful
+      timing: faithful
+      presentation: na
+      audio: na
+      liveness: live
+    intended_divergence: false
+    gaps:
+      - "HTTP delivery and the legacy QC save-restore entry point are outside the native local report."
+      - "The native gameplay-cvar exclusion list is a subset of the QuakeC purity filter, so identical server settings can produce different #config values."
+    verification:
+      - { kind: test, ref: "tests/VortexArena.Tests/WeaponStatsTests.cs", result: pass }
+      - { kind: ingame, ref: "Native headless DM with five bots. The map stormkeep command and normal exit appended one report each for darkzone and stormkeep to the same VORTEX_USERDIR file.", result: pass }
+    confidence: high
+    notes: "Ordered audit rows 176–177. Counts one hit per eligible PlayerDamage invocation, actual health plus armor lost, and one kill on the lethal path. A special death credits the attacker's held weapon. The victim's held weapon, both bot flags, and the pinned numeric registry order key the rows. The map opens the collector only with the cvar already set and consumes its batch on intermission or shutdown. At flush the current value supplies an ordered console-tokenized list of user-data files and stdout (-). An unavailable file falls through to the next destination. The first completed write or exhaustion consumes the batch. A post-open failure is terminal because bytes may have reached the sink. Hitplot has its own callers and format."

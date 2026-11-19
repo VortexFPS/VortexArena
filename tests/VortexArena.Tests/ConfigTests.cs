@@ -101,6 +101,42 @@ public class ConfigInterpreterTests
     }
 
     [Fact]
+    public void Local_Exec_Does_Not_Forward_Unknown_Commands_In_Includes()
+    {
+        var cvars = new CvarService();
+        var interp = New(cvars, new Dictionary<string, string>
+        {
+            ["root.cfg"] = "exec child.cfg",
+            ["child.cfg"] = "set local_setting 1; unknown_from_file",
+        });
+        var forwarded = new List<string>();
+        interp.UnknownCommandHandler = (name, _) => forwarded.Add(name);
+
+        Assert.True(interp.ExecuteFile("root.cfg", forwardUnknownCommands: false));
+        Assert.Equal("1", cvars.GetString("local_setting"));
+        Assert.Empty(forwarded);
+
+        interp.ExecuteLine("unknown_from_console");
+        Assert.Equal(new[] { "unknown_from_console" }, forwarded);
+    }
+
+    [Theory]
+    [InlineData("bind", "$menu_tooltips")]
+    [InlineData("in_bind", "$menu_tooltips")]
+    [InlineData("BIND", "2")]
+    [InlineData("\"bind\"", "2")]
+    public void BindDefinitionsFollowTheDarkPlacesCommandPrefix(string verb, string expected)
+    {
+        var cvars = new CvarService();
+        var interpreter = New(cvars);
+        cvars.Set("menu_tooltips", "2");
+        string? stored = null;
+        interpreter.RegisterCommand(verb.Trim('"'), argv => stored = argv[^1]);
+        interpreter.ExecuteLine($"{verb} F8 \"$menu_tooltips\"");
+        Assert.Equal(expected, stored);
+    }
+
+    [Fact]
     public void Exec_Missing_File_Is_Recorded_Not_Fatal()
     {
         var cvars = new CvarService();

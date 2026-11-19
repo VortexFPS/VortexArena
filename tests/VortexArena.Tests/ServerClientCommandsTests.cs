@@ -81,6 +81,25 @@ public class ServerClientCommandsTests
         Assert.Empty(VortexArena.Common.Gameplay.Waypoints.WaypointSprites.Active);
     }
 
+    [Fact]
+    public void Vote_ExplicitServerCommandDoesNotUseTheListenPlayer()
+    {
+        var world = NewWorld();
+        Player host = world.Clients.ClientConnect(isBot: false, netName: "host").Player;
+        world.Services.Cvars.Set("sv_vote_gamestart", "1");
+        world.Services.Cvars.Set("sv_vote_nospectators", "0");
+
+        world.Commands.Execute("sv_cmd vote call fraglimit 83", isServerConsole: true, caller: host);
+
+        Assert.True(world.Voting.Active);
+        Assert.Null(world.Voting.Caller);
+        Assert.Equal(0, world.Voting.YesCount);
+        Assert.Contains("Only clients can vote", world.Commands.Execute("sv_cmd vote yes", true, host).Output);
+        world.Commands.Execute("vote yes", isServerConsole: false, caller: host);
+        Assert.False(world.Voting.Active);
+        Assert.Equal("83", world.Services.Cvars.GetString("fraglimit"));
+    }
+
     // ============================================================================== engine defer
 
     [Fact]
@@ -494,12 +513,208 @@ public class ServerClientCommandsTests
     }
 
     [Fact]
+    public void Records_CtfPagesUseMapPositionsAndSeparateFastestCapture()
+    {
+        var world = NewWorld("ctf");
+        string[] maps = Enumerable.Range(0, 2001).Select(i => $"report-map-{i:0000}").ToArray();
+        world.Commands.Replies.RecordMapCatalog = mode =>
+        {
+            Assert.Equal("ctf", mode);
+            return maps;
+        };
+        RaceRecords.Clear();
+        try
+        {
+            RaceRecords.WriteCaptureBest(maps[199], 9.25f, "Page one");
+            RaceRecords.WriteCaptureBest(maps[200], 12.5f, "Page two");
+            RaceRecords.WriteCaptureBest(maps[1999], 21f, "Page ten");
+            RaceRecords.WriteCaptureBest(maps[2000], 22f, "Outside page limit");
+            RaceRecords.WriteCaptureBest("unmounted", 1f, "Outside catalog");
+            RaceRecords.SetTime(maps[200], RaceRecords.CtfRecord, 10f, "other", "Ranked but separate");
+
+            string first = world.Commands.Execute("records 1", isServerConsole: true).Output;
+            string second = world.Commands.Execute("records 2", caller: NewCaller()).Output;
+            Assert.Equal(maps[199].PadLeft(32) + " 9.25   Page one\n", first);
+            Assert.Equal(maps[200].PadLeft(32) + " 12.50  Page two\n", second);
+            string tenth = world.Commands.Execute("records 10", isServerConsole: true).Output;
+            Assert.Contains("Page ten", tenth);
+            string all = world.Commands.Execute("records", isServerConsole: true).Output;
+            Assert.Equal(first + second + tenth, all);
+            foreach (string arg in new[] { "3", "11", "-1", "invalid" })
+                Assert.Equal(all, world.Commands.Execute("records " + arg, isServerConsole: true).Output);
+        }
+        finally { RaceRecords.Clear(); }
+    }
+
+    [Theory]
+    [InlineData("rc", RaceRecords.RaceRecord, RaceRecords.CtsRecord)]
+    [InlineData("cts", RaceRecords.CtsRecord, RaceRecords.RaceRecord)]
+    public void Records_RaceModesReturnScopedRankOneInClockFormat(string mode, string activeType, string otherType)
+    {
+        var world = NewWorld(mode);
+        world.Commands.Replies.RecordMapCatalog = requested =>
+        {
+            Assert.Equal(mode, requested);
+            return new[] { "boil", "record-other" };
+        };
+        RaceRecords.Clear();
+        try
+        {
+            RaceRecords.SetTime("boil", activeType, 61.25f, "record-first", "First");
+            RaceRecords.SetTime("boil", activeType, 70f, "record-second", "Second");
+            RaceRecords.SetTime("boil", otherType, 1f, "record-other", "Other mode");
+            RaceRecords.SetTime("record-other", activeType, 4.5f, "record-other", "Other map");
+            string report = world.Commands.Execute("records", caller: NewCaller()).Output;
+            Assert.Equal("boil".PadLeft(32) + " 1:01.25  First\n"
+                        + "record-other".PadLeft(32) + " 0:04.50  Other map\n", report);
+            string rankings = world.Commands.Execute("rankings", caller: NewCaller()).Output;
+            Assert.Contains("Second", rankings);
+            Assert.DoesNotContain("Other", rankings);
+        }
+        finally { RaceRecords.Clear(); }
+    }
+
+    [Fact]
+    public void Ladder_CombinesCatalogPositionsAndCtsSpeedByIdentity()
+    {
+        var world = NewWorld("cts");
+        world.Commands.Replies.RecordMapCatalog = _ => new[] { "boil", "ladder-other" };
+        RaceRecords.Clear();
+        try
+        {
+            RaceRecords.SetTime("boil", RaceRecords.CtsRecord, 10f, "first", "First");
+            RaceRecords.SetTime("boil", RaceRecords.CtsRecord, 15f, "second", "Same name");
+            RaceRecords.SetTime("ladder-other", RaceRecords.CtsRecord, 11f, "second", "Same name");
+            RaceRecords.SetTime("ladder-other", RaceRecords.CtsRecord, 17f, "first", "First");
+            RaceRecords.SetTime("unmounted", RaceRecords.CtsRecord, 1f, "excluded", "Excluded");
+            RaceRecords.WriteSpeedAwardBest("ladder-other", RaceRecords.CtsRecord, 700f, "second");
+            RaceRecords.WriteSpeedAwardBest("boil", RaceRecords.RaceRecord, 800f, "first");
+            string report = world.Commands.Execute("ladder", caller: NewCaller()).Output;
+            Assert.Contains("1st^3| ^7    160^3|", report);
+            Assert.Contains("2nd^3| ^7    150^3|", report);
+            Assert.True(report.IndexOf("Same name", StringComparison.Ordinal) < report.IndexOf("First", StringComparison.Ordinal));
+            Assert.DoesNotContain("Excluded", report);
+        }
+        finally { RaceRecords.Clear(); }
+    }
+
+    [Fact]
+    public void Ladder_KeepsCatalogTieOrderAndCapsRanksAndTable()
+    {
+        var world = NewWorld("rc");
+        string[] maps = Enumerable.Range(0, 31).Select(i => $"ladder-{30 - i:00}").ToArray();
+        world.Commands.Replies.RecordMapCatalog = _ => maps;
+        RaceRecords.Clear();
+        try
+        {
+            for (int i = 0; i < maps.Length; i++)
+                RaceRecords.SetTime(maps[i], RaceRecords.RaceRecord, 10f, maps[i], $"Runner {i:00}");
+            string report = world.Commands.Execute("ladder", isServerConsole: true).Output;
+            string[] rows = report.Split('\n').Where(line => line.Contains("Runner ", StringComparison.Ordinal)).ToArray();
+            Assert.Equal(30, rows.Length);
+            for (int i = 0; i < rows.Length; i++)
+                Assert.EndsWith($" ^7Runner {i:00}", rows[i]);
+            Assert.Contains("   0 ^3| ^7", rows[0]);
+            world.Commands.Replies.RecordMapCatalog = _ => new[] { maps[0] };
+            for (int rank = 2; rank <= 11; rank++)
+                RaceRecords.SetTime(maps[0], RaceRecords.RaceRecord, 10f + rank, $"place-{rank}", $"Place {rank}");
+            string ranked = world.Commands.Execute("ladder", isServerConsole: true).Output;
+            Assert.Contains("Place 10", ranked);
+            Assert.DoesNotContain("Place 11", ranked);
+        }
+        finally { RaceRecords.Clear(); }
+    }
+
+    [Fact]
     public void Lsmaps_ListsCatalog()
     {
         var world = NewWorld();
         Cvars.Set("g_maplist", "boil");
         CommandContext ctx = world.Commands.Execute("lsmaps", isServerConsole: true);
         Assert.Contains("Maps available", ctx.Output);
+    }
+
+    [Theory]
+    [InlineData("ctf")]
+    [InlineData("cts")]
+    [InlineData("rc")]
+    public void Lsmaps_MarksUnplayedMapsUsingTheActiveRecordTable(string mode)
+    {
+        var world = NewWorld(mode);
+        world.Commands.Replies.RecordMapCatalog = _ => new[] { "played", "other-mode", "empty" };
+        RaceRecords.Clear();
+        try
+        {
+            if (mode == "ctf")
+            {
+                RaceRecords.WriteCaptureBest("played", 12.5f, "Capture holder");
+                RaceRecords.SetTime("other-mode", RaceRecords.CtfRecord, 9f, "other", "Rank only");
+            }
+            else
+            {
+                string active = mode == "rc" ? RaceRecords.RaceRecord : RaceRecords.CtsRecord;
+                string other = mode == "rc" ? RaceRecords.CtsRecord : RaceRecords.RaceRecord;
+                RaceRecords.SetTime("played", active, 15f, "a", "A");
+                RaceRecords.SetTime("other-mode", other, 9f, "b", "B");
+            }
+            Assert.Equal("^7Maps available (3) (New maps have asterisks marked in blue): ^3played ^4*other-mode ^5*empty\n",
+                world.Commands.Execute("lsmaps", caller: NewCaller()).Output);
+            Assert.Equal("^7Maps available (1): ^3played", CommandReplies.FormatMapCatalog(new[] { "played" }, mode));
+        }
+        finally { RaceRecords.Clear(); }
+    }
+
+    [Fact]
+    public void MapReplies_ReadOnlyTheirOwnCatalogAndRefreshAfterARecord()
+    {
+        var world = NewWorld("ctf");
+        var commands = world.Commands;
+        var maps = new[] { "catalog-test" };
+        commands.Replies.RecordMapCatalog = _ => maps;
+        world.Rotation.AllowedMaps = () => throw new InvalidOperationException("Rotation was not requested.");
+        Cvars.Set("g_maplist", "");
+        RaceRecords.Clear();
+        try
+        {
+            Assert.Contains("^5*catalog-test", commands.Execute("lsmaps", isServerConsole: true).Output);
+            RaceRecords.WriteCaptureBest("catalog-test", 5f, "New holder");
+            Assert.Contains("^3catalog-test", commands.Execute("lsmaps", isServerConsole: true).Output);
+
+            Cvars.Set("g_maplist", "first");
+            commands.Replies.RecordMapCatalog = _ => throw new InvalidOperationException("Catalog was not requested.");
+            Assert.Contains("^3first", commands.Execute("printmaplist", isServerConsole: true).Output);
+            commands.Execute("maplist add second", isServerConsole: true);
+            Assert.Contains("^3second ^2first", commands.Execute("printmaplist", isServerConsole: true).Output);
+        }
+        finally { RaceRecords.Clear(); }
+    }
+
+    [Fact]
+    public void Lsmaps_TruncatesAt250AndCountsOmittedMaps()
+    {
+        string[] maps = Enumerable.Range(1, 252).Select(i => $"map-{i}").ToArray();
+        string reply = CommandReplies.FormatMapCatalog(maps, "dm");
+        Assert.StartsWith("^7Maps available (252): ^3map-1 ^2map-2 ", reply);
+        Assert.EndsWith("^2map-250 ^7(2 not listed)", reply);
+        Assert.DoesNotContain("map-251", reply);
+    }
+
+    [Fact]
+    public void Maplist_AddChecksTheBspAndCleanupRetainsSupportedDuplicatesInOrder()
+    {
+        var world = NewWorld();
+        world.Rotation.MapExists = map => map is "one" or "two" or "wrong-mode";
+        world.Rotation.MapSupportsGametype = map => map != "wrong-mode";
+        Cvars.Set("g_maplist", "one missing two one");
+        Assert.Contains("does not exist", world.Commands.Execute("maplist add missing", isServerConsole: true).Output);
+        string quotedError = world.Commands.Execute("sv_cmd maplist add \"missing map\"", isServerConsole: true).Output;
+        Assert.Contains("missing map does not exist", quotedError);
+        Assert.Contains("Usage: maplist", quotedError);
+        world.Commands.Execute("sv_cmd maplist add \"wrong-mode\"", isServerConsole: true);
+        Assert.Equal("wrong-mode one missing two one", Cvars.String("g_maplist"));
+        Assert.Contains("Maps in list (3): ^2one ^2two ^3one", world.Commands.Execute("sv_cmd printmaplist", isServerConsole: true).Output);
+        world.Commands.Execute("sv_cmd maplist cleanup", isServerConsole: true);
+        Assert.Equal("one two one", Cvars.String("g_maplist"));
     }
 
     // ============================================================================== cvar_changes / purechanges

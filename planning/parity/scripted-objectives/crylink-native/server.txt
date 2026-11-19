@@ -1,0 +1,138 @@
+Godot Engine v4.6.3.stable.mono.official.7d41c59c4 - https://godotengine.org
+WARNING: The separate rendering thread feature is experimental. Feel free to try it since it will eventually become a stable feature.
+However, bear in mind that at the moment it can lead to project crashes or instability.
+So, unless you want to test the engine, set the "rendering/driver/threads/thread_model" project setting to 'Safe'.
+     at: setup2 (main/main.cpp:3415)
+
+[lb]frameprofiler] env: managed-debugger=False godot-context=debug csharp=Debug(jit-opt) vsync=Enabled maxfps=0 refresh=-1Hz cpu=6c gpu=
+[lb]frameprofiler] columns: proc=all _Process CPU | rcpu=render-thread submit | gpu=main viewport GPU | rest=present/vsync/stall (ms-proc-rcpu) | late=deferred+present gap | alloc=managed garbage/frame | pipe=shader-pipeline compiles  [lb]rcpu/gpu read 0 and rest widens to ms-proc unless cl_frameprofiler_rendertime 1 — see the banner's rendertime= flag]
+=== VortexArena boot ===
+Weapons:   27
+Items:     21
+Mutators:  46
+GameTypes: 21
+Sounds:    223
+[lb]MenuState] --no-save-config present — config.cfg will NOT be saved this run (DP -benchmark rule).
+[lb]MenuState] user gamedir mounted: /tmp/va-script-cry-native9/server-user/data (drop .pk3 packs in its maps/ subfolder).
+[AssetSystem] loaded 1542 shaders from 121 scripts.
+"maxplayers" set to "16"
+"maxplayers" set to "32"
+[lb]MenuState] config: 6446 cvars from 31 cfg files (381 aliases, 0 missing).
+[lb]MenuState] cvar help: 1386 engine descriptions.
+[lb]shell] --cvar sv_public = "0"
+[lb]shell] --cvar sv_cheats = "1"
+[lb]shell] --cvar sv_eventlog = "1"
+[lb]shell] --cvar g_start_delay = "0"
+[lb]shell] --cvar g_warmup = "0"
+[lb]shell] --cvar g_spawnshieldtime = "0"
+[lb]shell] --cvar g_balance_teams_prevent_imbalance = "0"
+[lb]shell] --cvar bot_number = "0"
+[lb]shell] --cvar g_weaponarena = "crylink"
+[lb]shell] --cvar g_balance_crylink_primary_speed = "100"
+[lb]shell] --cvar g_balance_crylink_primary_spread = "0.08"
+[lb]shell] --cvar g_balance_crylink_primary_refire = "4"
+[lb]shell] --cvar g_balance_crylink_primary_middle_lifetime = "0.35"
+[lb]shell] --cvar g_balance_crylink_primary_other_lifetime = "0.35"
+[lb]shell] --cvar g_balance_crylink_primary_middle_fadetime = "1.1"
+[lb]shell] --cvar g_balance_crylink_primary_other_fadetime = "1.1"
+[lb]shell] --cvar cl_frameprofiler = "0"
+[lb]shell] --cvar bot_neural_bake = "0"
+[lb]video] vid_vsync 0 → requested Disabled, actual Enabled (off — uncapped, may tear)
+[lb]video] cl_maxfps 256 -> Engine.MaxFps 144 (auto: nothing set a cap, using max(144, refresh); refresh -1Hz)
+[lb]video] cl_engine_jitterfix 0 -> Engine.PhysicsJitterFix 0 (physics 10 Hz, max steps/frame 8; 0 = report the measured delta)
+[lb]video] process priority boost unavailable: Permission denied
+[NativeColour] DarkPlaces colour arithmetic (r_darkplaces_colour 1).
+[MenuCommand] 'playerstats_update' has no client backend yet (inert).
+[lb]Shell] hosting listen server: gametype=dm map=runningmanctf bots=0 skill=-1 timelimit=0 fraglimit=0
+[NetGame] dedicated slim: headless host — client render/audio asset loads are skipped (server keeps collision, entities, muzzle tags, waypoints). `sv_dedicated_slim 0` restores the full load.
+[NetGame] DEDICATED: no local client — no loopback connection, carrier, camera, HUD or prediction. All player slots are available to real clients.
+[lb]GameWorld] tick rate: sys_ticrate=0.015625 -> 64 Hz [lb]sharedStore=True, cfgLoaded=False]
+[NetGame] dedicated loop cap: Engine.MaxFps 64 (sim tickrate 64 Hz).
+[NetTransport.Server] listening on UDP 26819 (max 32).
+[ServerNet] LAN discovery: answering getinfo on UDP 26820 (game port 26819).
+[ServerConsole] reading commands from stdin (type 'status', 'help', 'quit'; --no-console to disable).
+[NetGame] precached 0 weapon models, skipped 24 (lazy), 24 muzzle tags.
+[NetGame] listen server on 127.0.0.1:26819 (map 'runningmanctf', dm, 0 bots) — self-connecting.
+[LoadTimeline] host runningmanctf — load begin → ready, 554 ms total
+    textures.compress: nothing compressed (gl_texturecompression 1, no eligible textures)
+    bsp.parse             32.9 ms    5.9 %
+    collision.build      107.7 ms   19.4 %
+    world.boot           123.0 ms   22.2 %
+  server.start           297.2 ms   53.6 %
+  precache.weapons       210.7 ms   38.0 %
+  (unaccounted: yields, present, unmeasured)       46.3 ms
+[ServerNet] peer 1658711827 connected (awaiting handshake).
+[ServerNet] peer 166779053 connected (awaiting handshake).
+:connect:1:-1:
+:join:1:-1::RedProbe
+[ServerNet] peer 1658711827 accepted as 'RedProbe' (netId 1658711827, id a1c0362e).
+:connect:2:-2:
+:join:2:-2::BlueProbe
+[ServerNet] peer 166779053 accepted as 'BlueProbe' (netId 166779053, id d58b4d8a).
+[lb]hitch CPU-LOGIC] 46.9ms (2 dropped @60Hz) (med 15.6, ×3.0) — ng.process 46.0ms (typ 2.8ms, 16× over) | proc 46.5 rcpu 0.0 gpu 0.0 rest 0.4 late 2.2 | alloc 77KB | ticks 1 | watchdog: 16/39 samples in 'net.poll' | DEBUG-BUILD
+[lb]hitch]   prev: 15.6 15.6 15.6 15.6 15.6 15.6 15.6 15.6
+gametype: dm  time: 21.1
+players: 2 (0 bots)
+  BlueProbe        score    0  k/d 0/0
+"g_weaponarena" is "crylink"
+"g_balance_crylink_primary_speed" is "100"
+"g_balance_crylink_primary_spread" is "0.08"
+"g_balance_crylink_primary_refire" is "4"
+"g_balance_crylink_primary_middle_lifetime" is "0.35"
+"g_balance_crylink_primary_other_lifetime" is "0.35"
+"g_balance_crylink_primary_middle_fadetime" is "1.1"
+"g_balance_crylink_primary_other_fadetime" is "1.1"
+[lb]wf] first attack this session: crylink
+:part:2
+:anticheat:_time:2:20.17188
+:anticheat:speedhack:0.005315:-
+:anticheat:speedhack_m1:0.601672:-
+:anticheat:speedhack_m2:0.621965:-
+:anticheat:speedhack_m3:0.64595:-
+:anticheat:speedhack_m4:0.672614:-
+:anticheat:speedhack_m5:0.70028:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0.256687:-
+:anticheat:div0_evade:0.28337:-
+:anticheat:idle_snapaim:18.184929:-
+:anticheat:idle_snapaim_signal:18.597331:-
+:anticheat:idle_snapaim_noise:0.412402:-
+:anticheat:idle_snapaim_m2:4.455858:-
+:anticheat:idle_snapaim_m3:9.852938:-
+:anticheat:idle_snapaim_m4:14.654016:-
+:anticheat:idle_snapaim_m7:24.426297:-
+:anticheat:idle_snapaim_m10:29.983935:-
+:anticheat:div0_snapback:0.613363:-
+[ServerNet] peer 166779053 disconnected (BlueProbe).
+:part:1
+:anticheat:_time:1:20.875
+:anticheat:speedhack:0.094813:-
+:anticheat:speedhack_m1:0.768736:-
+:anticheat:speedhack_m2:0.790249:-
+:anticheat:speedhack_m3:0.81144:-
+:anticheat:speedhack_m4:0.83137:-
+:anticheat:speedhack_m5:0.849428:-
+:anticheat:div0_strafebot_old:0:-
+:anticheat:div0_strafebot_new:0.147082:-
+:anticheat:div0_evade:0:-
+:anticheat:idle_snapaim:10.143993:-
+:anticheat:idle_snapaim_signal:10.260753:-
+:anticheat:idle_snapaim_noise:0.116761:-
+:anticheat:idle_snapaim_m2:1.91524:-
+:anticheat:idle_snapaim_m3:4.866299:-
+:anticheat:idle_snapaim_m4:7.756871:-
+:anticheat:idle_snapaim_m7:14.126286:-
+:anticheat:idle_snapaim_m10:17.954138:-
+:anticheat:div0_snapback:0:-
+[ServerNet] peer 1658711827 disconnected (RedProbe).
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+=== frame profiler session summary (36s, 2185 frames) ===
+  fps: avg 63.1  1%low 58  0.1%low 19  (median 15.6ms, worst 302.9ms)
+  hitches: 1 total — 1 primaries: 1 CPU-LOGIC
+    worst[lb]1]: 46.9ms CPU-LOGIC (ng.process) @ t=14.7s
+  gc: g0+20 g1+11 g2+4, total pause 102ms
+  alloc: 179.8MB total, 0MB/s recent, peak 88.1MB in one frame @ t=1.5s, heap 55.6MB
+  note: DEBUG build — frame times and the hitch census are NOT release-representative (run the release export via tools/perf-run.ps1 for real numbers)
+  [lb]vram census] 0 resident textures, est 0 MB (textures only; Godot's vram monitor adds mesh/render-target buffers)
+    compression: mode 1, s3tc unprobed (nothing compressed this session), ok 0, bc7-fallback 0, failed 0
+    top 0:

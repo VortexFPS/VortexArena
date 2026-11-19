@@ -2,26 +2,11 @@ unit: sv-intermission
 category: server
 base_ref_rev: "v0.8.6-1779-g863cd3e84"
 last_audited: "2026-06-27"
-# Re-audited 2026-06-27 (consolidated post-Wave-16/17 verify; W16 b3a9c06, W17 2f0bfdb) on branch
-# claude/parity-port-waves. NET CHANGE vs the prior 2026-06-27 baseline:
-#   ONE NEW half-wired hazard found on the map-vote rows (NOT a closed gap):
-#   (*) mapvote.server_core / mapvote.client_ui: Wave 17 ADDED a NetControl.MapVote=22 opcode (NetProtocol.cs:240,
-#       ProtocolVersion bumped 12→13) and a full per-peer server S2C send (ServerNet.SendMapVote, ServerNet.cs:1011,
-#       called from the live ServerNet.cs:490 send loop) that serializes the entire ballot. BUT THE CLIENT DECODE
-#       WAS NEVER WRITTEN: ClientNet.OnPacket's dispatch switch (ClientNet.cs:530-547) has NO `case NetControl.MapVote`
-#       — the frame falls through to `default: break;` and is silently dropped. There is no ClientNet.HandleMapVote
-#       (the ServerNet.cs:1010 comment "Field order mirrors ClientNet.HandleMapVote" references a method that does
-#       not exist), and NetGame.UpdateMapVotePanel (NetGame.cs:3729) STILL reads only _serverWorld?.MapVote. So a
-#       pure --connect client STILL cannot see or cast the ballot — the observable remote behaviour is UNCHANGED;
-#       only the listen-server path remains live. The opcode now EXISTS but is dead on the receive side, so the
-#       server burns bandwidth pushing a frame every remote client drops. The prior baseline's "there is still NO
-#       NetControl.MapVote opcode" wording is now FACTUALLY STALE and has been corrected on both rows; the
-#       partial-liveness CONCLUSION is unchanged. kind=new-gap (a half-wired send-only path; not a regression of
-#       behaviour, but a latent producer-without-consumer hazard).
+# The November map-vote check exercised two authenticated clients, keyboard and pointer voting, abstention and ballot time under snapshot loss. Other rows retain their earlier review dates.
 # Confirmed-still-true from the prior baseline (verified again this pass): matchend.nextlevel — NextLevel
 #   (GameWorld.cs:3946) reproduces VoteReset/MatchEnd hooks/MarkWinners/DumpStats(true)/:gameover/PlayerStats/
-#   Kill_Notification/Campaign.PreIntermission/Demo.OnMatchEnd/GameEndHookHandler; WeaponStats_Shutdown STILL the
-#   lone omission (grep: zero refs in src/VortexArena.Server). nextmap.override all three exits live; overtime.cascade
+#   Kill_Notification/Campaign.PreIntermission/Demo.OnMatchEnd/GameEndHookHandler. Local weaponstats now
+#   flushes in NextLevel (see sv-weaponstats.local-report). nextmap.override all three exits live; overtime.cascade
 #   STAT(OVERTIMES) networked via MatchState (ServerNet.cs:971/977/990 region); nextmap_broadcast rides MatchState
 #   WriteString(nextMap) (ServerNet.cs:990). audio.cdtrack Intermission/PickIntermissionTrack untouched (the W16
 #   MusicPlayer.cs edit was trigger_music last-wins ordering, a different unit).
@@ -36,8 +21,7 @@ last_audited: "2026-06-27"
 summary:
   feature_count: 15
   worst_gaps:
-    - "Map vote remains networked-incomplete for REMOTE clients and is now HALF-WIRED: Wave 17 added a NetControl.MapVote=22 opcode (NetProtocol.cs:240, ProtocolVersion 12→13) and a full server-side per-peer push (ServerNet.SendMapVote, ServerNet.cs:1011, on the live send loop) — but the CLIENT DECODE was never written. ClientNet.OnPacket's switch (ClientNet.cs:530-547) has no `case NetControl.MapVote`, so the frame is dropped at `default: break;`; there is no ClientNet.HandleMapVote (despite a ServerNet comment referencing it), and NetGame.UpdateMapVotePanel (NetGame.cs:3729) still reads only _serverWorld?.MapVote. Net result: the live ballot/cast path still works ONLY on a listen server; a pure --connect client still never sees the ballot and cannot vote — and the server now wastes bandwidth sending a frame every remote client discards."
-    - "NextLevel still omits WeaponStats_Shutdown() (per-weapon accuracy-stats export) — but now DOES port DumpStats(true), the trailing localcmd(sv_hook_gameend) admin-script alias (GameEndHookHandler), VoteReset, MatchEnd_BeforeScores/MatchEnd hooks, Kill_Notification(NOTIF_ALL), and (client-side) target_music_kill."
+    - "Remote clients can vote and abstain. Remote preview artwork depends on the mounted map pack, and the winner presentation still needs a full paired end-of-match capture."
     - "Map-vote client UI has no mouse/cursor click-to-vote (Base MapVote_InputEvent); voting is number-key 1..9 only on the listen server."
 features:
   - id: sv-intermission.matchend.nextlevel
@@ -48,6 +32,7 @@ features:
     port_refs:
       - "src/VortexArena.Server/GameWorld.cs:NextLevel"
       - "src/VortexArena.Server/Commands.cs:DumpStats"
+      - "src/VortexArena.Server/WeaponStats.cs:Flush"
       - "src/VortexArena.Server/Intermission.cs:Begin"
       - "src/VortexArena.Server/Intermission.cs:BeginTeam"
     constants:
@@ -62,16 +47,14 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "NextLevel now reproduces the winner latch (MarkWinners), VoteReset (Voting.Stop), the MatchEnd_BeforeScores + MatchEnd mutator hooks, DumpStats(true) (Commands.DumpStats — colon-delimited :scores: score-log block), Kill_Notification(NOTIF_ALL) (SendCenterKill), the :gameover event log (sv_eventlog gated), PlayerStats_GameReport, the campaign PreIntermission decision, the demo stop, AND the trailing localcmd(sv_hook_gameend) admin-script alias (Commands.GameEndHookHandler → LoadedConfig.ExecuteLine). STILL OMITS: WeaponStats_Shutdown() (per-weapon accuracy stats export) — the lone remaining gap. (target_music_kill is ported but client-side — see sv-intermission.audio.cdtrack.)"
+    gaps: []
     verification:
       - { kind: test, ref: "tests/VortexArena.Tests/ServerInfraTests.cs:GameWorld_EndOfMatch_RotatesToNextMap", result: pass }
-      - { kind: code-read, ref: "GameWorld.NextLevel (lines 3946-4000): Voting.Stop + FireMatchEndBeforeScores + MarkWinners + Commands.DumpStats(final:true) + GameLog.GameOver/Close (sv_eventlog) + PlayerStats.GameReport + SendCenterKill(NotifBroadcast.All) + Campaign.PreIntermission + Demo.OnMatchEnd + FireMatchEnd + Commands.GameEndHookHandler?.Invoke() (sv_hook_gameend, GameWorld.cs:3999). No WeaponStats_Shutdown — verified again post-Wave-16/17 (2026-06-27).", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/WeaponStatsTests.cs:IntermissionAndTeardownAppendOncePerMap", result: pass }
       - { kind: code-read, ref: "Commands.DumpStats (Commands.cs:2675): faithful colon block — :scores:<gt>_<map>:<time>, :labels:player:, per-player :player:see-labels: rows (real + logscores_bots), teamplay :teamscores: rows, :end; sinks = sv_logscores_console / sv_eventlog / sv_eventlog_console doubling-suppression (2026-06-27).", result: pass }
       - { kind: code-read, ref: "sv_hook_gameend NOW WIRED: Commands.GameEndHookHandler (Commands.cs:179) invoked at NextLevel GameWorld.cs:3910; bound LIVE by NetGame.cs:833 (non-threaded) — also covered on the threaded path — to _serverWorld.LoadedConfig.ExecuteLine(\"sv_hook_gameend\"), resolving the stock empty alias (no-op, matching Base QC server/world.qc:1463 localcmd) or any server.cfg redefine (2026-06-27).", result: pass }
-      - { kind: grep, ref: "no WeaponStats_Shutdown anywhere in src/VortexArena.Server (the single remaining omission; Base server/world.qc:1433) — 2026-06-27.", result: fail }
     confidence: high
-    notes: "FIXED since the prior 2026-06-27 baseline: the trailing localcmd(sv_hook_gameend) admin-script alias is now ported+live (Commands.GameEndHookHandler, wired on both host paths) — it was previously recorded as still-omitted. The lone remaining omission is WeaponStats_Shutdown (an accuracy-stats export seam with no stock-config gameplay effect). DumpStats(true) and the rest of the NextLevel bookkeeping remain ported and live."
+    notes: "NextLevel flushes the optional local weaponstats report after the match report. Shutdown shares the same one-shot flush. See sv-weaponstats.local-report for report scope and limits."
 
   - id: sv-intermission.matchend.freeze
     name: "World freeze during intermission (game_stopped/intermission_running)"
@@ -289,6 +272,8 @@ features:
       - "src/VortexArena.Server/MapVoting.cs"
       - "src/VortexArena.Server/GameWorld.cs:DriveEndOfMatchMapFlow"
       - "src/VortexArena.Server/Commands.cs:DispatchImpulse"
+      - "game/net/ServerNet.cs:SendMapVote"
+      - "game/net/ClientNet.cs:HandleMapVote"
     constants:
       - { name: "g_maplist_votable", base: "6", port: "6", match: true }
       - { name: "g_maplist_votable_timeout (s)", base: "30", port: "30", match: true }
@@ -299,18 +284,14 @@ features:
       timing: faithful
       presentation: na
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Wave 17 ADDED a NetControl.MapVote=22 opcode (NetProtocol.cs:240, ProtocolVersion 12→13) and a full server-side per-peer ballot push (ServerNet.SendMapVote, ServerNet.cs:1011, on the live SendAll loop) — but the CLIENT DECODE was never written, so remote parity is still NOT achieved. ClientNet.OnPacket's dispatch switch (ClientNet.cs:530-547) has no `case NetControl.MapVote` → the frame is dropped at `default: break;`; there is no ClientNet.HandleMapVote (the ServerNet.cs:1010 comment 'mirrors ClientNet.HandleMapVote' points at a nonexistent method). Net: the server now serializes the ballot to every peer, but no remote client decodes it. On a LISTEN server the cast path is live (number-key 1..9 → C2S impulse → Commands.DispatchImpulse → MapVoting.CastVote while Running). On a dedicated/remote-client server the vote still closes on timeout/PlayerCount with zero real votes (deterministic RNG tiebreak)."
+    gaps: []
     verification:
-      - { kind: code-read, ref: "MapVoting.Start/CastVote/Tick/Finish faithful (incl. abstain + unbeatable-leader early finish + RandomSelection tiebreak); started from DriveEndOfMatchMapFlow when g_maplist_votable>0 and PlayerCount>0", result: pass }
-      - { kind: code-read, ref: "Commands.DispatchImpulse: `if (_world.MapVote.Running) { _world.MapVote.CastVote(caller, imp - 1); return; }` — live cast path; impulse arrives via ServerNet C2S impulse. MapVoting.SelectionOf present for the own-vote HUD highlight.", result: pass }
-      - { kind: code-read, ref: "ServerNet.SendMapVote (ServerNet.cs:1011): faithful per-peer S2C serialization (showing/finished/gametype/detail flags, seconds-remaining, 1-based winner, this peer's SelectionOf own-vote, abstain flag, each non-abstain candidate name/votes/availability/suggester); called from the live SendAll loop (ServerNet.cs:490), throttled ~2x/s. Producer side is real and live. 2026-06-27.", result: pass }
-      - { kind: grep, ref: "NetControl.MapVote=22 opcode NOW EXISTS (NetProtocol.cs:240) and ServerNet SENDS it, but ClientNet has NO HandleMapVote and OnPacket's switch (ClientNet.cs:530-547) has no MapVote case — the S2C frame is dropped (default: break;). So remote clients still cannot see/cast; the path is half-wired (send-only). 2026-06-27.", result: fail }
+      - { kind: runtime, ref: "planning/parity/MAP-VOTE-ENET-VERIFICATION.md — active player and observing peer cast and replaced separate choices, with both confirmed abstentions. The server deadline and extension survived movement snapshot loss.", result: pass }
     confidence: high
-    notes: "g_maplist_votable=6 by default, so the vote IS the default end-of-match path with players present. The number-key→impulse→CastVote cast path is live on the listen server. liveness stays `partial`: the wire opcode + server send now exist, but the client never decodes them, so remote clients are no better off than before — and the server wastes bandwidth on a dropped frame. CHANGED this wave: the worst-gap claim 'there is no opcode' is now stale (the opcode exists); the half-wired client-decode gap replaces it."
+    notes: "The native server sends the ballot and each recipient's own choice reliably. The client decodes it in HandleMapVote. Game-wide map selection and operator settings have separate map-voting rows."
 
   - id: sv-intermission.mapvote.client_ui
     name: "Client map-vote ballot UI (MapVote_Draw)"
@@ -320,24 +301,24 @@ features:
     port_refs:
       - "game/hud/MapVotePanel.cs"
       - "game/net/NetGame.cs:UpdateMapVotePanel"
+      - "game/net/ClientNet.cs:HandleMapVote"
+      - "game/net/NetGame.cs:HandleMapVoteInput"
     constants: []
     status:
       logic: faithful
       values: faithful
       timing: faithful
-      presentation: faithful
+      presentation: partial
       audio: na
-      liveness: partial
+      liveness: live
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "The panel is STILL fed only from the in-process GameWorld.MapVote (NetGame.UpdateMapVotePanel, NetGame.cs:3729, reads _serverWorld?.MapVote), so it lights up ONLY on a listen server. Wave 17 added the server-side NetControl.MapVote=22 push (ServerNet.SendMapVote), but ClientNet never decodes it (no HandleMapVote, no switch case — the frame is dropped at OnPacket's default) and UpdateMapVotePanel has no networked-source branch, so a pure --connect client's ballot still stays blank and it cannot vote. Full remote parity now needs only the client DECODE + a networked feed for this panel (see sv-intermission.mapvote.server_core); the wire opcode and server send already exist."
-      - "The panel has no mouse/cursor click handler (Base MapVote_InputEvent lets you click a map tile); voting is by number-key 1..9 only. Faithful enough to vote, but the click-to-vote affordance is absent."
+      - "Remote map preview artwork requires the map's assets. The recorded candidate-change and winner-reveal presentation checks used fixture panel data. A complete paired end-of-match visual comparison remains open."
     verification:
-      - { kind: code-read, ref: "NetGame.UpdateMapVotePanel (NetGame.cs:3531), called every frame from the HUD update (NetGame.cs:2999): feeds mv.SetVote(candidates) on ballot-identity change, mv.SetVotes(counts) + mv.OwnVote (vote.SelectionOf(LocalServerPlayer)) each frame, and mv.SetWinner on finish; owns mv.Visible. Live on the listen-server path. 2026-06-27.", result: pass }
-      - { kind: code-read, ref: "MapVotePanel.cs MapVote_Draw port has MV_FADETIME selection/settle fade + mv_top2_alpha unavailable-option fade + 'Suggested by:' line; SetVote/SetVotes/SetWinner/OwnVote have a live caller (UpdateMapVotePanel).", result: pass }
+      - { kind: runtime, ref: "planning/parity/MAP-VOTE-ENET-VERIFICATION.md — a remote player voted by keyboard, an observer clicked the drawn abstain row, and the panel showed each recipient's acknowledged selection. Periodic refresh preserved the highlighted row.", result: pass }
     confidence: high
-    notes: "On a listen server the player sees the ballot, live counts + their own vote highlighted, and the winner reveal. liveness `partial` (listen-server only). CHANGED this wave: mapvote.server_core's wire opcode + server send now exist, but the client decode + a networked feed for this panel were NOT written, so remote parity is still missing — the dependency narrowed from 'no opcode' to 'no client decode'. Panel itself (MapVotePanel.cs) and the listen-server feed unchanged."
+    notes: "UpdateMapVotePanel has both a local-server and a decoded remote ballot path. The reliable ballot carries the server deadline and its clock sample."
 
   - id: sv-intermission.matchend.nextmap_broadcast
     name: "Next-map broadcast to clients (Set_NextMap / Send_NextMap_To_Player → scoreboard 'Next map:')"

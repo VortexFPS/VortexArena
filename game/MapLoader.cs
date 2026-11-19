@@ -160,8 +160,10 @@ public static class MapLoader
     /// those <c>"*N"</c> brush entities are skipped so a gametype-conditional barrier doesn't render in a
     /// gametype it doesn't belong to. Null/empty → render every face (prior behavior).
     /// </summary>
+    /// <param name="separateSubmodels">Inline models already built as individual presentation nodes.</param>
     public static Node3D BuildMap(BspData bsp, AssetSystem assets, string mapName = "",
-        IReadOnlySet<int>? droppedSubmodels = null)
+        IReadOnlySet<int>? droppedSubmodels = null, IReadOnlySet<int>? separateSubmodels = null,
+        bool includeEmbeddedMonitors = false)
     {
         var root = new Node3D { Name = "Map" };
 
@@ -171,6 +173,8 @@ public static class MapLoader
         // MeshInstance3D nodes (the see-through portal "window" meshes); PortalRenderer turns matched ones into a
         // live SubViewport render. Empty on the vast majority of maps (no portals) → zero overhead.
         var portalFaces = new List<int>();
+        Dictionary<int, int> cameraOwners = CameraFaceOwners(bsp, includeEmbeddedMonitors);
+        var cameraFaces = new Dictionary<int, List<int>>();
 
         // Warpzone POCKET DECOR — the authored backdrop (`warpzone_backdrop`, the dark quad ~64qu behind each
         // window) and the additive rims (`blueedge`/`rededge`). They render normally for the player, but the
@@ -182,6 +186,7 @@ public static class MapLoader
 
         // Faces belonging to a filtered-out "*N" brush model (resolved from the models lump's face ranges).
         bool[]? dropFace = BuildDroppedFaceMask(bsp, droppedSubmodels);
+        bool[]? separateFace = BuildDroppedFaceMask(bsp, separateSubmodels);
 
         // Whether the map's lightmaps are paired with deluxe (light-direction) pages. BspReader can't resolve
         // this for an external-lightmap map (no VFS at parse time), so refine the decision here (see
@@ -198,14 +203,21 @@ public static class MapLoader
                 continue; // patches handled below; flares have no geometry
             if (face.IndexCount <= 0 || face.VertexCount <= 0)
                 continue;
-            if (dropFace is not null && dropFace[fi])
+            if (dropFace?[fi] == true || separateFace?[fi] == true)
                 continue; // gametype-filtered brush entity
             if (ShouldSkip(bsp, assets, face.TextureIndex))
                 continue;
 
             if (IsPortalCameraShader(bsp, assets, face.TextureIndex))
             {
-                portalFaces.Add(fi); // its own MeshInstance3D below; kept OUT of the cell mesh (no double-draw)
+                if (cameraOwners.TryGetValue(fi, out int owner))
+                {
+                    if (!cameraFaces.TryGetValue(owner, out var faces))
+                        cameraFaces.Add(owner, faces = new List<int>());
+                    faces.Add(fi);
+                }
+                else
+                    portalFaces.Add(fi);
                 continue;
             }
             if (IsWarpzoneDecorShader(bsp, assets, face.TextureIndex))
@@ -231,7 +243,7 @@ public static class MapLoader
             BspFace face = bsp.Faces[fi];
             if (face.Type != BspFaceType.Patch)
                 continue;
-            if (dropFace is not null && dropFace[fi])
+            if (dropFace?[fi] == true || separateFace?[fi] == true)
                 continue; // gametype-filtered brush entity
             if (ShouldSkip(bsp, assets, face.TextureIndex))
                 continue;
@@ -414,9 +426,49 @@ public static class MapLoader
             MissingTextures.LogLoadSummary(bsp, assets, mapName);
 
         // Build the warpzone/portal "window" meshes (no-op when the map has none).
-        BuildPortalSurfaces(root, bsp, assets, mapName, deluxe, portalFaces, decorFaces);
+        BuildPortalSurfaces(root, bsp, assets, mapName, deluxe, portalFaces, decorFaces, cameraFaces);
 
         return root;
+    }
+
+    /// <summary>Mesh for a scripted inline entity, in the BSP model's local coordinates.</summary>
+    internal static MeshInstance3D? BuildInlineMapModel(BspData bsp, AssetSystem assets, string mapName, int modelIndex)
+    {
+        BspModel model = bsp.Models[modelIndex];
+        var surfaces = new Dictionary<SurfaceKey, SurfaceBuilder>();
+        float tolerance = SubdivisionTolerance();
+        int end = System.Math.Min(bsp.Faces.Length, model.FirstFace + model.FaceCount);
+        for (int i = System.Math.Max(0, model.FirstFace); i < end; i++)
+        {
+            BspFace face = bsp.Faces[i];
+            if (ShouldSkip(bsp, assets, face.TextureIndex))
+                continue;
+            if (face.Type is BspFaceType.Flat or BspFaceType.Mesh && face.IndexCount > 0 && face.VertexCount > 0)
+                AppendPolygonFace(GetSurface(surfaces, face.TextureIndex, LightmapKeyForFace(bsp, assets, face)), bsp, face, i);
+            else if (face.Type == BspFaceType.Patch)
+            {
+                var tessellation = BezierPatch.Tessellate(face, bsp.Vertices, BezierPatch.SubdivisionsFor(face, bsp.Vertices, tolerance));
+                if (tessellation is not null)
+                    AppendTessellation(GetSurface(surfaces, face.TextureIndex, LightmapKeyForFace(bsp, assets, face)), tessellation, i);
+            }
+        }
+
+        bool deluxe = EffectiveDeluxemapped(bsp, assets, mapName);
+        var mesh = new ArrayMesh();
+        foreach (var (key, surface) in surfaces)
+        {
+            if (surface.Indices.Count == 0 || surface.Positions.Count == 0)
+                continue;
+            bool lightmapped = key.LightmapIndex >= 0;
+            PackSurface(mesh, surface, lightmapped, withTangents: lightmapped,
+                withColor: key.LightmapIndex == VertexLitKey || (assets.DarkPlacesRules && !lightmapped));
+            mesh.SurfaceSetMaterial(mesh.GetSurfaceCount() - 1, ResolveSurfaceMaterial(bsp, assets, key, mapName, deluxe));
+        }
+        return mesh.GetSurfaceCount() == 0 ? null : new MeshInstance3D
+        {
+            Mesh = mesh,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
     }
 
     // ---- Warpzone / portal surfaces (the see-through portal "window" meshes) ----------------------------------
@@ -463,20 +515,47 @@ public static class MapLoader
     /// live see-through render. They carry the existing dark-mirror placeholder material, so a map with no
     /// PortalRenderer (or an unmatched surface) renders EXACTLY as before — this only adds addressable meshes.
     /// </summary>
-    private static void BuildPortalSurfaces(Node3D root, BspData bsp, AssetSystem assets, string mapName, bool deluxe,
-        List<int> portalFaces, List<int> decorFaces)
+    private static Dictionary<int, int> CameraFaceOwners(BspData bsp, bool includeEmbeddedMonitors)
     {
-        if (portalFaces.Count == 0 && decorFaces.Count == 0)
+        var owners = new Dictionary<int, int>();
+        // The server may replace map entities independently. Keep the embedded camera surfaces
+        // addressable on remote clients even when their mounted .ent omits the camera class.
+        var entities = includeEmbeddedMonitors && bsp.EmbeddedEntities is { } embedded
+            ? bsp.Entities.Concat(embedded) : bsp.Entities;
+        foreach (var entity in entities)
+        {
+            if (!entity.TryGetValue("classname", out string? classname)
+                || classname is not ("func_camera" or "func_warpzone_camera")
+                || !entity.TryGetValue("model", out string? model) || !model.StartsWith('*')
+                || !int.TryParse(model.AsSpan(1), out int index) || index <= 0 || index >= bsp.Models.Length)
+                continue;
+
+            BspModel brush = bsp.Models[index];
+            for (int i = brush.FirstFace; i < brush.FirstFace + brush.FaceCount; i++)
+                owners[i] = index;
+        }
+        return owners;
+    }
+
+    private static void BuildPortalSurfaces(Node3D root, BspData bsp, AssetSystem assets, string mapName, bool deluxe,
+        List<int> portalFaces, List<int> decorFaces, Dictionary<int, List<int>> cameraFaces)
+    {
+        if (portalFaces.Count == 0 && decorFaces.Count == 0 && cameraFaces.Count == 0)
             return;
 
         var portalsRoot = new Node3D { Name = "Portals" };
         int built = BuildPortalGroup(portalsRoot, bsp, assets, mapName, deluxe, portalFaces, decor: false, 0);
         int decor = BuildPortalGroup(portalsRoot, bsp, assets, mapName, deluxe, decorFaces, decor: true, built);
-        if (built + decor > 0)
+        int cameras = 0;
+        foreach (var (model, faces) in cameraFaces)
+            cameras += BuildPortalGroup(portalsRoot, bsp, assets, mapName, deluxe, faces, decor: false,
+                built + cameras, cameraModel: model);
+        if (built + decor + cameras > 0)
             root.AddChild(portalsRoot);
         if (!PieceBuild)
-        GD.Print($"[MapLoader] '{mapName}' portal surfaces: {built} (from {portalFaces.Count} faces)"
-            + (decor > 0 ? $", pocket decor: {decor} (from {decorFaces.Count} faces)" : ""));
+            GD.Print($"[MapLoader] '{mapName}' portal surfaces: {built} (from {portalFaces.Count} faces)"
+                + (decor > 0 ? $", pocket decor: {decor} (from {decorFaces.Count} faces)" : "")
+                + (cameras > 0 ? $", fixed camera surfaces: {cameras}" : ""));
     }
 
     /// <summary>One coplanar-grouped build pass for <see cref="BuildPortalSurfaces"/>: window faces get the
@@ -484,7 +563,7 @@ public static class MapLoader
     /// faces (backdrop/rims) get <c>wz_decor</c> and keep their authored material — PortalRenderer only moves
     /// them onto the portal-excluded render layer. Returns the number of nodes built.</summary>
     private static int BuildPortalGroup(Node3D portalsRoot, BspData bsp, AssetSystem assets, string mapName,
-        bool deluxe, List<int> faces, bool decor, int nameBase)
+        bool deluxe, List<int> faces, bool decor, int nameBase, int cameraModel = 0)
     {
         if (faces.Count == 0)
             return 0;
@@ -565,6 +644,8 @@ public static class MapLoader
                 mi.SetMeta("wz_origin", new Vector3(planeO.X, planeO.Y, planeO.Z));
                 mi.SetMeta("wz_normal", new Vector3(planeN.X, planeN.Y, planeN.Z));
             }
+            if (cameraModel != 0)
+                mi.SetMeta("wz_camera_model", cameraModel);
             portalsRoot.AddChild(mi);
             built++;
         }
@@ -1772,16 +1853,41 @@ public static class MapLoader
         if (bsp is null)
             return;
         Worldspawn ws = BuildWorldspawn(bsp);
-        if (!ws.HasFog || ws.FogDensity <= 0f || ws.FogAlpha <= 0f)
+        if (ws.HasFog)
+            ApplyFogDepth(env, ws.FogDensity, ws.FogColor, ws.FogAlpha, ws.FogStart, ws.FogEnd);
+    }
+
+    public static void ApplyMapFog(Godot.Environment env, VortexArena.Common.Menu.MapFogSettings fog)
+    {
+        env.FogEnabled = false;
+        ApplyFogDepth(env, fog.Density, new Color(fog.Colour.X, fog.Colour.Y, fog.Colour.Z),
+            fog.Alpha, fog.Start, fog.End);
+    }
+
+    public static void ApplyMountedMapFog(Godot.Environment env, BspData bsp, string? authoredFog)
+    {
+        string? worldspawnFog = null;
+        if (bsp.Entities.Count != 0)
+            FindWorldspawn(bsp).TryGetValue("fog", out worldspawnFog);
+        if (VortexArena.Common.Menu.MapFogSettings.TryParse(authoredFog, out var fog)
+            || VortexArena.Common.Menu.MapFogSettings.TryParse(worldspawnFog, out fog))
+            ApplyMapFog(env, fog);
+        else
+            env.FogEnabled = false;
+    }
+
+    private static void ApplyFogDepth(Godot.Environment env, float density, Color colour, float alpha, float start, float end)
+    {
+        if (density <= 0f || alpha <= 0f)
             return;
 
         // DP fogrange (gl_rmain.c R_UpdateFog, linear mode): the distance at which fog saturates and is held.
-        float fogrange = Mathf.Clamp(2048f / ws.FogDensity + ws.FogStart, ws.FogStart, ws.FogEnd);
+        float fogrange = Mathf.Clamp(2048f / density + start, start, end);
         // DP visibility at fogrange: exp(-density * 0.004 * (fogrange - start)); the max fog opacity is then
         // (1 - vis) * fog_alpha (R_BuildFogTexture). This is the haze DP actually shows — typically subtle.
-        float buildup = Mathf.Max(1f, fogrange - ws.FogStart);
-        float maxVis = Mathf.Exp(-ws.FogDensity * 0.004f * buildup);
-        float maxFog = (1f - maxVis) * Mathf.Clamp(ws.FogAlpha, 0f, 1f);
+        float buildup = Mathf.Max(1f, fogrange - start);
+        float maxVis = Mathf.Exp(-density * 0.004f * buildup);
+        float maxFog = (1f - maxVis) * Mathf.Clamp(alpha, 0f, 1f);
         if (maxFog < 0.002f || fogrange <= 0f)
             return;   // negligible fog — leave it off rather than add an invisible cost.
 
@@ -1790,13 +1896,13 @@ public static class MapLoader
         float godotDensity = -Mathf.Log(1f - Mathf.Min(maxFog, 0.98f)) / fogrange;
 
         env.FogEnabled = true;
-        env.FogLightColor = ws.FogColor;
+        env.FogLightColor = colour;
         env.FogDensity = godotDensity;
         // Don't fully drown the skybox in fog — DP fogs the sky only partially; keep the horizon readable.
         env.FogSkyAffect = 0.5f;
-        GD.Print($"[MapLoader] fog: density {ws.FogDensity:0.####} alpha {ws.FogAlpha:0.##} start {ws.FogStart:0} " +
+        GD.Print($"[MapLoader] fog: density {density:0.####} alpha {alpha:0.##} start {start:0} " +
                  $"-> maxFog {maxFog:0.00} @ {fogrange:0}u, godotDensity {godotDensity:0.000000} " +
-                 $"color ({ws.FogColor.R:0.00} {ws.FogColor.G:0.00} {ws.FogColor.B:0.00})");
+                 $"color ({colour.R:0.00} {colour.G:0.00} {colour.B:0.00})");
     }
 
     /// <summary>Find the worldspawn entity (by classname; falls back to the first entity, Quake convention).</summary>

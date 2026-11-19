@@ -1,0 +1,17 @@
+{
+  "capture": "/tmp/va-countdown-native9",
+  "frames": {
+    "observer-before.webp": {
+      "source": "RedProbe/0000.webp",
+      "sample": 35.996
+    },
+    "observer-during.webp": {
+      "source": "RedProbe/0025.webp",
+      "sample": 39.132
+    },
+    "observer-after.webp": {
+      "source": "RedProbe/0080.webp",
+      "sample": 46.026
+    }
+  }
+}

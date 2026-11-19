@@ -390,7 +390,7 @@ public sealed class Vaporizer : Weapon
         // QC vaporizer.qc:263: W_CalculateProjectileVelocity(actor, actor.velocity, vel, /*forceAbsolute*/true).
         // With forceAbsolute true the Newtonian owner-velocity inheritance is bypassed (newton_style forced 0),
         // so the only live effect is the g_weaponspeedfactor scale (util.qc get_shotvelocity: spd * dir).
-        float speedFactor = WeaponSpeedFactor();
+        float speedFactor = WeaponFiring.WeaponSpeedFactor(actor);
 
         // QC vaporizer.qc:230,245: the bolts set up + tag as WEP_ELECTRO (proj.projectiledeathtype = WEP_ELECTRO
         // .m_id) — so the RocketMinsta mutator's electro-keyed no-self-damage hook matches and the kill feed /
@@ -400,7 +400,7 @@ public sealed class Vaporizer : Weapon
         int laserDeathType = electro?.RegistryId ?? RegistryId;
 
         QMath.AngleVectors(actor.Angles, out Vector3 forward, out Vector3 right, out _);
-        ShotInfo shot = WeaponFiring.SetupShot(actor, forward, new Vector3(0, 0, -3), new Vector3(0, 0, -3));
+        ShotInfo shot = WeaponFiring.SetupShot(actor, forward, new Vector3(0, 0, -3), new Vector3(0, 0, -3), wep: electro ?? this);
 
         // QC vaporizer.qc:233: W_MuzzleFlash(WEP_ELECTRO) — the barrage uses electro muzzle effects.
         EffectEmitter.Emit("ELECTRO_MUZZLEFLASH", shot.Origin, shot.Dir * 1000f, 1, except: actor);
@@ -501,15 +501,6 @@ public sealed class Vaporizer : Weapon
         WeaponSplash.RadiusDamage(self, self.Origin, damagePerBolt, damagePerBolt, radius,
             self.Owner, laserDeathType, forcePerBolt, directHit: directHit);
         Api.Entities.Remove(self);
-    }
-
-    // QC W_WeaponSpeedFactor / W_CalculateProjectileVelocity(forceAbsolute=true): g_weaponspeedfactor (default 1).
-    // Mirrors Devastator.WeaponSpeedFactor — only positive values take effect.
-    private static float WeaponSpeedFactor()
-    {
-        if (Api.Services is null) return 1f;
-        float f = Api.Cvars.GetFloat("g_weaponspeedfactor");
-        return f > 0f ? f : 1f;
     }
 
     // bool IsFlying(entity) — airshot test (mirrors Devastator/Vortex): airborne, not swimming, ≥24u clearance.

@@ -493,27 +493,30 @@ features:
 
   - id: bot-waypoints.editor
     name: "Waypoint editor (spawn/remove from editor, symmetry, hardwire, autowaypoints)"
-    layer: [authority]
+    layer: [authority, presentation]
     base_refs:
       - "server/bot/default/waypoints.qc:waypoint_spawn_fromeditor"
       - "server/bot/default/waypoints.qc:botframe_autowaypoints"
       - "server/bot/default/waypoints.qc:botframe_deleteuselesswaypoints"
       - "server/bot/default/waypoints.qc:waypoint_getSymmetricalPoint"
-    port_refs: []
-    constants: []
-    status:
-      logic: missing
-      values: missing
-      timing: missing
-      presentation: missing
-      audio: na
-      liveness: na
-    intended_divergence: false
-    divergence_rationale: null
+      - "server/bot/default/waypoints.qc:botframe_showwaypointlinks"
+      - "common/debug.qh:DebugText3d_draw2d"
+    port_refs:
+      - "game/net/NetGame.cs:CmdEditorWaypoint"
+      - "game/net/NetGame.DebugLabels.cs:SampleLocalDebugAim"
+      - "src/VortexArena.Server/Bot/WaypointEditor.cs:PickAimed"
+      - "src/VortexArena.Server/LocalDebugLabels.cs:AimAtWaypoint"
+    constants:
+      - { name: "point waypoint aim box", base: "16 units each side", port: "16 units each side", match: true }
+      - { name: "waypoint aim sample interval", base: "0.5 gameplay seconds", port: "0.5 gameplay seconds", match: true }
+      - { name: "waypoint label lifetime", base: "7 gameplay seconds", port: "7 gameplay seconds", match: true }
+    status: { logic: partial, values: partial, timing: partial, presentation: partial, audio: na, liveness: live }
+    intended_divergence: true
+    divergence_rationale: "Native authoring uses the editor gametype and the local Waypoint tool. Its free-fly and orthographic cursor use native graph indices and the editor's direct picking ray. Stock aims as a player with g_waypointeditor enabled and broadcasts labels to clients."
     gaps:
-      - "No in-game waypoint editor: cannot place/remove/hardwire/mirror waypoints (g_waypointeditor*); no editor visualization (waypoint model, link lightning beams, colormod by flag)."
-      - "No runtime auto-waypointing toward players (botframe_autowaypoints) or useless-waypoint pruning (botframe_deleteuselesswaypoints): the loaded graph is static."
+      - "The stock symmetry-mirroring workflow, editor waypoint models and link beams remain open."
+      - "The stock player-driven autowaypoint mode and useless-waypoint pruning remain open."
     verification:
-      - { kind: code, ref: "no editor/symmetry/autowaypoint symbols in Server.Bot (grep 2026-06-27); navigation_unstuck/wander (bot_wander_enable) and botframe_autowaypoints/deleteuselesswaypoints remain unported. (Note: botframe_updatedangerousobjects IS now ported+live — see bot-waypoints.path.markroutes.)", result: pass }
+      - { kind: runtime, ref: "planning/parity/debug-labels/README.md", result: pass }
+      - { kind: test, ref: "tests/VortexArena.Tests/LocalDebugLabelTests.cs", result: pass }
     confidence: high
-    notes: "Unchanged at 2026-06-27: still no in-game editor / autowaypoint / symmetry-mirror / pruning. Dev authoring tooling; not required for players. Symmetry header is parsed (LoadFromText) and file WRITERS exist (see bot-waypoints.file.save) but both are dead — there is no editor to drive a place->mirror->save round-trip."

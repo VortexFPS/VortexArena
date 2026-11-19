@@ -232,6 +232,8 @@ rule — so scripted runs and their `--cvar`/`--bots` pins can't pollute the pla
 - **server.cfg (DS-5):** on any host boot the server execs `~/XonData/server.cfg` (after the shipped config
   tree + `config.cfg`, before `--cvar` pins). Copy `server.cfg.example` (repo root) to start. `--serverconfig
   <name>` picks a different file. Absent by default, so nothing runs unless you opt in.
+- **Original server records:** use the [offline Race, CTS and CTF migration tool](RECORD-MIGRATION.md)
+  to archive a DarkPlaces database and merge records for verified players into this native profile.
 - **Slot count — `maxplayers <n>`:** how many clients the server may hold, counting **humans and bots in one
   budget** (DP `svs.maxclients`; it is a *command*, not a cvar, so `set maxplayers …` does nothing). **Vortex
   ships 32** (`vortex-server.cfg`, overriding upstream's `16`), so a solo host can field **31 bots** — one slot

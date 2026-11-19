@@ -8,7 +8,6 @@
 // Collision_CalcPlanesForTriangleBrushFloat) and Collision_TraceLineTriangleFloat; model_brush.c
 // Mod_Q3BSP_Load ("enlarge the bounding box to enclose all geometry of this model": ModelBounds, with
 // the visual half of Mod_Q3BSP_LoadFaces' tessellation, PATCH_LOD_VISUAL).
-using System.Buffers.Binary;
 using System.Numerics;
 using VortexArena.Formats.Bsp;
 
@@ -25,11 +24,8 @@ namespace VortexArena.Engine.Collision;
 ///
 /// Every one of those choices is visible to the game: where an item dropped onto a curved floor
 /// comes to rest, whether a spawn point beside a curved wall is "in solid", what the program's
-/// DropToFloor and move-out-of-solid passes do to both. <see cref="BspCollisionBuilder"/> makes
-/// thick slabs from its own finer tessellation by default, which is what the native game was tuned
-/// on and puts things in different places than a DarkPlaces server does; asked for
-/// <see cref="PatchCollisionMode.DarkPlacesTriangles"/> it uses these triangles instead. Legacy
-/// mode (a Xonotic server program, or a client predicting against one) always asks for them.
+/// DropToFloor and move-out-of-solid passes do to both. Native BSPs and legacy mode use these
+/// triangles by default. The former native profile uses thick slabs from a finer tessellation.
 ///
 /// A triangle is a <see cref="Brush"/> with <see cref="Brush.IsTriangle"/> set; <see cref="TraceService"/>
 /// sweeps a box against it as against any brush, sends a line to <see cref="TraceLineTriangle(ref LineHit, Vector3, Vector3, Brush)"/>
@@ -47,15 +43,15 @@ public static class DarkPlacesPatchCollision
     private const int MinTess = 0, MaxTess = 1024, MaxVertices = 4225;
     private const int MaxTessellatedVertices = 65536;   // r_subdivisions_maxvertices, used here as a hard bound
     private const int MaxTriangles = 4_000_000;         // on the whole map
-    private const int FaceRecordSize = 104, FaceLodBoundsOffset = 60;   // q3dface_t: specific.patch.mins / maxs
     private const float SnapScale = 32.0f, Snap = 1.0f / SnapScale;      // COLLISION_SNAPSCALE, COLLISION_SNAP
 
     private sealed class Patch
     {
         public int Face, XSize, YSize, XTess, YTess;
         public float[] Vertices = Array.Empty<float>();   // originalvertex3f
-        public float L0, L1, L2, L3, L4, L5;              // lodgroup: the patch's LOD bounds
-        public bool SameLodGroup(Patch o) => L0 == o.L0 && L1 == o.L1 && L2 == o.L2 && L3 == o.L3 && L4 == o.L4 && L5 == o.L5;
+        public (Vector3 Mins, Vector3 Maxs)? LodBounds;
+        public bool SameLodGroup(Patch other) =>
+            LodBounds is { } bounds && other.LodBounds is { } otherBounds && bounds == otherBounds;
     }
 
     /// <summary>A brush made by <see cref="Build"/> for one collision triangle: two face planes and three side planes around three points.</summary>
@@ -63,15 +59,14 @@ public static class DarkPlacesPatchCollision
 
     /// <summary>
     /// The collision triangles of every patch in the map, as brushes, per inline model: index 0 is
-    /// the world, index N the model "*N". <paramref name="file"/> is the map file the data was read
-    /// from - the LOD bounds that group patches for seamless tessellation are not in the parsed data.
+    /// the world, index N the model "*N".
     /// </summary>
-    public static List<Brush>[] Build(BspData bsp, ReadOnlySpan<byte> file)
+    public static List<Brush>[] Build(BspData bsp)
     {
         int models = Math.Max(1, bsp.Models.Length);
         List<Brush>[] result = new List<Brush>[models];
         for (int i = 0; i < models; i++) result[i] = new List<Brush>();
-        List<Patch> patches = ChoosePatches(bsp, file, CollisionTolerance);
+        List<Patch> patches = ChoosePatches(bsp, CollisionTolerance);
 
         // Second pass: tessellate, snap, drop degenerate triangles, make the brushes.
         int triangles = 0;
@@ -119,7 +114,7 @@ public static class DarkPlacesPatchCollision
     /// world: its box is sv.world.mins / maxs, what a QuakeC program reads as world.mins / world.maxs
     /// and the box the server's area grid is laid over.
     /// </summary>
-    public static (Vector3 Mins, Vector3 Maxs)[] ModelBounds(BspData bsp, ReadOnlySpan<byte> file)
+    public static (Vector3 Mins, Vector3 Maxs)[] ModelBounds(BspData bsp)
     {
         (Vector3 Mins, Vector3 Maxs)[] bounds = new (Vector3, Vector3)[bsp.Models.Length];
         for (int m = 0; m < bounds.Length; m++) bounds[m] = (bsp.Models[m].Mins, bsp.Models[m].Maxs);
@@ -131,7 +126,7 @@ public static class DarkPlacesPatchCollision
             bounds[m] = (Vector3.Min(bounds[m].Mins, v), Vector3.Max(bounds[m].Maxs, v));
         }
         Dictionary<int, Patch> patches = new();
-        foreach (Patch patch in ChoosePatches(bsp, file, RenderTolerance)) patches[patch.Face] = patch;
+        foreach (Patch patch in ChoosePatches(bsp, RenderTolerance)) patches[patch.Face] = patch;
         for (int i = 0; i < bsp.Faces.Length; i++)
         {
             BspFace face = bsp.Faces[i];
@@ -170,12 +165,8 @@ public static class DarkPlacesPatchCollision
 
     // Mod_Q3BSP_LoadFaces' first loop and its "Fix patches tesselations so that they make no seams"
     // pass, for one level of detail: which faces are sound patches, and how finely each is cut.
-    private static List<Patch> ChoosePatches(BspData bsp, ReadOnlySpan<byte> file, float tolerance)
+    private static List<Patch> ChoosePatches(BspData bsp, float tolerance)
     {
-        RawLump faceLump = bsp.RawLumps.Length > (int)BspLump.Faces ? bsp.RawLumps[(int)BspLump.Faces] : default;
-        bool haveRaw = !faceLump.IsEmpty && faceLump.Offset >= 0 && (long)faceLump.Offset + faceLump.Length <= file.Length
-            && faceLump.Length / FaceRecordSize == bsp.Faces.Length;
-
         // First pass (Mod_Q3BSP_LoadFaces' first loop): validate each patch and choose its tessellation.
         List<Patch> patches = new();
         for (int i = 0; i < bsp.Faces.Length; i++)
@@ -187,7 +178,7 @@ public static class DarkPlacesPatchCollision
             // "invalid patchsize"
             if (w > 32767 || h > 32767 || face.VertexCount != w * h || w < 3 || h < 3 || (w & 1) == 0 || (h & 1) == 0 || w * h >= MaxVertices) continue;
             if (face.FirstVertex < 0 || (long)face.FirstVertex + face.VertexCount > bsp.Vertices.Length) continue;
-            Patch patch = new() { Face = i, XSize = w, YSize = h, Vertices = new float[w * h * 3] };
+            Patch patch = new() { Face = i, XSize = w, YSize = h, Vertices = new float[w * h * 3], LodBounds = face.PatchLodBounds };
             for (int v = 0; v < w * h; v++)
             {
                 Vector3 p = bsp.Vertices[face.FirstVertex + v].Position;
@@ -199,21 +190,6 @@ public static class DarkPlacesPatchCollision
             // bound to user settings, then to sanity settings
             patch.XTess = Math.Clamp(Math.Clamp(TessellationOnX(w, h, patch.Vertices, tolerance), MinTess, MaxTess), 0, 1024);
             patch.YTess = Math.Clamp(Math.Clamp(TessellationOnY(w, h, patch.Vertices, tolerance), MinTess, MaxTess), 0, 1024);
-            if (haveRaw)
-            {
-                ReadOnlySpan<byte> bounds = file.Slice(faceLump.Offset + i * FaceRecordSize + FaceLodBoundsOffset, 24);
-                patch.L0 = BinaryPrimitives.ReadSingleLittleEndian(bounds);
-                patch.L1 = BinaryPrimitives.ReadSingleLittleEndian(bounds[4..]);
-                patch.L2 = BinaryPrimitives.ReadSingleLittleEndian(bounds[8..]);
-                patch.L3 = BinaryPrimitives.ReadSingleLittleEndian(bounds[12..]);
-                patch.L4 = BinaryPrimitives.ReadSingleLittleEndian(bounds[16..]);
-                patch.L5 = BinaryPrimitives.ReadSingleLittleEndian(bounds[20..]);
-            }
-            else
-            {
-                // Without the file's LOD bounds no two patches share a group (NaN equals nothing).
-                patch.L0 = float.NaN;
-            }
             patches.Add(patch);
         }
 

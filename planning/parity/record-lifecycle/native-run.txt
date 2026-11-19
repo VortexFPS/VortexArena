@@ -1,0 +1,27 @@
+rotation pid=208936 restart pid=209298
+
+rotation
+[RaceRecords] Loaded <temporary run>/server/race-records.tsv.
+Deleted rank 1 on map darkzone
+[NetGame] listen server on 127.0.0.1:28766 (map 'darkzone', ctf, 0 bots) — self-connecting.
+[RaceRecords] Saved <temporary run>/server/race-records.tsv.
+[RaceRecords] Loaded <temporary run>/server/race-records.tsv.
+[NetGame] listen server on 127.0.0.1:28766 (map 'stormkeep', ctf, 0 bots) — self-connecting.
+[RaceRecords] Saved <temporary run>/server/race-records.tsv.
+[RaceRecords] Loaded <temporary run>/server/race-records.tsv.
+[NetGame] listen server on 127.0.0.1:28766 (map 'darkzone', ctf, 0 bots) — self-connecting.
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+[RaceRecords] Saved <temporary run>/server/race-records.tsv.
+
+restarted
+[RaceRecords] Loaded <temporary run>/server/race-records.tsv.
+[NetGame] listen server on 127.0.0.1:28766 (map 'darkzone', ctf, 0 bots) — self-connecting.
+[Main] received SIGTERM; shutting down gracefully (signal again to force).
+[RaceRecords] Saved <temporary run>/server/race-records.tsv.
+
+client
+[ClientNet] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1, tickrate 64 Hz.
+[NetGame] handshake accepted by 'Vortex 1.0.0+43e4b7d9 Server': netId 1.
+joined the game
+]cmd kill
+[Main] received SIGTERM; shutting down gracefully (signal again to force).

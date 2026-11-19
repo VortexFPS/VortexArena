@@ -1,0 +1,10 @@
+[lb]shell] --cvar g_sandbox = "1"
+[lb]shell] --cvar g_sandbox_info = "2"
+[lb]shell] --cvar g_sandbox_editor_free = "1"
+[lb]shell] --cvar g_sandbox_editor_distance_spawn = "88"
+[lb]shell] --cvar g_sandbox_storage_autoload = "0"
+[lb]shell] --cvar g_sandbox_storage_autosave = "0.2"
+:join:1:-1::ParityGuest
+[ServerNet] peer 1750354850 accepted as 'ParityGuest' (netId 1750354850, id 4203adff).
+:join:2:-2::ParityOwner
+[ServerNet] peer 372966754 accepted as 'ParityOwner' (netId 372966754, id f67242ea).

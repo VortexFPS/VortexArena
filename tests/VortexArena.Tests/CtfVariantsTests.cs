@@ -42,6 +42,45 @@ public class CtfVariantsTests
         Assert.Null(ctf.CarriedBy(red));
     }
 
+    [Theory]
+    [InlineData(true, false, true, 1f, "ranked", 1f)]
+    [InlineData(true, false, false, 1f, "ranked", 0f)]
+    [InlineData(false, false, true, 1f, "ranked", 0f)]
+    [InlineData(true, true, true, 1f, "ranked", 0f)]
+    [InlineData(true, false, true, 0.005f, "ranked", 0f)]
+    [InlineData(true, false, true, 1f, "", 0f)]
+    public void CaptureLeaderboard_RecordsOnlyEnabledValidIdentifiedTwoFlagCaptures(
+        bool enabled, bool oneFlag, bool consent, float duration, string identity, float expected)
+    {
+        var services = new EngineServices(new CollisionWorld());
+        Api.Services = services;
+        string map = $"ctf-leaderboard-test-{enabled}-{oneFlag}-{consent}-{duration}-{identity}";
+        Api.Cvars.Set("mapname", map);
+        Api.Cvars.Set("g_ctf_leaderboard", enabled ? "1" : "0");
+        var ctf = new Ctf { UidConsentProvider = _ => consent };
+        var redFlag = ctf.SpawnFlag(Teams.Red, new Vector3(100, 0, 0));
+        var blueFlag = ctf.SpawnFlag(Teams.Blue, new Vector3(-100, 0, 0));
+        var pickup = oneFlag ? ctf.SpawnNeutralFlag(Vector3.Zero) : blueFlag;
+        ctf.DelayedInit();
+        ctf.Activate();
+        var player = NewPlayer(Teams.Red);
+        player.PersistentId = identity;
+        player.NetName = "Runner";
+
+        var clock = typeof(GameClock).GetProperty(nameof(GameClock.Time))!;
+        clock.SetValue(services.ClockImpl, 10f);
+        ctf.FlagTouch(pickup.Entity!, player);
+        clock.SetValue(services.ClockImpl, 10f + duration);
+        ctf.FlagTouch(redFlag.Entity!, player);
+
+        Assert.Equal(1, ctf.GetTeamCaps(Teams.Red));
+        Assert.Equal(expected, RaceRecords.ReadTime(map, RaceRecords.CtfRecord, 1));
+        Assert.Equal(expected > 0f ? "Runner" : "", RaceRecords.ReadName(map, RaceRecords.CtfRecord, 1));
+        Assert.Equal(0f, RaceRecords.ReadTime(map, RaceRecords.RaceRecord, 1));
+        Assert.Equal(!oneFlag && duration > 0.01f ? duration : 0f, RaceRecords.ReadCaptureBest(map).Time);
+        if (expected > 0f) RaceRecords.DeleteTime(map, RaceRecords.CtfRecord, 1);
+    }
+
     [Fact]
     public void OneFlag_TeamFlagsAreNotPickable()
     {

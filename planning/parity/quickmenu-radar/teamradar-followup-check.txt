@@ -1,0 +1,4 @@
+Both engines' raw and collision bounds: (-3008.0, -1344.0, 1600.0, 3264.0) (-2944.031, -1280.031, 1536.031, 3200.031)
+Stock black pixel (46, 18, 16) → (46, 18, 16), grey pixel (32, 23, 32) → (88, 81, 88)
+Native black pixel (7, 6, 5) → (7, 6, 5), grey pixel (2, 9, 19) → (59, 65, 72)
+Native held time at 16, dropped ≥3 updates, received reliable empty 5, rejected delayed update 1, and accepted newer update 6.

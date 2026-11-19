@@ -6,16 +6,8 @@ summary:
   feature_count: 15
   worst_gaps:
     - "DEATH_CAMP environmental-suicide penalty omitted from MayhemScoring.IsEnvironmentalSuicide (the DeathTypes.Camp tag now EXISTS in the port, but is not added to the team SplitHealthArmor suicide set; non-default campcheck-mutator concern, no campcheck death is currently produced anyway)."
-    - "Menu point-limit slider uses the generic fraglimit_override 5..100 instead of QC's g_tmayhem_point_limit 200..3000 (menu/mapinfo concern, deferred)."
     - "SetWeaponArena 'most_available' resolves to the full weapons_most (no map-weapon intersection); on a weapon-bearing map this would grant a SUPERSET of QC's map-filtered arena (low impact — tmayhem maps strip pickups)."
   notes: >
-    DRIFT RE-AUDIT 2026-06-25 (post-Wave-5): one FIX since the 2026-06-22 baseline. The
-    SeedTimeLimit self-cancelling guard is GONE — SeedTimeLimit (TeamMayhem.cs:107-112, called LIVE from
-    GameWorld.OnInit @503, before ActivateGameType @545) now UNCONDITIONALLY calls
-    Api.Cvars.Set("timelimit","20") on every gametype select, faithfully reproducing QC's
-    _MapInfo_Map_ApplyGametypeEx (mapinfo.qc:551 resets timelimit to defstring, :572 unconditionally applies
-    the gametype default string's timelimit=20). This RESETS a prior mode/vote/round's non-20 leftover, closing
-    the "non-20 timelimit not reset" gap → tmayhem.identity.registration values: partial→faithful.
     The biggest historical gap — the once-DEAD SetWeaponArena chain (players spawning Blaster-only) — remains
     CLOSED: MutatorHooks.SetWeaponArena.Call is live at SpawnSystem.cs:751 (readplayerstartcvars seam) and
     :967 (warmup); OnSetWeaponArena fills "most_available", ExpandWeaponArena → weapons_most, full arsenal +
@@ -32,14 +24,14 @@ features:
       - "common/gametypes/gametype/tmayhem/tmayhem.qh:CLASS(tmayhem)"
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:tmayhem_Initialize"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem (ctor/OnInit/SeedTimeLimit)"
-      - "src/VortexArena.Server/GameWorld.cs:ActivateGameType (case TeamMayhem, line 1743); OnInit at GameWorld.cs:503"
+      - "src/VortexArena.Server/GameWorld.cs:ApplyMapMatchDefaults"
+      - "src/VortexArena.Common/Menu/PointLimitSettings.cs"
     constants:
       - { name: "netname", base: "tmayhem", port: "tmayhem", match: true }
       - { name: "teamgame", base: "true (TEAMPLAY)", port: "true", match: true }
       - { name: "pointlimit_default", base: "1500", port: "1500", match: true }
       - { name: "leadlimit_default", base: "0", port: "0", match: true }
-      - { name: "timelimit_default", base: "20 (gametype_init, applied unconditionally on select)", port: "20 (SeedTimeLimit unconditionally cvar_sets timelimit=20 on select)", match: true }
+      - { name: "timelimit_default", base: "20 minutes", port: "20 minutes through native match boot", match: true }
     status:
       logic: faithful
       values: faithful
@@ -51,9 +43,9 @@ features:
     divergence_rationale: null
     gaps: []
     verification:
-      - { kind: code, ref: "FIX VERIFIED 2026-06-25 (was baseline values:partial): SeedTimeLimit (TeamMayhem.cs:107-112) no longer guards on `==20` — it now UNCONDITIONALLY Api.Cvars.Set(\"timelimit\",\"20\"). Called LIVE from GameWorld.OnInit (GameWorld.cs:503) which runs before ActivateGameType (GameWorld.cs:545). This faithfully mirrors QC _MapInfo_Map_ApplyGametypeEx (mapinfo.qc:551 resets timelimit to cvar_defstring, then :572 unconditionally applies gametype_init's timelimit=20), so a prior mode/vote/round's non-20 leftover IS reset to tmayhem's 20. case TeamMayhem live in ActivateGameType (now line 1743). TeamMayhem ctor sets NetName/TeamGame; MayhemScoringTests.TeamMayhem_Identity_TeamCount_AndPointLimitDefault", result: pass }
+      - { kind: test, ref: "MapInfoGenerationTests.MayhemMenuPointSettingsReachTheScoreRuleAcrossMaps verifies defaults and an authored 20-minute clock with both stores.", result: pass }
     confidence: high
-    notes: "pointlimit/leadlimit defaults correctly hardcoded (1500/0). DRIFT 2026-06-25: the SeedTimeLimit self-cancelling guard was removed; timelimit is now unconditionally reset to the gametype default on every select, matching QC — the \"non-20 leftover not reset\" gap is CLOSED (values partial→faithful). m_legacydefaults \"1500 20 2 0\" not ported (menu/mapinfo concern, see tmayhem.menu.describe_support)."
+    notes: "Native boot initializes effective clocks and score limits from defaults, authored metadata and applicable overrides. The selected clock does not inherit the previous map’s limit."
 
   - id: tmayhem.teams.count
     name: "Team count 2..4 (g_tmayhem_teams_override >= 2 ? override : g_tmayhem_teams)"
@@ -62,7 +54,7 @@ features:
       - "common/gametypes/gametype/tmayhem/sv_tmayhem.qc:tmayhem_DelayedInit"
     port_refs:
       - "src/VortexArena.Common/Gameplay/GameTypes/TeamMayhem.cs:TeamMayhem.TeamCount"
-      - "src/VortexArena.Server/GameWorld.cs:2708 (case TeamMayhem → tm.TeamCount)"
+      - "src/VortexArena.Server/GameWorld.cs:ApplyMapMatchDefaults and TeamCountFor"
     constants:
       - { name: "g_tmayhem_teams", base: "2", port: "2", match: true }
       - { name: "g_tmayhem_teams_override", base: "0 (>=2 wins)", port: "0 (>=2 wins)", match: true }
@@ -77,11 +69,12 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "QC tmayhem_DelayedInit spawns/labels tmayhem_team map entities via Team_MapEnts_FindOrSpawn; the port derives only the team COUNT and relies on generic team registration. Whether tmayhem_team colours/entities are honoured was not verified (unchanged from baseline)."
+      - "The pin has no dedicated tmayhem_team spawnfunc. The native port seeds the standard roster from the resolved count. Separate fallback team edicts and raw team-entity overrides remain unverified in play."
     verification:
+      - { kind: test, ref: "MapInfoGenerationTests.MayhemMenuPointSettingsReachTheScoreRuleAcrossMaps checks modern and legacy team counts and menu override precedence.", result: pass }
       - { kind: code, ref: "TeamCount override/teams/clamp logic vs QC (TeamMayhem.cs:96-105); GameWorld.cs:2609; MayhemScoringTests.TeamMayhem_Identity_TeamCount", result: pass }
     confidence: medium
-    notes: "TeamCount drives the team seed/leader; the map-entity team-color registration (Team_MapEnts_FindOrSpawn) is an open presentation question. Untouched by Wave-2."
+    notes: "Authored team counts apply before roster and score slots are initialized. A g_tmayhem_teams_override of at least 2 takes precedence."
 
   - id: tmayhem.teams.spawns
     name: "Team spawnpoints gated on g_tmayhem_team_spawns (default off)"
@@ -383,7 +376,7 @@ features:
     constants:
       - { name: "pointlimit", base: "1500", port: "1500", match: true }
       - { name: "leadlimit", base: "0 (no lead limit)", port: "0", match: true }
-      - { name: "limit_neg1_noop", base: "GameRules_limit_score(<0) is a no-op (keeps mapinfo fraglimit)", port: "PointLimit returns default 1500 on -1/unset", match: true }
+      - { name: "limit_neg1_noop", base: "GameRules_limit_score(<0) is a no-op (keeps mapinfo fraglimit)", port: "mode-specific -1 leaves authored or stock defaults available", match: true }
       - { name: "team_tie_overtime", base: "team equality top-two ST_SCORE tied → overtime", port: "TeamTie.TopTwoTied(LeaderTeam, SecondTeam)", match: true }
     status:
       logic: faithful
@@ -394,12 +387,13 @@ features:
       liveness: live
     intended_divergence: false
     divergence_rationale: null
-    gaps:
-      - "Minor: the port hardcodes 1500 as the point-limit fallback rather than reading the (mapinfo-set) fraglimit cvar that QC's GameRules_limit_score leaves in place; effective value matches for stock play but a map/admin fraglimit override would not be honoured for tmayhem the way it is in Base. Unchanged from baseline."
+    gaps: []
     verification:
+      - { kind: test, ref: "MapInfoGenerationTests.MayhemMenuPointSettingsReachTheScoreRuleAcrossMaps exercises thresholds, zero and map defaults through GameWorld.Frame.", result: pass }
+      - { kind: runtime, ref: "Native headless darkzone boot with g_tmayhem_point_limit=600 and fraglimit_override=5 reported fraglimit=600, timelimit=20 and the pinned menu team override of 4 through the server console.", result: pass }
       - { kind: code, ref: "UpdateLeaderAndCheckLimit enforces point+lead limit on ST_SCORE leader via DriveGametypeFrame (GameWorld.cs:1795); ReportsTie wired in CheckRulesAndIntermission; winner team at GameWorld.cs:2265; MatchEnded at 292", result: pass }
     confidence: high
-    notes: "Leader read through the flag-aware GameScores.LeaderTeam()/SecondTeam(). Untouched by Wave-2 (the GameWorld round-timelimit changes were CA/FreezeTag-only, not tmayhem)."
+    notes: "The mode-specific nonnegative limit wins before the generic fallback. Native boot publishes the resolved limits through fraglimit and leadlimit for gameplay and the listen-server scoreboard."
 
   - id: tmayhem.match.reset
     name: "reset_map_players — zero total_damage_dealt on round/map reset"
@@ -427,27 +421,34 @@ features:
     notes: "Freshly-spawned players default GtTotalDamageDealt to 0, so Activate needs no extra zeroing. Untouched by Wave-2."
 
   - id: tmayhem.menu.describe_support
-    name: "Menu describe + map-support gating + configure slider + mapinfo parsing"
+    name: "Guide and registration summaries, point-limit controls and map support"
     layer: [presentation, shared]
     base_refs:
-      - "common/gametypes/gametype/tmayhem/tmayhem.qc:METHOD(tmayhem, describe)"
-      - "common/gametypes/gametype/tmayhem/tmayhem.qh:m_parse_mapinfo/m_isAlwaysSupported/m_isForcedSupported/m_setTeams/m_configuremenu"
+      - "common/gametypes/gametype/tmayhem/tmayhem.qc:describe"
+      - "common/gametypes/gametype/tmayhem/tmayhem.qh:gametype_init/m_configuremenu/m_isAlwaysSupported/m_isForcedSupported"
+      - "menu/xonotic/gametypelist.qc:XonoticGametypeList_focusedItemChangeNotify"
+      - "client/mapvoting.qc:MapInfo_Type_Description consumer"
     port_refs:
-      - "game/menu/CreateGameScreen.cs:80 (tmayhem point-limit row + g_tmayhem_teams_override tcvar)"
+      - "game/menu/CreateGameScreen.cs:MayhemMenu"
+      - "game/menu/dialogs/GuideCatalogText.cs:DescribeGametype"
+      - "game/menu/framework/QcCreateLists.cs:QcGametypeList.SetDescriptionTooltip"
+      - "game/net/NetGame.cs:gametype vote description"
+      - "src/VortexArena.Formats/Bsp/MapInfoCatalog.cs:Generate"
     constants:
-      - { name: "point_limit_slider", base: "200..3000 step 100 (g_tmayhem_point_limit, tcvar g_tmayhem_teams_override)", port: "5..100 step 5 fraglimit_override + g_tmayhem_teams_override", match: false }
+      - { name: "point_limit_slider", base: "200..3000, step 100, g_tmayhem_point_limit and g_tmayhem_teams_override", port: "same, including Default -1 and Unlimited 0", match: true }
+      - { name: "generated and forced map eligibility", base: "unconditional generic generation; promotion from DM or TDM", port: "same", match: true }
     status:
-      logic: missing
-      values: partial
+      logic: faithful
+      values: faithful
       timing: na
-      presentation: missing
+      presentation: faithful
       audio: na
-      liveness: partial
-    intended_divergence: true
-    divergence_rationale: "Menu blurb (describe), the m_configuremenu point-limit slider, map-pool support gating (m_isAlwaysSupported/m_isForcedSupported), and mapinfo team parsing (m_parse_mapinfo/m_setTeams) are MENUQC / map-pool concerns deferred in the port. The CreateGameScreen does list tmayhem with the teams-override tcvar, but the slider range/cvar differ from the QC m_configuremenu (point-limit 200..3000 vs the generic fraglimit_override 5..100)."
-    gaps:
-      - "No describe blurb; the menu point-limit slider uses the generic fraglimit_override 5..100 step 5 instead of QC's g_tmayhem_point_limit 200..3000 step 100; no automatic DM/TDM-map support gating; no mapinfo teams parsing. Unchanged from baseline (Wave-2 did not touch the menu)."
+      liveness: live
+    intended_divergence: false
+    divergence_rationale: null
+    gaps: []
     verification:
-      - { kind: code, ref: "CreateGameScreen.cs:80 lists tmayhem with g_tmayhem_teams_override; no describe/m_configuremenu/m_is*Supported/m_parse_mapinfo port symbol", result: fail }
-    confidence: medium
-    notes: "Out of gameplay scope; tracked for completeness. The Scores_CountFragsRemaining suppression hook is commented out (dead) in Base too, so not a port gap. Scoreboard columns include tmayhem (kills/deaths/suicides/teamkills) per ScoreboardPanel DefaultColumns."
+      - { kind: test, ref: "MapInfoGenerationTests.MayhemMenuPointSettingsReachTheScoreRuleAcrossMaps and NativeMapThresholdsReachCatalogAndDetails; MenuDataSourceTests.MapInfo_CatalogAndDetailsApplyDefaultPromotions.", result: pass }
+      - { kind: code, ref: "The Guide retains the stock paragraphs. Create Game focus and gametype vote use the short translated registration summary.", result: pass }
+    confidence: high
+    notes: "Generic native generation still respects symmetric-objective and Defrag suppression. Team Mayhem also consumes modern teams= and the third legacy positional TMayhem team count."

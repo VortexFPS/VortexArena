@@ -1,0 +1,17 @@
+client	dialog	case	input	caret column	saved _cl_name
+native	profile	replace	^1^xAbCCD^2EF	5	^x5EFCD^2EF
+native	profile	insert	^xaBcAB^xDeFCD	7	^xaBcAB^x9E0^xDeFCD
+native	profile	bare	AB^CD	3	AB^^^x9E0CD
+native	profile	quoted	AB^^CD	4	AB^^^x9E0CD
+native	firstrun	replace	^1^xAbCCD^2EF	5	^x5AFCD^2EF
+native	firstrun	insert	^xaBcAB^xDeFCD	7	^xaBcAB^x8E0^xDeFCD
+native	firstrun	bare	AB^CD	3	AB^^^x8E0CD
+native	firstrun	quoted	AB^^CD	4	AB^^^x8E0CD
+stock	profile	replace	^1^xAbCCD^2EF	5	^x59FCD^2EF
+stock	profile	insert	^xaBcAB^xDeFCD	7	^xaBcAB^x9E0^xDeFCD
+stock	profile	bare	AB^CD	3	AB^^^x9E0CD
+stock	profile	quoted	AB^^CD	4	AB^^^x9E0CD
+stock	firstrun	replace	^1^xAbCCD^2EF	5	^x5AFCD^2EF
+stock	firstrun	insert	^xaBcAB^xDeFCD	7	^xaBcAB^x8E0^xDeFCD
+stock	firstrun	bare	AB^CD	3	AB^^^x8E0CD
+stock	firstrun	quoted	AB^^CD	4	AB^^^x8E0CD

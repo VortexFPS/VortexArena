@@ -77,6 +77,17 @@ public static class CrosshairTrace
         return true;
     }
 
+    /// <summary>Test the viewed player's hull against the camera ray, stopping at nearer collision.</summary>
+    public static bool ChaseBodyObstructs(NVec3 eye, NVec3 forward, NVec3 mins, NVec3 maxs, Entity? localPlayer)
+    {
+        NVec3 end = eye + forward * MaxShotDistance;
+        if (!WeaponFiring.TraceHitsBox(eye, end, mins, maxs, out float entry))
+            return false;
+        // The local predicted hull may not be in the trace service. Test it explicitly and only
+        // trace the preceding segment so walls and other actors still block the fade.
+        return entry == 0f || !TraceForward(eye, forward, entry * MaxShotDistance, MoveFilter.Normal, localPlayer).DidHit;
+    }
+
     /// <summary>
     /// The <c>crosshair_chase</c> impact point (QC crosshair.qc:259-301): from the player origin lifted by
     /// <paramref name="viewHeight"/>, trace forward along <paramref name="forwardQuake"/> against the world only

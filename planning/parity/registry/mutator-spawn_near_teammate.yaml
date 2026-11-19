@@ -5,21 +5,25 @@ last_audited: "2026-06-27"
 summary:
   feature_count: 8
   worst_gaps:
-    - "cl_spawn_near_teammate is still read as a host-global cvar (Api.Cvars.GetFloat, lines 107/166), not a per-player REPLICATEd value (cvar_cl_spawn_near_teammate), so the ignore_spawnpoint==2 per-client opt-in mode is not per-player."
     - "weaponLocked(teammate) ports only the reachable freeze subset (FrozenStat || STATUSEFFECT_Frozen); QC's game_stopped / player_blocked / LockWeapon-hook portions are not modeled — a minor faithful-subset divergence on the relocate eligibility gate."
 features:
   - id: mutator-spawn_near_teammate.registration.cvar_gate
     name: "Mutator registration + cvar gate (expr_evaluate g_spawn_near_teammate)"
-    layer: [authority]
+    layer: [authority, shared]
     base_refs:
       - "common/mutators/mutator/spawn_near_teammate/sv_spawn_near_teammate.qc:16 (REGISTER_MUTATOR expr_evaluate)"
       - "common/mutators/mutator/spawn_near_teammate/spawn_near_teammate.qc:4 (REPLICATE cvar_cl_spawn_near_teammate)"
       - "lib/cvar.qh:48 (expr_evaluate)"
+      - "lib/replicate.qh:43-100 (initial send, change polling, and server boolean storage)"
     port_refs:
-      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:64 (IsEnabled)"
+      - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs (IsEnabled, ShouldRelocate)"
+      - "game/net/ClientNet.cs (ReplicatedCvars)"
+      - "game/net/NetGame.cs (StartClient)"
+      - "src/VortexArena.Server/Commands.cs (SentCvarAllowlist, ClientPreferenceProvider, ForgetPlayer)"
       - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:489 (ExprEvaluate)"
       - "src/VortexArena.Common/Gameplay/Mutators/SpawnNearTeammateMutator.cs:506 (ExprToken)"
     constants:
+      - { name: "cl_spawn_near_teammate", base: "1 archived client default; false on the server until received", port: "1 archived client default; false on the server until received", match: true }
       - { name: "g_spawn_near_teammate", base: "0 (string/expr; overkill: \"!g_assault !g_freezetag\")", port: "ExprEvaluate(string) — real expr parser", match: true }
     status:
       logic: faithful
@@ -31,14 +35,14 @@ features:
     intended_divergence: false
     divergence_rationale: null
     gaps:
-      - "cl_spawn_near_teammate is read as a host-global cvar (Api.Cvars.GetFloat, lines 107/166), not a per-player REPLICATEd value (cvar_cl_spawn_near_teammate); the ignore_spawnpoint==2 per-client opt-in mode is therefore not per-player. (Carried over from baseline — still open.)"
       - "MINOR/cosmetic: ExprToken tests the comparison operators in the order >= <= == != === !== > < whereas Base BINOP source order is >= <= > < == != === !==. The '> / <' before '== / !=' difference only changes the split point for a pathological token that contains BOTH a '>'/'<' and an '=='/'!=' (e.g. 'a>b==c'); no real ruleset/cvar value has such a token, so the live result is identical. The code comment overclaims 'EXACTLY QC's BINOP source order'."
     verification:
       - { kind: code-read, ref: "ExprEvaluate (489)/ExprToken (506) vs lib/cvar.qh:48-104 — leading +/- handling, whitespace tokenize, BINOP AND-chain, bare-token (ftos(f)==k ? f : cvar(k)) truthiness with '!' invert: all present and matching", result: pass }
       - { kind: code-read, ref: "overkill value \"!g_assault !g_freezetag\": both tokens take the bare-token path (no operator), each = cvar truthiness with '!' invert → correctly disables when g_assault or g_freezetag is set", result: pass }
       - { kind: unit-test, ref: "MutatorBatchT19Tests: g_spawn_near_teammate=\"1\" enables", result: pass }
+      - { kind: unit-test, ref: "CvarReplicationTests.SpawnNearTeammate_UsesEachClientsPreference: scoring and relocation in modes 0/1/2, client changes, disconnect cleanup", result: pass }
     confidence: high
-    notes: "ExprEvaluate is a genuine port of expr_evaluate — tokenizes the string, evaluates each token as a cvar boolean/comparison predicate (AND-chain), honors leading +/-, and uses (ftos(f)==k ? f : cvar(k)) bare-token truthiness with '!' invert. The overkill ruleset value correctly disables the mutator during assault/freezetag. Activation stays live via the [Mutator] auto-register + IsEnabled gate. Remaining gap: cl_spawn_near_teammate non-replication (host-global)."
+    notes: "ExprEvaluate is a genuine port of expr_evaluate — tokenizes the string, evaluates each token as a cvar boolean/comparison predicate (AND-chain), honors leading +/-, and uses (ftos(f)==k ? f : cvar(k)) bare-token truthiness with '!' invert. The overkill ruleset value correctly disables the mutator during assault/freezetag. Activation stays live via the [Mutator] auto-register + IsEnabled gate. ClientNet sends the local preference on connection and when it changes. Both spawn hooks use the authoritative player-specific value in mode 2."
 
   - id: mutator-spawn_near_teammate.bias.spawn_score
     name: "Spawn_Score bias: +200 near a living teammate, +100 same-team fallback"

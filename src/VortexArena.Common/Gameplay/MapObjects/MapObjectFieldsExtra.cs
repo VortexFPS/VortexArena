@@ -15,6 +15,8 @@ namespace VortexArena.Common.Framework
 {
     public partial class Entity
     {
+        public Gameplay.MapBgmSettings? BgmScript;
+
         // ---- effect-name / emitter keys (laser.qc / pointparticles.qc) ----
         /// <summary>QC <c>.mdl</c> — an effectinfo effect NAME (laser end effect, pointparticles emitter).</summary>
         public string Mdl = "";
@@ -176,6 +178,20 @@ namespace VortexArena.Common.Gameplay
             // g_clientmodel_use reads it off the activator. (models.qc:42)
             if (TryF(fields, "antiwall_flag", out float awf)) e.AntiwallFlag = (int)awf;
 
+            // --- music-synchronized client models and particle emitters ---
+            if (fields.TryGetValue("bgmscript", out string? track) && !string.IsNullOrEmpty(track)
+                && e.ClassName is "misc_clientmodel" or "func_clientwall" or "func_clientillusionary" or "func_pointparticles" or "func_sparks")
+            {
+                bool angular = track[0] == '<' && e.ClassName is "misc_clientmodel" or "func_clientwall" or "func_clientillusionary";
+                TryF(fields, "bgmscriptattack", out float attack);
+                TryF(fields, "bgmscriptdecay", out float decay);
+                TryF(fields, "bgmscriptsustain", out float sustain);
+                TryF(fields, "bgmscriptrelease", out float release);
+                e.BgmScript = new MapBgmSettings(angular ? track[1..] : track, angular,
+                    Nonnegative(attack), Nonnegative(decay), sustain == 0f ? 1f : System.MathF.Min(1f, Nonnegative(sustain)),
+                    Nonnegative(release));
+            }
+
             // --- music keys ---
             if (TryF(fields, "lifetime", out float lt)) e.MusicLifetime = lt;
             if (TryF(fields, "fade_time", out float ft)) e.MusicFadeIn = ft;
@@ -234,6 +250,8 @@ namespace VortexArena.Common.Gameplay
             if (TryVec(fields, "target3normal", out Vector3 tn2)) e.Target3Normal = tn2;
             if (TryVec(fields, "target4normal", out Vector3 tn3)) e.Target4Normal = tn3;
         }
+
+        private static float Nonnegative(float value) => float.IsFinite(value) ? System.MathF.Max(0f, value) : 0f;
 
         private static bool TryF(System.Collections.Generic.IReadOnlyDictionary<string, string> f, string key, out float v)
         {

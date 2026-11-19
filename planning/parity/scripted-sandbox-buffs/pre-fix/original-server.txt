@@ -1,0 +1,7 @@
+:join:1:1:127.0.0.1:ParityOwner
+:join:2:2:127.0.0.1:ParityGuest
+SANDBOX - SERVER: ParityOwner spawned an object at origin '1696.0 -534.1   8.7'
+Player ParityOwner tried to use cheat 'teleporttotarget'
+Player ParityGuest tried to use cheat 'teleporttotarget'
+ParityOwner got the Vampire buff!
+ParityOwner lost the Vampire buff!

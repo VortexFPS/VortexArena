@@ -67,6 +67,22 @@ smoke: **docs/RUNNING.md**.
   message. Off by default (`cl_allow_mods 0`).
 - Past investigations → `planning/*.md` postmortems (verified, dated).
 
+## Game clients on shared machines
+
+Parity recordings, probes and other runs that start real game clients (Godot clients or servers,
+`darkplaces-sdl`, usually under Xvfb) take 2.5 to 4 GB of memory **each**. Several agent sessions often
+share one machine, so run only one such job at a time.
+
+- **Check first:** `pgrep -fl 'Godot_v|darkplaces'` lists the game processes running now. If another
+  session's job is going, wait for it to end rather than starting yours beside it, for example
+  `while pgrep -f 'Godot_v|darkplaces' >/dev/null; do sleep 30; done`. Never stop another session's run.
+- **Within your own job,** start at most the clients the scenario needs (a server and two clients), and
+  stop every process you started, Xvfb included, when the job ends or fails.
+- Builds, unit tests and headless scripts that start no game client may run alongside.
+
+Why: on 2026-11-19 several sessions ran parity probes at once on a 15 GB Linux host. The kernel killed
+game clients for memory 14 times, and each kill took down the Tasual host and every agent session on it.
+
 ## House rules
 
 - **Never** push a commit, open a merge request, or post a comment/issue on the Xonotic GitLab

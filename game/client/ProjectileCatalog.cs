@@ -35,6 +35,8 @@ public static class ProjectileCatalog
         // standard projectile path with the grenademodel.md3 body tinted by the per-type NadeRegistry m_color.
         NadeNormal, NadeNapalm, NadeIce, NadeTranslocate, NadeSpawn, NadeHeal,
         NadeMonster, NadeEntrap, NadeVeil, NadeAmmo, NadeDarkness,
+        // The grappling hook head (ENT_CLIENT_HOOK draws MDL_HOOK at the chain end — not a CSQCProjectile).
+        GrapplingHook,
     }
 
     /// <summary>The body look a projectile draws with when it has no resolved model (QC setmodel fallback).</summary>
@@ -158,8 +160,11 @@ public static class ProjectileCatalog
             Body = BodyFamily.GrenadeMesh, ModelPath = "models/grenademodel.md3", GlowColor = GrenadeGreen });
         Add(new Desc { Type = ProjectileType.GrenadeBouncing, TrailEffect = "TR_GRENADE", Trail = GrenadeSmoke,
             Body = BodyFamily.GrenadeMesh, ModelPath = "models/grenademodel.md3", SpinDegPerSec = new Vector3(0, -1000f, 0), GlowColor = GrenadeGreen });
+        // EFFECT_TR_GRENADE, MDL_PROJECTILE_MINE = models/mine.md3 (all.inc:61; projectile.qc:353,450) — the same
+        // model W_MineLayer_Stick sets on the placed mine (MDL_MINELAYER_MINE). Without the ModelPath the flying
+        // mine drew the procedural grenade body (playtest #85).
         Add(new Desc { Type = ProjectileType.Mine, TrailEffect = "TR_GRENADE", Trail = GrenadeSmoke,
-            Body = BodyFamily.GrenadeMesh, GlowColor = GrenadeGreen });
+            Body = BodyFamily.GrenadeMesh, ModelPath = "models/mine.md3", GlowColor = GrenadeGreen });
         // EFFECT_Null — no trail (projectile.qc:354). MDL_PROJECTILE_BLASTER = models/laser.mdl (all.inc:63 —
         // MD3 content despite the .mdl extension), scale 1, no fly loop and no dlight (PROJECTILE_BLASTER is
         // absent from projectile.qc's second per-type switch). Falls back to the additive glow sprite when the
@@ -178,6 +183,10 @@ public static class ProjectileCatalog
             Body = BodyFamily.GlowSprite, ModelScale = 4f, GlowColor = new Color(1.0f, 0.4f, 0.4f) });
         Add(new Desc { Type = ProjectileType.PortoBlue, TrailEffect = "TR_WIZSPIKE", Trail = WizSpike,
             Body = BodyFamily.GlowSprite, ModelScale = 4f, GlowColor = new Color(0.4f, 0.4f, 1.0f) });
+        // ENT_CLIENT_HOOK (hook.qc NET_HANDLE + Draw_GrapplingHook): setmodel(MDL_HOOK = models/hook.md3) at the
+        // chain end, angled along the chain; no trail, no spin. The chain itself is HookRopeRenderer.
+        Add(new Desc { Type = ProjectileType.GrapplingHook, Body = BodyFamily.GrenadeMesh, ModelPath = "models/hook.md3",
+            GlowColor = new Color(0.8f, 0.8f, 0.8f) });
         // EFFECT_TR_KNIGHTSPIKE (projectile.qc:359, forward tumble :135-136)
         Add(new Desc { Type = ProjectileType.Hookbomb, TrailEffect = "TR_KNIGHTSPIKE", Trail = KnightSpike,
             Body = BodyFamily.GrenadeMesh, SpinDegPerSec = new Vector3(1000f, 0, 0), GlowColor = new Color(1.0f, 0.5f, 0.3f) });
@@ -326,7 +335,10 @@ public static class ProjectileCatalog
         if (Has(s, "mage")) return ProjectileType.MageSpike;
         if (Has(s, "spike", "crylink")) return ProjectileType.Crylink;
         if (Has(s, "hookbomb")) return ProjectileType.Hookbomb;
-        if (Has(s, "grapplinghook", "hook")) return ProjectileType.Hookbomb;
+        // The grapple chain (classname grapplinghook) is the MDL_HOOK head, not the hookbomb grenade with its
+        // knight-spike trail (the hookbomb classname is matched just above).
+        if (Has(s, "grapplinghook")) return ProjectileType.GrapplingHook;
+        if (Has(s, "hook")) return ProjectileType.Hookbomb;
         if (Has(s, "mine")) return ProjectileType.Mine;
         // Held-nade projectiles (cl_nades). The server stamps the nade entity's classname "nade" and appends the
         // per-type netname (ServerNet → key "nade <netname>"), so the key carries the Nades-registry token. This
@@ -424,7 +436,8 @@ public static class ProjectileCatalog
             or ProjectileType.RocketMinstaLaser or ProjectileType.Fireball or ProjectileType.Flac
             or ProjectileType.Tag or ProjectileType.SpiderRocket or ProjectileType.WakiRocket
             or ProjectileType.WakiCannon or ProjectileType.BumbleGun or ProjectileType.MageSpike
-            or ProjectileType.GolemLightning or ProjectileType.ElectroBeam => CollisionMode.Stop,
+            or ProjectileType.GolemLightning or ProjectileType.ElectroBeam
+            or ProjectileType.GrapplingHook => CollisionMode.Stop,
 
         ProjectileType.CrylinkBouncing or ProjectileType.ArcBolt or ProjectileType.HagarBouncing
             or ProjectileType.PortoRed or ProjectileType.PortoBlue => CollisionMode.Bounce,

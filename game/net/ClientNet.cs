@@ -1169,6 +1169,7 @@ public sealed class ClientNet : IDisposable
         "cl_handicap_damage_taken",
         "cl_noantilag",
         "g_xonoticversion",
+        "cl_gunalign",          // common/weapons/all.qc:804 REPLICATE(cvar_cl_gunalign) — the shot-origin side
         // --- port-specific (not in Base REPLICATE) ---
         "cl_weaponpriority",
         "cl_physics",
@@ -1498,7 +1499,9 @@ public sealed class ClientNet : IDisposable
         // residual from inputs buffered before the first MatchState arrived (the MatchStartTime-race) would
         // otherwise be smoothed + re-armed each snapshot and take a freeze-length to bleed off — the vibrate the
         // user saw lingering ~5s into live play. Clearing it every frozen snapshot makes go-live instant + clean.
-        if (!MatchWarmup && MatchStartTime > 0f && serverTime < MatchStartTime)
+        // The match-end hold is the same shape (#92): the server stops moving the player at intermission and the
+        // predictor is frozen with it, so clear any residual instead of gliding it across the scoreboard.
+        if ((!MatchWarmup && MatchStartTime > 0f && serverTime < MatchStartTime) || MatchIntermission)
             _reconciler.ResetError();
 
         // delta-decompress the entity section against the baseline the server named.

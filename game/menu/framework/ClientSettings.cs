@@ -257,6 +257,10 @@ public static class ClientSettings
         // (draws 2026-08-02) The sun's shadow pass — output provably unconsumed by both world and model
         // shaders, so OFF by default; kept as a cvar for A/B or a future shader that reads it.
         c.Register("r_sun_shadow", "0");
+        // DarkPlaces' view far plane (gl_rmain.c): farclip = r_farclip_base + world radius * r_farclip_world * 2.
+        // Read when the camera is made and when a map binds (NetGame.ApplyFarClip). Not archived, as in DP.
+        c.Register("r_farclip_base", "65536");
+        c.Register("r_farclip_world", "2");
         // (draws 2026-08-02) Portal render tuning: render every Nth frame (1 = every frame, DP-parity),
         // inherit the main viewport's MSAA (1 = parity; 0 = portals render MSAA-off — cheaper, and removes
         // an MSAA-keyed PSO family the warm pass would otherwise have to cover), and skip portals whose
@@ -802,10 +806,6 @@ public static class ClientSettings
         { "vid_width", "vid_height", "vid_fullscreen", "vid_borderless", "sys_priority_boost" };
 
     /// <summary>
-    /// The audio cvars that only take effect on an explicit apply. <see cref="ApplyAudio"/> is called at boot
-    /// and from the Apply button and nowhere else, so every volume it pushes is genuinely deferred.
-    /// </summary>
-    /// <summary>
     /// The render cvars consumed while the MAP is built, so only a map reload re-applies them: gl_picmip and
     /// gl_texturecompression as each texture is decoded, r_subdivisions_tolerance when the bezier patches are
     /// tessellated, r_shadow_world_casts when the world cells are created. Recorded by the map build (see
@@ -814,9 +814,13 @@ public static class ClientSettings
     public static readonly string[] MapBuildApplyCvars =
         { "gl_picmip", "gl_texturecompression", "r_subdivisions_tolerance", "r_shadow_world_casts" };
 
-    public static readonly string[] AudioApplyCvars =
-        { "mastervolume", "bgmvolume", "snd_channel0volume", "snd_channel1volume",
-          "snd_channel2volume", "snd_channel7volume" };
+    /// <summary>
+    /// The audio cvars that only take effect on the Audio tab's "Apply immediately": the attenuation method, which
+    /// Xonotic applies through the <c>snd_attenuation_method_N</c> alias the button runs. The volumes are live (see
+    /// <see cref="InstallLiveAudioCvars"/>); <c>snd_speed</c> and <c>snd_channels</c>, which Xonotic also links to
+    /// the button, are not listed because nothing here reads them (the output format is the audio server's).
+    /// </summary>
+    public static readonly string[] AudioApplyCvars = { "menu_snd_attenuation_method" };
 
     /// <summary>
     /// Resolution + fullscreen + borderless + vsync from the <c>vid_*</c> cvars onto the window (QC vid_restart).
@@ -968,6 +972,17 @@ public static class ClientSettings
         // BEFORE its limiter - so the Master bus stays at unity. The few players still on engine nodes
         // (vehicle engines and alarms) keep their loudness by having mastervolume folded into their buses.
         VortexArena.Game.Audio.DpNative.Configure(c);
+        ApplyVolumes(c);
+    }
+
+    /// <summary>
+    /// The volume half of <see cref="ApplyAudio"/>: the volume cvars onto the mixer's settings and the buses. Run
+    /// by <see cref="ApplyAudio"/> and, through <see cref="InstallLiveAudioCvars"/>, on every volume-cvar change.
+    /// </summary>
+    private static void ApplyVolumes(CvarService c)
+    {
+        // The mixer's own copy: a match refreshes it every frame (ClientWorld.DpFrame), but nothing does at the menu.
+        VortexArena.Game.Audio.DpNative.ReadSettings();
         float master = ChannelVol(c, "mastervolume");
         float fold = VortexArena.Game.Audio.DpNative.Active ? master : 1f;
         SetBusVolume("Master", VortexArena.Game.Audio.DpNative.Active ? 1f : master);
@@ -982,9 +997,30 @@ public static class ClientSettings
         SetBusVolume("Player", ChannelVol(c, "snd_channel7volume") * fold);
         // Ambient inherits from the general effects channel (snd_channel0volume).
         SetBusVolume("Ambient", ChannelVol(c, "snd_channel0volume") * fold);
-
-        AppliedState.Record(AudioApplyCvars);   // see the note in ApplyVideo
     }
+
+    /// <summary>
+    /// The volume cvars, live: DarkPlaces reads <c>mastervolume</c>, <c>volume</c>, <c>bgmvolume</c> and every
+    /// <c>snd_*volume</c> each frame (S_Update / SND_Spatialize), so a volume slider is heard while it is dragged
+    /// and Xonotic's audio "Apply immediately" button is not linked to any of them. Here they were applied only by
+    /// <see cref="ApplyAudio"/> (boot and <c>snd_restart</c>), so the sliders did nothing until Apply was pressed
+    /// (playtest #60). Installed once at boot, beside <see cref="InstallLiveVideoCvars"/>.
+    /// </summary>
+    public static void InstallLiveAudioCvars(CvarService c)
+    {
+        c.Changed += name =>
+        {
+            if (IsVolumeCvar(name)) ApplyVolumes(c);
+        };
+    }
+
+    /// <summary>True for a cvar DarkPlaces reads as a volume: mastervolume, volume, bgmvolume, snd_*volume.</summary>
+    public static bool IsVolumeCvar(string name) =>
+        string.Equals(name, "mastervolume", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "volume", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "bgmvolume", StringComparison.OrdinalIgnoreCase)
+        || (name.StartsWith("snd_", StringComparison.OrdinalIgnoreCase)
+            && name.EndsWith("volume", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// The stock Darkplaces audio-cvar defaults (snd_main.c). These are ENGINE cvars — Darkplaces registers them

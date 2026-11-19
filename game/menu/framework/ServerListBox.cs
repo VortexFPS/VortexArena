@@ -125,11 +125,17 @@ public partial class ServerListBox : MenuListBox
             running = cat;
         }
 
+        // menu_slist_categories_onlyifmultiple drops a lone heading — except "Xonotic Servers (legacy mode)", the
+        // one heading that carries information on its own: with no Vortex server listed, it is what tells the
+        // player every row is a stock Xonotic server (playtest-bugs #91).
         bool onlyIfMultiple = MenuState.Cvars.GetFloat("menu_slist_categories_onlyifmultiple") != 0f;
         if (headings <= 1 && onlyIfMultiple)
         {
             for (int i = 0; i < _rows.Count; i++)
-                _rows[i] = new Row(_rows[i].Server, null);
+            {
+                if (_rows[i].Heading != ServerCategory.Xonotic)
+                    _rows[i] = new Row(_rows[i].Server, null);
+            }
         }
 
         ItemCount = _rows.Count;

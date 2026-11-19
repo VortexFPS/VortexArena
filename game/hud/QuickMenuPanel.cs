@@ -567,7 +567,10 @@ public partial class QuickMenuPanel : HudPanel
 
         if (@event is InputEventKey { Pressed: true } k)
         {
-            if (k.Keycode == Key.Escape) { Close(); AcceptEvent(); return; }
+            // Escape is NOT handled here: closing on the press let the release fall through to Shell's Escape chain,
+            // which then opened the game menu over the just-closed quickmenu (#82). Shell closes it on the release
+            // edge instead (NetGame.HandleHudEscape), whether or not this panel still has focus.
+            if (k.Keycode == Key.Escape) return;
             int digit = DigitOf(k.Keycode);
             if (digit >= 0)
             {

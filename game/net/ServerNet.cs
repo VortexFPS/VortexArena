@@ -1034,11 +1034,17 @@ public sealed class ServerNet : IDisposable
             _ => "this server does not report a map catalog (sv_master_catalog 0, or no content mounted)",
         };
 
+        // `fs_rescan` changes the mounted packages, so the pool this server reports has changed too. Without
+        // this the catalog kept describing the old pool until the next map change rebuilt this ServerNet.
+        Menu.MenuState.ContentRescanned += OnContentRescanned;
+
         // A map change reboots the listen server onto the new map (NetGame.StartListenServer via
         // Shell's MapChangeRequested handler), so a fresh ServerNet coming up on a map IS the map-change
         // path — the same reason EnableMasterServer arms an immediate dpmaster heartbeat right above.
         OnMapChanged();
     }
+
+    private void OnContentRescanned() => _announce?.RequestCatalogRefresh();
 
     /// <summary>DS-7: re-announce at the next pump instead of waiting out the 180 s cadence, per the protocol's
     /// freshness contract (a listing showing the previous map is worse than a listing a few seconds late).
@@ -3154,6 +3160,7 @@ public sealed class ServerNet : IDisposable
                 // colormap after spawn) and both QC encodings (packed 1024+ vs a sub-1024 slot reference)
                 // survive the wire. 0 on the overwhelming majority of entities → the delta bit stays clear.
                 ColorMapOverride = e.ColorMapOverride & 0xFFFF,
+                Scale = NetEntityState.EncodeScale(e.ScaleFactor), // QC .scale (protocol v23; 0 = unscaled, not sent)
                 Health = (int)e.Health,
                 Alpha = QuantizeAlpha(e.Alpha), // [W1-alpha-net] per-entity render transparency (e.g. Cloaked items)
                 Owner = (e.Owner is Player op && _byPlayer.TryGetValue(op, out PeerState? ops)) ? ops.PeerId : 0,
@@ -3679,6 +3686,13 @@ public sealed class ServerNet : IDisposable
         // every weapon's spawn), so a projectile is that marker PLUS an owner PLUS a projectile movetype
         // (rocket/grenade/bolt/nade/mine/…). Same test as TurretAI.IsMissile; excludes ownerless map geometry.
         if ((e.Flags & EntFlags.Item) != 0 && e.Owner is not null && IsProjectileMoveType(e.MoveType))
+            return NetEntityKind.Projectile;
+        // A placed mine (W_MineLayer_Stick: MOVETYPE_NONE, or FOLLOW on a moving bmodel) and a latched grappling
+        // hook stop moving but stay on screen. Keep them on the projectile path, which draws their real model
+        // (mine.md3 / hook.md3) oriented from their angles as DarkPlaces draws an alias model; as a generic entity
+        // the mine went through EntityNode's yaw/pitch shortcuts and sat flipped off the surface, and the latched
+        // hook head vanished from the snapshot (playtests #85, #88).
+        if ((e.Flags & EntFlags.Item) != 0 && e.Owner is not null && cn is "mine" or "grapplinghook")
             return NetEntityKind.Projectile;
 
         // [W-nadeclient] the nade_orb effect entity (heal/ammo/entrap/veil/ice/darkness orb) is SOLID_TRIGGER, so the
@@ -4348,6 +4362,7 @@ public sealed class ServerNet : IDisposable
         // rebuild that a disposed lane cancels on the spot.
         if (ReferenceEquals(_world.Commands.MasterCatalogRefreshHandler, _catalogRefreshHook))
             _world.Commands.MasterCatalogRefreshHandler = null;
+        Menu.MenuState.ContentRescanned -= OnContentRescanned;
         // DS-7 first: it joins its in-flight announce (bounded wait) while the transport is still alive, so a
         // map change that tears this down mid-announce does not race the socket out from under the worker.
         _announce?.Dispose();

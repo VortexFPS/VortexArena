@@ -103,15 +103,11 @@ public sealed class Minelayer : Weapon
     {
         if (fire == FireMode.Primary)
         {
-            // QC checks the per-player mine limit before prepareattack, so an over-limit press doesn't burn
-            // the refire timer; then gates the lay on the refire (weapon_prepareattack). The over-limit press
-            // gives feedback (W_MineLayer_Attack, minelayer.qc:299-305): a center-print + the UNAVAILABLE cue.
-            // The refire delay throttles the spam, matching the comment in Base.
-            if (Cvars.Limit > 0 && CountMines(actor) >= Cvars.Limit)
-            {
-                NotifyOverLimit(actor);
-                return;
-            }
+            // QC wr_think (minelayer.qc:475-481): `if (fire & 1) if (weapon_prepareattack(...)) { Attack; thinkf }`.
+            // The mine limit is checked INSIDE W_MineLayer_Attack, i.e. only on a press the refire gate let
+            // through, so the over-limit center-print + UNAVAILABLE cue come at most once per refire. (This
+            // WrThink(Primary) runs every tick whether or not ATK is held; checking the limit up here sent the
+            // notification and the sound every tick while four mines were out — playtest #86.)
             if (PrepareAttack(actor, slot, fire))
                 Attack(actor, slot);
         }
@@ -130,9 +126,13 @@ public sealed class Minelayer : Weapon
     // W_MineLayer_Attack — lay a mine that arms and proximity-detonates. minelayer.qc
     private void Attack(Entity actor, WeaponSlot slot)
     {
-        // QC enforces the per-player mine limit before firing.
+        // QC W_MineLayer_Attack:298-305 — scan how many mines we placed, and refuse (with the center-print and the
+        // UNAVAILABLE cue) if we reached the limit. "The refire delay keeps this message from being spammed."
         if (Cvars.Limit > 0 && CountMines(actor) >= Cvars.Limit)
+        {
+            NotifyOverLimit(actor);
             return;
+        }
 
         actor.TakeResource(AmmoType, Cvars.Ammo);
 
@@ -688,7 +688,7 @@ public sealed class Minelayer : Weapon
 
     /// <summary>
     /// Over-limit press feedback (QC W_MineLayer_Attack:301-304): a center-print telling the player the cap, plus
-    /// the UNAVAILABLE cue. The refire delay throttles the spam (the press is rejected before prepareattack).
+    /// the UNAVAILABLE cue. The refire delay throttles the spam (the press is refused after prepareattack).
     /// </summary>
     private void NotifyOverLimit(Entity actor)
     {

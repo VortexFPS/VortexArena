@@ -220,6 +220,11 @@ public sealed class Shotgun : Weapon
     public override float RefireFor(FireMode fire) => fire == FireMode.Secondary ? Secondary.Refire : Primary.Refire;
     public override float AnimtimeFor(FireMode fire) => fire == FireMode.Secondary ? Secondary.Animtime : Primary.Animtime;
 
+    // shotgun.qc: the melee (secondary 1) runs W_Shotgun_Attack2 -> weapon_thinkf(WFRAME_FIRE2, ...), the 23-frame
+    // swing of h_shotgun's fire2 group; the triple shot (secondary 2) and the primary use WFRAME_FIRE1.
+    public override int FireFrameFor(FireMode fire)
+        => fire == FireMode.Secondary && Secondary.Secondary == 1 ? WFrameFire2 : WFrameFire1;
+
     // W_Shotgun_Attack — fire `bullets` hitscan pellets in a spread pattern. shotgun.qc
     private void Attack(Entity actor, WeaponSlot slot)
     {
@@ -319,7 +324,9 @@ public sealed class Shotgun : Weapon
     // W_Shotgun_Melee_Think to begin after melee_delay, spreading its melee_traces over melee_time.
     private void Melee(Entity actor, WeaponSlot slot)
     {
-        Api.Sound.Play(actor, SoundChannel.Weapon, "weapons/shotgun_melee.wav");
+        // QC sound(actor, CH_WEAPON_A, SND_SHOTGUN_MELEE, ...): an AUTO channel, so a weapon switch or dry-fire
+        // click on the single weapon channel cannot cut the swing sound off.
+        Api.Sound.Play(actor, SoundChannel.WeaponAuto, "weapons/shotgun_melee.wav");
 
         float rate = WeaponRateFactor(actor);
 

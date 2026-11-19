@@ -340,6 +340,8 @@ public static class Triggers
             float cooldown = (CompatRemaps.IsQ3Compat && (self.SpawnFlags & HurtSlow) == 0) ? 0.05f : 1f;
             if (MapMover.Now() >= toucher.TriggerHurtTime + cooldown)
             {
+                if (!MapMover.ExactTriggerTouch(self, toucher)) // QC EXACTTRIGGER_TOUCH: inside the brush, not just its bbox
+                    return;
                 toucher.TriggerHurtTime = MapMover.Now();
                 Entity attacker = (self.Enemy is not null && (self.Enemy.Flags & EntFlags.Client) != 0)
                     ? self.Enemy
@@ -352,6 +354,8 @@ public static class Triggers
             // QC gates non-creatures on toucher.damagedbytriggers (projectiles/loot/bodies); the port has no
             // such field, so IsPushable stands in for it (same set, matching the TargetUtilities convention).
             // Those take damage every touch.
+            if (!MapMover.ExactTriggerTouch(self, toucher))
+                return;
             Combat.Damage(toucher, self, self, self.Dmg, DeathTypes.Void, toucher.Origin, Vector3.Zero);
         }
     }
@@ -397,6 +401,9 @@ public static class Triggers
         if (toucher.TakeDamage == DamageMode.No || MapMover.IsDead(toucher))
             return;
         if (toucher.TriggerHealTime >= MapMover.Now())
+            return;
+        // QC: EXACTTRIGGER_TOUCH only when touched (no targetname); a use() from a target heals unconditionally.
+        if (string.IsNullOrEmpty(self.TargetName) && !MapMover.ExactTriggerTouch(self, toucher))
             return;
 
         if (self.Delay > 0f)

@@ -185,10 +185,13 @@ public partial class ModelAnimator : Node3D
         ResolveSurfaces(skin);
         if (BuildProbe is { } p1) { p1("animator step: materials " + md3.Name, probe); probe = System.Diagnostics.Stopwatch.GetTimestamp(); }
 
-        _mesh = ModelLoader.BuildModel(_md3, 0, _assets, skin);
-        _mesh.Name = "Mesh";
+        // (playtest-bugs #69) No throwaway frame-0 snapshot: the old ModelLoader.BuildModel here built and
+        // uploaded a full ArrayMesh that the first ApplyFrame (Play below, or the explicit one at the end)
+        // replaced and disposed straight away — a second mesh build per animator, and an animator is built every
+        // time an MD3 entity (re)enters the client's view, not once per model. The persistent morph mesh is
+        // built once, by BuildMorphBuffers, before Initialize returns.
+        _mesh = new MeshInstance3D { Name = "Mesh" };
         AddChild(_mesh);
-        if (BuildProbe is { } p2) { p2("animator step: frame-0 mesh " + md3.Name, probe); probe = System.Diagnostics.Stopwatch.GetTimestamp(); }
 
         _tagsRoot = ModelLoader.BuildTags(_md3, 0);
         AddChild(_tagsRoot);
@@ -210,6 +213,10 @@ public partial class ModelAnimator : Node3D
         {
             foreach (AnimClip c in _clips.Values) { Play(c.Name); break; }
         }
+        // No clip registered (a frame-driven or held-frame model): hold frame 0, which builds the morph mesh now
+        // so the node never draws empty before its first Advance.
+        if (!_morphInit)
+            ApplyFrame(0, 0, 0f);
         BuildProbe?.Invoke("animator step: first clip frame " + md3.Name, probe);
     }
 
@@ -491,9 +498,11 @@ public partial class ModelAnimator : Node3D
             && !VortexArena.Game.Loaders.Models.IqmBuilder.IsShared(initialMesh))
             initialMesh.Dispose();
 
-        // One-shot build breadcrumb: which morph path this model took and why (per-model, boot/spawn-time
-        // volume). The r16 flag investigation needed exactly this to see WHY a model stayed on the CPU path.
-        if (_md3.FrameCount > 1)
+        // Build breadcrumb: which morph path this model took and why. The r16 flag investigation needed exactly
+        // this to see WHY a model stayed on the CPU path. It fires once per ANIMATOR, i.e. every time an MD3
+        // entity enters the client's view (a respawn across the map re-enters the flags), so it is a developer
+        // trace (developer 1), not console output for players (playtest-bugs #69).
+        if (_md3.FrameCount > 1 && VortexArena.Common.Diagnostics.Log.WillTrace)
         {
             var mats = new System.Text.StringBuilder();
             foreach ((Md3Surface s, Material? m, bool vis) in _surfaces)
@@ -505,7 +514,7 @@ public partial class ModelAnimator : Node3D
                     ShaderMaterial => "shader! ", // no morph vertex stage — pins the model to the CPU path
                     _ => "other! ",
                 });
-            VortexArena.Common.Diagnostics.Log.Info(
+            VortexArena.Common.Diagnostics.Log.Trace(
                 $"[md3morph] '{_md3.Name}' frames={_md3.FrameCount} gpu={_gpuMorph} mats: {mats.ToString().TrimEnd()}");
         }
     }

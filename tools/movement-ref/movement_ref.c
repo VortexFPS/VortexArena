@@ -439,9 +439,11 @@ static int FlyMove(pent *e, const mparams *mp, float dt, int applygravity, int a
                 numplanes=0;
                 continue;
             } else {
+                /* movetypes.qc:228-229 (and DP sv_phys.c SV_FlyMove): a REJECTED in-loop step only restores
+                 * the origin. It does NOT set blockedflag 2 or the step normal — that only happens in the
+                 * stepheight==0 branch below — so with stepmultipletimes on, the primary walk move never
+                 * reports a step to _Movetype_Physics_Walk, and its explicit up/forward recovery never runs. */
                 e->origin = org;
-                blockedflag|=2;
-                if(applystepnormal) move_stepnormal = my_normal;
             }
         } else {
             blockedflag|=2;
@@ -518,15 +520,17 @@ static void WalkMove(pent *e, const mparams *mp, float dt, int applygravity){
             return;
         }
         /* wallfriction: sv_wallfriction=1 (DP engine default) but stock QC _Movetype_WallFriction's body is
-           commented out (a no-op), so the term never affects the trajectory and is intentionally omitted here */
-        return;
+           commented out (a no-op), so the term never affects the trajectory and is intentionally omitted here.
+           NO return: walk.qc:146-170 falls through from an accepted step-up into the move-down below. */
     }
-
-    /* step-down */
-    int stepdown_skip = !mp->stepdown || e->waterlevel>=WL_SUBMERGED || start_velocity.z>=(1.0f/32.0f)
-        || !oldonground || (e->flags&FL_ONGROUND)
-        || (mp->stepdown_maxspeed && vdot(start_velocity,start_velocity) >= (mp->stepdown_maxspeed*mp->stepdown_maxspeed) && !(e->flags&FL_ONSLICK));
-    if(stepdown_skip) return;
+    /* step-down: walk.qc:153 — the skip test is the `else if` of the step branch, so it applies only when
+       the move did NOT block on a step */
+    else {
+        int stepdown_skip = !mp->stepdown || e->waterlevel>=WL_SUBMERGED || start_velocity.z>=(1.0f/32.0f)
+            || !oldonground || (e->flags&FL_ONGROUND)
+            || (mp->stepdown_maxspeed && vdot(start_velocity,start_velocity) >= (mp->stepdown_maxspeed*mp->stepdown_maxspeed) && !(e->flags&FL_ONSLICK));
+        if(stepdown_skip) return;
+    }
 
     qvec downmove = v3(0,0, -mp->stepheight + start_velocity.z*dt);
     if(!PushEntity(e, downmove)) return;
@@ -780,7 +784,7 @@ static void player_move(pent *e, const mparams *mp, pinput in){
 /* ===================================================================== *
  *  Scenario harness + JSON emitter
  * ===================================================================== */
-#define MAXTICKS 256
+#define MAXTICKS 1024
 typedef struct {
     const char *name; const char *desc;
     cworld world;
@@ -826,6 +830,36 @@ static void emit_json(FILE *f, scenario *s){
     fprintf(f,"  ]\n}\n");
 }
 
+/* Greedy "strafe bot": runs the reference sim from the scenario's start state and, every tick, picks the yaw
+ * (searched in 0.1-degree steps around the current velocity heading) whose tick ends with the most horizontal
+ * speed. The chosen inputs are stored in the scenario and replayed verbatim by emit_json (and by the C# parity
+ * test), so the yaw stream is just recorded input: any deterministic stream would do for parity, this one also
+ * makes the end speed a meaningful "strafe power" number. */
+static void greedy_strafe(scenario *s, qvec move, int jump, int nticks, float dt){
+    mparams mp = stock();
+    pent e; memset(&e,0,sizeof(e));
+    e.origin=s->start_origin; e.velocity=s->start_velocity; e.v_angle=s->start_vangle;
+    e.mins=mp.player_mins; e.maxs=mp.player_maxs; e.flags=s->start_flags; e.lastflags=s->start_flags;
+    g_world=&s->world; g_time=0;
+    for(int t=0;t<nticks;t++){
+        g_time += dt;
+        float heading = atan2f(e.velocity.y, e.velocity.x) * (180.0f/3.14159265358979f);
+        float bestyaw = heading, bestspd = -1.0f;
+        for(int k=-1800;k<1800;k++){
+            float yaw = heading + 0.1f*(float)k;
+            pent trial = e;
+            pinput pi = { v3(0,yaw,0), move, jump, 0, dt };
+            player_move(&trial, &mp, pi);
+            float spd = vlen(vec2(trial.velocity));
+            if(spd > bestspd){ bestspd = spd; bestyaw = yaw; }
+        }
+        pinput pi = { v3(0,bestyaw,0), move, jump, 0, dt };
+        s->in[t] = pi;
+        player_move(&e, &mp, pi);
+    }
+    s->nticks = nticks;
+}
+
 /* --- world builders --- */
 static cworld flat_world(void){
     cworld w; w.nbrushes=0;
@@ -851,6 +885,14 @@ static cworld ramp_world(void){
     b.planes[b.nplanes++] = (cplane){ v3(0,-1,0), 4096.0f };
     b.planes[b.nplanes++] = (cplane){ v3(0,0,-1), 256.0f };
     w.brushes[w.nbrushes++] = b;
+    return w;
+}
+/* a 16u drop at x=64 (upper floor top z=0 for x<64, lower floor top z=-16 beyond) beside a tall wall at y>=40 */
+static cworld wall_ledge_world(void){
+    cworld w; w.nbrushes=0;
+    w.brushes[w.nbrushes++] = box_brush(v3(-4096,-4096,-256), v3(64,40,0), CONT_SOLID);
+    w.brushes[w.nbrushes++] = box_brush(v3(64,-4096,-256), v3(4096,40,-16), CONT_SOLID);
+    w.brushes[w.nbrushes++] = box_brush(v3(-4096,40,-256), v3(4096,4096,1024), CONT_SOLID);
     return w;
 }
 static cworld water_world(void){
@@ -972,6 +1014,47 @@ int main(int argc, char **argv){
         FILE *f=fopen(path,"wb"); emit_json(f,&s); fclose(f);
     }
 
-    printf("wrote 10 golden scenarios to %s\n", outdir);
+    /* --- added 2026-10-31 for playtest #68 (strafe power) and #71 (step-up velocity) --- */
+    const float DT64 = 1.0f/64.0f; /* the live tick: Xonotic sys_ticrate 0.015625, cl_netfps 64 */
+    { /* 11 */
+        scenario s; memset(&s,0,sizeof(s));
+        s.name="step_jump_up"; s.desc="airborne and rising (vz 200) into the 24u step face -> in-loop step-up keeps velocity.z";
+        s.world=stairs_world(); s.start_origin=v3(46,0,30); s.start_velocity=v3(300,0,200);
+        s.start_vangle=v3(0,0,0); s.start_flags=FL_JUMPRELEASED;
+        for(int t=0;t<48;t++){ pinput pi={ v3(0,0,0), v3(360,0,0), 0,0, DT64 }; s.in[t]=pi; }
+        set_ticks(&s,48);
+        snprintf(path,sizeof(path),"%s/step_jump_up.json",outdir);
+        FILE *f=fopen(path,"wb"); emit_json(f,&s); fclose(f);
+    }
+    { /* 12 */
+        scenario s; memset(&s,0,sizeof(s));
+        s.name="wall_scrape_stepdown"; s.desc="run along a tall wall (wish 20 deg into it) off a 16u drop -> step-down keeps onground";
+        s.world=wall_ledge_world(); s.start_origin=v3(0,23.875f,GROUNDZ); s.start_velocity=v3(300,0,0);
+        s.start_vangle=v3(0,20,0); s.start_flags=FL_ONGROUND|FL_JUMPRELEASED;
+        for(int t=0;t<40;t++){ pinput pi={ v3(0,20,0), v3(360,0,0), 0,0, DT64 }; s.in[t]=pi; }
+        set_ticks(&s,40);
+        snprintf(path,sizeof(path),"%s/wall_scrape_stepdown.json",outdir);
+        FILE *f=fopen(path,"wb"); emit_json(f,&s); fclose(f);
+    }
+    { /* 13 */
+        scenario s; memset(&s,0,sizeof(s));
+        s.name="strafe_bhop_side_5s"; s.desc="flat ground, held jump + pure side strafe (D), greedy-optimal yaw, 5 s at 64 Hz";
+        s.world=flat_world(); s.start_origin=v3(0,0,GROUNDZ); s.start_velocity=v3(320,0,0);
+        s.start_vangle=v3(0,0,0); s.start_flags=FL_ONGROUND|FL_JUMPRELEASED;
+        greedy_strafe(&s, v3(0,360,0), 1, 320, DT64);
+        snprintf(path,sizeof(path),"%s/strafe_bhop_side_5s.json",outdir);
+        FILE *f=fopen(path,"wb"); emit_json(f,&s); fclose(f);
+    }
+    { /* 14 */
+        scenario s; memset(&s,0,sizeof(s));
+        s.name="strafe_bhop_fwdside_5s"; s.desc="flat ground, held jump + W+D, greedy-optimal yaw, 5 s at 64 Hz";
+        s.world=flat_world(); s.start_origin=v3(0,0,GROUNDZ); s.start_velocity=v3(320,0,0);
+        s.start_vangle=v3(0,0,0); s.start_flags=FL_ONGROUND|FL_JUMPRELEASED;
+        greedy_strafe(&s, v3(360,360,0), 1, 320, DT64);
+        snprintf(path,sizeof(path),"%s/strafe_bhop_fwdside_5s.json",outdir);
+        FILE *f=fopen(path,"wb"); emit_json(f,&s); fclose(f);
+    }
+
+    printf("wrote 14 golden scenarios to %s\n", outdir);
     return 0;
 }

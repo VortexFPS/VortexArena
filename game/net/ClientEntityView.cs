@@ -165,6 +165,8 @@ public sealed partial class ClientEntityView : Node
         // rendering — the listen host renders from these same decoded proxies (ClientWorld.OnEntityUpdate has
         // no caller outside this file), so there is no shared-edict shortcut to fall back on.
         e.ColorMapOverride = s.ColorMapOverride;
+        // QC .scale (DP's 1/16-step byte): EntityNode scales the model node by it; 0 = unscaled.
+        e.ScaleFactor = NetEntityState.DecodeScale(s.Scale);
         // A weapon PICKUP's explicit identity (non-player Weapon field = RegistryId + 1, 0 = not a weapon
         // pickup): the render layer prefers this over matching the item model filename.
         e.ItemWeaponId = s.Kind != NetEntityKind.Player && s.Weapon > 0 ? s.Weapon - 1 : -1;

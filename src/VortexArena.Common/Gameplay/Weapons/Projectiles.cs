@@ -43,6 +43,38 @@ public static class Projectiles
         e.DpHitContentsMask = SuperContentsSolid | SuperContentsBody | SuperContentsCorpse;
     }
 
+    /// <summary>DP <c>Q3SURFACEFLAG_NOIMPACT</c> (dpextensions.qc): set on sky (and <c>common/noimpact</c>) faces.</summary>
+    public const int Q3SurfaceFlagNoImpact = 0x10;
+
+    /// <summary>
+    /// Port of QC <c>SUB_NoImpactCheck</c> (server/weapons/common.qc:113), called from a projectile's touch via
+    /// <c>PROJECTILE_TOUCH</c>: true when the contact is with a NOIMPACT surface (the sky), in which case Base
+    /// removes the projectile silently instead of letting it impact. First the touch's own trace
+    /// (<see cref="TouchTrace"/>, QC <c>trace_dphitq3surfaceflags</c>); then, for a world contact by a sized
+    /// projectile, Base's "sky-grapple bug" re-probe: a traceline one frame of travel (plus the box size) either
+    /// side of the origin, checking the face it finds.
+    /// </summary>
+    public static bool NoImpactCheck(Entity self, Entity? toucher)
+    {
+        if (TouchTrace.TryGet(out TraceResult touchTrace)
+            && (touchTrace.DpHitQ3SurfaceFlags & Q3SurfaceFlagNoImpact) != 0)
+            return true;
+
+        bool world = toucher is null || toucher.ClassName == "worldspawn";
+        Vector3 size = self.Maxs - self.Mins;
+        if (world && size != Vector3.Zero && Api.Services is not null)
+        {
+            Vector3 tic = self.Velocity * Api.Clock.FrameTime;
+            if (tic != Vector3.Zero)
+                tic += Vector3.Normalize(tic) * size.Length();
+            TraceResult tr = Api.Trace.Trace(self.Origin - tic, Vector3.Zero, Vector3.Zero, self.Origin + tic,
+                MoveFilter.Normal, self);
+            if (tr.Fraction < 1f && (tr.DpHitQ3SurfaceFlags & Q3SurfaceFlagNoImpact) != 0)
+                return true; // QC: "Detected and prevented the sky-grapple bug."
+        }
+        return false;
+    }
+
     /// <summary>
     /// [W1-projectile-net] Make a damageable projectile actually shootable — route incoming RadiusDamage onto its
     /// <see cref="Entity.ProjectileDamage"/> shoot-down callback (QC <c>W_*_Grenade_Damage</c> →

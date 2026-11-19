@@ -264,10 +264,11 @@ a wrong world and an inflated netId (the real success signal is `netId 1` on a f
 should always pass a private `--port` instead of fighting over 26000.
 
 **Auto-pause vs background windows (agents, take note):** a solo local game **pauses when its window loses
-focus** (#19, `Shell.SyncAutoPause`) — and a `Start-Process` capture run usually never HAS focus, so the
-whole sim + every client animation freezes (e.g. the weapon raise stops mid-slide and the gun sits below
+focus** (#19, Xonotic's `sv_autopause`, `Shell.SyncAutoPause`) — and a `Start-Process` capture run
+usually never HAS focus, so the whole sim + every client animation freezes (e.g. the weapon raise stops mid-slide and the gun sits below
 the frame — screenshots then look like the viewmodel is missing). Scripted windowed runs should pass
-`--cvar cl_autopause 0`.
+`--cvar sv_autopause 0` (the older spelling `--cvar cl_autopause 0`, which the scripts in `tools/` still
+pass, is honoured as the same off switch).
 
 For a packaged install, `tools/run-dedicated.sh` (shipped beside the exported `linux-dedicated`
 binary by `tools/package.sh`) `cd`s to its own directory first, matching upstream's
@@ -335,11 +336,11 @@ dotnet build VortexArena.csproj -c Debug -p:VaBotPlayer=true
 ```
 
 ```bash
-"$GODOT" --path . --host stormkeep --gametype dm --bots 6 --bot-player --cvar cl_autopause 0 --quit-after-seconds 90
+"$GODOT" --path . --host stormkeep --gametype dm --bots 6 --bot-player --cvar sv_autopause 0 --quit-after-seconds 90
 ```
 
 - `--bot-player [skill]` — skill is the QC bot rung (0..10), default 5.
-- **`--cvar cl_autopause 0` is required.** A solo match auto-pauses when the window loses focus, so an
+- **`--cvar sv_autopause 0` is required.** A solo match auto-pauses when the window loses focus, so an
   unattended run silently idles and measures nothing.
 - The harness sets `g_forced_respawn 1` itself. Without it the slot dies once and stays a corpse for the rest
   of the run — every other metric still looks healthy while nothing is being exercised.
@@ -611,9 +612,12 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   `planning/`, `.godot/`, `obj/`, `bin/` so it doesn't double-compile the libraries. Don't drop those removes.
 - **`dotnet build VortexArena.csproj` outputs to `.godot/mono/temp/bin`** (the Godot SDK redirects it), not `bin/` —
   that's where the engine looks for the assembly.
-- **Maps:** the **32 pinned compiled maps** install as one `.pk3` each into `data/maps/` via `tools/data/fetch-maps.py`
-  (downloaded from the `xonotic-0.8.6.zip` release; `xonotic-20230620-nexcompat.pk3` adds the Nexuiz-compat set).
-  `maps/_init/_init.bsp` is still present (inside the maps pk3) as the lightweight placeholder. To add more,
+- **Maps:** the **31 pinned packs** in `data/maps.lock.json` (29 playable maps, the `_hudsetup` utility level and
+  `shared`) install as one `.pk3` each into `data/maps/` via `tools/data/fetch-maps.py`, from the `VortexFPS/VortexMaps`
+  release named there. DarkPlaces' `_init` boot stub is no longer one of them (dropped in maps-2026.08), and the
+  `startmap_dm` alias that loaded it is gone from `xonotic-server.cfg`. Map lists offer only `maps/<name>.bsp` (never
+  a nested bsp) and skip a map whose `.mapinfo` says `forbidden` (`_hudsetup`), or `hidden`/`frustrating` unless
+  `g_maplist_allow_hidden`/`g_maplist_allow_frustrating` allow it — such a map still loads by name. To add more,
   drop another `*.pk3` into `data/maps/` — `MountGameDir` picks it up automatically. **A player** adds maps to
   `~/XonData/data/maps/` instead (the user gamedir, above), which needs no write access to the install.
 - **`fs_rescan`** (DP `FS_Rescan_f`) re-reads the content search path *without a restart*: drop a `.pk3` into
@@ -629,6 +633,10 @@ ToS/welcome/team-select, tools, confirms). Architecture:
   - It refreshes where files are *found*, not what is already loaded (same line DP draws): the shader table and
     the menu's map/preview caches are rebuilt, but textures/models already decoded this session keep their
     loaded copies until a map change or `vid_restart`.
+  - Everything that lists maps reads the rescanned path: `map`/`gotomap`/`editor <map>`, `lsmaps`, the Create
+    Game list (an open one refreshes itself), and an empty `g_maplist`'s rotation. A public server with
+    `sv_master_catalog 1` also rebuilds the map catalog it reports to the master (in the background, as
+    `sv_master_catalog_refresh` does).
   - Deleting a mounted `.pk3` works on Windows too (the archives are opened `FILE_SHARE_DELETE`); the name is
     released when the rescan disposes the mount. Overwriting one **in place** while it is mounted still is not
     possible on Windows — delete, `fs_rescan`, then copy the replacement.

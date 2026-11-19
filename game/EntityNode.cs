@@ -131,7 +131,7 @@ public partial class EntityNode : Node3D, IEntityPresence
         _pvsTestedResult = visible;
     }
 
-    /// <summary>Copy the bound entity's origin and yaw onto this node's transform (Quake -> Godot).</summary>
+    /// <summary>Copy the bound entity's origin, angles and scale onto this node's transform (Quake -> Godot).</summary>
     public void SyncFromEntity()
     {
         if (Entity is null)
@@ -163,30 +163,15 @@ public partial class EntityNode : Node3D, IEntityPresence
 
         Position = position;
 
-        // [T48] Pitched/rolled entities (misc_gamemodel props on courtfun/space-elevator etc.) need the FULL
-        // orientation, not just yaw. Use the proven AngleVectors → Coords.ToGodot columns basis (the same
-        // convention FirstPersonView/the camera use — see NetGame's note that a negated-yaw Euler flips
-        // handedness): mesh verts are ToGodot-converted, so the node basis is the Quake rotation conjugated
-        // by ToGodot — columns X=ToGodot(forward), Y=ToGodot(up), Z=ToGodot(right). Gated to entities that
-        // actually carry pitch/roll so the long-standing yaw-only path below stays byte-identical for
-        // players/items/monsters (changing their convention is a separate, visually-verified pass).
-        if (Entity.Angles.X != 0f || Entity.Angles.Z != 0f)
-        {
-            var angles = new System.Numerics.Vector3(Entity.Angles.X, yawDeg, Entity.Angles.Z);
-            VortexArena.Common.Math.QMath.AngleVectors(angles,
-                out System.Numerics.Vector3 fwd, out System.Numerics.Vector3 right, out System.Numerics.Vector3 up);
-            Basis = new Basis(Coords.ToGodot(fwd), Coords.ToGodot(up), Coords.ToGodot(right));
-        }
-        else
-        {
-            // Quake yaw is rotation about +Z (up). Under ToGodot=(x,z,-y), +Z maps to Godot +Y, and a
-            // positive Quake yaw (+X toward +Y) becomes a negative rotation about Godot +Y.
-            Rotation = new Vector3(0f, -Mathf.DegToRad(yawDeg), 0f);
-        }
+        // One orientation path for every entity, pitched or not: the AngleVectors → Coords.ToGodot columns basis
+        // DarkPlaces' Matrix4x4_CreateFromQuakeEntity builds, including its alias-model pitch reversal
+        // (Coords.EntityBasis). playtest-bugs #76: the old yaw-only shortcut `Rotation.Y = -yaw` was the MIRROR of
+        // this (a Quake yaw θ is +θ about Godot +Y), so every item a mapper turned to 90° faced 270°, and the
+        // carried CTF flag (#7) counter-rotated against its own carry offset. Setting Basis also resets the scale,
+        // which is re-applied just below.
+        Basis = Coords.EntityBasis(new System.Numerics.Vector3(Entity.Angles.X, yawDeg, Entity.Angles.Z), Entity.Model);
 
-        // [T48] Prop scale (QC .scale → Entity.ScaleFactor, models.qc g_model_init): applied for the
-        // listen-server/demo paths, where the shared entity carries it. 0 = unset (remote clients miss it
-        // until an EntityField.Scale protocol bump — deferred, see the T48 brief).
+        // [T48] Prop scale (QC .scale → Entity.ScaleFactor, models.qc g_model_init). 0 = unset (= 1).
         float s = Entity.ScaleFactor;
         if (s > 0f && System.MathF.Abs(s - 1f) > 0.001f)
             Scale = new Vector3(s, s, s);

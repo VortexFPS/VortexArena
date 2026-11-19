@@ -284,6 +284,52 @@ public sealed class EntityService : IEntityService, TraceService.IEntityProvider
         results.RemoveRange(w, results.Count - w);
     }
 
+    /// <summary>
+    /// <see cref="IEntityService.BoxTouchesBrushModel"/>: test the world box against each of the entity's
+    /// model-local clip brushes, carried into world space by the entity's transform. A brush is touched unless
+    /// one of its planes (or its bounding box) separates it from the box — the plane set DP's zero-length
+    /// tracebox uses for a compiled brush, whose bevels already cover the box's own axes. Touching counts, as
+    /// a startsolid trace does.
+    /// </summary>
+    public bool BoxTouchesBrushModel(Entity trigger, Vector3 mins, Vector3 maxs)
+    {
+        if (!TryGetEntityBrushModel(trigger, out IReadOnlyList<Brush> brushes, out EntityMatrix toWorld))
+            return true; // no brush data: the bounding box is all there is to go on (QC !modelindex)
+
+        for (int b = 0; b < brushes.Count; b++)
+        {
+            Brush brush = brushes[b];
+            if (brush.IsTriangle || brush.Points.Length == 0)
+                continue; // no volume to be inside of
+
+            // Brush bounding box in world space (rotated corners → AABB): a quick reject.
+            Vector3 lo = toWorld.TransformPoint(brush.Points[0]), hi = lo;
+            for (int i = 1; i < brush.Points.Length; i++)
+            {
+                Vector3 p = toWorld.TransformPoint(brush.Points[i]);
+                lo = Vector3.Min(lo, p);
+                hi = Vector3.Max(hi, p);
+            }
+            if (mins.X > hi.X || maxs.X < lo.X || mins.Y > hi.Y || maxs.Y < lo.Y || mins.Z > hi.Z || maxs.Z < lo.Z)
+                continue;
+
+            bool separated = false;
+            for (int s = 0; s < brush.Sides.Length && !separated; s++)
+            {
+                (Vector3 n, float d) = toWorld.TransformPositivePlane(brush.Sides[s].Normal, brush.Sides[s].Dist);
+                // The box corner deepest behind this plane; if even it is in front, the plane separates them.
+                float nearest = n.X * (n.X > 0f ? mins.X : maxs.X)
+                              + n.Y * (n.Y > 0f ? mins.Y : maxs.Y)
+                              + n.Z * (n.Z > 0f ? mins.Z : maxs.Z);
+                if (nearest - d > 0f)
+                    separated = true;
+            }
+            if (!separated)
+                return true;
+        }
+        return false;
+    }
+
     // --- TraceService.IEntityProvider ---
 
     public IReadOnlyList<Entity> SolidEntities

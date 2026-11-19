@@ -329,14 +329,10 @@ public partial class ConsoleOverlay : CanvasLayer
             SceneTreeTimer timer = GetTree().CreateTimer(seconds, processAlways: true, processInPhysics: false, ignoreTimeScale: true);
             timer.Timeout += () =>
             {
-                if (line.Length > 1 && line[0] is '+' or '-' && !line.Contains(' '))
-                {
-                    const string key = "__defer";
-                    VortexArena.Engine.Console.BindTable.Bind(key, "+" + line[1..]);
-                    VortexArena.Engine.Console.BindTable.HandleBind(key, line[0] == '+', c => interp.ExecuteLine(c));
-                    VortexArena.Engine.Console.BindTable.Unbind(key);
-                }
-                else interp.ExecuteLine(line);
+                // As typed, with no key: a deferred "-forward" lets go however many keys hold the button (DP KeyUp).
+                if (!(line.Length > 1 && line[0] is '+' or '-' && !line.Contains(' ')
+                      && VortexArena.Engine.Console.BindTable.ButtonCommand(line, key: null)))
+                    interp.ExecuteLine(line);
             };
         }, "run a command after a delay: defer <seconds> <command>");
 
@@ -730,6 +726,19 @@ public partial class ConsoleOverlay : CanvasLayer
         if (_eatEscapeRelease && @event is InputEventKey { Pressed: false, Echo: false, Keycode: Key.Escape })
         {
             _eatEscapeRelease = false;
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        // DP keys.c Key_Event: "in all modes shift-escape toggles console", an engine binding no bind table can
+        // lose, so a player can always get the console back; the release then goes nowhere. Toggled on the press,
+        // or on the release when the press never arrived (a captured pointer can swallow it - see
+        // Shell._UnhandledKeyInput); a release whose press was handled is eaten by the check above.
+        if (@event is InputEventKey { Echo: false, Keycode: Key.Escape, ShiftPressed: true } shiftEscape)
+        {
+            Toggle();
+            if (shiftEscape.Pressed)
+                _eatEscapeRelease = true;
             GetViewport().SetInputAsHandled();
             return;
         }

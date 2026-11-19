@@ -53,14 +53,20 @@ public class VortexConfigLayerTests
         var cvars = new CvarService();
         var interp = ConfigLoader.LoadServerConfig(cvars, DiskReader);
 
-        // The whole of the old physicsBryan.cfg: stock physicsX plus one port-added knob. Default is -1
-        // (disabled), so a layer that silently stopped loading would leave this at -1 and simply play
-        // like stock — the exact symptom nobody noticed last time.
-        Assert.Equal(1f, cvars.GetFloat("sv_step_upspeed_max"));
+        // sv_step_upspeed_max was this layer's canary until playtest 2026-07-31 #71 set it back to -1: at 1
+        // it capped the upward velocity carried through a step-up to 1 qu/s, which Xonotic never does (and it
+        // was the port's only shipped physics value that differed from Xonotic). It now matches the
+        // compiled-in default, so it can no longer prove the layer LOADED: -1 is what you get either way.
+        Assert.Equal(-1f, cvars.GetFloat("sv_step_upspeed_max"));
+        Assert.Equal(-1f, cvars.GetFloat("g_physics_bryan_step_upspeed_max"));
 
-        // PhysicsPreset.Resolve reads g_physics_<set>_* first and falls back to the global cvar, so the
-        // per-set value is what makes the client-selectable "bryan" set carry its own value.
-        Assert.Equal(1f, cvars.GetFloat("g_physics_bryan_step_upspeed_max"));
+        // So the canary moves to the one value only this layer can produce: it restates
+        // g_physics_clientselect_options with "warsow bryan" appended (a cvar assignment cannot append,
+        // see vortex-physics.cfg). Upstream's list ends at "xdf". If the layer silently stopped loading,
+        // this reverts to the upstream string — the exact class of failure that went unnoticed last time.
+        string sets = cvars.GetString("g_physics_clientselect_options");
+        Assert.Contains("bryan", sets);
+        Assert.Contains("warsow", sets);
 
         _out.WriteLine($"chain: {interp.CvarsAssigned} cvars, {interp.FilesExecuted} files, "
                        + $"{interp.FilesMissing} missing");
@@ -217,6 +223,22 @@ public class VortexConfigLayerTests
         // weapon_drop path, 0.1 on offhand). "forward right up" — the middle term is the one that matters.
         Assert.Equal("0.75 0 0.2", cvars.GetString("g_nades_throw_dir"));
         Assert.Equal("0.7 0 0.2", cvars.GetString("g_nades_throw_dir_offhand"));
+    }
+
+    /// <summary>
+    /// Shots leave the barrel <c>cl_gunalign</c> picks, not the eye line: the layer's <c>g_shootfromeye 0</c>
+    /// has to beat xonotic-server.cfg:201's <c>1</c>, so this loads the REAL server chain (playtest-bugs #62).
+    /// </summary>
+    [Fact]
+    public void Layer_Fires_From_The_Barrel_Not_The_Eye()
+    {
+        RequireCoreContent();
+        var cvars = new CvarService();
+        ConfigLoader.LoadServerConfig(cvars, DiskReader);
+
+        Assert.Equal(0f, cvars.GetFloat("g_shootfromeye"));
+        Assert.Equal(0f, cvars.GetFloat("g_shootfromcenter"));
+        Assert.Equal("", cvars.GetString("g_shootfromfixedorigin"));
     }
 
     /// <summary>

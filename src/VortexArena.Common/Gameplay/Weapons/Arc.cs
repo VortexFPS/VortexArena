@@ -722,6 +722,9 @@ public sealed class Arc : Weapon
     // No separate bolt animtime cvar, so the refire doubles as the fire-anim length.
     public override float RefireFor(FireMode fire)
         => fire == FireMode.Secondary ? Bolt.Refire : Beam.Refire;
+
+    // arc.qc: the bolts (W_Arc_Attack_Bolt) and the beam both use weapon_thinkf(WFRAME_FIRE1, ...).
+    public override int FireFrameFor(FireMode fire) => WFrameFire1;
     public override float AnimtimeFor(FireMode fire)
         => fire == FireMode.Secondary ? Bolt.Refire : Beam.Animtime;
 

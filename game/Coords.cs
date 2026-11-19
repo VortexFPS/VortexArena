@@ -27,4 +27,23 @@ public static class Coords
 
     /// <summary>Godot (Y-up) position/vector -> Quake (Z-up, System.Numerics) position/vector.</summary>
     public static System.Numerics.Vector3 ToQuake(Godot.Vector3 g) => new(g.X, -g.Z, g.Y);
+
+    /// <summary>
+    /// The Godot basis that orients an entity's MODEL as DarkPlaces does for QC <c>.angles</c> (pitch, yaw, roll):
+    /// the columns are the Quake-space images of the model's forward (+X), up (+Z) and right (-Y, which is Godot's
+    /// local +Z) from <see cref="VortexArena.Common.Math.EntityRenderAxes"/>, so there is no Godot Euler angle to
+    /// get the sign of wrong. <paramref name="model"/> selects DP's alias-model pitch reversal
+    /// (<see cref="VortexArena.Common.Math.EntityRenderAxes.ReversesPitch"/>). A pure yaw θ comes out as a
+    /// rotation of <b>+θ</b> about Godot +Y (playtest-bugs #76; the old <c>Rotation.Y = -yaw</c> mirrored it).
+    /// </summary>
+    public static Basis EntityBasis(System.Numerics.Vector3 anglesQuake, string? model)
+    {
+        VortexArena.Common.Math.EntityRenderAxes.Axes(anglesQuake,
+            VortexArena.Common.Math.EntityRenderAxes.ReversesPitch(model),
+            out System.Numerics.Vector3 forward, out System.Numerics.Vector3 left, out System.Numerics.Vector3 up);
+        return new Basis(ToGodot(forward), ToGodot(up), -ToGodot(left));
+    }
+
+    /// <summary>The Godot basis for a pure Quake yaw (degrees): <see cref="EntityBasis"/> with pitch and roll 0.</summary>
+    public static Basis YawBasis(float yawDeg) => EntityBasis(new System.Numerics.Vector3(0f, yawDeg, 0f), null);
 }

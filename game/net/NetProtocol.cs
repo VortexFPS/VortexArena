@@ -147,7 +147,13 @@ public static class NetProtocol
     /// server with no mod configured (the default) never sends one and a client never sends one unprompted, so
     /// apart from this number the traffic of such a pair is unchanged. Additive, but bumped so that a server
     /// offering a mod is never talking to a build that would silently drop the offer.
-    public const uint ProtocolVersion = 21;
+    ///
+    /// v23 (entity scale, playtest-bugs #80): a new one-byte <c>Scale</c> entity delta field (EntityField bit 27,
+    /// DP's scale*16 byte) so the client can draw QC <c>.scale</c> — the CTF flag at Base's 9/16, the capture shield,
+    /// dom_controlpoint and scaled misc_gamemodel props. New delta bit in every entity delta ⇒ version bump. v22 is
+    /// skipped on purpose (the skip trick above): it leaves room for a concurrent wire branch to take 22 without two
+    /// builds advertising one number with different layouts.
+    public const uint ProtocolVersion = 23;
 
     /// <summary>Ordered, reliable ENet channel — handshake, spawns/removes, notifications, scores.</summary>
     public const int ReliableChannel = 0;

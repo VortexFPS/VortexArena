@@ -249,6 +249,10 @@ public sealed class Commands
         "cl_weaponpriority8", "cl_weaponpriority9",
         "cl_autoswitch", "cl_autoswitch_cts",
         "cl_noantilag",
+        // Gun alignment (common/weapons/all.qc:804 REPLICATE(cvar_cl_gunalign)): picks the shot-origin side when the
+        // server leaves it to the client (g_shootfromeye/center/fixedorigin all off). Wired via
+        // WeaponFiring.GunAlignProvider below.
+        "cl_gunalign",
         "cl_physics",
         "cl_movement_track_canjump",
         "cl_jetpack_jump",
@@ -610,6 +614,12 @@ public sealed class Commands
         // (SentCvarAllowlist) — this is the missing server-side CONSUMER. Unset defaults to 0 (false → noclip), the
         // Base default. Non-Player entities (never a real spectator) read false.
         ClientManager.ClippedSpectatingProvider = p => GetClientCvarFloat(p, "cl_clippedspectating", 0f) != 0f;
+
+        // Per-client gun alignment (QC W_ResetGunAlign(this, CS_CVAR(this).cvar_cl_gunalign), client.qc:850): the
+        // side W_SetupShot fires from when g_shootfromeye/center/fixedorigin leave the shot origin to the client.
+        // Unset (a bot, or a client that never replicated) reads 3 = right, Base's default.
+        WeaponFiring.GunAlignProvider = e =>
+            e is Player p ? (int)GetClientCvarFloat(p, "cl_gunalign", 3f) : 3;
     }
 
     /// <summary>

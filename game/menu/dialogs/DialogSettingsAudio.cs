@@ -7,9 +7,9 @@ namespace VortexArena.Game.Menu;
 /// TD on its 15.5 x 6.2 grid. The volumes are the QC's decibel sliders (<see cref="QcDecibelsSlider"/>: -40..0 dB in
 /// 0.4 dB steps over the linear 0..1 cvars), each greyed while the master volume is off.
 ///
-/// <para>"Apply immediately" runs <c>snd_restart</c> (the QC also runs its <c>snd_attenuation_method_N</c> alias,
-/// which this client's sound system has no counterpart for), live only while an output setting it applies has
-/// changed (<see cref="ClientSettings.AudioApplyCvars"/>).</para>
+/// <para>The volumes take effect as they move. "Apply immediately" runs the QC's <c>snd_restart;
+/// snd_attenuation_method_${menu_snd_attenuation_method}</c>, live only after the attenuation checkbox changed
+/// (<see cref="ClientSettings.AudioApplyCvars"/>).</para>
 /// </summary>
 public partial class DialogSettingsAudio : QcTab
 {
@@ -19,8 +19,12 @@ public partial class DialogSettingsAudio : QcTab
 
     protected override void Fill()
     {
-        var apply = Qc.Command("Apply immediately", "snd_restart");
-        PendingApply.Bind(apply, ClientSettings.AudioApplyCvars, string.Empty);
+        // audioApplyButton, with its disableOnClick: greyed until a control linked to it changes, greyed again once
+        // pressed. Xonotic links the attenuation checkbox, Frequency and Channels to it - never the volumes, which
+        // DarkPlaces reads every frame (live here too: ClientSettings.InstallLiveAudioCvars). Of those three only
+        // the attenuation method does anything in this client (ClientSettings.AudioApplyCvars).
+        var apply = Qc.Command("Apply immediately", "snd_restart; snd_attenuation_method_${menu_snd_attenuation_method}");
+        QcApplyOnChange.Bind(apply, ClientSettings.AudioApplyCvars);
 
         TR();
             TD(1, 1, Qc.Label("Master:"));

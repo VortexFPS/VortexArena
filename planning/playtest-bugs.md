@@ -1437,7 +1437,7 @@ below is just for picking work.
   #89 (`_init`), #90 (editor map validation)
 
 ### 60. Volume sliders don't work
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `dbb0a4d4` (2026-10-31, branch `fix/playtest-0731`). Volumes were applied only at boot and on the Audio Apply button; the DP mixer (Oct) made most live in-match, but the menu, the Godot-bus players and `bgmvolume` on remote clients still waited, and Music at 0 never silenced. Now re-applied on every volume cvar change. Needs an in-game listen.
 - **Symptom:** The volume sliders in the audio settings have no effect on playback.
 - **Expected:** Master/effects/music volume changes apply, matching Base's `volume` /
   `bgmvolume` / `snd_*` behaviour.
@@ -1449,7 +1449,7 @@ below is just for picking work.
   Related: #63 (apply flow), #83 (per-sound asset mismatch — different bug).
 
 ### 61. Some mouse buttons don't work, inconsistently (side buttons)
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `1dea082e` (2026-10-31, branch `fix/playtest-0731`) — not reproduced, two likely causes fixed. Side buttons were mapped correctly; a press+release between two input samples was lost (DP latches it — `BindTable.TapLatch`), and fractional wheel events fired several notches (`WheelAccumulator`). Needs a real-mouse check.
 - **Symptom:** Binds on the extra mouse buttons (side/thumb buttons, MOUSE4/MOUSE5) fire
   inconsistently — sometimes working, sometimes not.
 - **Expected:** Side buttons bind and fire as reliably as MOUSE1/2/3, like DP.
@@ -1461,7 +1461,7 @@ below is just for picking work.
   which mouse indices are enumerated at all, then whether the event is being consumed upstream.
 
 ### 62. "Shoot from center" doesn't move the shot origin
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `1157ddea` (2026-10-31, branch `fix/playtest-0731`). `WeaponFiring.SetupShot` ignored `g_shootfromeye`/`g_shootfromcenter`/`g_shootfromfixedorigin` and never received `cl_gunalign`. Ported Base `shotorg_adjust`; `cl_gunalign` now replicates. Vortex ships `g_shootfromeye 0` (Base ships 1; decided 2026-10-31), so shots leave the barrel `cl_gunalign` picks; `g_shootfromeye 1` in server.cfg restores Base.
 - **Symptom:** Toggling the shoot-from-center setting changes the viewmodel/visual, but the
   actual shot origin doesn't move with it.
 - **Expected:** Base's `cl_gunalign` moves the *real* shot origin (`shotorg`) too — the setting
@@ -1475,7 +1475,7 @@ below is just for picking work.
   `W_SetupShot` shotorg/gunalign math and the per-weapon `planning/parity/specs/weapon-*.md`.
 
 ### 63. No feedback that the settings Apply button did anything (or works at all)
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `c1905ef1` (2026-10-31, branch `fix/playtest-0731`). Feedback (greyed until a pending change) was already done by 8b6dc76a + the menu rework. Apply itself ran nothing for non-menu commands (`sendcvar`, `exec effects-*.cfg`, `name`, the attenuation aliases); the menu now hands registered commands/aliases/`exec` to the console.
 - **Symptom:** In the settings dialogs it isn't obvious whether the Apply button worked — no
   visible confirmation, and it's unclear if it applies at all.
 - **Expected:** Applying is either immediate (Base applies most settings live) or gives clear
@@ -1487,7 +1487,7 @@ below is just for picking work.
   apply/commit path; Base applies most settings on change rather than behind an Apply button.
 
 ### 64. Muzzle flash is broken on the machine gun
-- [ ] **Status:** Not started (untriaged)
+- [~] **Status:** PARTIAL `21f2f745` (2026-10-31, branch `fix/playtest-0731`). First-person: a fading flash's steps acted on the newest flash, so at MG refire the old fade deleted the new one; and the burst flashed once per hold. Both fixed. Remote players / third person still show only the particle puff (no `uziflash.md3` on the outside weapon).
 - **Symptom:** The machine gun's muzzle flash renders wrong or not at all.
 - **Expected:** Base's machinegun muzzle flash (`muzzleflash` effect + the flash model/dlight)
   on every shot.
@@ -1499,7 +1499,7 @@ below is just for picking work.
   the local fire feedback path (`NetGame.UpdateLocalFireFeedback`, per #21).
 
 ### 65. No secondary-fire sound on the machine gun
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `5401e9b9` with #66.
 - **Symptom:** Machine gun secondary fire plays no sound.
 - **Expected:** Base's machinegun secondary (burst) fire sound on every burst.
 - **Notes:** The user separately reports this as general across weapons — see **#66**, which is
@@ -1507,7 +1507,7 @@ below is just for picking work.
 - **First look:** `planning/parity/specs/weapon-machinegun.md` secondary-fire sound wiring.
 
 ### 66. Secondary weapon attacks generally don't make sound
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `5401e9b9` (2026-10-31, branch `fix/playtest-0731`). Shooter-only: the client dropped the server's echo of any own sound whose FILE matched a predicted primary sound, so secondaries sharing a primary's file (MG, mortar, hagar, HLAC, porto, vaporizer laser, fireball) were silent to the shooter. `PredictedFireSoundLedger` now drops only echoes of actually-predicted copies.
 - **Symptom:** Secondary attacks across weapons appear to be silent (generalizes #65).
 - **Expected:** Each weapon's secondary fire plays its Base sound.
 - **Hypothesis (unverified):** the fire-sound emit is wired only on the primary path — the same
@@ -1518,7 +1518,7 @@ below is just for picking work.
   one weapon whether a sound *event* reaches the client at all before chasing per-weapon assets.
 
 ### 67. Typing indicator shows during the pre-match countdown
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `b9a6db34` (2026-10-31, branch `fix/playtest-0731`). `ButtonChat` was updated only inside `PlayerPhysics.Move`, which doesn't run while the countdown holds players, so a prompt open at countdown start stuck. `GameWorld` now sets it from every tick's input.
 - **Symptom:** The "typing" indicator is up above players during the countdown to match start.
 - **Expected:** No typing indicator during the countdown — it should only show while a player
   actually has the chat prompt open.
@@ -1530,7 +1530,7 @@ below is just for picking work.
   chatbubble draw gate from #48.
 
 ### 68. Nowhere near as much strafe power as original Xonotic
-- [ ] **Status:** Not started (untriaged) — **high value, movement feel**
+- [x] **Status:** NO PHYSICS BUG (2026-10-31). Golden traces: 5 s strafe-jump end speed equals Base (712.1 / 862.0 u/s); physicsX.cfg byte-identical; input-rate dependence <= 1%. The only real loss was #71 near ledges. Feel still needs a side-by-side check (same sensitivity/m_yaw; try `m_smoothdt 0`).
 - **Symptom:** Strafe acceleration / air-control feels dramatically weaker than real Xonotic.
 - **Expected:** Movement acceleration matches Base exactly (this is the single most load-bearing
   feel property in the game).
@@ -1544,7 +1544,7 @@ below is just for picking work.
   Then a measured A/B (strafe-jump top speed over N seconds) rather than a feel judgement.
 
 ### 69. `md3morph` log line spams the console for no apparent reason
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `e7099eb3` (2026-10-31, branch `fix/playtest-0731`). The line printed per `ModelAnimator`, which is rebuilt when an entity re-enters PVS; now `Log.Trace` (developer 1). The throwaway frame-0 mesh built per animator is gone.
 - **Symptom:** Lines of the form `md3morph 'models/players/model/model.md3' frames=3 gpu=true
   mats:null` get spammed frequently. Suspected trigger: **player spawn**.
 - **Expected:** No per-spawn/per-frame diagnostic spam in the console (and, if the underlying
@@ -1556,7 +1556,7 @@ below is just for picking work.
   whether it's cached per model or per entity instance.
 
 ### 70. Fast weapon switching leaves weapons stuck at the bottom of the screen
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `95157777` (2026-10-31, branch `fix/playtest-0731`). A switch A->B->A arriving mid-lower was discarded by `EquipNetworkedWeapon` without raising, leaving the gun parked until the holster recovery (~0.55 s+). Now lowers and re-raises, as Base.
 - **Symptom:** Switching weapons quickly leaves a viewmodel visibly parked at the bottom of the
   screen (the lowered/switch-out pose) instead of raising.
 - **Expected:** The switch animation resolves to the new weapon raised, no matter how fast the
@@ -1569,7 +1569,7 @@ below is just for picking work.
   happens when a new switch request arrives mid-lower.
 
 ### 71. Step-height velocity restriction cancels upward velocity you should have kept
-- [ ] **Status:** Not started (untriaged) — **user asks for exact Xonotic behaviour**
+- [x] **Status:** FIXED `ed7ee3dc` + `620389c3` (2026-10-31, branch `fix/playtest-0731`). `vortex-physics.cfg` shipped `sv_step_upspeed_max 1` (port-only), setting vz to 1 on any step-up incl. airborne (sv_jumpstep 1). Now -1 (also for the `bryan` preset). Also fixed: a rejected step set the step-blocked flag and skipped step-down. Golden traces `step_jump_up`, `wall_scrape_stepdown`.
 - **Symptom:** The step-height handling restricts velocity in a way that kills upward movement
   the player would otherwise have retained.
 - **Expected:** Behave *exactly* like Xonotic's stepping — Base only steps up under specific
@@ -1584,7 +1584,7 @@ below is just for picking work.
   site, then diff against Base's step conditions line by line.
 
 ### 72. Major desync in the campaign on first load — degrades progressively, then crashes
-- [ ] **Status:** Not started (untriaged) — **most severe item in this batch**
+- [ ] **Status:** NOT REPRODUCED (2026-10-31). Headless campaign runs (4-7 min, level change, warps) show no backlog growth, flat memory, no crash; Aug fixes 13e16bdb/5e59e70c/95ae0f13 target exactly this pattern. The end-of-level jitter was #92. Needs a 10-min windowed campaign run with `net_input_trace 1`.
 - **Symptom:** Loading the campaign produces a major desync; it gets progressively worse over
   time and eventually crashes.
 - **Expected:** No desync; no crash.
@@ -1597,7 +1597,7 @@ below is just for picking work.
   init step that the normal path performs). Related: #92 (prediction breaking on match end).
 
 ### 73. Crylink primary: fires the client-side animation while held, but doesn't actually fire
-- [ ] **Status:** Not started (untriaged) — **user proposed the fix**
+- [x] **Status:** FIXED `01863ea1` (2026-10-31, branch `fix/playtest-0731`) — phantom shots only. Base blocks crylink primary refire until release even after the spikes die; the client prediction didn't know that. The auto-refire proposal is a non-Base gameplay change — NEEDS DECISION.
 - **Symptom:** Holding fire with the Crylink primary keeps playing the local fire animation even
   though no shot is produced (the weapon is waiting on the release→join mechanic).
 - **Expected (user's proposal):** detect when the projectiles from the previous shot have died —
@@ -1612,7 +1612,7 @@ below is just for picking work.
   #21/#24 phantom-FX gate).
 
 ### 74. Instant-death spot in the centre of `boil`
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `194dd167` (2026-10-31, branch `fix/playtest-0731`). CONFIRMED the user's hypothesis: boil's only trigger_hurt is a diagonal wedge whose bbox reaches the ramp south of centre. The port skipped Base's `EXACTTRIGGER_TOUCH`; now `trigger_hurt`/`trigger_heal`/`trigger_teleport` test the real brush. Also affected glowplant, implosion, afterslime, erbium, diagonal teleporters.
 - **Symptom:** A spot in the middle of the map on **boil** kills the player instantly on touch.
 - **Expected:** No death trigger there — the real hurt trigger is at the bottom of the map.
 - **Hypothesis (user's, unverified):** hurt triggers are being tested against the **centre of
@@ -1624,7 +1624,7 @@ below is just for picking work.
   trigger before assuming it's boil-only.
 
 ### 75. Heart + health indicator floats above players' heads (and shows through walls)
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `4794dd33` (2026-10-31, branch `fix/playtest-0731`). A leftover heart-and-health Label3D (NoDepthTest) from `ClientWorld.TryAttachNameplate`; its dead-check read an unnetworked MaxHealth. Removed; Base-style shownames unaffected.
 - **Symptom:** A heart icon and a health indicator appear above player heads — apparently while
   **dead** — and are visible through walls.
 - **Expected:** No such indicator (this isn't Base behaviour in normal play).
@@ -1637,7 +1637,7 @@ below is just for picking work.
   a dead player's entity state raises that a living one doesn't.
 
 ### 76. Item rotations are swapped/mirrored on the map
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `96750f25` (2026-10-31, branch `fix/playtest-0731`). `Rotation.Y = -yaw` mirrored every yaw (a Quake yaw is +theta about Godot +Y); alias models also lacked DP's draw-time pitch reversal. One `Coords.EntityBasis` (DP's entity matrix) everywhere; #7's negation in Ctf.cs removed. EYEBALL: players/bots must face the way they run.
 - **Symptom:** Items placed on the map are rotated the wrong way.
 - **Expected:** Items face the angle the mapper set.
 - **Hypothesis (user's, plausible):** the DarkPlaces↔Godot angle/handedness convention gap —
@@ -1651,7 +1651,7 @@ below is just for picking work.
   the item spawn angle plumbing.
 
 ### 77. Implement `fs_rescan` so maps can load without restarting
-- [ ] **Status:** Not started (feature)
+- [x] **Status:** FIXED 87b16b63 (2026-08-01) + `3c25f611` (2026-10-31, branch `fix/playtest-0731`): the master map catalog and an open Create Game list now refresh after `fs_rescan`.
 - **Request:** A working `fs_rescan` console command that re-scans the filesystem/pk3 set so a
   newly added map is loadable without restarting the game.
 - **Notes:** No `fs_rescan` in the repo today (grep is clean). Scope: re-enumerate the search
@@ -1664,7 +1664,7 @@ below is just for picking work.
   `VirtualFileSystem` search-path construction, `MapCatalogScan`/`MapCatalogCache`.
 
 ### 78. Visible lines in the corners of the skybox
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `d360b855` (2026-10-31, branch `fix/playtest-0731`) — unverified on screen. Sky faces were mipmapped; at face edges the derivative jump picked the smallest mip. Now clamp-to-edge, no mipmaps, as DP `r_sky.c`.
 - **Symptom:** Seam lines are visible at the corners/edges of the skybox.
 - **Expected:** A seamless sky.
 - **Hypothesis (unverified):** the classic skybox seam cause — texture sampling wrapping past
@@ -1675,7 +1675,7 @@ below is just for picking work.
   builds a cubemap or six quads.
 
 ### 79. Unusually low farclip — can't see very far
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `8bb80d06` (2026-10-31, branch `fix/playtest-0731`). The camera ran at Godot's default Far (4000 qu); maps reach ~15,500 qu. Now DP's `r_farclip_base` + world radius x `r_farclip_world` x 2.
 - **Symptom:** The view distance is noticeably shorter than expected; distant geometry is cut off.
 - **Expected:** Base/DP's far clip distance (DP defaults are large; Xonotic maps assume you can
   see the whole map).
@@ -1688,7 +1688,7 @@ below is just for picking work.
   (and `Near`) values, and where the unit scale is applied.
 
 ### 80. CTF flag model scale is wrong
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `80442b46` (2026-10-31, branch `fix/playtest-0731`). The port never set FLAG_SCALE (0.5625) and couldn't render any QC `.scale` (unnetworked). New `EntityField.Scale` (DP byte encoding); protocol 21->23.
 - **Symptom:** The CTF flag models render at the wrong size.
 - **Expected:** Base's flag scale.
 - **Notes:** Consistent with an earlier observation in **#7** ("the oversized/blocking placement
@@ -1701,7 +1701,7 @@ below is just for picking work.
   `Entity.Scale` networked field is needed (see #4 root cause part 2).
 
 ### 81. Add `sv_autopause` toggling functionality from original Xonotic
-- [ ] **Status:** Not started (feature)
+- [x] **Status:** FIXED `c4b15910` (2026-10-31, branch `fix/playtest-0731`). Auto-pause read an unregistered `cl_autopause`; now `sv_autopause` as Base (`cl_autopause 0` still disables). Chat prompt counts; no pause at intermission. Base has no menu checkbox and the dedicated-server empty-pause isn't ported — NEEDS DECISION on both.
 - **Request:** Port Xonotic's `sv_autopause` toggle.
 - **Notes:** The port already has the *mechanism* from **#19** — `Shell.SyncAutoPause()` +
   the slowmo-based freeze — read behind an unset-means-on `cl_autopause` cvar. #19's own
@@ -1713,7 +1713,7 @@ below is just for picking work.
   Base's `sv_autopause` definition and default.
 
 ### 82. Escape should close the quickmenu, and close the console
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `c158a77a` (2026-10-31, branch `fix/playtest-0731`). The quickmenu closed on Escape press and Shell then opened the menu on release; Shell now asks `NetGame.HandleHudEscape` first (quickmenu, maximized radar, minigame menu). Console Escape already worked; Shift+Escape now toggles the console as DP.
 - **Symptom:** Escape doesn't close the quickmenu, and doesn't close the console.
 - **Expected:** Escape dismisses the topmost UI layer (quickmenu → console → pause menu), as in
   Base/DP.
@@ -1724,7 +1724,7 @@ below is just for picking work.
   handling (`ConsoleState.IsOpen` is already consulted by `SyncAutoPause`, per #19).
 
 ### 83. Vaporizer sound doesn't match Xonotic's
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `6f99a9c6` (2026-10-31, branch `fix/playtest-0731`). The file was right; playback wasn't: single weapon channel (each shot cut the 2.4 s tail), atten 1 not ATTN_NORM, shooter copy at 1.0 not VOL_BASE*0.8.
 - **Symptom:** The vaporizer's sound is not the one Xonotic uses.
 - **Expected:** The Base vaporizer fire sound.
 - **Notes:** Probably a wrong sound *path* in the weapon def (vaporizer and vortex share lineage
@@ -1733,7 +1733,7 @@ below is just for picking work.
   vaporizer weapon definition; compare against Base's `.qc` weapon sound registration.
 
 ### 84. Shotgun secondary (the melee slap/swing) doesn't work
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `4969a965` (2026-10-31, branch `fix/playtest-0731`). The melee damage and sound already worked; the viewmodel played the blast recoil because the port had one fire clip. Attacks now carry their WFRAME; secondaries play `fire2`.
 - **Symptom:** The shotgun's secondary melee attack doesn't work — the user suspects it may be
   only the animation that's missing.
 - **Expected:** Base's shotgun secondary melee (damage + animation + sound).
@@ -1743,14 +1743,14 @@ below is just for picking work.
 - **First look:** `planning/parity/specs/weapon-shotgun.md` secondary; Base `W_Shotgun_Attack2`.
 
 ### 85. Minelayer mine model is incorrect
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `afc0b223` (2026-10-31, branch `fix/playtest-0731`). Flying mines had no model (procedural grenade); placed mines drew via EntityNode facing out of the surface. Both now `models/mine.md3`, flush. Owner-colour glow still missing.
 - **Symptom:** Mines laid by the minelayer use the wrong model.
 - **Expected:** Base's mine model (`models/mine.md3` or whatever the current Base def names).
 - **First look:** `planning/parity/specs/weapon-minelayer.md` model reference vs. the port's mine
   projectile spawn.
 
 ### 86. Minelayer "can't lay more than 4 mines at a time" — ⚠ report incomplete
-- [ ] **Status:** Not started — **needs clarification from the reporter**
+- [x] **Status:** FIXED `a904ac19` (2026-10-31, branch `fix/playtest-0731`). Limit (4), enforcement and text already matched Base; the check ran every tick instead of after the refire gate, so holding the weapon with 4 mines out spammed the unavailable sound/notice.
 - **Symptom (as written):** *"The 'can't lay more than 4 mines at a time'"* — the sentence was
   cut off in the report. Most likely one of: the limit isn't enforced, the limit message doesn't
   appear, the message appears when it shouldn't, or the limit value differs from Base's
@@ -1760,7 +1760,7 @@ below is just for picking work.
   `g_balance_minelayer_limit` handling.
 
 ### 87. Two buttons bound to jump: releasing one stops jumping even while the other is held
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `1c708960` (2026-10-31, branch `fix/playtest-0731`). `BindTable` kept each button as one bool; now `KeyButton` (DP `kbutton_t`) tracks every key holding it, for all `+commands`; typed `+jump`/`-jump` are real console commands. Legacy-with-Xonotic-menu path fixed too.
 - **Symptom:** With two binds on `+jump`, holding both and releasing one stops the jump even
   though the other is still held.
 - **Expected:** DP's `+`/`-` command semantics — a `+cmd` tracks *which* key activated it, and
@@ -1773,7 +1773,7 @@ below is just for picking work.
   `Key_Event`/`KeyDown`/`KeyUp` two-key state in `keys.c`.
 
 ### 88. Hook can grapple the skybox; hook beam rendering is wrong
-- [ ] **Status:** Not started (untriaged) — two parts
+- [x] **Status:** FIXED `2e97fb50` (sky) + `afc0b223`/`3d5ec207` (beam) (2026-10-31, branch `fix/playtest-0731`). Touch handlers never saw the impact trace; new `TouchTrace` + `Projectiles.NoImpactCheck` (Base SUB_NoImpactCheck). Beam is now Base's textured `particles/hook_<team>` chain from the gun, pants-tinted; hook head is `models/hook.md3`.
 - **Symptom:** (a) The hook attaches to skybox surfaces; (b) the hook beam renders incorrectly.
 - **Expected:** (a) Use the same collision/surface checks Xonotic uses — sky surfaces are not
   valid hook targets; (b) the beam renders like Base's.
@@ -1784,7 +1784,7 @@ below is just for picking work.
   test; the beam's render path (compare to the other beam weapons, which may already be right).
 
 ### 89. What is `_init`? Probably not needed in Vortex — consider removing
-- [ ] **Status:** Not started (investigation → cleanup)
+- [x] **Status:** FIXED `3434d53b` (2026-10-31, branch `fix/playtest-0731`). Nothing used `_init`; alias and `_sv_init` removed. Map lists now take only `maps/<name>.bsp` and honour .mapinfo `forbidden`/`hidden` (also hides `_hudsetup`).
 - **Answer (already known):** `_init` is inherited DarkPlaces/Xonotic **dedicated-server
   bootstrap** scaffolding, not gameplay. `data/core.pk3dir/xonotic-server.cfg:332-333` defines
   `set _sv_init 0` and `alias startmap_dm "set _sv_init 0; map _init/_init; exec $serverconfig;
@@ -1799,7 +1799,7 @@ below is just for picking work.
   whatever the port's dedicated server actually executes at startup.
 
 ### 90. Editor doesn't validate map names and will "load" non-existent maps
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `c4073bbc` (2026-10-31, branch `fix/playtest-0731`). `editor <map>` now validates against the live search path (installed bsp or a saved .vmap) and prints an error otherwise.
 - **Symptom:** The map editor accepts and attempts to load maps that don't exist.
 - **Expected:** Validate against the real map catalog and report a clear error (or only offer
   maps that exist).
@@ -1808,7 +1808,7 @@ below is just for picking work.
 - **First look:** `game/vmap/EditorController.cs` map-open path; `MapCatalogScan`/`MapCatalogCache`.
 
 ### 91. Remove the existing servers from the server list
-- [ ] **Status:** Not started (cleanup)
+- [x] **Status:** FIXED (2026-10-31, branch `fix/playtest-0731`) per decision D1-B: stock Xonotic servers stay listed (legacy compat mode joins them) but always under their own "Xonotic Servers (legacy mode)" heading, below Vortex servers, even with categories off. Open: Vortex servers announce only to Conductor (not deployed) and the browser does not read it yet.
 - **Request:** Drop the inherited server entries from the in-game server list — they're real
   Xonotic servers and aren't compatible with Vortex anyway.
 - **Notes:** Touches the master/announce path — `src/VortexArena.Net/MasterAnnounce.cs` and
@@ -1819,7 +1819,7 @@ below is just for picking work.
   menu's server browser.
 
 ### 92. Prediction stays broken after the match ends — view jitters
-- [ ] **Status:** Not started (untriaged)
+- [x] **Status:** FIXED `af99cfae` (2026-10-31, branch `fix/playtest-0731`). The server freezes players at MatchEnded/intermission; the predictor only copied the pre-match freeze. Prediction now freezes at intermission; reconcile error 0.00 headless.
 - **Symptom:** When the match ends, player prediction breaks and the view jitters through the
   end-of-match period.
 - **Expected:** A stable view at match end / intermission.
@@ -1834,6 +1834,10 @@ below is just for picking work.
 - **First look:** the intermission/match-end state transition on both sides; where prediction is
   gated (`ClientNet` / `PredictionBuffer`); how #19's slowmo pause suppresses prediction and
   whether match-end can reuse it.
+
+### 93. NVIDIA 2060 (6 GB VRAM) — terse playtest note
+- [ ] **Status:** NEEDS DECISION (2026-10-31). At the playtest textures were uncompressed (catharsis ~3.4 GB VRAM); `gl_texturecompression 1` ships since c7e7b10f (~1.6 GB), but the Normal/High/Ultra/Ultimate Effects presets set it back to 0 (Base-verbatim; Base ships pre-compressed DDS), and nothing evicts textures between native maps.
+- **Options:** make those presets keep compression on; or reuse legacy mode's `ForgetUnreferencedTextures` between native maps. Measure on the card with `r_vram_census` / `cl_frameprofiler 1`.
 
 ---
 

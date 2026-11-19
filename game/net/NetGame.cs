@@ -269,6 +269,9 @@ public sealed partial class NetGame : Node3D
     // InputCommand and cleared, so a tap shorter than one 1/72 s input tick still reaches the server.
     private bool _attackLatch;
     private bool _attack2Latch;
+    // DP's impulse-down bit for every move button (BindTable.TapLatch): a press since the last sampled command is
+    // in that command even when the key is already up again — a +jump on the mouse wheel, a short side-button click.
+    private readonly BindTable.TapLatch _tapLatch = new();
 
     // Local fire prediction (cl_predictfire, default on): a client-side refire clock that fires the view-model
     // muzzle flash + a local fire SOUND on every shot the moment the player fires (not just the first), so
@@ -281,6 +284,10 @@ public sealed partial class NetGame : Node3D
     private bool _predictFire = true;
     private float _fireClock;
     private readonly Dictionary<int, float> _weaponReadyTime = new();
+    // Pairs each predicted fire sound with the server's copy of the same shot, so exactly one plays. A networked
+    // fire sound from the local player with no predicted partner (every secondary attack, and any shot the refire
+    // clock did not predict) plays normally — playtest #65/#66.
+    private readonly VortexArena.Net.PredictedFireSoundLedger _fireSoundLedger = new();
     private bool _loggedAccept;
     private bool _hostJoinDone;                  // [#44] the listen host's early_join_requested `join` actually spawned it
     private float _hostJoinNextRetryMsec;        // [#44] next allowed `join` attempt (bounded retry — a blocked spawn no-ops)
@@ -391,6 +398,10 @@ public sealed partial class NetGame : Node3D
     /// menu/console/focus-loss, but a server with remote players must keep running. False for a remote client
     /// (no server) and for a listen host that is alone (with or without bots — bots aren't peers).</summary>
     public bool HasRemoteClients => _isListenServer && (_server?.ConnectedPeerCount ?? 0) > 1;
+
+    /// <summary>The match has reached intermission (the networked flag). QC never auto-pauses then
+    /// (<c>sv_autopause &amp;&amp; !intermission_running</c>), so the scoreboard runs on to the next map.</summary>
+    public bool InIntermission => _client?.MatchIntermission ?? false;
 
     /// <summary>
     /// Raised when this listen server must change level (DP <c>changelevel</c>) — carries (map, gametype,
@@ -2501,7 +2512,8 @@ public sealed partial class NetGame : Node3D
             CdTrack = resolvedTrack,
             PackTrackRemap = MusicPlayer.ReadPackTrackRemap(_vfs),
             AudioLoader = _assets is not null ? _assets.LoadSound : null,
-            BgmVolume = _sharedCvars?.GetFloat("bgmvolume") ?? 0.7f,
+            // DP's default is 1; 0 is a real setting (the Music slider at OFF), not "unset".
+            BgmVolume = CvOr("bgmvolume", 1f),
         };
 
         // On a listen server, give the music player direct access to the entity list so it can scan
@@ -2561,6 +2573,7 @@ public sealed partial class NetGame : Node3D
         float vFov = Client.FirstPersonView.ComputeVerticalFov(_view.BaseFov, 1f);
         _camera = new Camera3D { Name = "Camera3D", Fov = vFov, Near = 1f, Current = true };
         AddChild(_camera);
+        ApplyFarClip();
 
         // (E3/E5) The editor nodes are constructed in SetupRender, which runs BEFORE this method — so the
         // Attach calls there handed them a null camera, and both silently stood down every frame: the
@@ -2607,6 +2620,14 @@ public sealed partial class NetGame : Node3D
             _render.PortoPreview.SuppressedProvider = () =>
                 _client is not { Accepted: true } || _client.Health <= 0
                 || _view.ChaseActive || _client.MatchIntermission;
+        }
+
+        // Draw_GrapplingHook: the local player's chain starts at the rendered view's gun (view_origin + the
+        // hook_shotorigin offset), or at the eye in chase view; everyone else's at the server reel origin.
+        if (_render.HookRope is not null)
+        {
+            _render.HookRope.LocalPlayerProvider = () => LocalServerPlayer;
+            _render.HookRope.ChaseActiveProvider = () => _view.ChaseActive;
         }
 
         // Bridge the HUD's texture cache to the mounted game data so weapon icons / crosshairs / kill-notify
@@ -3036,7 +3057,26 @@ public sealed partial class NetGame : Node3D
         // latch _equippedWeaponId while the placeholder is still up, and this early-out would then freeze it.)
         if (id == _equippedWeaponId && vmOverride == _equippedVmOverride && _pendingEquipModel is null)
         {
-            _switchDropLeft = -1f;        // a staged switch back to the current weapon dissolves
+            // Switching BACK to the held weapon while its drop is staged (A→B→A: a quick double-tap of "last
+            // weapon", or a scroll-wheel spin that wraps round). Base does not cancel a drop: in WS_DROP the new
+            // m_switchweapon is only latched, w_clear still empties the slot when the drop ends, and the WS_CLEAR
+            // branch then raises the weapon again — the port's server does the same (WeaponFireDriver). So finish
+            // the lowering and raise the same gun. Dissolving the staged switch here instead left the gun parked
+            // at the bottom of the screen until the holster auto-recovery gave up on it (playtest #70).
+            if (_switchDropLeft >= 0f && !hidden)
+            {
+                _viewModel.Visible = true;
+                _viewModel.PlayHolster(); // keep lowering (refreshes the recovery grace while we own the slide)
+                _switchDropLeft -= (float)GetProcessDeltaTime();
+                if (_switchDropLeft > 0f)
+                    return;
+                _switchDropLeft = -1f;
+                _viewModel.PlayRaise();
+                VortexArena.Common.Gameplay.Weapon? held = VortexArena.Common.Gameplay.Weapons.ById(id);
+                _switchRaiseLeft = held?.SwitchDelayRaise() ?? 0f; // the server slot is raising: hold fire prediction
+                return;
+            }
+            _switchDropLeft = -1f;
             _viewModel.Visible = !hidden; // no weapon/model change; just track the dead/holstered visibility edge
             return;
         }
@@ -3438,7 +3478,7 @@ public sealed partial class NetGame : Node3D
             // during sustained fire; the AttackFinished VALUE change can.
             float af = st.AttackFinished;
             if (!reloading && af > _viewmodelLastAttackFinished && _serverWorld is { } sw && af > (float)sw.Time)
-                _viewModel.PlayFireClip();
+                _viewModel.PlayFireClip(fire2: st.FireAnimFrame == VortexArena.Common.Gameplay.Weapon.WFrameFire2);
             else if (_serverWorld is { } sw2 && af <= (float)sw2.Time)
                 // Attack window closed (refire expired, no new shot): re-assert idle like Base's weapon state
                 // machine does explicitly (w_ready → weapon_thinkf(WFRAME_IDLE)). Needed because SOME fire
@@ -4359,7 +4399,7 @@ public sealed partial class NetGame : Node3D
     // lookups: seeded on first frame, refreshed only when the shared store raises Changed for one of them.
     // With no shared store (bare CLI client) the seeds match the old per-frame defaults.
     private bool _processCvarsHooked;
-    private float _bgmVolumeCv = 0.7f;
+    private float _bgmVolumeCv = 1f;
     private bool _predictFireCv = true;
     private bool _perFrameInputCv;
     // Path A send model. cl_netfps (DP-faithful, default 72) = datagram send rate; cl_movement_send_all (default 0):
@@ -4430,7 +4470,7 @@ public sealed partial class NetGame : Node3D
 
     private void RefreshProcessCvars()
     {
-        _bgmVolumeCv = _sharedCvars?.GetFloat("bgmvolume") ?? 0.7f;
+        _bgmVolumeCv = CvOr("bgmvolume", 1f);   // unset → DP's default 1; an explicit 0 mutes the music
         // cl_predictfire defaults ON: unset GetString reads "" → treat anything but "0" as on.
         _predictFireCv = (_sharedCvars?.GetString("cl_predictfire") ?? "") != "0";
         _perFrameInputCv = _sharedCvars?.GetFloat("cl_movement_perframe") is float pf && pf != 0f;
@@ -4664,13 +4704,16 @@ public sealed partial class NetGame : Node3D
         UpdateIntermissionAutoscreenshot();
 
         // Feed the music player the current server time so trigger_music touch freshness works.
+        if (_musicPlayer is not null && _serverWorld is not null)
+            _musicPlayer.ServerTime = _serverWorld.Time;
+        // Keep bgmvolume in sync on EVERY client, as QC target_music reads autocvar_bgmvolume each frame (cached
+        // here; the Changed hook refreshes it on a menu/console set). It used to be fed only on a listen host and
+        // only when above 0, so a remote client's Music slider did nothing and OFF never silenced the music (#60).
+        // Only the no-shared-store path still reads the server store live (rare: bare CLI host).
         if (_musicPlayer is not null)
         {
-            if (_serverWorld is not null) _musicPlayer.ServerTime = _serverWorld.Time;
-            // Keep bgmvolume in sync (cached; the Changed hook refreshes it on a menu/console set). Only the
-            // no-shared-store path still reads the server store live (rare: bare CLI host).
-            _musicPlayer.BgmVolume = _sharedCvars is not null ? _bgmVolumeCv
-                : _serverWorld?.Services.Cvars.GetFloat("bgmvolume") ?? _musicPlayer.BgmVolume;
+            if (_sharedCvars is not null) _musicPlayer.BgmVolume = _bgmVolumeCv;
+            else if (_serverWorld is not null) _musicPlayer.BgmVolume = _serverWorld.Services.Cvars.GetFloat("bgmvolume");
         }
 
         // [T51] HUD feeds produced by the server-side mutators (host path only — a pure remote client has no
@@ -4992,9 +5035,15 @@ public sealed partial class NetGame : Node3D
                 // which then takes a freeze-length to bleed off → looked like movement freed ~5s into live). Gate on
                 // HasMatchState (not MatchStartTime>0) so it engages from the very first post-spawn frame, on the
                 // server clock (LatestServerTime) so it releases exactly at go-live. Warmup is freely playable.
+                // MATCH-END FREEZE (#92): the same hold applies once the match is over — the server stops running
+                // PM_Main at intermission (GameWorld canMove: !MatchEnded && !Intermission.Running; Base
+                // sys_phys_pregame_hold: !game_stopped → velocity 0, MOVETYPE_NONE, disableclientprediction 2).
+                // Predicting on through the scoreboard moved the view every frame and snapped it back every
+                // snapshot — the end-of-match jitter, on the host and on a remote client alike.
                 if (_movementStep is not null)
-                    _movementStep.Frozen = _client.HasMatchState && !_client.MatchWarmup
-                        && _client.LatestServerTime < _client.MatchStartTime;
+                    _movementStep.Frozen = _client.MatchIntermission
+                        || (_client.HasMatchState && !_client.MatchWarmup
+                            && _client.LatestServerTime < _client.MatchStartTime);
             }
 
             // NET-INPUT DIAGNOSTIC (dormant; `set net_input_trace 1`). Logs the full input→movement pipeline every
@@ -12238,6 +12287,25 @@ public sealed partial class NetGame : Node3D
     private bool QuickMenuOpen
         => _fullHud?.GetPanel<VortexArena.Game.Hud.QuickMenuPanel>() is { IsOpen: true };
 
+    /// <summary>
+    /// Escape for the in-world HUD UIs that take the keyboard, in QC CSQC_InputEvent's order: the quickmenu
+    /// (QuickMenu_InputEvent: "K_ESCAPE && key_pressed → QuickMenu_Close"), the maximized radar
+    /// (HUD_Radar_InputEvent) and the minigame menu (HUD_Minigame_InputEvent). Each closes and claims the key, so
+    /// it never also reaches the game menu. Called from Shell's Escape chain (Shell._UnhandledKeyInput), which owns
+    /// both Escape edges and runs before this node's _UnhandledInput would; returns false when none is open.
+    /// </summary>
+    public bool HandleHudEscape()
+    {
+        if (ConsoleState.IsOpen || _fullHud is null)
+            return false;
+        if (_fullHud.MinigameMenu is { IsOpen: true } minigameMenu)
+        {
+            minigameMenu.Close();
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>Whether an in-world HUD UI owns the cursor.</summary>
     private bool UiOwnsCursor => MinigameMenuOpen || QuickMenuOpen || _radar is { Clickable: true }
                                  || (_editorOrtho?.IsOpen ?? false) || EditorMenuOpen || EditorDialogOpen;
@@ -12425,10 +12493,10 @@ public sealed partial class NetGame : Node3D
             // elapsed, so a burst of taps / wheel-fire can't out-run the refire rate. FirePredictReady + the
             // MarkFirePredicted cadence are the client mirror of the server's ATTACK_FINISHED gate.
             if (a1 && !LocalDeadNow() && HasAmmoNow()
-                && TryActivePrimaryFire(out int wid, out string fireSound, out float refire) && FirePredictReady(wid)
+                && TryActivePrimaryFire(out int wid, out string fireSound, out float fireVolume, out float refire) && FirePredictReady(wid)
                 && (!PrimaryRefireRequiresRelease(wid) || _rlReleaseMirror)) // #24: release-gated weapons need the armed latch, not a press edge
             {
-                PredictFireShot(fireSound);
+                PredictFireShot(fireSound, fireVolume);
                 MarkFirePredicted(wid, refire, dt);
                 _rlReleaseMirror = false; // QC: rl_release = 0 on the shot (inert for non-gated weapons)
             }
@@ -12450,20 +12518,81 @@ public sealed partial class NetGame : Node3D
         // fire mode). Zoom-style secondaries (Vortex/Vaporizer/Rifle secondary = zoom, not a shot) must NOT flash,
         // so we gate on the weapon having a real secondary attack. Shares the SAME per-weapon ready clock as primary
         // (Base ATTACK_FINISHED is per-slot, not per-mode), so a secondary tap inside the refire window is dropped.
+        //
+        // The Machinegun's secondary is predicted like a primary: it re-fires while HELD (machinegun.qc wr_think
+        // runs the burst / first-shot branch every frame fire&2 is down), and a mode-1 burst is several rounds,
+        // each with its own W_MuzzleFlash (W_MachineGun_Attack_Burst). The press-edge-only flash showed one flash
+        // per held burst stream instead of one per round (playtest #64).
         bool a2 = BindTable.Attack2Held;
         if (a2 && !_attack2Held)
-        {
             _attack2Latch = true;
+        bool mgSecondary = ActiveMachinegun(out VortexArena.Common.Gameplay.Machinegun? mg);
+        if (a2 && (!_attack2Held || mgSecondary))
+        {
             if (SecondaryFiresShot() && !LocalDeadNow()
                 && TryActiveRefire(VortexArena.Common.Gameplay.FireMode.Secondary, out int wid2, out float refire2)
                 && FirePredictReady(wid2))
             {
                 _hud?.PulseFire();
                 _viewModel?.Fire(); // local muzzle flash for the secondary shot (remote copy stays networked)
+                if (mg is not null && mg.Cvars.Mode == 1 && mg.Cvars.Burst > 0f)
+                {
+                    // The remaining burst rounds follow every burst_refire; the next burst can start only after
+                    // the last round's burst_refire2 (W_MachineGun_Attack_Burst parks ATTACK_FINISHED there).
+                    int rounds = (int)mg.Cvars.Burst;
+                    float roundGap = Mathf.Max(mg.Cvars.BurstRefire, 0.01f);
+                    _burstFlashesLeft = rounds - 1;
+                    _burstFlashNext = _fireClock + roundGap;
+                    _burstFlashGap = roundGap;
+                    _burstWeaponId = wid2;
+                    refire2 = roundGap * (rounds - 1) + mg.Cvars.BurstRefire2;
+                }
                 MarkFirePredicted(wid2, refire2, dt);
             }
         }
         _attack2Held = a2;
+        UpdateBurstFlashes();
+    }
+
+    // The predicted Machinegun burst rounds still to flash after the first (see UpdateLocalFireFeedback).
+    private int _burstFlashesLeft;
+    private float _burstFlashNext;
+    private float _burstFlashGap;
+    private int _burstWeaponId = -1;
+
+    /// <summary>Flash the remaining rounds of a predicted Machinegun burst on the burst_refire cadence. A burst cut
+    /// short by a weapon switch or death stops flashing; rounds more than a few frames overdue (input was paused)
+    /// are dropped rather than flashed all at once.</summary>
+    private void UpdateBurstFlashes()
+    {
+        if (_burstFlashesLeft <= 0)
+            return;
+        if (_client is null || _client.ActiveWeaponId != _burstWeaponId || LocalDeadNow())
+        {
+            _burstFlashesLeft = 0;
+            return;
+        }
+        while (_burstFlashesLeft > 0 && _fireClock >= _burstFlashNext)
+        {
+            if (_fireClock - _burstFlashNext < 0.2f)
+            {
+                _hud?.PulseFire();
+                _viewModel?.Fire();
+            }
+            _burstFlashesLeft--;
+            _burstFlashNext += _burstFlashGap;
+        }
+    }
+
+    /// <summary>True (with the weapon) when the active weapon is the Machinegun.</summary>
+    private bool ActiveMachinegun(out VortexArena.Common.Gameplay.Machinegun? mg)
+    {
+        mg = null;
+        int wid = _client?.ActiveWeaponId ?? -1;
+        if (wid < 0 || wid >= VortexArena.Common.Gameplay.Weapons.Count)
+            return false;
+        mg = VortexArena.Common.Gameplay.Weapons.ById(wid) as VortexArena.Common.Gameplay.Machinegun;
+        return mg is not null;
     }
 
     /// <summary>
@@ -12482,8 +12611,17 @@ public sealed partial class NetGame : Node3D
         // (v1: phantom persisted), and Api.Cvars threw / broke the whole prediction path (v2: no flash at all). The
         // guidestop-1 config (continuous fire, no guiding) is rare and non-default; treating the Devastator as
         // always release-gated only costs a slightly under-predicted FX cadence in that rare case (cosmetic).
-        return wid >= 0 && wid < VortexArena.Common.Gameplay.Weapons.Count
-            && (VortexArena.Common.Gameplay.Weapons.ById(wid)?.NetName ?? "") == "devastator";
+        if (wid < 0 || wid >= VortexArena.Common.Gameplay.Weapons.Count)
+            return false;
+        VortexArena.Common.Gameplay.Weapon? w = VortexArena.Common.Gameplay.Weapons.ById(wid);
+        // The Crylink primary is the other stock case (playtest #73): Base sets crylink_waitrelease after a
+        // join-enabled volley (joinspread != 0 && shots > 1 — stock primary) and wr_think refuses to refire that
+        // mode until the button is RELEASED (the release is what makes the spikes join). The refire clock alone
+        // predicted a muzzle flash, fire animation and fire sound every refire while held, though no shot left.
+        // Read off the weapon descriptor (cvar-seeded at bootstrap; on a listen host that is the server's balance).
+        if (w is VortexArena.Common.Gameplay.Crylink crylink)
+            return crylink.WaitsForRelease(secondary: false);
+        return (w?.NetName ?? "") == "devastator";
     }
 
     /// <summary>
@@ -12509,6 +12647,8 @@ public sealed partial class NetGame : Node3D
             // popped a phantom flash AND advanced the shared client ready clock, which then swallowed the
             // prediction of the NEXT primary rocket (the fire→detonate→fire combo went silent).
             "devastator" or "minelayer" => false,
+            // Machinegun: a burst (mode 1) or a first-shot snipe (mode 0), unless the balance turns it into zoom.
+            "machinegun" => VortexArena.Common.Gameplay.Weapons.ById(wid) is not VortexArena.Common.Gameplay.Machinegun { ZoomOnSecondary: true },
             "" => false,
             _ => true,
         };
@@ -12516,23 +12656,36 @@ public sealed partial class NetGame : Node3D
 
     /// <summary>Play one predicted local shot: the view-model muzzle flash + recoil, the HUD crosshair pulse, and
     /// the weapon's primary fire sound at the predicted eye (auto-stack channel so rapid fire doesn't cut off).
-    /// Source net-id = the local player so the matching networked copy is dropped in <see cref="OnSoundReceived"/>.</summary>
-    private void PredictFireShot(string fireSound)
+    /// Source net-id = the local player; the shot is noted in <see cref="_fireSoundLedger"/> so the server's copy
+    /// of it is dropped in <see cref="OnSoundReceived"/> (and skipped here if that copy already arrived).</summary>
+    private void PredictFireShot(string fireSound, float volume)
     {
         _hud?.PulseFire();
         _viewModel?.Fire();
-        if (!string.IsNullOrEmpty(fireSound) && _render is not null && _client is not null)
-            _render.OnSound(fireSound, _client.PredictedOrigin, 1f, 0.5f,
+        if (!string.IsNullOrEmpty(fireSound) && _render is not null && _client is not null
+            && _fireSoundLedger.OnPredicted(fireSound, FireSoundClock()))
+            _render.OnSound(fireSound, _client.PredictedOrigin, volume, 0.5f,
                 (int)VortexArena.Common.Services.SoundChannel.WeaponAuto, _client.LocalNetId, 1f);
+    }
+
+    /// <summary>The wall clock the fire-sound ledger runs on (seconds). Both of its callers, the predicted shot and
+    /// the arriving networked sound, read it, so it must be one clock independent of the input/frame accumulators.
+    /// The echo window follows the measured round trip: a predicted shot waits roughly two pings for its echo.</summary>
+    private float FireSoundClock()
+    {
+        int ping = _client?.PingMs ?? 0;
+        _fireSoundLedger.EchoWindow = Math.Clamp(ping * 0.002f + 0.35f, 0.4f, 2f);
+        return Time.GetTicksMsec() * 0.001f;
     }
 
     /// <summary>The active weapon's id + primary fire sound + refire interval, or false when it can't be predicted
     /// (no active weapon, or a loop/grapple weapon absent from <see cref="WeaponFireSounds"/> → its networked sound
     /// plays normally and is NOT suppressed).</summary>
-    private bool TryActivePrimaryFire(out int weaponId, out string fireSound, out float refire)
+    private bool TryActivePrimaryFire(out int weaponId, out string fireSound, out float volume, out float refire)
     {
         weaponId = -1;
         fireSound = "";
+        volume = 1f;
         refire = 0.1f;
         if (_client is null || _client.ActiveWeaponId < 0)
             return false;
@@ -12540,9 +12693,10 @@ public sealed partial class NetGame : Node3D
         VortexArena.Common.Gameplay.Weapon w = VortexArena.Common.Gameplay.Weapons.ById(weaponId);
         if (w is null)
             return false;
-        fireSound = WeaponFireSounds.PrimaryFor(w.NetName);
+        fireSound = WeaponFireSounds.PrimaryFor(w);
         if (string.IsNullOrEmpty(fireSound))
             return false;
+        volume = WeaponFireSounds.VolumeFor(w.NetName);
         refire = w.RefireFor(VortexArena.Common.Gameplay.FireMode.Primary);
         if (refire <= 0f) refire = 0.1f;
         return true;
@@ -12716,15 +12870,15 @@ public sealed partial class NetGame : Node3D
             forward = BindTable.Forward;
             side = BindTable.Side;
             up = BindTable.Up;
-            if (BindTable.AttackHeld) buttons |= InputButtons.Attack;
-            if (BindTable.Attack2Held) buttons |= InputButtons.Attack2;
-            if (BindTable.JumpHeld) buttons |= InputButtons.Jump;
-            if (BindTable.CrouchHeld) buttons |= InputButtons.Crouch;
-            if (BindTable.ZoomHeld) buttons |= InputButtons.Zoom;
-            if (BindTable.UseHeld) buttons |= InputButtons.Use;
+            if (_tapLatch.Sample(BindTable.MoveButton.Attack)) buttons |= InputButtons.Attack;
+            if (_tapLatch.Sample(BindTable.MoveButton.Attack2)) buttons |= InputButtons.Attack2;
+            if (_tapLatch.Sample(BindTable.MoveButton.Jump)) buttons |= InputButtons.Jump;
+            if (_tapLatch.Sample(BindTable.MoveButton.Crouch)) buttons |= InputButtons.Crouch;
+            if (_tapLatch.Sample(BindTable.MoveButton.Zoom)) buttons |= InputButtons.Zoom;
+            if (_tapLatch.Sample(BindTable.MoveButton.Use)) buttons |= InputButtons.Use;
             // PHYS_INPUT_BUTTON_HOOK (+hook): the offhand-fire button — grapple hook / offhand blaster / nade.
-            if (BindTable.HookHeld) buttons |= InputButtons.Hook;
-            if (BindTable.DragHeld) buttons |= InputButtons.Drag;
+            if (_tapLatch.Sample(BindTable.MoveButton.Hook)) buttons |= InputButtons.Hook;
+            if (_tapLatch.Sample(BindTable.MoveButton.Drag)) buttons |= InputButtons.Drag;
 
             // Sub-tick fire latch (set per render frame in UpdateLocalFireFeedback): OR a press that landed since
             // the last sampled command into THIS command — so a tap shorter than one input tick still fires —
@@ -12733,6 +12887,8 @@ public sealed partial class NetGame : Node3D
             if (_attackLatch) { buttons |= InputButtons.Attack; _attackLatch = false; }
             if (_attack2Latch) { buttons |= InputButtons.Attack2; _attack2Latch = false; }
         }
+        else
+            _tapLatch.Skip(); // a press the menu/console owned is not a tap when play resumes
 
         // While FOLLOWING a player (spectatee_status > 0), the server keeps us MOVETYPE_NONE and glues us to the
         // spectatee — so suppress local movement (don't predict our own walk, which would fight the follow-cam),
@@ -12955,7 +13111,12 @@ public sealed partial class NetGame : Node3D
         // above all a damage-knockback shove (Reconciler force smoothing) — it ramps the rendered velocity from the
         // old value up to the new over the smoothing window, so the view bob/sway and the sub-tic eye extrapolation
         // below ease into the shove instead of the velocity snapping. Zeroed while dead (frozen corpse has no bob).
-        NVec3 viewVelocity = localDead ? NVec3.Zero : _client.PredictedVelocity + _client.PredictionVelocityErrorOffset(now);
+        // Intermission: Base CSQCPlayer_SetCamera uses velocity '0 0 0' while `intermission` (unless
+        // cl_movement_intermissionrunning), so the frozen player's last running speed doesn't bob/sway or
+        // extrapolate the eye on the scoreboard.
+        NVec3 viewVelocity = localDead || _client.MatchIntermission
+            ? NVec3.Zero
+            : _client.PredictedVelocity + _client.PredictionVelocityErrorOffset(now);
 
         // Sub-tic view smoothing (DP's partial final movement frame): the predicted origin only advances when an
         // input tic is drained, so it moves in discrete 1/72 s (~13.9 ms) steps while the camera renders at the
@@ -13168,13 +13329,14 @@ public sealed partial class NetGame : Node3D
         if (_render is null || !GodotObject.IsInstanceValid(_render))
             return;
 
-        // Drop the local player's OWN primary fire sound (cl_predictfire): we already played it locally on the
-        // refire clock, so the networked echo would double it. Keyed by source net-id + a predicted fire sample so
-        // it never suppresses footsteps/pain/reload/secondary (other channels/samples), and remote players are
-        // unaffected (they don't match LocalNetId). A non-predicted weapon (loops/grapple) isn't in the set → its
-        // networked fire sound plays normally.
-        if (_predictFire && _client is not null && e.SourceNetId == _client.LocalNetId
-            && WeaponFireSounds.IsPredicted(e.Sample))
+        // Drop the local player's OWN fire sound when it is the echo of a shot already played locally
+        // (cl_predictfire). Only samples a primary press can predict are checked, and only from the local player;
+        // the ledger then drops the sound ONLY if it pairs with a predicted copy still waiting for its echo. A
+        // secondary attack that shares a primary's sample (Machinegun burst, Mortar/Hagar/HLAC secondaries, the
+        // Vaporizer laser) has no predicted partner and plays — the old sample-only match silenced all of those
+        // for the shooter (playtest #65/#66).
+        if (_predictFire && _client is not null && e.SourceNetId == _client.LocalNetId && !e.Stop
+            && WeaponFireSounds.IsPredicted(e.Sample) && _fireSoundLedger.OnNetworked(e.Sample, FireSoundClock()))
             return;
 
         if (e.Stop)
@@ -13781,6 +13943,25 @@ public sealed partial class NetGame : Node3D
     }
 
     /// <summary>
+    /// Set the view camera's far plane the way DarkPlaces does (<c>r_farclip_base + world radius * r_farclip_world
+    /// * 2</c>, see <see cref="VortexArena.Common.Math.RenderFarClip"/>). Without it the camera kept Godot's default
+    /// Far of 4000 units — Quake units here — and cut big maps off mid-distance (playtest-bugs #79). Called when the
+    /// camera is made (the listen host already has its BSP) and again from <see cref="ApplyMapSky"/> once a pure
+    /// client learns its map. Portal and water cameras copy this camera's Far, so they follow.
+    /// </summary>
+    private void ApplyFarClip()
+    {
+        if (_camera is null || !GodotObject.IsInstanceValid(_camera))
+            return;
+        float farBase = _sharedCvars is { } c && c.Has("r_farclip_base") ? c.GetFloat("r_farclip_base") : VortexArena.Common.Math.RenderFarClip.DefaultBase;
+        float farWorld = _sharedCvars is { } c2 && c2.Has("r_farclip_world") ? c2.GetFloat("r_farclip_world") : VortexArena.Common.Math.RenderFarClip.DefaultWorld;
+        bool haveWorld = _bsp is not null && _bsp.Models.Length > 0;
+        _camera.Far = VortexArena.Common.Math.RenderFarClip.Compute(farBase, farWorld,
+            haveWorld ? _bsp!.Models[0].Mins : null, haveWorld ? _bsp!.Models[0].Maxs : null);
+        VortexArena.Common.Diagnostics.Log.Trace($"[view] far clip {_camera.Far:0} (r_farclip_base {farBase:0} + world radius x r_farclip_world {farWorld:0.##} x 2)");
+    }
+
+    /// <summary>
     /// Re-apply the real map's skybox, fog and colour-tint baseline to the live <see cref="WorldEnvironment"/>,
     /// replacing the procedural sky <see cref="AddLight"/> put up before the map was known. Called by
     /// <see cref="LoadClientMapFromServer"/> once a pure <c>--connect</c> client has loaded the server's BSP.
@@ -13790,6 +13971,7 @@ public sealed partial class NetGame : Node3D
     {
         if (_worldEnv is null || _bsp is null)
             return;
+        ApplyFarClip(); // the world radius is known only now on a pure client (#79)
         Sky? sky = VortexArena.Game.Loaders.SkyboxLoader.TryBuild(_bsp, _assets?.Assets);
         if (sky is not null)
             _worldEnv.Sky = sky;

@@ -154,15 +154,18 @@ public sealed class MovementTestServices : IEngineServices
 {
     public ITraceService Trace { get; }
     public IGameClock Clock { get; }
-    public ICvarService Cvars { get; } = new EmptyCvars();
+    public ICvarService Cvars { get; }
     public IEntityService Entities { get; } = new MinimalEntities();
     public ISoundService Sound { get; } = new NullSound();
     public IModelService Models { get; } = new NullModels();
 
-    public MovementTestServices(AnalyticWorld world, MutableClock clock)
+    /// <param name="cvars">Optional real cvar store (e.g. one the shipped config chain was loaded into), so a
+    /// golden replay can run under the values the game actually ships rather than the compiled-in defaults.</param>
+    public MovementTestServices(AnalyticWorld world, MutableClock clock, ICvarService? cvars = null)
     {
         Trace = new AnalyticTraceService(world);
         Clock = clock;
+        Cvars = cvars ?? new EmptyCvars();
     }
 
     private sealed class EmptyCvars : ICvarService

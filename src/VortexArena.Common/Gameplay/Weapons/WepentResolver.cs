@@ -116,7 +116,8 @@ public static class WepentResolver
             {
                 WeaponFireState.Raise => 3,
                 WeaponFireState.Drop => 4,
-                WeaponFireState.InUse => wst.AttackFinished > now ? 1 : 0,
+                // fire: 1 = WFRAME_FIRE1, 5 = WFRAME_FIRE2 (the Shotgun melee swing, most secondaries)
+                WeaponFireState.InUse => wst.AttackFinished > now ? (wst.FireAnimFrame == Weapon.WFrameFire2 ? 5 : 1) : 0,
                 _ => 0, // idle (READY/CLEAR)
             };
 

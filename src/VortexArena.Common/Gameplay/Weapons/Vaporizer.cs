@@ -222,8 +222,12 @@ public sealed class Vaporizer : Weapon
         Entity? hit = WeaponFiring.FireRailgunBullet(actor, shot.Origin, end, damage, RegistryId, Primary.Force,
             headshotNotify: true);
 
-        // QC vaporizer.qc:139: sound played separately at VOL_BASE * 0.8 (and bypasses the strength sound).
-        Api.Sound.Play(actor, SoundChannel.Weapon, "weapons/minstanexfire.wav", SoundLevels.VolBase * 0.8f);
+        // QC vaporizer.qc:139: sound(actor, CH_WEAPON_A, SND_VAPORIZER_FIRE, VOL_BASE * 0.8, ATTEN_NORM), played
+        // separately so it bypasses the strength sound. CH_WEAPON_A is an AUTO channel: the 2.4 s sample keeps
+        // ringing under the next shot (refire 1 s) instead of being cut off, as it was on the single weapon
+        // channel; ATTEN_NORM, not the service default 1 (twice as steep a falloff). Playtest #83.
+        Api.Sound.Play(actor, SoundChannel.WeaponAuto, "weapons/minstanexfire.wav",
+            SoundLevels.VolBase * 0.8f, SoundLevels.AttenNorm);
 
         // Rail-endpoint trace (world-only) → the impact point + surface flags, used for the beam visual, the
         // impact effect/sound, and the Rocket-Minsta sky/noimpact explosion gate (QC trace_endpos / trace_
@@ -481,8 +485,9 @@ public sealed class Vaporizer : Weapon
         // QC vaporizer.qc:229: snd = (mode==0) ? SND_CRYLINK_FIRE : SND_ELECTRO_FIRE2. W_SetupShot_ProjectileSize
         // already plays this on CH_WEAPON_A; the port emits it here. mode-0 fan = crylink_fire, mode-1 stream =
         // electro_fire2.
-        Api.Sound.Play(actor, SoundChannel.Weapon,
-            mode == 0 ? "weapons/crylink_fire.wav" : "weapons/electro_fire2.wav");
+        Api.Sound.Play(actor, SoundChannel.WeaponAuto,
+            mode == 0 ? "weapons/crylink_fire.wav" : "weapons/electro_fire2.wav",
+            SoundLevels.VolBase, SoundLevels.AttenNorm); // W_SetupShot: CH_WEAPON_A, VOL_BASE, ATTN_NORM
     }
 
     // W_RocketMinsta_Laser_Explode — the TIMEOUT explode path (vaporizer.qc:194-205). Awards the Electrobitch

@@ -212,6 +212,288 @@ public class BindsTests
     }
 
     // =====================================================================================================
+    //  Two keys on one +command (playtest #87): DP KeyDown/KeyUp (cl_input.c:65-122) track WHICH keys hold a
+    //  button, so it stays down until every one of them is released.
+    // =====================================================================================================
+
+    [Fact]
+    public void Two_Keys_On_Jump_Releasing_One_Keeps_Jumping()
+    {
+        BindTable.Bind("Space", "+jump");
+        BindTable.Bind("MOUSE5", "+jump");
+        BindTable.HandleBind("Space", true, _ => { });
+        BindTable.HandleBind("MOUSE5", true, _ => { });
+        BindTable.HandleBind("Space", false, _ => { });
+        Assert.True(BindTable.JumpHeld);      // MOUSE5 still holds it
+        Assert.Equal(1f, BindTable.Up);
+        BindTable.HandleBind("MOUSE5", false, _ => { });
+        Assert.False(BindTable.JumpHeld);
+    }
+
+    [Theory]
+    [InlineData("+forward")]
+    [InlineData("+back")]
+    [InlineData("+moveleft")]
+    [InlineData("+moveright")]
+    [InlineData("+crouch")]
+    [InlineData("+fire")]
+    [InlineData("+fire2")]
+    [InlineData("+zoom")]
+    [InlineData("+use")]
+    [InlineData("+hook")]
+    [InlineData("+showscores")]
+    public void Every_Held_Button_Stays_Down_Until_Its_Last_Key_Is_Up(string command)
+    {
+        BindTable.Bind("A", command);
+        BindTable.Bind("B", command);
+        BindTable.HandleBind("A", true, _ => { });
+        BindTable.HandleBind("B", true, _ => { });
+        BindTable.HandleBind("B", false, _ => { });
+        Assert.True(IsHeld(command));
+        BindTable.HandleBind("A", false, _ => { });
+        Assert.False(IsHeld(command));
+    }
+
+    private static bool IsHeld(string command) => command switch
+    {
+        "+forward" => BindTable.Forward > 0,
+        "+back" => BindTable.Forward < 0,
+        "+moveleft" => BindTable.Side < 0,
+        "+moveright" => BindTable.Side > 0,
+        "+crouch" => BindTable.CrouchHeld,
+        "+fire" => BindTable.AttackHeld,
+        "+fire2" => BindTable.Attack2Held,
+        "+zoom" => BindTable.ZoomHeld,
+        "+use" => BindTable.UseHeld,
+        "+hook" => BindTable.HookHeld,
+        "+showscores" => BindTable.ShowScores,
+        _ => throw new ArgumentException(command),
+    };
+
+    [Fact]
+    public void Three_Keys_All_Hold_The_Button()
+    {
+        // DP's down[2] refuses a third key ("Three keys down for a button!"); the port keeps any number.
+        foreach (string k in new[] { "A", "B", "C" })
+        {
+            BindTable.Bind(k, "+jump");
+            BindTable.HandleBind(k, true, _ => { });
+        }
+        BindTable.HandleBind("A", false, _ => { });
+        BindTable.HandleBind("B", false, _ => { });
+        Assert.True(BindTable.JumpHeld);
+        BindTable.HandleBind("C", false, _ => { });
+        Assert.False(BindTable.JumpHeld);
+    }
+
+    [Fact]
+    public void Repeated_Press_Of_The_Same_Key_Needs_Only_One_Release()
+    {
+        BindTable.Bind("Space", "+jump");
+        BindTable.HandleBind("Space", true, _ => { });
+        BindTable.HandleBind("Space", true, _ => { }); // DP "repeating key"
+        BindTable.HandleBind("Space", false, _ => { });
+        Assert.False(BindTable.JumpHeld);
+    }
+
+    [Fact]
+    public void Release_Of_A_Key_That_Never_Pressed_The_Button_Is_Ignored()
+    {
+        // DP "key up without corresponding down (menu pass through)": e.g. the press went to the menu.
+        BindTable.Bind("Space", "+jump");
+        BindTable.Bind("MOUSE5", "+jump");
+        BindTable.HandleBind("Space", true, _ => { });
+        BindTable.HandleBind("MOUSE5", false, _ => { });
+        Assert.True(BindTable.JumpHeld);
+    }
+
+    [Fact]
+    public void Typed_Minus_Command_Clears_Every_Key_Holding_The_Button()
+    {
+        BindTable.Bind("Space", "+jump");
+        BindTable.Bind("MOUSE5", "+jump");
+        BindTable.HandleBind("Space", true, _ => { });
+        BindTable.HandleBind("MOUSE5", true, _ => { });
+        Assert.True(BindTable.ButtonCommand("-jump", key: null)); // DP KeyUp with no key: "so clear all"
+        Assert.False(BindTable.JumpHeld);
+        // a later release of either key is a stray and leaves it up
+        BindTable.HandleBind("Space", false, _ => { });
+        Assert.False(BindTable.JumpHeld);
+    }
+
+    [Fact]
+    public void Typed_Plus_Command_Holds_Like_One_More_Key()
+    {
+        BindTable.Bind("Space", "+jump");
+        Assert.True(BindTable.ButtonCommand("+jump", key: null));
+        BindTable.HandleBind("Space", true, _ => { });
+        BindTable.HandleBind("Space", false, _ => { });
+        Assert.True(BindTable.JumpHeld);                 // the typed press still holds it
+        Assert.True(BindTable.ButtonCommand("-jump", key: null));
+        Assert.False(BindTable.JumpHeld);
+    }
+
+    [Fact]
+    public void ButtonCommand_Refuses_What_Is_Not_A_Held_Button()
+    {
+        Assert.False(BindTable.ButtonCommand("+hud_panel_radar_maximized", key: null));
+        Assert.False(BindTable.ButtonCommand("kill", key: null));
+        Assert.False(BindTable.ButtonCommand("", key: null));
+    }
+
+    [Fact]
+    public void Key_Bound_To_Minus_Command_Releases_On_Press_Only()
+    {
+        // DP only appends the key to a '+' bind; a key bound to "-jump" runs it bare on press (clear all).
+        BindTable.Bind("Space", "+jump");
+        BindTable.Bind("J", "-jump");
+        BindTable.HandleBind("Space", true, _ => { });
+        BindTable.HandleBind("J", true, _ => { });
+        Assert.False(BindTable.JumpHeld);
+        BindTable.HandleBind("J", false, _ => { });
+        Assert.False(BindTable.JumpHeld);
+    }
+
+    [Fact]
+    public void ReleaseAttack_Lets_Go_Of_Every_Fire_Key()
+    {
+        BindTable.Bind("MOUSE1", "+fire");
+        BindTable.Bind("Ctrl", "+fire");
+        BindTable.HandleBind("MOUSE1", true, _ => { });
+        BindTable.HandleBind("Ctrl", true, _ => { });
+        BindTable.ReleaseAttack();
+        Assert.False(BindTable.AttackHeld);
+        BindTable.HandleBind("MOUSE1", false, _ => { }); // the physical release that follows is a stray
+        Assert.False(BindTable.AttackHeld);
+    }
+
+    [Fact]
+    public void Togglezoom_Off_Releases_A_Held_Plus_Zoom_Too()
+    {
+        // xonotic-client.cfg: togglezoom runs -zoom → -button4 with no key, which DP treats as "clear all".
+        BindTable.Bind("MOUSE3", "togglezoom");
+        BindTable.Bind("Z", "+zoom");
+        BindTable.HandleBind("MOUSE3", true, _ => { }); // on
+        BindTable.HandleBind("Z", true, _ => { });
+        BindTable.HandleBind("MOUSE3", true, _ => { }); // off, even with Z held
+        Assert.False(BindTable.ZoomHeld);
+    }
+
+    // =====================================================================================================
+    //  Taps shorter than one move (playtest #61): DP's impulse-down bit (cl_input.c:91, :1801, :2180)
+    // =====================================================================================================
+
+    [Fact]
+    public void Wheel_Bound_Jump_Press_And_Release_Before_The_Move_Still_Jumps()
+    {
+        var latch = new BindTable.TapLatch();
+        BindTable.Bind("MWHEELDOWN", "+jump");
+        BindTable.HandleBind("MWHEELDOWN", true, _ => { });   // the wheel's press and release arrive back to back
+        BindTable.HandleBind("MWHEELDOWN", false, _ => { });
+        Assert.False(BindTable.JumpHeld);                      // the level is already up again...
+        Assert.True(latch.Sample(BindTable.MoveButton.Jump));  // ...but this move carries the press
+        Assert.False(latch.Sample(BindTable.MoveButton.Jump)); // and only this one
+    }
+
+    [Fact]
+    public void TapLatch_Reports_A_Held_Button_Every_Move()
+    {
+        var latch = new BindTable.TapLatch();
+        BindTable.Bind("MOUSE5", "+hook");
+        BindTable.HandleBind("MOUSE5", true, _ => { });
+        Assert.True(latch.Sample(BindTable.MoveButton.Hook));
+        Assert.True(latch.Sample(BindTable.MoveButton.Hook));
+        BindTable.HandleBind("MOUSE5", false, _ => { });
+        Assert.False(latch.Sample(BindTable.MoveButton.Hook));
+    }
+
+    [Fact]
+    public void TapLatch_Readers_Are_Independent_And_Skip_Forgets_Taps()
+    {
+        var a = new BindTable.TapLatch();
+        var b = new BindTable.TapLatch();
+        BindTable.Bind("MOUSE1", "+fire");
+        BindTable.HandleBind("MOUSE1", true, _ => { });
+        BindTable.HandleBind("MOUSE1", false, _ => { });
+        Assert.True(a.Sample(BindTable.MoveButton.Attack));
+        Assert.True(b.Sample(BindTable.MoveButton.Attack)); // a's sample didn't consume b's tap
+        BindTable.HandleBind("MOUSE1", true, _ => { });
+        BindTable.HandleBind("MOUSE1", false, _ => { });
+        a.Skip();                                            // the menu/console owned that press
+        Assert.False(a.Sample(BindTable.MoveButton.Attack));
+    }
+
+    [Fact]
+    public void Second_Key_Joining_A_Held_Button_Is_Not_A_New_Tap()
+    {
+        var latch = new BindTable.TapLatch();
+        BindTable.Bind("Space", "+jump");
+        BindTable.Bind("MOUSE5", "+jump");
+        BindTable.HandleBind("Space", true, _ => { });
+        Assert.True(latch.Sample(BindTable.MoveButton.Jump));
+        BindTable.HandleBind("MOUSE5", true, _ => { });       // already down: DP sets no impulse either
+        BindTable.HandleBind("Space", false, _ => { });
+        BindTable.HandleBind("MOUSE5", false, _ => { });
+        Assert.False(latch.Sample(BindTable.MoveButton.Jump));
+    }
+
+    [Fact]
+    public void Wheel_Accumulator_Standard_Wheel_Is_One_Click_Per_Event()
+    {
+        var w = new WheelAccumulator();
+        Assert.Equal(1, w.Clicks(up: true, 1f));
+        Assert.Equal(1, w.Clicks(up: false, 1f));
+        Assert.Equal(1, w.Clicks(up: false, 0f)); // a platform that reports no factor
+    }
+
+    [Fact]
+    public void Wheel_Accumulator_Adds_Fractions_Into_Whole_Notches()
+    {
+        var w = new WheelAccumulator();
+        Assert.Equal(0, w.Clicks(true, 0.25f));
+        Assert.Equal(0, w.Clicks(true, 0.25f));
+        Assert.Equal(0, w.Clicks(true, 0.25f));
+        Assert.Equal(1, w.Clicks(true, 0.25f));
+        int total = 0;
+        for (int i = 0; i < 10; i++) total += w.Clicks(true, 0.1f);
+        Assert.Equal(1, total);                    // float rounding does not lose the notch
+        Assert.Equal(2, w.Clicks(true, 2f));       // a packed fast flick is two clicks
+    }
+
+    [Fact]
+    public void Wheel_Accumulator_Drops_A_Partial_Notch_When_Direction_Flips()
+    {
+        var w = new WheelAccumulator();
+        Assert.Equal(0, w.Clicks(true, 0.75f));
+        Assert.Equal(0, w.Clicks(false, 0.5f));    // up's 0.75 is gone, not cancelled against
+        Assert.Equal(1, w.Clicks(false, 0.5f));
+    }
+
+    [Fact]
+    public void Console_Plus_And_Minus_Button_Commands_Drive_The_Table()
+    {
+        var cvars = new CvarService();
+        var interp = new ConfigInterpreter(cvars, _ => null);
+        _ = new ConsoleCommands(interp, cvars, _ => { });
+        BindTable.Bind("Space", "+jump");
+        BindTable.HandleBind("Space", true, _ => { });
+
+        interp.ExecuteLine("+jump");             // typed: one more holder
+        BindTable.HandleBind("Space", false, _ => { });
+        Assert.True(BindTable.JumpHeld);
+        interp.ExecuteLine("-jump");             // typed: clears everything
+        Assert.False(BindTable.JumpHeld);
+
+        interp.ExecuteLine("+fire 512");         // with a key, as DP's Key_Event sends it
+        interp.ExecuteLine("+fire 513");
+        interp.ExecuteLine("-fire 512");
+        Assert.True(BindTable.AttackHeld);
+        interp.ExecuteLine("-fire 513");
+        Assert.False(BindTable.AttackHeld);
+        Assert.False(cvars.Has("+fire"));        // never fell through to a bare cvar assignment
+    }
+
+    // =====================================================================================================
     //  binds-xonotic.cfg ingestion: register a `bind` sink on the interpreter, exec the cfg, assert the table
     //  (the linchpin path — MenuState.Boot does exactly this with BindInput's sink at boot).
     // =====================================================================================================

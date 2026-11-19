@@ -158,7 +158,8 @@ public static class NetProtocol
     /// v30: waypoint snapshots have a per-peer sequence shared by reliable clears and best-effort updates.
     /// v31: snapshot solid inline brush poses for client presentation collision.
     /// v32: radar-link snapshots have a sequence shared by reliable clears and best-effort updates.
-    public const uint ProtocolVersion = 32;
+    /// v33: entity scale uses its own delta bit alongside countdown indicators.
+    public const uint ProtocolVersion = 33;
 
     /// <summary>Ordered, reliable ENet channel — handshake, spawns/removes, notifications, scores.</summary>
     public const int ReliableChannel = 0;

@@ -187,6 +187,7 @@ public partial class ViewModel : Node3D
     private float _flashTime;              // remaining flash-light time
     private float _recoil;                 // current recoil displacement (Quake units, decays to 0)
     private Node3D? _muzzleFlashNode;      // live flash-model node (single slot; replaced each Fire call)
+    private Tween? _muzzleFlashTween;      // that node's fade (killed when the next shot replaces it)
 
     // Player colormap + per-weapon glowmod (Base viewmodel_draw lines 302-321: e.colormap = 256 + c where c =
     // entcs_GetClientColors — the packed shirt/pants profile colors in EVERY mode, #43; e.glowmod =
@@ -697,7 +698,7 @@ public partial class ViewModel : Node3D
     /// <c>W_MuzzleFlash_Model_Think</c>. The node inherits the socket's global transform (for world-correct
     /// placement) but is attached to the muzzle marker so it rides the viewmodel sway. A random roll is applied
     /// to give each shot a distinct orientation, matching the QC <c>flash.angles.z = random() * 180</c>.
-    /// Fades out over 3 × 0.05 s via a Tween: scale halved and alpha decremented by 0.25 per step.
+    /// Fades out in three steps at +0.02, +0.07 and +0.12 s: scale halved and alpha decremented by 0.25 per step.
     /// </summary>
     private void SpawnMuzzleFlashModel()
     {
@@ -707,7 +708,11 @@ public partial class ViewModel : Node3D
         if (FlashModelFactory is null || string.IsNullOrEmpty(MuzzleModelPath)) return;
         if (_muzzleMarker is null || !GodotObject.IsInstanceValid(_muzzleMarker)) return;
 
-        // Free the previous flash (QC: reuses the wepent.muzzle_flash slot).
+        // Free the previous flash and stop its fade (QC: reuses the wepent.muzzle_flash slot and restarts its
+        // think chain — W_MuzzleFlash_Model resets scale/alpha/frame and nextthink, so the old fade never
+        // reaches the new flash).
+        _muzzleFlashTween?.Kill();
+        _muzzleFlashTween = null;
         if (_muzzleFlashNode is not null && GodotObject.IsInstanceValid(_muzzleFlashNode))
             _muzzleFlashNode.QueueFree();
         _muzzleFlashNode = null;
@@ -731,41 +736,41 @@ public partial class ViewModel : Node3D
         _muzzleMarker.AddChild(flashNode);
         _muzzleFlashNode = flashNode;
 
-        // QC W_MuzzleFlash_Model_Think: three ticks at 0.05 s intervals — scale*=0.5, alpha-=0.25 each.
-        // After the third tick alpha reaches 0 and the entity is freed (QC uses nextthink + SUB_Remove).
-        // Use a Tween for exact per-step control (not a smooth Lerp — the QC does discrete steps).
-        // In Godot 4, TweenCallback.SetDelay adds a RELATIVE delay before THAT step (sequential tween),
-        // so each step fires 0.05s after the previous one — cumulative total 0.05, 0.10, 0.15 s.
-        // QC W_MuzzleFlash_Model sets flash.frame = 2 initially; W_MuzzleFlash_Model_Think does frame += 2 each tick.
-        // When FlashModelFactory returns a ModelAnimator (multi-frame MD3), seed it at frame 2 immediately.
-        if (_muzzleFlashNode is ModelAnimator seedAnim)
+        // QC W_MuzzleFlash_Model sets frame = 2, alpha = 0.75 and the first think at time + 0.02; each
+        // W_MuzzleFlash_Model_Think then does frame += 2, scale *= 0.5, alpha -= 0.25 and re-thinks 0.05 s later,
+        // removing the flash once alpha reaches 0 — three thinks, at +0.02, +0.07 and +0.12 s.
+        // Every step acts on THIS flash node (captured), never on the _muzzleFlashNode field: at the Machinegun's
+        // 0.1 s refire the next shot replaces the flash while this fade is still running, and a fade that read
+        // the field shrank and freed the NEW flash 0.05 s after it appeared (playtest #64 — the machinegun flash
+        // flickered tiny or vanished on sustained fire). The previous tween is also killed above.
+        if (flashNode is ModelAnimator seedAnim)
             seedAnim.SetRawFrame(2);
+        SetFlashAlpha(flashNode, 0.75f);
 
         Tween tween = CreateTween();
         tween.SetProcessMode(Tween.TweenProcessMode.Idle);
-        // Step 1 (t=+0.05 s): scale 0.75 → 0.375, alpha 0.75 → 0.50, frame 2 → 4
-        // Step 2 (t=+0.05 s): scale 0.375 → 0.1875, alpha 0.50 → 0.25, frame 4 → 6
-        // Step 3 (t=+0.05 s): scale 0.1875 → 0.09375, alpha 0.25 → 0 → free
+        _muzzleFlashTween = tween;
         for (int step = 1; step <= 3; step++)
         {
             float targetScale = 0.75f * MathF.Pow(0.5f, step);
             float targetAlpha = 0.75f - step * 0.25f; // 0.50, 0.25, 0
-            int capturedStep = step;
+            bool last = step >= 3;
             int targetFrame = 2 + step * 2; // 4, 6, 8 (QC: flash.frame += 2 each think)
             tween.TweenCallback(Callable.From(() =>
             {
-                if (_muzzleFlashNode is null || !GodotObject.IsInstanceValid(_muzzleFlashNode)) return;
-                _muzzleFlashNode.Scale = Vector3.One * targetScale;
-                SetFlashAlpha(_muzzleFlashNode, targetAlpha);
+                if (!GodotObject.IsInstanceValid(flashNode)) return;
+                flashNode.Scale = Vector3.One * targetScale;
+                SetFlashAlpha(flashNode, targetAlpha);
                 // Advance MD3 flash frame: flash.md3=30 frames, uziflash.md3=14; SetRawFrame clamps safely.
-                if (_muzzleFlashNode is ModelAnimator flashAnim)
+                if (flashNode is ModelAnimator flashAnim)
                     flashAnim.SetRawFrame(targetFrame);
-                if (capturedStep >= 3)
+                if (last)
                 {
-                    _muzzleFlashNode.QueueFree();
-                    _muzzleFlashNode = null;
+                    flashNode.QueueFree();
+                    if (ReferenceEquals(_muzzleFlashNode, flashNode))
+                        _muzzleFlashNode = null;
                 }
-            })).SetDelay(0.05f);
+            })).SetDelay(step == 1 ? 0.02f : 0.05f); // SetDelay is relative to the previous step
         }
     }
 
@@ -860,9 +865,9 @@ public partial class ViewModel : Node3D
     /// rapid fire re-triggers visibly (Godot <c>Play()</c> on the current animation does not restart it).
     /// (playtest r8 #3)
     /// </summary>
-    public void PlayFireClip()
+    public void PlayFireClip(bool fire2 = false)
     {
-        string n = FindFireClip(); // plays the clip when found (IQM/DPM or MD3 path)
+        string n = FindFireClip(fire2); // plays the clip when found (IQM/DPM or MD3 path)
         if (_iqmAnimPlayer is not null && GodotObject.IsInstanceValid(_iqmAnimPlayer)
             && !string.IsNullOrEmpty(n) && _iqmAnimPlayer.CurrentAnimation == n)
             _iqmAnimPlayer.Seek(0.0, update: true);
@@ -888,12 +893,19 @@ public partial class ViewModel : Node3D
         PlayIdle();
     }
 
-    private string FindFireClip()
+    // Clip names tried for WFRAME_FIRE1 and WFRAME_FIRE2. Base anim_fire2 is framegroup 1 of the h_ model; the
+    // IQM builder names a 4-row nameless framegroups file fire/fire2/idle/reload, so "fire2" is that group. A model
+    // without one falls back to the fire clip.
+    private static readonly string[] Fire1Clips = { "fire", "shoot", "attack", "fire1" };
+    private static readonly string[] Fire2Clips = { "fire2", "fire", "shoot", "attack", "fire1" };
+
+    private string FindFireClip(bool fire2 = false)
     {
+        string[] names = fire2 ? Fire2Clips : Fire1Clips;
         // IQM/DPM path (h_* rigs with an AnimationPlayer — the live equip path).
         if (_iqmAnimPlayer is not null && GodotObject.IsInstanceValid(_iqmAnimPlayer))
         {
-            foreach (string n in new[] { "fire", "shoot", "attack", "fire1" })
+            foreach (string n in names)
             {
                 if (_iqmAnimPlayer.HasAnimation(n))
                 {
@@ -906,7 +918,7 @@ public partial class ViewModel : Node3D
         // MD3 vertex-morph path (legacy SetWeapon(Md3Data) path).
         if (_animator is not null)
         {
-            foreach (string n in new[] { "fire", "shoot", "attack", "fire1" })
+            foreach (string n in names)
                 if (_animator.PlayIfChanged(n)) return n;
             return _animator.CurrentClip;
         }
@@ -1009,6 +1021,9 @@ public partial class ViewModel : Node3D
                 break;
             case 2: // WFRAME_RELOAD
                 PlayReload();
+                break;
+            case 5: // WFRAME_FIRE2 — the fire2 clip once (the Shotgun's melee swing; most secondaries)
+                FindFireClip(fire2: true);
                 break;
             // case 3 (raise) / case 4 (drop): the PlayRaise/PlayHolster slide already covers the local viewmodel,
             // so the networked raise/drop selector is a no-op here (no clip to start).
@@ -1247,6 +1262,8 @@ public partial class ViewModel : Node3D
         _surfaceFxApplied = false;
         _modelAlpha = 1f;
         _glowDirty = true; // the freshly-built model's materials need the team colormod/glow re-applied
+        _muzzleFlashTween?.Kill();
+        _muzzleFlashTween = null;
         if (_muzzleFlashNode is not null && GodotObject.IsInstanceValid(_muzzleFlashNode))
             _muzzleFlashNode.QueueFree();
         _muzzleFlashNode = null;

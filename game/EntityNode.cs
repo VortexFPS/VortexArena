@@ -76,7 +76,6 @@ public partial class EntityNode : Node3D, IEntityPresence
     private float _lastScale;
     private byte _lastItemAnimate;
     private bool _syncValid;
-    private bool _viewLocationYaw;
 
     /// <summary>Drive one frame of transform sync (called from <c>ClientWorld._Process</c>'s central loop),
     /// skipping the interop writes when nothing the sync reads has changed. An animating pickup
@@ -103,17 +102,6 @@ public partial class EntityNode : Node3D, IEntityPresence
     /// <summary>Force the next <see cref="DriveSync"/> to re-sync regardless of the dirty-gate (model swap /
     /// visibility regain — see <see cref="ApplyVisible"/>).</summary>
     public void ForceSync() => _syncValid = false;
-
-    internal void SetViewLocationYaw(bool enabled)
-    {
-        if (_viewLocationYaw == enabled)
-            return;
-        _viewLocationYaw = enabled;
-        ForceSync();
-    }
-
-    internal float RenderYaw(float quakeYaw)
-        => Mathf.DegToRad(_viewLocationYaw ? quakeYaw : -quakeYaw);
 
     // (perf 2026-08-03) PVS-test memo. BoxAnyClusterVisibleFrom is a recursive BSP descent per entity per
     // frame — the dominant cost of the entity drive at ~165 entities. Its result is a pure function of
@@ -143,7 +131,7 @@ public partial class EntityNode : Node3D, IEntityPresence
         _pvsTestedResult = visible;
     }
 
-    /// <summary>Copy the bound entity's origin and yaw onto this node's transform (Quake -> Godot).</summary>
+    /// <summary>Copy the bound entity's origin, angles and scale onto this node's transform (Quake -> Godot).</summary>
     public void SyncFromEntity()
     {
         if (Entity is null)
@@ -175,29 +163,15 @@ public partial class EntityNode : Node3D, IEntityPresence
 
         Position = position;
 
-        // [T48] Pitched/rolled entities (misc_gamemodel props on courtfun/space-elevator etc.) need the FULL
-        // orientation, not just yaw. Use the proven AngleVectors → Coords.ToGodot columns basis (the same
-        // convention FirstPersonView/the camera use — see NetGame's note that a negated-yaw Euler flips
-        // handedness): mesh verts are ToGodot-converted, so the node basis is the Quake rotation conjugated
-        // by ToGodot — columns X=ToGodot(forward), Y=ToGodot(up), Z=ToGodot(right). Gated to entities that
-        // actually carry pitch/roll so the long-standing yaw-only path below stays byte-identical for
-        // players/items/monsters (changing their convention is a separate, visually-verified pass).
-        if (Entity.Angles.X != 0f || Entity.Angles.Z != 0f)
-        {
-            var angles = new System.Numerics.Vector3(Entity.Angles.X, yawDeg, Entity.Angles.Z);
-            VortexArena.Common.Math.QMath.AngleVectors(angles,
-                out System.Numerics.Vector3 fwd, out System.Numerics.Vector3 right, out System.Numerics.Vector3 up);
-            Basis = new Basis(Coords.ToGodot(fwd), Coords.ToGodot(up), Coords.ToGodot(right));
-        }
-        else
-        {
-            // Rail avatar yaw follows the Quake forward vector under ToGodot=(x,z,-y).
-            Rotation = new Vector3(0f, RenderYaw(yawDeg), 0f);
-        }
+        // One orientation path for every entity, pitched or not: the AngleVectors → Coords.ToGodot columns basis
+        // DarkPlaces' Matrix4x4_CreateFromQuakeEntity builds, including its alias-model pitch reversal
+        // (Coords.EntityBasis). playtest-bugs #76: the old yaw-only shortcut `Rotation.Y = -yaw` was the MIRROR of
+        // this (a Quake yaw θ is +θ about Godot +Y), so every item a mapper turned to 90° faced 270°, and the
+        // carried CTF flag (#7) counter-rotated against its own carry offset. Setting Basis also resets the scale,
+        // which is re-applied just below.
+        Basis = Coords.EntityBasis(new System.Numerics.Vector3(Entity.Angles.X, yawDeg, Entity.Angles.Z), Entity.Model);
 
-        // [T48] Prop scale (QC .scale → Entity.ScaleFactor, models.qc g_model_init): applied for the
-        // listen-server/demo paths, where the shared entity carries it. 0 = unset (remote clients miss it
-        // until an EntityField.Scale protocol bump — deferred, see the T48 brief).
+        // [T48] Prop scale (QC .scale → Entity.ScaleFactor, models.qc g_model_init). 0 = unset (= 1).
         float s = Entity.ScaleFactor;
         if (s > 0f && System.MathF.Abs(s - 1f) > 0.001f)
             Scale = new Vector3(s, s, s);

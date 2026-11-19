@@ -131,6 +131,15 @@ public sealed class Crylink : Weapon
     /// <summary>g_balance_crylink_*_joinspread — converge speed factor on release (0 = parallel, no convergence).</summary>
     public float PrimaryJoinSpread = 0.5f;
     public float SecondaryJoinSpread = 0f;
+
+    /// <summary>
+    /// QC W_Crylink_Attack/Attack2 tail: a volley sets <c>crylink_waitrelease</c> (no refire of that mode until the
+    /// button is released, which also triggers the link-join) exactly when <c>joinspread != 0 &amp;&amp; shots &gt; 1</c>.
+    /// Stock primary: joinspread 0.2, 6 shots → held fire never refires; stock secondary: joinspread 0 → it does.
+    /// The client's fire prediction reads this so it doesn't play a shot the server is holding back.
+    /// </summary>
+    public bool WaitsForRelease(bool secondary)
+        => (secondary ? SecondaryJoinSpread : PrimaryJoinSpread) != 0f && (secondary ? Secondary : Primary).Shots > 1;
     /// <summary>g_balance_crylink_*_linkexplode — 1: chain-detonate the group on a friendly-safe hit; 2: always.</summary>
     public int PrimaryLinkExplode = 0;
     public int SecondaryLinkExplode = 0;
@@ -322,8 +331,7 @@ public sealed class Crylink : Weapon
         EffectEmitter.Emit("CRYLINK_MUZZLEFLASH", shot.Origin, shot.Dir * 1000f, 1, except: actor);
 
         // Register the group for the converge-on-release link-join (only when joinspread is enabled).
-        float joinSpread = secondary ? SecondaryJoinSpread : PrimaryJoinSpread;
-        if (joinSpread != 0f && shots > 1)
+        if (WaitsForRelease(secondary))
         {
             st.CrylinkLastGroup = group[0];
             st.CrylinkWaitRelease = secondary ? 2 : 1;

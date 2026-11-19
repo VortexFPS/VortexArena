@@ -144,6 +144,13 @@ public sealed class WeaponSlotState
     public float AttackFinished;
 
     /// <summary>
+    /// QC <c>.wframe</c> for the last committed attack: 1 = <c>WFRAME_FIRE1</c>, 2 = <c>WFRAME_FIRE2</c> (0 until
+    /// the first). Set by <c>Weapon.PrepareAttack</c> from <c>Weapon.FireFrameFor</c>; the first-person viewmodel
+    /// plays its <c>fire2</c> clip for FIRE2 — the Shotgun's melee swing is that clip (playtest #84).
+    /// </summary>
+    public int FireAnimFrame;
+
+    /// <summary>
     /// QC <c>.weapon_nextthink</c>: server time the scheduled <see cref="WeaponThink"/> fires (the animtime
     /// timer — e.g. the return-to-READY after a shot's anim, or the end of a raise/drop). 0 = none pending.
     /// </summary>

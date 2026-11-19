@@ -418,6 +418,19 @@ public class WepentViewStateTests : IDisposable
     }
 
     [Fact]
+    public void WepentResolver_StampsViewmodelFrame_Fire2ForAFire2Attack()
+    {
+        // The Shotgun melee commits WFRAME_FIRE2 (its 23-frame swing clip): the selector says 5, not fire 1.
+        var (p, st) = ArmedPlayer(Boot(), "shotgun");
+        st.State = WeaponFireState.InUse;
+        st.AttackFinished = 20f;
+        st.FireAnimFrame = Weapon.WFrameFire2;
+
+        WepentViewState got = WepentResolver.Resolve(p, _ => 0, now: 10f);
+        Assert.Equal(5, got.ViewmodelFrame);
+    }
+
+    [Fact]
     public void WepentResolver_StampsViewmodelFrame_ReloadSentinelTakesPriority()
     {
         // The QC WFRAME_RELOAD sentinel: a slot with a clip whose load went negative (-1 "needs reload" / mid-

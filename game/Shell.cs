@@ -647,6 +647,8 @@ public partial class Shell : Node
         // like DP — no vid_restart needed for the non-window-mode video cvars. Wired after boot-config load so
         // the bulk cfg exec doesn't re-apply per line.
         ClientSettings.InstallLiveVideoCvars(MenuState.Cvars);
+        // ...and the volumes (playtest #60): DP reads them every frame, so a slider is heard as it moves.
+        ClientSettings.InstallLiveAudioCvars(MenuState.Cvars);
         // QC `map`/`devmap`: in a running match this is a changelevel (keep mode + bots); at the menu it starts a
         // fresh listen server on the map then self-connects (the real "start a game" path).
         // ...unless Xonotic's own menu or a local Xonotic game is what is running: then "map" is that console's
@@ -886,6 +888,11 @@ public partial class Shell : Node
             MenuCommand.Run("menu_showhudexit");
             return;
         }
+        //   3. an in-world HUD UI that has the keyboard (quickmenu, maximized radar, minigame menu) closes, and only
+        //      that (playtest #82: Escape on the quickmenu used to close it on the press and then open the game
+        //      menu on the release). Not while a menu dialog is up: then the menu has the keys, as in DarkPlaces.
+        if (!_paused && _netGame is not null && _netGame.HandleHudEscape())
+            return;
 
         if (_paused)
         {
@@ -998,26 +1005,39 @@ public partial class Shell : Node
         SyncAutoPause();
     }
 
-    /// <summary>QoL auto-pause (#19): freeze a SOLO local game while the player can't act on it — the pause menu
-    /// is open, the console is open, or the window is unfocused/minimized. Gated on hosting a listen server with
-    /// NO remote clients (a real multiplayer server must keep running for them) and on <c>cl_autopause</c> != 0
-    /// (default on). The Shell owns <c>GetTree().Paused</c>: the match is <see cref="Node.ProcessModeEnum.Pausable"/>
-    /// while the Shell is <see cref="Node.ProcessModeEnum.Always"/>, so this keeps running to RELEASE the pause.</summary>
+    /// <summary>Xonotic's <c>sv_autopause</c> (#19, #81): freeze a SOLO local game while the player can't act on it
+    /// — the pause menu, the console or the chat prompt is open, or the window is unfocused/minimized. That is QC
+    /// Pause_TryPause (server/main.qc), which pauses while every real client holds BUTTON_CHAT, the bit DarkPlaces
+    /// sends while <c>key_dest != key_game || key_consoleactive || !vid_activewindow</c> (cl_input.c). Gated on
+    /// hosting a listen server with NO remote clients (a real multiplayer server must keep running for them) and on
+    /// <see cref="AutoPauseEnabled"/>. The Shell owns <c>GetTree().Paused</c>: the match is
+    /// <see cref="Node.ProcessModeEnum.Pausable"/> while the Shell is <see cref="Node.ProcessModeEnum.Always"/>, so
+    /// this keeps running to RELEASE the pause.</summary>
     private void SyncAutoPause()
     {
-        var cv = MenuState.Cvars;
-        // Treat an unset cvar as ON (default-enabled) so no registration is required for the default behaviour.
-        bool cvarOn = string.IsNullOrEmpty(cv.GetString("cl_autopause")) || cv.GetFloat("cl_autopause") != 0f;
         bool eligible = MatchRunning
             && _loadingScreen is null                        // not mid-load: pausing then would stall the handshake
             && (_netGame?.IsListenServer ?? false)
             && !(_netGame?.HasRemoteClients ?? false)
-            && cvarOn;
-        bool cantAct = _paused || ConsoleState.IsOpen || !_windowFocused;
+            && !(_netGame?.InIntermission ?? false)            // QC: sv_autopause && !intermission_running
+            && AutoPauseEnabled(MenuState.Cvars);
+        bool cantAct = _paused || ConsoleState.IsOpen || Game.Hud.ChatPrompt.IsOpen || !_windowFocused;
         bool want = eligible && cantAct;
         if (GetTree().Paused != want)
             GetTree().Paused = want;
     }
+
+    /// <summary>
+    /// Whether auto-pause is on. The authority is the SERVER's <c>sv_autopause</c> (xonotic-server.cfg: <c>seta
+    /// sv_autopause 1</c>; the listen host decides whether its world stops), unset meaning on. The port's earlier
+    /// spelling <c>cl_autopause</c> is still honoured as an off switch, because launch scripts and docs pass
+    /// <c>--cvar cl_autopause 0</c>: either one at 0 turns auto-pause off.
+    /// </summary>
+    internal static bool AutoPauseEnabled(VortexArena.Engine.Simulation.CvarService cv) =>
+        !IsExplicitZero(cv, "sv_autopause") && !IsExplicitZero(cv, "cl_autopause");
+
+    private static bool IsExplicitZero(VortexArena.Engine.Simulation.CvarService cv, string name) =>
+        !string.IsNullOrEmpty(cv.GetString(name)) && cv.GetFloat(name) == 0f;
 
     public override void _Process(double delta)
     {
@@ -1696,7 +1716,20 @@ public partial class Shell : Node
             _console.Print("editor: no map running — use `editor <map>`.");
             return;
         }
-        ChangeLevel(target, "editor");
+        // Open only something that exists: an installed map, or one saved from the editor (editor_save <name>
+        // writes a .vmap that may have no compiled bsp). A misspelt name used to come up as an empty flat floor
+        // with no document, which reads as the editor being broken rather than the name being wrong. Checked
+        // against the live search path, so a pack added with fs_rescan is openable at once.
+        var vfs = Menu.MenuState.Vfs;
+        string? error = VortexArena.Common.Menu.InstalledMaps.EditorOpenError(target,
+            stem => vfs is null || vfs.Exists($"maps/{stem}.bsp"),
+            stem => Vmap.VmapService.FindPackage(stem) is not null);
+        if (error is not null)
+        {
+            _console.Print(error);
+            return;
+        }
+        ChangeLevel(VortexArena.Common.Menu.InstalledMaps.Stem(target), "editor");
     }
 
     /// <summary>

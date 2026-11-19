@@ -115,9 +115,6 @@ public partial class ClientWorld : Node3D
     /// <summary>Per-player skeletal models (IQM + CPU upper/lower split + view-pitch aim), driven each frame.</summary>
     private readonly Dictionary<int, PlayerModel> _playerModels = new();
 
-    /// <summary>Per-player floating nameplates (ent_cs): a billboarded health/id label above the head.</summary>
-    private readonly Dictionary<int, Label3D> _nameplates = new();
-
     private int _chaseBodyId;
     private float _chaseBodyAlpha = 1f;
     private float _chaseBodyTargetAlpha = 1f;
@@ -304,6 +301,8 @@ public partial class ClientWorld : Node3D
         // host may set Assets before OR after _Ready, so wire it from both sites (null until _Ready ran).
         if (Lasers is not null)
             Lasers.TextureLoader = _assets.LoadTexture;
+        if (HookRope is not null)
+            HookRope.TextureLoader = _assets.LoadTexture; // particles/hook_* (the chain picture)
     }
 
     /// <summary>
@@ -525,6 +524,8 @@ public partial class ClientWorld : Node3D
         // renderers lease from — without it HookRopeRenderer gates on the null Lines and idles. Self-driving off
         // the ambient entity facade, exactly like Lasers/PortoPreview above (live on a listen host/demo).
         HookRope = new HookRopeRenderer { Name = "HookRope", Lines = CylindricLines };
+        if (_assets is not null)
+            HookRope.TextureLoader = _assets.LoadTexture;
         AddChild(HookRope);
 
         // Mirror in-process effect emissions (server/local gameplay calling EffectEmitter.Emit) onto the
@@ -658,7 +659,6 @@ public partial class ClientWorld : Node3D
             _entityNodes[entity.Index] = node;
 
             TryAttachModel(entity, node);
-            TryAttachNameplate(entity, node);
         }
         else
         {
@@ -667,39 +667,6 @@ public partial class ClientWorld : Node3D
 
         // Drive animation from the entity's frame/movement if it has an animator.
         UpdateAnimatorState(entity);
-        UpdateNameplate(entity);
-    }
-
-    /// <summary>Add a floating health/id nameplate above a remote player (ent_cs). Skipped for non-players.</summary>
-    private void TryAttachNameplate(Entity entity, EntityNode node)
-    {
-        if (!entity.ClassName.Equals("player", StringComparison.OrdinalIgnoreCase))
-            return;
-        var plate = new Label3D
-        {
-            Name = "Nameplate",
-            Position = new Vector3(0f, 60f, 0f),  // above the head (Godot up)
-            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
-            NoDepthTest = true,
-            PixelSize = 0.03f,
-            FontSize = 48,
-            OutlineSize = 8,
-            Modulate = Colors.White,
-            Text = "",
-        };
-        node.AddChild(plate);
-        _nameplates[entity.Index] = plate;
-    }
-
-    /// <summary>Refresh a player's nameplate text (health) each update; hide it when the player is dead.</summary>
-    private void UpdateNameplate(Entity entity)
-    {
-        if (!_nameplates.TryGetValue(entity.Index, out Label3D? plate) || !GodotObject.IsInstanceValid(plate))
-            return;
-        bool dead = entity.Health <= 0f && entity.MaxHealth > 0f;
-        plate.Visible = !dead;
-        if (!dead)
-            plate.Text = $"♥ {Mathf.Max(0, (int)entity.Health)}";
     }
 
     /// <summary>An entity left the snapshot / was freed. Tears down its visual(s).</summary>
@@ -716,7 +683,6 @@ public partial class ClientWorld : Node3D
         _attachedDamage.Remove(index);
         _frameDriven.Remove(index);
         _graceHidden.Remove(index); // a net id is reusable — a stale grace mark would start the next tenant hidden
-        _nameplates.Remove(index); // the Label3D is a child of the node — freed with it below
         StopLoopsForEntity(index); // end any looping sounds this entity emitted (Arc beam, vehicle engine)
 
         // Tear down the CSQC-model effect state (stop the jetpack loop, free the dynamic light).
@@ -828,7 +794,7 @@ public partial class ClientWorld : Node3D
     /// <summary>
     /// Tear down the entity's model visual(s) and re-run the attach. Used when an ASYNC player-model resolve
     /// settles on a different outcome than first assumed (the streamed parse found a non-skeletal model → fall
-    /// back to the MD3/static path) or the entity's model changed while a resolve was in flight. The nameplate
+    /// back to the MD3/static path) or the entity's model changed while a resolve was in flight. The node
     /// survives; the freed model children invalidate the cached csqc mesh list on the next effects pass.
     /// </summary>
     public void RebuildEntityModel(Entity entity)
@@ -838,7 +804,7 @@ public partial class ClientWorld : Node3D
         if (!_entityNodes.TryGetValue(entity.Index, out EntityNode? node) || !GodotObject.IsInstanceValid(node))
             return;
 
-        // Release the per-entity render state exactly like OnEntityRemove, but keep the node + nameplate.
+        // Release the per-entity render state exactly like OnEntityRemove, but keep the node.
         if (_csqc.Remove(entity.Index, out CsqcState? cs))
         {
             CsqcModelEffects.Release(entity, cs.Effects, Api.Services?.Sound);
@@ -850,8 +816,6 @@ public partial class ClientWorld : Node3D
 
         foreach (Node child in node.GetChildren())
         {
-            if (child is Label3D)
-                continue; // the floating nameplate isn't part of the model
             node.RemoveChild(child);
             child.QueueFree();
         }
@@ -2462,20 +2426,11 @@ public partial class ClientWorld : Node3D
             // Follow the entity transform (Quake → Godot), like EntityNode.
             vis.Position = Coords.ToGodot(e.Origin);
             // The raptor flight controller (Raptor.Frame) writes the full nose-down/up PITCH (Angles.X) +
-            // bank-on-strafe ROLL (Angles.Z) into the entity Angles, not just yaw — so for a pitched/rolled
-            // airframe build the full orientation the SAME way EntityNode does (AngleVectors → Coords.ToGodot
-            // columns basis: X=fwd, Y=up, Z=right). Gated to entities that actually carry pitch/roll so the
-            // long-standing yaw-only path stays byte-identical for every other vehicle (racer/spiderbot/
-            // bumblebee read flat).
-            if (e.Angles.X != 0f || e.Angles.Z != 0f)
-            {
-                VortexArena.Common.Math.QMath.AngleVectors(e.Angles, out NVec3 fwd, out NVec3 right, out NVec3 up);
-                vis.Basis = new Basis(Coords.ToGodot(fwd), Coords.ToGodot(up), Coords.ToGodot(right));
-            }
-            else
-            {
-                vis.Rotation = new Vector3(0f, -Mathf.DegToRad(e.Angles.Y), 0f);
-            }
+            // bank-on-strafe ROLL (Angles.Z) into the entity Angles, not just yaw — so build the full orientation
+            // the SAME way EntityNode does (Coords.EntityBasis: DP's entity matrix, alias-model pitch reversal
+            // included). The old yaw-only branch `Rotation.Y = -yaw` mirrored every flat vehicle's heading
+            // (playtest-bugs #76).
+            vis.Basis = Coords.EntityBasis(e.Angles, e.Model);
 
             float speed01 = Mathf.Clamp(
                 Mathf.Sqrt(e.Velocity.X * e.Velocity.X + e.Velocity.Y * e.Velocity.Y) / speedRef, 0f, 1f);

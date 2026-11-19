@@ -271,6 +271,8 @@ public static class Teleporters
     {
         if (!TeleportActive(self, toucher))
             return;
+        if (!MapMover.ExactTriggerTouch(self, toucher)) // QC EXACTTRIGGER_TOUCH (teleport.qc:56)
+            return;
 
         // QC teleport.qc:59-61 (#ifdef SVQC): a hooked player drops the grappling hook on teleport so the chain
         // doesn't stay latched through the portal. Server-only; the touch path is always authoritative here.

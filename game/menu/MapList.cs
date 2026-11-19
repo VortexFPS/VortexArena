@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using VortexArena.Common.Services;
+using VortexArena.Common.Menu;
 
 namespace VortexArena.Game.Menu;
 
@@ -48,14 +49,7 @@ public static class MapList
         {
             foreach (string vpath in vfs.Find("maps/", "bsp"))
             {
-                // LoadMap resolves maps/<name>.bsp. Nested brush and prefab BSPs are outside the map glob.
-                string name = vpath["maps/".Length..];
-                if (name.Contains('/'))
-                    continue;
-                if (name.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase))
-                    name = name[..^".bsp".Length];
-                // Skip brush/prefab box models (b_*.bsp) the compiler ships; they aren't playable maps.
-                if (name.Length > 0 && !name.StartsWith("b_", StringComparison.OrdinalIgnoreCase))
+                if (InstalledMaps.BspName(vpath) is { } name)
                     found.Add(name);
             }
         }

@@ -172,6 +172,12 @@ perturbing the frames it existed to measure. It now defaults **off**.
   +1ms+ p50 on debug) — the report's `draws p50` line + the diff's render-load gate flag it. Since 2026-07-06
   perf-run **pins `cl_portal_render 0` by default**; portal-cost cells opt back in with
   `-Cvar "cl_portal_render 1"` + `-Cvar "wz_portal_lookat 1"` (always face one → deterministic load).
+- **Captures from before 2026-10-31 drew less of big maps.** Until then the native camera ran at Godot's
+  default `Far` of 4000 qu, so on open maps (space-elevator, geoplanetary — world diagonals up to ~15500 qu)
+  everything past 4000 qu was clipped and not drawn. The far plane is now DP's `r_farclip_base` (65536) +
+  world radius × `r_farclip_world` (2) × 2 (playtest-bugs #79), so a draws/GPU delta on an open-map spawn
+  across that date is the extra distance being rendered, not a regression. `r_farclip_base 4000; r_farclip_world 0`
+  (applied at the next map load) reproduces the old view for an A/B.
 - **New per-frame system ⇒ ships with a `Prof.Sample` scope** (and its name added to
   `FrameProfiler.TopLevelNodeScopes`), or it will surface as `(unscoped)`/`proc:other` in the next hunt.
   The session summary prints a "scope coverage debt" line when that happens.

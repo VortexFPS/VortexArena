@@ -190,15 +190,37 @@ public class ServerListInfoTests
     [Fact]
     public void Override_With_Categories_Off_Collapses_Everything_But_Favorites_And_Recommended()
     {
-        // The shipped default (menu_slist_categories 0): one "Servers" heading, plus the two that stay apart.
+        // The shipped default (menu_slist_categories 0): one "Servers" heading, plus the two that stay apart —
+        // and Vortex's stock-Xonotic heading, which must never fold away (playtest-bugs #91).
         foreach (ServerCategory cat in Enum.GetValues<ServerCategory>())
         {
             ServerCategory folded = ServerListInfo.ApplyOverride(cat, categoriesEnabled: false, null);
-            ServerCategory expected = cat is ServerCategory.Favorited or ServerCategory.Recommended
+            ServerCategory expected = cat is ServerCategory.Favorited or ServerCategory.Recommended or ServerCategory.Xonotic
                 ? cat
                 : ServerCategory.Servers;
             Assert.Equal(expected, folded);
         }
+    }
+
+    [Fact]
+    public void Stock_Xonotic_Servers_Get_Their_Own_Labelled_Category()
+    {
+        // A queried server without the Vortex key sorts under its own heading, whatever mod it reports and
+        // however well it would do in the recommendation vote; a bookmark still wins.
+        var stock = Server() with { IsStockXonotic = true };
+        Assert.Equal(ServerCategory.Xonotic, ServerListInfo.CategoryForEntry(stock, StockRules));
+        Assert.Equal(ServerCategory.Xonotic,
+            ServerListInfo.CategoryForEntry(Server(mod: "xdf", promoted: true) with { IsStockXonotic = true }, StockRules));
+        Assert.Equal(ServerCategory.Favorited,
+            ServerListInfo.CategoryForEntry(Server(favorite: true) with { IsStockXonotic = true }, StockRules));
+        // A Vortex server (or an unqueried row) is categorised exactly as before.
+        Assert.Equal(ServerCategory.Normal, ServerListInfo.CategoryForEntry(Server(mod: "xonotic"), StockRules with { Mode = 0 }));
+
+        Assert.Equal("Xonotic Servers (legacy mode)", ServerListInfo.CategoryTitle(ServerCategory.Xonotic));
+        Assert.Equal(ServerCategory.Xonotic,
+            ServerListInfo.ParseCategoryKey(ServerListInfo.CategoryKey(ServerCategory.Xonotic)));
+        // Below every Vortex category, so Vortex servers list first.
+        Assert.Equal(ServerCategory.Xonotic, Enum.GetValues<ServerCategory>()[^1]);
     }
 
     [Fact]

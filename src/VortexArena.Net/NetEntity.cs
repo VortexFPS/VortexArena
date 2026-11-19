@@ -161,6 +161,13 @@ public enum EntityField : uint
     // majority of entities). Bit 26, verified free.
     ColormapOverride = 1 << 26,
     CountdownIndicator = 1 << 27,
+
+    // The QC .scale render scale (DP entity_state_t.scale, protocol 5+: one byte, scale * 16 truncated — the 1/16
+    // grid Base's FLAG_SCALE 0.5625 = 9/16 is chosen for). Before this field the port could not show any entity
+    // scale on a client: the CTF flag drew at full size (Base 9/16), the capture shield and dom_controlpoint
+    // ignored their 0.5 / 0.6, and misc_gamemodel "scale"/"modelscale" props drew unscaled (playtest-bugs #80,
+    // #4). Wire 0 = the default scale 1 (DP's 16), so an unscaled entity leaves the bit clear.
+    Scale = 1 << 28,
 }
 
 /// <summary>
@@ -188,6 +195,9 @@ public struct NetEntityState
     public int Colors;           // [r15 #43] packed 16*shirt+pants clientcolors (0 = colorless, bit stays clear)
     public CountdownIndicatorState CountdownIndicator;
     public int ColorMapOverride; // full Entity.ColorMapOverride for RENDER_COLORMAPPED non-players (0 = none)
+    /// <summary>Render scale in DP's byte form: scale * 16 truncated to 1..255; <b>0 = the default 1</b> (not sent).
+    /// See <see cref="EncodeScale"/> / <see cref="DecodeScale"/>.</summary>
+    public byte Scale;
     public int Health;           // for nameplates / the owner HUD (0 when not applicable)
     public int Armor;            // [T68] QC entcs RES_ARMOR slice — the shownames teammate status bar (0 when N/A)
 
@@ -335,6 +345,25 @@ public struct NetEntityState
     /// </summary>
     public VehicleViewState VehicleView;
 
+    /// <summary>
+    /// QC <c>.scale</c> → the wire byte, as DarkPlaces' <c>SV_PrepareEntityForSending</c> does it (sv_send.c):
+    /// <c>(int)(scale * 16)</c>, bounded to 255, with an unset scale (0) meaning 1. The port's wire spends 0 on the
+    /// default so an unscaled entity costs nothing; DP's 16 (= 1.0) therefore also encodes as 0, and a nonzero
+    /// scale under 1/16 (DP's byte 0, an invisible model) is kept at the smallest drawable step, 1/16.
+    /// </summary>
+    public static byte EncodeScale(float scale)
+    {
+        if (!(scale != 0f) || !float.IsFinite(scale))
+            return 0;
+        int i = (int)(scale * 16f);
+        if (i == 16)
+            return 0;
+        return (byte)System.Math.Clamp(i, 1, 255);
+    }
+
+    /// <summary>The wire byte → the client's <c>Entity.ScaleFactor</c> (0 = unset, which renders at 1).</summary>
+    public static float DecodeScale(byte wire) => wire == 0 ? 0f : wire / 16f;
+
     /// <summary>A fresh state carrying just an id (the implicit baseline for a never-seen entity — a "spawn").</summary>
     public static NetEntityState Empty(int entNum) => new() { EntNum = entNum, SwitchWeapon = -1, SwitchingWeapon = -1, VehicleView = VehicleViewState.None };
 
@@ -354,6 +383,7 @@ public struct NetEntityState
         if (baseline.Colors != current.Colors) m |= EntityField.Colors;
         if (baseline.CountdownIndicator != current.CountdownIndicator) m |= EntityField.CountdownIndicator;
         if (baseline.ColorMapOverride != current.ColorMapOverride) m |= EntityField.ColormapOverride;
+        if (baseline.Scale != current.Scale) m |= EntityField.Scale;
         if (baseline.Health != current.Health) m |= EntityField.Health;
         if (baseline.Armor != current.Armor) m |= EntityField.Armor;
         if (baseline.Alpha != current.Alpha) m |= EntityField.Alpha;
@@ -470,6 +500,7 @@ public static class EntityStateCodec
             w.WriteByte(current.CountdownIndicator.Digit);
             w.WriteSByte(current.CountdownIndicator.TargetTeam);
         }
+        if ((mask & EntityField.Scale) != 0) w.WriteByte(current.Scale);
         if ((mask & EntityField.Health) != 0) w.WriteShort(current.Health);
         if ((mask & EntityField.Armor) != 0) w.WriteShort(current.Armor);
         if ((mask & EntityField.Alpha) != 0) w.WriteByte(current.Alpha & 0xFF); // 0 = opaque; 1..254 = alpha/255; 255 = hidden (-1)
@@ -566,6 +597,7 @@ public static class EntityStateCodec
         if ((mask & EntityField.ColormapOverride) != 0) s.ColorMapOverride = r.ReadUShort();
         if ((mask & EntityField.CountdownIndicator) != 0)
             s.CountdownIndicator = new((byte)r.ReadByte(), r.ReadSByte());
+        if ((mask & EntityField.Scale) != 0) s.Scale = (byte)r.ReadByte();
         if ((mask & EntityField.Health) != 0) s.Health = r.ReadShort();
         if ((mask & EntityField.Armor) != 0) s.Armor = r.ReadShort();
         if ((mask & EntityField.Alpha) != 0) s.Alpha = r.ReadByte();

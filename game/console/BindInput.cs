@@ -225,6 +225,19 @@ public static class BindInput
                 if (kk != null)
                     BindTable.HandleBind(kk, k.Pressed, runCommand);
                 break;
+            case InputEventMouseButton { ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } wheel:
+                // DP vid_sdl.c: one MWHEELUP/MWHEELDOWN press + release per WHOLE notch. Godot's own release
+                // (sent straight after each wheel press) is dropped; the pairs are made here.
+                if (!wheel.Pressed)
+                    return;
+                bool up = wheel.ButtonIndex == MouseButton.WheelUp;
+                string wk = up ? "MWHEELUP" : "MWHEELDOWN";
+                for (int n = Wheel.Clicks(up, wheel.Factor); n > 0; n--)
+                {
+                    BindTable.HandleBind(wk, true, runCommand);
+                    BindTable.HandleBind(wk, false, runCommand);
+                }
+                break;
             case InputEventMouseButton m:
                 string? mk = MouseString(m.ButtonIndex);
                 if (mk != null)
@@ -232,6 +245,9 @@ public static class BindInput
                 break;
         }
     }
+
+    /// <summary>Whole wheel notches from Godot's fractional wheel events (see <see cref="WheelAccumulator"/>).</summary>
+    private static readonly WheelAccumulator Wheel = new();
 
     /// <summary>
     /// Resolve a fresh key/mouse PRESS to the console command bound to that key (DP key→bind lookup), or null for
@@ -310,6 +326,8 @@ public static class BindInput
         MouseButton.Xbutton2 => "MOUSE5",
         MouseButton.WheelUp => "MWHEELUP",
         MouseButton.WheelDown => "MWHEELDOWN",
+        // The horizontal wheel (WheelLeft/WheelRight) stays unbound, as in DP ("TODO support wheel x direction",
+        // vid_sdl.c), and Godot reports no button past XBUTTON2, so DP's MOUSE6..MOUSE16 cannot occur either.
         _ => null,
     };
 

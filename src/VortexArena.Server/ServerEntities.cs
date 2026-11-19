@@ -68,6 +68,10 @@ public sealed class ServerEntityService : IEntityService
     /// contract this is the NON-CLIENT table — players are not merged (they live in <see cref="Players"/>).</summary>
     public IReadOnlyList<Entity>? All => _inner.All;
 
+    /// <summary>Brush models live in the engine's model catalog — delegate (<see cref="IEntityService.BoxTouchesBrushModel"/>).</summary>
+    public bool BoxTouchesBrushModel(Entity trigger, Vector3 mins, Vector3 maxs)
+        => _inner.BoxTouchesBrushModel(trigger, mins, maxs);
+
     public Entity Spawn() => _inner.Spawn();
 
     public void Remove(Entity e)

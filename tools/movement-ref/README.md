@@ -51,6 +51,23 @@ committed, so the tests run without the C toolchain; regenerate only when the re
 friction, the jump arc + landing, strafe-jump and CPM air-control speed gain, auto-bhop, gravity
 integration, ramp clipping, stair stepping, and water.
 
+Added 2026-10-31 (playtest 2026-07-31 #68 and #71), all at the live 1/64 s tick:
+
+- `step_jump_up` — rising (vz 200) into a 24u step face: the in-loop step-up is positional and keeps velocity.z.
+- `wall_scrape_stepdown` — running along a tall wall off a 16u drop: a rejected in-loop step (the wall) must not
+  report a step, so the step-down still glues the player to the lower floor.
+- `strafe_bhop_side_5s`, `strafe_bhop_fwdside_5s` — 5 s of held-jump strafing (D, and W+D) with the yaw chosen
+  per tick by a greedy speed-maximising search in the reference (`greedy_strafe`); the chosen yaw is stored as
+  ordinary input and replayed by the C# test. End speeds: 712.1 and 862.0 u/s.
+
+`MovementParityTests.Port_Matches_DarkplacesReference_UnderShippedConfig` replays a subset with the whole shipped
+config chain loaded, not the compiled-in defaults — the plain test cannot see a `.cfg` value that diverges.
+
+The same day fixed two step-logic transcription errors this reference shared with the port (both now follow
+movetypes.qc / walk.qc line for line): a rejected in-loop step no longer sets blocked-flag 2, and an accepted
+explicit step-up falls through to the move-down instead of returning. The ten original fixtures regenerate
+byte-identical (modulo line endings).
+
 ## Cross-checking the reference against the live engine
 
 `verify-against-dp.md` records a live-engine validation: boot `Base/darkplaces/darkplaces-sdl.exe`

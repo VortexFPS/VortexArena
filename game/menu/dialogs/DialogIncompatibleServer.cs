@@ -6,11 +6,11 @@ namespace VortexArena.Game.Menu;
 /// The notice shown when the player tries to join a server that turns out to be running stock Xonotic.
 ///
 /// <para>The server browser queries the same dpmaster instances Xonotic itself uses, so almost every row in
-/// the internet list is a Darkplaces server running the original QuakeC game. VortexArena's netcode is a
-/// ground-up reimplementation — different handshake, different snapshot format, different entity protocol —
-/// so connecting to one could not do anything but fail, and it would fail as a timeout rather than as
-/// anything the player could act on. Those servers are still listed (they exist, and dropping them would
-/// read as a broken browser), so this is where the truth gets told instead.</para>
+/// the internet list is a Darkplaces server running the original QuakeC game, listed under its own
+/// "Xonotic Servers (legacy mode)" heading. The native netcode shares no wire format with them; legacy
+/// compatibility mode joins them, but only with Xonotic's own data configured (<c>legacy_xonotic_data</c>).
+/// Without it, connecting could not do anything but fail — as a timeout rather than as anything the player
+/// could act on — so this is where the player is told what to set up instead.</para>
 ///
 /// <para>Presented as the old QuitDialog was: full-rect with a dimmed backdrop over the browser, so it
 /// reads as a modal rather than another screen on the stack.</para>

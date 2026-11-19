@@ -177,7 +177,7 @@ public partial class ProjectileRenderer : Node3D
         var predictor = new ProjectilePredictor();
         predictor.Spawn(entity.Origin, entity.Velocity);
         // Orient after entering the tree (LookAt works on the global transform).
-        OrientToVelocity(root, entity);
+        OrientToVelocity(root, entity, null, type);
 
         // Looping fly sound (QC loopsound): rocket/electro/fireball/seeker/vehicle rockets.
         if (LoopSounds && !string.IsNullOrEmpty(desc.LoopSound))
@@ -364,7 +364,7 @@ public partial class ProjectileRenderer : Node3D
                     v.Root.Position = v.Root.Position.Lerp(target, Mathf.Clamp(delta * 30f, 0f, 1f));
             }
 
-            OrientToVelocity(v.Root, v.Entity, v.Root.Position - v.LastPos);
+            OrientToVelocity(v.Root, v.Entity, v.Root.Position - v.LastPos, v.Type);
             v.LastPos = v.Root.Position;
 
             if (v.Type is PType.Crylink or PType.CrylinkBouncing)
@@ -825,8 +825,16 @@ public partial class ProjectileRenderer : Node3D
     /// orthonormal basis with +X along velocity and a world-up-stable cross for the other two axes. The body's
     /// accumulated roll lives on the child, so re-setting the root basis here every frame never wipes the spin.
     /// </summary>
-    private static void OrientToVelocity(Node3D root, Entity e, Vector3? motionFallback = null)
+    private static void OrientToVelocity(Node3D root, Entity e, Vector3? motionFallback = null, PType type = PType.None)
     {
+        // A placed mine (W_MineLayer_Stick: angles = vectoangles(-trace_plane_normal), MOVETYPE_NONE/FOLLOW) and a
+        // latched grappling hook stay networked as projectiles once they stop; at rest they face along their
+        // server ANGLES, not their (zero) velocity or a riding platform's motion.
+        if (type is PType.Mine or PType.GrapplingHook && e.Velocity.LengthSquared() < 1f)
+        {
+            OrientFromAngles(root, e.Angles);
+            return;
+        }
         Vector3 vel = Coords.ToGodot(e.Velocity);
         if (vel.LengthSquared() < 1f && motionFallback is { } m && m.LengthSquared() > 1e-4f)
             vel = m;
@@ -837,6 +845,19 @@ public partial class ProjectileRenderer : Node3D
         Vector3 z = x.Cross(upRef).Normalized();                                         // a transverse axis
         Vector3 y = z.Cross(x).Normalized();                                             // completes RH frame
         root.Basis = new Basis(x, y, z); // columns (X,Y,Z); x×y = z, orthonormal — preserves root.Position
+    }
+
+    /// <summary>
+    /// Orient a model from QC entity angles the way DarkPlaces draws an alias model (cl_main.c: "if model is
+    /// alias ... reverse pitch direction"): QC <c>vectoangles</c> pitch is up-positive, the render matrix is
+    /// down-positive, so the pitch is negated before AngleVectors. Model axes: +X forward, +Y left, +Z up →
+    /// Godot columns ToGodot(forward), ToGodot(up), ToGodot(right) (the FirstPersonView convention).
+    /// </summary>
+    private static void OrientFromAngles(Node3D root, NVec3 angles)
+    {
+        VortexArena.Common.Math.QMath.AngleVectors(new NVec3(-angles.X, angles.Y, angles.Z),
+            out NVec3 fwd, out NVec3 right, out NVec3 up);
+        root.Basis = new Basis(Coords.ToGodot(fwd), Coords.ToGodot(up), Coords.ToGodot(right));
     }
 
     /// <summary>Presence link for a projectile entity (so the sim can reach its node, like EntityNode).</summary>

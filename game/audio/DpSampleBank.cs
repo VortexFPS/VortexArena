@@ -3,7 +3,6 @@
 // decoded by the engine's Vorbis decoder, run at the file's own rate so that what the mixer resamples is
 // the same PCM DarkPlaces holds.
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using Godot;
@@ -14,7 +13,7 @@ namespace VortexArena.Game.Audio;
 /// <summary>
 /// The samples of one set of game data (the native game's, or a legacy session's). <see cref="Get"/>
 /// answers at once with a <see cref="DpSfx"/> whose format is known; the PCM of a compressed file is
-/// filled in by a worker and the mixer holds a channel until its first frames are there (a sample that was
+/// filled in on <see cref="EngineDecodes"/> and the mixer holds a channel until its first frames are there (a sample that was
 /// precached is decoded long before it is played, as in DarkPlaces, which decodes at precache).
 /// </summary>
 public sealed class DpSampleBank
@@ -36,8 +35,6 @@ public sealed class DpSampleBank
     private readonly Action<string>? _warn;
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
     private readonly object _lock = new();
-    private static readonly BlockingCollection<Action> s_background = new();
-    private static int s_workers;
     private long _decodedBytes;
     private int _decoded;
 
@@ -56,6 +53,12 @@ public sealed class DpSampleBank
     /// tries the .ogg beside it as DarkPlaces does.
     /// </summary>
     public string? DefaultExtension { get; init; }
+
+    /// <summary>
+    /// The one thread every decode through the engine's Vorbis decoder runs on: every bank's, and the legacy
+    /// presentation's PCM cache (<c>GodotLegacyPresentation.Decoded</c>). See <see cref="SerialDecodeQueue"/>.
+    /// </summary>
+    public static SerialDecodeQueue EngineDecodes { get; } = new("EngineDecode");
 
     /// <summary>Compressed samples decoded so far, and the bytes of PCM they take.</summary>
     public int DecodedSamples => Volatile.Read(ref _decoded);
@@ -84,20 +87,16 @@ public sealed class DpSampleBank
             if (forPlay)
             {
                 if (Interlocked.Exchange(ref entry.DecodeState, 2) != 2)
-                {
-                    // An offline capture is deterministic: the sample is whole before its channel starts.
-                    if (DpAudio.OfflineFrames > 0) Decode(entry);
-                    else ThreadPool.QueueUserWorkItem(_ => Decode(entry));
-                }
-                else if (DpAudio.OfflineFrames > 0) SpinWait.SpinUntil(() => entry.Sfx.Complete, 5000);
+                    EngineDecodes.Post(() => Decode(entry), urgent: true);
+                // An offline capture is deterministic: the sample is whole before its channel starts.
+                if (DpAudio.OfflineFrames > 0) SpinWait.SpinUntil(() => entry.Sfx.Complete, 5000);
             }
             else if (entry.Sfx.LengthSeconds <= PrecacheMaxSeconds && Interlocked.CompareExchange(ref entry.DecodeState, 1, 0) == 0)
             {
-                EnsureWorkers();
-                s_background.Add(() =>
+                EngineDecodes.Post(() =>
                 {
                     if (Interlocked.Exchange(ref entry.DecodeState, 2) != 2) Decode(entry);
-                });
+                }, urgent: false);
             }
         }
         return entry.Sfx;
@@ -142,23 +141,6 @@ public sealed class DpSampleBank
             _warn?.Invoke($"Could not find sound \"{name}\"");
         }
         return new Entry { Sfx = sfx, Ogg = ogg };
-    }
-
-    private static void EnsureWorkers()
-    {
-        if (Interlocked.CompareExchange(ref s_workers, 1, 0) != 0) return;
-        for (int i = 0; i < 2; i++)
-        {
-            System.Threading.Thread worker = new(() =>
-            {
-                foreach (Action job in s_background.GetConsumingEnumerable())
-                {
-                    try { job(); }
-                    catch (Exception e) when (e is not OutOfMemoryException) { }
-                }
-            }) { IsBackground = true, Name = "DpSampleDecode" + i, Priority = ThreadPriority.BelowNormal };
-            worker.Start();
-        }
     }
 
     // The whole file through the engine's Vorbis decoder. Its playback resamples to the audio server's rate;

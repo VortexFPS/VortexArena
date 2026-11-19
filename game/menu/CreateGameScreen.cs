@@ -373,6 +373,11 @@ public partial class CreateGameScreen : MenuScreen
             MenuState.Cvars.MarkArchived("g_maplist");
     }
 
+    // An `fs_rescan` typed while this screen is open (the console sits over the menu) changes what is
+    // installed; without this the list kept showing the old set until the gametype or the filter changed.
+    public override void _EnterTree() => MenuState.ContentRescanned += RefilterMaps;
+    public override void _ExitTree() => MenuState.ContentRescanned -= RefilterMaps;
+
     /// <summary>Rebuild the visible map rows from the gametype + text filter (QC refilter).</summary>
     private void RefilterMaps()
     {

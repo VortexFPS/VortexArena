@@ -134,6 +134,7 @@ if $do_smoke; then
             grep -aE "MapLoader|waypoints for|handshake accepted|dedicated slim" "$log" || true
             grep -aq "MapLoader"          "$log" || { tail -40 "$log"; fail "host smoke: map never loaded ([MapLoader] missing)"; }
             grep -aq "waypoints for"      "$log" || { tail -40 "$log"; fail "host smoke: bots never filled ([bots] waypoints missing)"; }
+            grep -aFq "[NetGame] listen server on 127.0.0.1:" "$log" || fail "host smoke: listen banner missing"
             grep -aq "handshake accepted" "$log" || { tail -40 "$log"; fail "host smoke: client never connected (handshake missing)"; }
             # Dedicated-slim (docs/RUNNING.md "Dedicated server"): a headless host must NOT pay the client asset
             # pipeline (measured 4.9 GB -> 0.58 GB peak WS). If this line vanishes, the slim gate regressed silently.
@@ -158,6 +159,8 @@ if $do_smoke; then
             echo "hard errors: $d_errors | warnings: $(grep -c 'WARNING:' "$dlog" || true)"
             grep -aE "DEDICATED:|players:|waypoints for" "$dlog" || true
             grep -aq "DEDICATED: no local client" "$dlog" || { tail -40 "$dlog"; fail "dedicated smoke: client-less mode did not engage"; }
+            grep -aFq "[NetGame] dedicated server listening on UDP 26099 " "$dlog" || fail "dedicated smoke: dedicated banner missing"
+            grep -aFq "self-connecting" "$dlog" && fail "dedicated smoke: printed a listen-host banner"
             # The load-bearing assertion: a dedicated host must NOT connect a loopback client.
             grep -aq "handshake accepted" "$dlog" && { tail -40 "$dlog"; fail "dedicated smoke: a local client connected (DS-1 regressed — the phantom slot is back)"; }
             grep -aq "waypoints for" "$dlog" || { tail -40 "$dlog"; fail "dedicated smoke: bots never filled (bot_join_empty gate?)"; }

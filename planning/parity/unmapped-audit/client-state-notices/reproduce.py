@@ -273,7 +273,7 @@ def run_native(godot, out):
     server_log = out / "native-server.log"
     server = spawn(command, project, server_log, profile(out / "native-server"))
     try:
-        wait_log(server, server_log, "listen server on")
+        wait_log(server, server_log, "dedicated server listening on UDP")
         for role, delay in CASES.items():
             env = profile(out / f"native-{role}")
             env["VORTEX_NOTICE_PROBE_DELAY"] = str(delay)

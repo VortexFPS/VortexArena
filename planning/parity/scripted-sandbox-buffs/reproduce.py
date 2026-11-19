@@ -233,7 +233,7 @@ def run(args, engine, data, port, first_display):
             shutil.copyfile(args.original_key_users / "server-user/key_0.d0si", userdir / "key_0.d0si")
         host = paired.start(stack, server_cmd, host_log, env | {"VORTEX_USERDIR": str(folder / "server-user"),
                                                                "XDG_DATA_HOME": str(folder / "server-xdg")})
-        paired.wait_log(host, host_log, r"listen server on 127\.0\.0\.1|Server listening on address 127\.0\.0\.1")
+        paired.wait_log(host, host_log, r"dedicated server listening on UDP" if native else r"Server listening on address 127\.0\.0\.1")
         all_commands = {"server": server_cmd, "cvars": cvars, "input_binds": COMMAND_KEYS | {"+button8": "v"}}
         for index, role in enumerate(("owner", "guest")):
             display = f":{first_display + index}"

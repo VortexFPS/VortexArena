@@ -145,6 +145,18 @@ public sealed class ConsoleCommands
         _interp.RegisterCommand("bindlist", _ => CmdBindList(),
             "list every bound key and the command it runs");
 
+        // DP cl_input.c IN_*Down / IN_*Up: the held buttons are console commands too. `+jump` typed holds the
+        // button as if one more key did; `-jump` typed lets go however many keys hold it (KeyUp's "unsticking"
+        // case). An argument is the key that pressed it, the form DP's own Key_Event sends ("+jump 32").
+        foreach (string name in BindTable.ButtonNames)
+        {
+            string press = "+" + name, release = "-" + name;
+            _interp.RegisterCommand(press, a => BindTable.ButtonCommand(press, KeyArgument(a)),
+                $"engine button: hold {name} (released by -{name})");
+            _interp.RegisterCommand(release, a => BindTable.ButtonCommand(release, KeyArgument(a)),
+                $"engine button: release {name}; with no key named, whatever holds it");
+        }
+
         // `maxplayers` is already on the interpreter (ConfigLoader wires it before the cfg tree execs, since
         // xonotic-server.cfg:31 uses it). Re-register with the CONSOLE's print sink so a typed `maxplayers`
         // reports into the console instead of only the log — same handler, same ServerSlots state.
@@ -588,6 +600,9 @@ public sealed class ConsoleCommands
         // join the tail so both `bind x "+forward"` (one token) and `bind x say hi` (many) work.
         BindTable.Bind(key, JoinTail(a, 2));
     }
+
+    /// <summary>The key a <c>+button</c>/<c>-button</c> command names, or null when typed bare (DP <c>k = -1</c>).</summary>
+    private static string? KeyArgument(IReadOnlyList<string> a) => a.Count >= 2 && a[1].Length > 0 ? a[1] : null;
 
     private void CmdBindList()
     {

@@ -1559,19 +1559,26 @@ public sealed class PlayerPhysics : IPlayerPhysics
             // Port extension: this explicit up/forward step just RE-ADDED start_velocity.z (line above), so it is the
             // other place a step-up carries upward velocity through. Clamp it the same way (no-op at stock defaults).
             ApplyStepUpSpeedClamp(player, mp);
-            return;
-        }
 
-        // ===== step-down (walk.qc tail): keep the player glued to the ground walking down stairs/slopes =====
-        bool skip =
-            mp.StepDown == 0
-            || player.WaterLevel >= WaterLevelSubmerged
-            || startVelocity.Z >= (1f / 32f)
-            || !oldOnGround
-            || (player.Flags & EntFlags.OnGround) != 0
-            || (mp.StepDownMaxSpeed != 0f && startVelocity.Length() >= mp.StepDownMaxSpeed && !player.OnSlick);
-        if (skip)
-            return;
+            // NO return: walk.qc:146-170 (and DP SV_WalkMove) fall through from an accepted step-up into the
+            // move-down below, which settles the hull onto the step top or, failing good ground, reverts to the
+            // original move. (Unreachable for the player at stock settings — see FlyMove's rejected-step note —
+            // but kept line-for-line.)
+        }
+        else
+        {
+            // ===== step-down (walk.qc tail): keep the player glued to the ground walking down stairs/slopes =====
+            // walk.qc:153 — the skip test is the `else if` of the step branch, so it gates only the no-step case.
+            bool skip =
+                mp.StepDown == 0
+                || player.WaterLevel >= WaterLevelSubmerged
+                || startVelocity.Z >= (1f / 32f)
+                || !oldOnGround
+                || (player.Flags & EntFlags.OnGround) != 0
+                || (mp.StepDownMaxSpeed != 0f && startVelocity.Length() >= mp.StepDownMaxSpeed && !player.OnSlick);
+            if (skip)
+                return;
+        }
 
         Vector3 downmove = new(0f, 0f, -mp.StepHeight + startVelocity.Z * dt);
         if (!PushEntity(player, downmove, out TraceResult dtr))
@@ -1743,9 +1750,13 @@ public sealed class PlayerPhysics : IPlayerPhysics
                 }
                 else
                 {
+                    // movetypes.qc:228-229 (DP SV_FlyMove alike): a REJECTED in-loop step only restores the origin.
+                    // It does NOT set blockedflag 2 or the step normal — only the stepheight==0 branch below does —
+                    // so with stepmultipletimes on, the primary walk move never reports a step to WalkMove and its
+                    // up/forward recovery never runs; WalkMove goes on to the step-down instead. Setting bit 2 here
+                    // (as this port did) skipped the step-down whenever the tick touched a wall, so running along a
+                    // wall off a ledge went airborne where Base stays on the ground (golden: wall_scrape_stepdown).
                     player.Origin = org;
-                    blockedflag |= 2;
-                    stepNormal = myPlaneNormal;
                 }
             }
             else

@@ -176,6 +176,19 @@ public static class MenuCommand
                 AudioRestart?.Invoke();
                 break;
 
+            // xonotic-common.cfg:165-167's aliases, which the Audio tab's "Apply immediately" runs as
+            // snd_attenuation_method_${menu_snd_attenuation_method}. That cfg is not part of this client's boot
+            // chain, so the aliases are spelled out here (RegisterEngineAudioDefaults seeds method 1's values).
+            case "snd_attenuation_method_0":
+                SetAttenuation("0", "1200", "1", "0");   // Quake default
+                break;
+            case "snd_attenuation_method_1":
+                SetAttenuation("1", "2400", "4", "0");   // nice approximation for method 2
+                break;
+            case "snd_attenuation_method_2":
+                SetAttenuation("2", "1200", "0", "10");  // warning: plays sounds within up to 6000qu
+                break;
+
             case "map":
             case "devmap":
                 if (t.Count > 1) StartMap?.Invoke(t[1]);
@@ -387,9 +400,67 @@ public static class MenuCommand
                     else GD.Print($"\"{cmd}\" is \"{cvars.GetString(cmd)}\"");
                     break;
                 }
+                // The QC menu's localcmd lands in DarkPlaces' console buffer, so anything the console knows works
+                // from a menu button too. Hand a command the shared console interpreter has registered, an alias it
+                // holds, or an `exec`, to it: "Apply immediately" on Game > Weapons (sendcvar cl_weaponpriority), the
+                // Profile tab's `name`, the Effects quality presets (exec effects-*.cfg). Never an unknown word -
+                // that would be forwarded to the server - and never `exec default.cfg`, which DarkPlaces treats as
+                // "restore every cvar's initial value first" (Cvar_RestoreInitState), not as a plain exec.
+                if (ConsoleKnows(cmd, t) && MenuState.Interp is { } interp && _consoleDepth < 4)
+                {
+                    _consoleDepth++;
+                    try { interp.ExecuteCommand(Join(t), null); }
+                    finally { _consoleDepth--; }
+                    break;
+                }
                 GD.Print($"[MenuCommand] '{string.Join(' ', t)}' has no client backend yet (inert).");
                 break;
         }
+    }
+
+    // A console command can itself call back into Run (menu_cmd, the HUD editor's menu_show* commands); bound the
+    // nesting so a command that names itself on both sides cannot recurse forever.
+    [ThreadStatic] private static int _consoleDepth;
+
+    private static bool ConsoleKnows(string cmd, List<string> t)
+    {
+        if (MenuState.Interp is not { } interp)
+            return false;
+        if (string.Equals(cmd, "exec", StringComparison.OrdinalIgnoreCase))
+            return t.Count >= 2 && !string.Equals(t[1], "default.cfg", StringComparison.OrdinalIgnoreCase);
+        if (interp.Aliases.ContainsKey(cmd))
+            return true;
+        foreach (string name in interp.CommandNames)
+            if (string.Equals(name, cmd, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
+    /// <summary>Re-quote the tokens (already $-expanded here) into one line for the console interpreter, escaped so
+    /// it neither expands a <c>$</c> a second time nor re-splits a quoted value.</summary>
+    internal static string Join(List<string> t)
+    {
+        var sb = new StringBuilder();
+        foreach (string token in t)
+        {
+            if (sb.Length > 0) sb.Append(' ');
+            string s = token.Replace("$", "$$");
+            if (s.Length == 0 || s.IndexOfAny(new[] { ' ', '\t', ';', '"', '\\', '/' }) >= 0)
+                sb.Append('"').Append(s.Replace("\\", "\\\\").Replace("\"", "\\\"")).Append('"');
+            else
+                sb.Append(s);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>One of the snd_attenuation_method_N aliases: the method, then the curve DarkPlaces spatializes with.</summary>
+    private static void SetAttenuation(string method, string radius, string exponent, string decibel)
+    {
+        var cvars = MenuState.Cvars;
+        cvars.Set("menu_snd_attenuation_method", method);
+        cvars.Set("snd_soundradius", radius);
+        cvars.Set("snd_attenuation_exponent", exponent);
+        cvars.Set("snd_attenuation_decibel", decibel);
     }
 
     /// <summary>Send a gameplay command to the live match, or log it inert when there's no channel wired.</summary>

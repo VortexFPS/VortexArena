@@ -560,6 +560,9 @@ public sealed class Vortex : Weapon
     // zoom-charge secondary never reaches PrepareAttack, so primary timing covers everything else.
     public override float RefireFor(FireMode fire)
         => fire == FireMode.Secondary && Cvars.Secondary ? Cvars.SecondaryRefire : Cvars.Refire;
+
+    // vortex.qc wr_think: both fire modes use weapon_thinkf(WFRAME_FIRE1, ...).
+    public override int FireFrameFor(FireMode fire) => WFrameFire1;
     public override float AnimtimeFor(FireMode fire)
         => fire == FireMode.Secondary && Cvars.Secondary ? Cvars.SecondaryAnimtime : Cvars.Animtime;
 

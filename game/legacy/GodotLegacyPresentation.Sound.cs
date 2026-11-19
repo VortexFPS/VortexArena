@@ -201,7 +201,7 @@ public sealed partial class GodotLegacyPresentation
     // Starting a compressed (Ogg Vorbis) sample makes the engine set up a decoder for it: half a millisecond to a
     // millisecond and a half on the main thread, every time - a shotgun blast, two pain sounds and a ricochet in
     // one frame were three milliseconds of it. DarkPlaces decodes a sample to PCM when it loads it and starting it
-    // is free. Here a sample is decoded the first time it has been started: on a pool thread, through the
+    // is free. Here a sample is decoded the first time it has been started: on the shared decode thread, through the
     // engine's own decoder and resampler (so it sounds as it did), into a PCM stream that every later start of it
     // uses. Only what a match actually plays is decoded, short samples only, and never a looping one.
     // VORTEX_LEGACY_NOPCM=1 turns it off (the other arm of a comparison).
@@ -224,18 +224,15 @@ public sealed partial class GodotLegacyPresentation
         if (!(length > 0) || length > MaxDecodedSeconds) { _decoded[stream] = null; return stream; }
         _decoded[stream] = null;   // being decoded: this start, and any before it is ready, plays the compressed one
         float mixRate = AudioServer.GetMixRate();
-        System.Threading.Tasks.Task.Run(() =>
+        // Not a pool thread: the one thread every engine Vorbis decode shares (DpSampleBank.EngineDecodes).
+        VortexArena.Game.Audio.DpSampleBank.EngineDecodes.Post(() =>
         {
-            try
+            if (DecodeToPcm(ogg, mixRate, length) is { } wav)
             {
-                if (DecodeToPcm(ogg, mixRate, length) is { } wav)
-                {
-                    _decoded[stream] = wav;
-                    Interlocked.Add(ref _decodedBytes, wav.Data.Length);
-                }
+                _decoded[stream] = wav;
+                Interlocked.Add(ref _decodedBytes, wav.Data.Length);
             }
-            catch (Exception e) when (e is not OutOfMemoryException) { }
-        });
+        }, urgent: false);
         return stream;
     }
 

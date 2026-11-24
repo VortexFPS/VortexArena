@@ -111,11 +111,13 @@ public sealed partial class CsqcBuiltins
         _state.WantsMouseMove = vm.ArgFloat(0) != 0;
     }
 
-    // #344 vector() getmousepos: zero unless the game has the keyboard.
+    // #344 vector() getmousepos: zero unless the game has the keyboard; the pointer while the program has a
+    // cursor (setcursormode), otherwise the frame's mouse movement.
     private void GetMousePos(QcVm vm)
     {
         Parms(0, "VM_CL_getmousepos");
-        vm.ReturnVector(_state.GameHasKeyFocus ? new QcVector(_state.MousePosition.X, _state.MousePosition.Y, 0) : default);
+        QcVector mouse = _state.WantsMouseMove ? _state.MousePosition : _state.MouseMove;
+        vm.ReturnVector(_state.GameHasKeyFocus ? new QcVector(mouse.X, mouse.Y, 0) : default);
     }
 
     // #345 float(float framenum) getinputstate: load the input_* globals from the remembered input

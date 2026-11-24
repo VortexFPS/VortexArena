@@ -150,6 +150,11 @@ public sealed partial class GodotLegacyPresentation
         MarkAllocationStart();
         long started = LegacyPerfLog.Stamp();
         (List<string> models, List<string> sounds) = LegacyPrecacheHint.Load();
+        // Only what the game data holds now. The last level's lists name the files of the packages that server
+        // had downloaded, and those are not mounted until this server names them: looking for them here found
+        // nothing, and every model found missing stayed missing in the asset loader's cache - a returning
+        // player saw most of the server's models never drawn.
+        models.RemoveAll(name => !_vfs.Exists(name));
         if (models.Count > 0 || sounds.Count > 0)
         {
             PrecacheRun run = EnsureRun();

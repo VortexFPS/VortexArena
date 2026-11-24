@@ -141,8 +141,18 @@ public partial class ModelAnimator : Node3D
     /// same RenderingDevice allocator (0xC0000374 mid-session heap corruption), and whose end-of-run
     /// backlog is what the at-exit "Attempted to free invalid ID" spam drains. sb.Material is the
     /// SHARED AssetSystem-cache material and is deliberately not touched.
+    /// <para>On deletion, not on leaving the tree: a node taken out and put back (the legacy scene's pre-built
+    /// models are rendered once offscreen by GpuWarmPass.WarmNodes, then handed to the scene) must keep its
+    /// surfaces - released at the exit, the next frame rebuilt the morph mesh from an empty list and the model
+    /// (Pepsiman's can on Quake 1 Nostalgia) was never drawn. NOTIFICATION_PREDELETE comes on the thread that
+    /// frees the node, the main thread for QueueFree and for the tree's own teardown at exit.</para>
     /// </summary>
-    public override void _ExitTree()
+    public override void _Notification(int what)
+    {
+        if (what == NotificationPredelete) Release();
+    }
+
+    private void Release()
     {
         if (GodotObject.IsInstanceValid(_mesh))
             _mesh.Mesh = null;

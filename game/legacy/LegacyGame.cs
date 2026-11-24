@@ -1892,6 +1892,7 @@ public partial class LegacyGame : Node
         state.GameHasKeyFocus = focus;
         Vector2 delta = _mouseDelta;
         _mouseDelta = Vector2.Zero;
+        state.MouseMove = default;
         if (!_inGame || _cvars is not { } cvars) return default;
 
         // +showscores is a command the program registers, not an engine button.
@@ -1940,6 +1941,9 @@ public partial class LegacyGame : Node
             }
             else if (focus && delta != Vector2.Zero)
             {
+                // VM_CL_getmousepos: "in_mouse_x * vid_conwidth.integer / vid.mode.width"
+                if (_viewSize.X > 0 && _viewSize.Y > 0)
+                    state.MouseMove = new QcVector(delta.X * (int)cvars.GetFloat("vid_conwidth") / _viewSize.X, delta.Y * (int)cvars.GetFloat("vid_conheight") / _viewSize.Y, 0);
                 host.InputEvent(2, delta.X, delta.Y);
                 float zoom = state.Stats[CsqcClientState.StatViewZoom] > 0 ? state.Stats[CsqcClientState.StatViewZoom] / 255f : 1;
                 state.ViewAngles = LegacyInputMath.MouseLook(state.ViewAngles, delta.X, delta.Y,

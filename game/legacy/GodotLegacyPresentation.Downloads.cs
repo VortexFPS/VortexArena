@@ -56,7 +56,10 @@ public sealed partial class GodotLegacyPresentation
             ReleaseAllProxies();
             ReleasePrebuilt();
             ModelData.ClearCache();
-            _note("downloaded packages were added to the game data: the level's files are read from it now");
+            // The asset loader remembers a model it could not find as missing for good: one looked for before its
+            // package was mounted would never be drawn.
+            int forgotten = _assets.ForgetFailedModels();
+            _note($"downloaded packages were added to the game data: the level's files are read from it now ({forgotten} models not found before are looked for again)");
         }
         if (!WorldLoaded) LoadLevelFiles(state);
         else if (changed) BeginPrecache(state);

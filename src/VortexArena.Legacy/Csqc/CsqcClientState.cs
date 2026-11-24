@@ -128,8 +128,11 @@ public sealed class CsqcClientState
     // Mouse state behind setcursormode / getmousepos / setsensitivityscale.
     public bool WantsMouseMove { get; set; }
     public float SensitivityScale { get; set; } = 1;
-    /// <summary>The pointer in virtual-screen pixels, as getmousepos reports it.</summary>
+    /// <summary>The pointer in virtual-screen pixels, as getmousepos reports it while the program has a cursor.</summary>
     public QcVector MousePosition { get; set; }
+    /// <summary>in_mouse_x / in_mouse_y: this frame's mouse movement in virtual-screen pixels, as getmousepos
+    /// reports it while the program has not asked for a cursor (a program that draws its own accumulates it).</summary>
+    public QcVector MouseMove { get; set; }
     /// <summary>key_dest == key_game and the console is closed: getmousepos answers zero otherwise.</summary>
     public bool GameHasKeyFocus { get; set; } = true;
 

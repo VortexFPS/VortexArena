@@ -874,7 +874,7 @@ public static class IqmBuilder
     /// dot — with underscores, so a bone name can be embedded verbatim in an animation track sub-path
     /// (<c>"Skeleton3D:bone"</c>). Matches the sibling MD3/DPM builders' sanitiser.
     /// </summary>
-    private static string SanitizeBoneName(string raw)
+    internal static string SanitizeBoneName(string raw)
     {
         if (string.IsNullOrEmpty(raw))
             return raw;

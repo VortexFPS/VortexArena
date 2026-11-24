@@ -489,7 +489,7 @@ public sealed partial class GodotLegacyPresentation
         lap = Lap(profile, 2, lap);
         if (s_debugEntities && _debugEntities.Count < 300)
             _debugEntities.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                $"ent {entity.Edict,4} {model} rf {entity.RenderFlags} ef {entity.Effects} a {entity.Alpha:0.##} sc {entity.Scale:0.##} cm {entity.ColorMap} skin {entity.Skin} fr {entity.Frame:0} tag {entity.TagEntity}/{entity.TagIndex} org {entity.Origin.X:0.#} {entity.Origin.Y:0.#} {entity.Origin.Z:0.#} ang {entity.Angles.X:0.#} {entity.Angles.Y:0.#} {entity.Angles.Z:0.#} -> at {placement.Origin.X:0.#} {placement.Origin.Y:0.#} {placement.Origin.Z:0.#} |fwd| {placement.Fwd.Length():0.###} colormod {entity.ColorMod.X:0.##} {entity.ColorMod.Y:0.##} {entity.ColorMod.Z:0.##} glow {entity.GlowMod.X:0.##} {entity.GlowMod.Y:0.##} {entity.GlowMod.Z:0.##} node {(proxy.Node is null ? "none" : "ok")} failed {proxy.Failed}"));
+                $"ent {entity.Edict,4} {model} rf {entity.RenderFlags} ef {entity.Effects} a {entity.Alpha:0.##} sc {entity.Scale:0.##} cm {entity.ColorMap} skin {entity.Skin} fr {entity.Frame:0} tag {entity.TagEntity}/{entity.TagIndex} org {entity.Origin.X:0.#} {entity.Origin.Y:0.#} {entity.Origin.Z:0.#} ang {entity.Angles.X:0.#} {entity.Angles.Y:0.#} {entity.Angles.Z:0.#} -> at {placement.Origin.X:0.#} {placement.Origin.Y:0.#} {placement.Origin.Z:0.#} |fwd| {placement.Fwd.Length():0.###} colormod {entity.ColorMod.X:0.##} {entity.ColorMod.Y:0.##} {entity.ColorMod.Z:0.##} glow {entity.GlowMod.X:0.##} {entity.GlowMod.Y:0.##} {entity.GlowMod.Z:0.##} node {(proxy.Node is null ? "none" : "ok")} failed {proxy.Failed}{DescribeSkin(proxy)}"));
         if (proxy.Node is null) return !proxy.Failed;
         if (!PlaceProxy(proxy, placement)) return true;
         lap = Lap(profile, 3, lap);
@@ -857,6 +857,30 @@ public sealed partial class GodotLegacyPresentation
         foreach (Node child in node.GetChildren())
             if (FindMorph(child) is { } found) return found;
         return null;
+    }
+
+    // The entity dump's tail: the tint applied last frame and what each mesh draws with - the skin shader with or
+    // without its pants/shirt masks, or another material that takes no colormap at all.
+    private static string DescribeSkin(Proxy proxy)
+    {
+        var text = new System.Text.StringBuilder();
+        if (proxy.Tint is { } t) text.Append(System.Globalization.CultureInfo.InvariantCulture, $" tint shirt {t.Shirt.R:0.##} {t.Shirt.G:0.##} {t.Shirt.B:0.##} pants {t.Pants.R:0.##} {t.Pants.G:0.##} {t.Pants.B:0.##}");
+        int shown = 0;
+        foreach (GeometryInstance3D geometry in proxy.Geometry)
+        {
+            if (geometry is not MeshInstance3D { Mesh: { } mesh } instance || shown++ >= 3) continue;
+            text.Append($" | {instance.GetType().Name}/{instance.GetParent()?.GetType().Name} skel {(instance.Skeleton.IsEmpty ? "-" : "y")}");
+            for (int s = 0; s < Math.Min(mesh.GetSurfaceCount(), 2); s++)
+            {
+                Material? material = instance.GetSurfaceOverrideMaterial(s) ?? instance.MaterialOverride ?? mesh.SurfaceGetMaterial(s);
+                text.Append($" s{s} {material?.GetType().Name ?? "null"} {material?.ResourceName}");
+                if (material is ShaderMaterial shader)
+                    text.Append($" pants {(shader.GetShaderParameter(PlayerSkinShader.PantsMaskUniform).Obj is Texture2D p ? $"{p.GetWidth()}x{p.GetHeight()} {p.GetType().Name}" : "-")}"
+                        + $" shirt {(shader.GetShaderParameter(PlayerSkinShader.ShirtMaskUniform).Obj is Texture2D ? "y" : "-")}"
+                        + $" ipants {instance.GetInstanceShaderParameter(PlayerSkinShader.PantsColorUniform)}");
+            }
+        }
+        return text.ToString();
     }
 
     private static void CollectGeometry(Node node, List<GeometryInstance3D> into)

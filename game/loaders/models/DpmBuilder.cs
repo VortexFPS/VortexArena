@@ -111,12 +111,15 @@ public static class DpmBuilder
 
         // A file may name two bones alike (models/monsters/spider.dpm has three "Spider"). Skeleton3D refuses
         // the second AddBone of a name, which left the skeleton bones short and every later bone index -
-        // parents, rests, the mesh's skin weights - pointing too far. A repeat gets its index appended.
+        // parents, rests, the mesh's skin weights - pointing too far. A repeat gets its index appended. The
+        // same goes for a name Skeleton3D does not take at all: Mixamo rigs name every bone "mixamorig:Hips"
+        // and so on (the Quake packages' player_bean / player_pepsiman / player_poop), and ':' '/' are refused,
+        // so those are sanitised as IqmBuilder does (it also keeps the "Skeleton3D:bone" track paths valid).
         var boneNames = new HashSet<string>(StringComparer.Ordinal);
         for (int b = 0; b < boneCount; b++)
         {
             DpmBone bone = dpm.Bones[b];
-            string boneName = string.IsNullOrEmpty(bone.Name) ? $"bone{b}" : bone.Name;
+            string boneName = string.IsNullOrEmpty(bone.Name) ? $"bone{b}" : IqmBuilder.SanitizeBoneName(bone.Name);
             if (!boneNames.Add(boneName))
             {
                 boneName = $"{boneName}~{b}";

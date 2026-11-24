@@ -92,6 +92,21 @@ public partial class LegacyDrawLayer : Control
     // class is the flag; anything else is the normal blend.
     private static int BlendClass(int flags) => (flags & 0xFF) is >= 1 and <= 4 ? flags & 0xFF : 0;
 
+    // A stretch's class is its blend class plus this bit when its texture repeats. VM_CL_R_PolygonEnd loads a
+    // polygon's texture without TEXF_CLAMP, so texture coordinates past the edge wrap round (a slot machine's
+    // reel scrolls its strip that way); a picture's is clamped. Godot sets repeat per canvas item, so a polygon
+    // that reaches outside the texture is drawn by a stretch of its own with repeat on.
+    private const int RepeatClass = 8;
+
+    private static int StretchClass(in LegacyDrawCommand c, IReadOnlyList<LegacyDrawVertex> vertices)
+    {
+        int blend = BlendClass(c.Flags);
+        if (c.Kind != LegacyDrawKind.Polygon || c.VertexStart < 0 || c.VertexStart + c.VertexCount > vertices.Count) return blend;
+        for (int v = c.VertexStart, last = c.VertexStart + c.VertexCount; v < last; v++)
+            if (vertices[v].U is < 0 or > 1 || vertices[v].V is < 0 or > 1) return blend | RepeatClass;
+        return blend;
+    }
+
     /// <summary>
     /// Takes the frame's list: cuts it into stretches that one canvas item can draw and schedules their
     /// redraw. A stretch ends where the blend mode changes (Godot fixes it per canvas item) and where
@@ -122,7 +137,7 @@ public partial class LegacyDrawLayer : Control
                 }
                 continue;
             }
-            int blend = BlendClass(command.Flags);
+            int blend = StretchClass(command, source.DrawList.PolygonVertices);
             bool needsHardClip = hardClip is null && clip is { } area && command.Kind == LegacyDrawKind.Text && used < MaxSegments - 2
                 && TextCrosses(source, command, area);
             if (currentClass < 0)
@@ -133,7 +148,7 @@ public partial class LegacyDrawLayer : Control
                 clipAtStart = clip;
                 if (needsHardClip) hardClip = clip;
             }
-            else if ((blend != currentClass || needsHardClip || (s_chunk > 0 && !ChunkOff && inStretch >= s_chunk && blend < 3 && used < MaxSegments - 32)) && used < MaxSegments - 1)
+            else if ((blend != currentClass || needsHardClip || (s_chunk > 0 && !ChunkOff && inStretch >= s_chunk && (blend & ~RepeatClass) < 3 && used < MaxSegments - 32)) && used < MaxSegments - 1)
             {
                 Assign(used++, start, i, currentClass, clipAtStart, hardClip, ref clipped);
                 start = i;
@@ -213,8 +228,10 @@ public partial class LegacyDrawLayer : Control
         if (segment.BlendClass != blendClass)
         {
             segment.BlendClass = blendClass;
-            segment.Material = blendClass switch { 1 => _additive, 2 => _multiply, 3 => _doubleMultiply, 4 => _screen, _ => null };
-            _copies[index].Visible = blendClass is 3 or 4;
+            int blend = blendClass & ~RepeatClass;
+            segment.Material = blend switch { 1 => _additive, 2 => _multiply, 3 => _doubleMultiply, 4 => _screen, _ => null };
+            segment.TextureRepeat = (blendClass & RepeatClass) != 0 ? TextureRepeatEnum.Enabled : TextureRepeatEnum.ParentNode;
+            _copies[index].Visible = blend is 3 or 4;
         }
 
         // DrawQ_SetClipArea turns the virtual rectangle into whole pixels ("(int)(0.5 + x * width / vid_conwidth)").

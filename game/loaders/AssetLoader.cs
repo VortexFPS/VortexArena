@@ -298,6 +298,31 @@ public sealed class AssetLoader
     }
 
     /// <summary>
+    /// Forgets every cached NEGATIVE (a model that could not be read or parsed), keeping the models that did load.
+    /// For when packages are mounted under a running game (a legacy session's downloads): a model looked for
+    /// before its package was mounted was missing then and is there now, and the cache would otherwise answer
+    /// "missing" for the rest of the process. Main thread; workers that parse into the cache share its lock.
+    /// </summary>
+    public int ForgetFailedModels()
+    {
+        int forgotten = 0;
+        lock (_modelCacheGate)
+        {
+            List<string>? failed = null;
+            foreach (KeyValuePair<string, ModelParse> entry in _modelCache)
+                if (entry.Value.Factory is null) (failed ??= new()).Add(entry.Key);
+            if (failed is not null)
+                foreach (string key in failed) forgotten += _modelCache.Remove(key) ? 1 : 0;
+        }
+        List<string>? md3Failed = null;
+        foreach (KeyValuePair<string, Md3Data?> entry in _md3Cache)
+            if (entry.Value is null) (md3Failed ??= new()).Add(entry.Key);
+        if (md3Failed is not null)
+            foreach (string key in md3Failed) _md3Cache.Remove(key);
+        return forgotten;
+    }
+
+    /// <summary>
     /// Parse a model as raw <see cref="Md3Data"/> for the client's per-entity <c>ClientWorld.ModelResolver</c>
     /// (world items/gibs/monsters that render via the MD3 morph/snapshot path). Returns null for a missing file
     /// or a non-MD3 model (IQM/DPM go through <see cref="LoadModel"/>); cached per normalized vpath.

@@ -1143,6 +1143,25 @@ public partial class CsqcHostTests
         Assert.Equal(0.5f, rig.State.SensitivityScale);
     }
 
+    // VM_CL_getmousepos without setcursormode answers in_mouse_x / in_mouse_y: a program that draws its own cursor
+    // (a radial menu) adds the frame's movement to it. The pointer's position would park that cursor in a corner.
+    [Fact]
+    public void GetMousePos_WithoutCursorMode_AnswersTheFramesMovement()
+    {
+        using Rig rig = new();
+        Asm a = new();
+        int mouse = a.V("mouse", 9, 9, 9);
+        a.Begin("CSQC_Init");
+        a.GetV(344, mouse);
+        a.End();
+        rig.State.MousePosition = new QcVector(320, 240, 0);
+        rig.State.MouseMove = new QcVector(3, -2, 0);
+        rig.Load(a);
+
+        Assert.False(rig.State.WantsMouseMove);
+        Assert.Equal("'3 -2 0'", rig.GlobalVector("mouse").ToString());
+    }
+
     // ---- the frame ---------------------------------------------------------------------------------
 
     [Fact]
